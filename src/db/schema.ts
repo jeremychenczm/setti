@@ -164,6 +164,43 @@ export const paypalRefunds = pgTable(
   (t) => [check("paypal_refunds_amount_positive", sql`${t.amountCents} > 0`)],
 );
 
+/** Every kind of money move Setti asks PayPal for. Only `capture` is executed so far. */
+export const operationKind = pgEnum("operation_kind", ["capture", "void", "refund", "authorize", "reauthorize"]);
+/** `unknown` means PayPal may or may not have done it; retry with the same request id to find out. */
+export const operationStatus = pgEnum("operation_status", ["pending", "succeeded", "failed", "unknown"]);
+
+/**
+ * One money move, written before PayPal is called so a crash or timeout never
+ * loses track of it. Every attempt sends the same request id, which PayPal
+ * uses to avoid doing the same move twice.
+ */
+export const paymentOperations = pgTable(
+  "payment_operations",
+  {
+    id: uuid("id").primaryKey(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id),
+    kind: operationKind("kind").notNull(),
+    status: operationStatus("status").notNull().default("pending"),
+    authorizationId: uuid("authorization_id").references(() => paypalAuthorizations.id),
+    amountCents: integer("amount_cents").notNull(),
+    finalCapture: boolean("final_capture").notNull().default(false),
+    requestId: text("request_id").notNull().unique(),
+    attempts: integer("attempts").notNull().default(0),
+    /** The PayPal id of what this move produced, for example the capture id. */
+    paypalResourceId: text("paypal_resource_id"),
+    failureCode: text("failure_code"),
+    failureMessage: text("failure_message"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    check("payment_operations_amount_positive", sql`${t.amountCents} > 0`),
+    check("payment_operations_capture_has_authorization", sql`${t.kind} <> 'capture' OR ${t.authorizationId} IS NOT NULL`),
+  ],
+);
+
 export const decision = pgEnum("decision", ["approved", "declined"]);
 
 /** The client's decision on one line of a sent revision, bound to its exact content. */
