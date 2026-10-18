@@ -1,0 +1,21 @@
+# Local development database. The hosted app uses a managed Postgres instead.
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: setti
+      POSTGRES_PASSWORD: setti
+      POSTGRES_DB: setti
+    ports:
+      - "5433:5432"
+    volumes:
+      - setti-db:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U setti -d setti"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  setti-db:
