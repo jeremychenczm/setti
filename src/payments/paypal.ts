@@ -17,6 +17,16 @@ export interface CaptureReceipt {
   amountCents: number;
 }
 
+export interface VoidCommand {
+  paypalAuthorizationId: string;
+  requestId: string;
+}
+
+export interface VoidReceipt {
+  /** PayPal keeps reporting the original amount after a void, so this is not the amount released. */
+  reportedAmountCents?: number;
+}
+
 /**
  * How a PayPal call ended:
  * - `rejected`: PayPal refused; sending the same request again gets the same answer.
@@ -31,6 +41,8 @@ export type PayPalResult<T> =
 
 export interface PayPalPayments {
   captureAuthorization(command: CaptureCommand): Promise<PayPalResult<CaptureReceipt>>;
+  /** Releases whatever is still held on the authorization. */
+  voidAuthorization(command: VoidCommand): Promise<PayPalResult<VoidReceipt>>;
 }
 
 /** Network error codes that mean the request never reached PayPal. */

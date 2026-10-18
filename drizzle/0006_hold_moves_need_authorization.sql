@@ -1,0 +1,2 @@
+ALTER TABLE "payment_operations" DROP CONSTRAINT "payment_operations_capture_has_authorization";--> statement-breakpoint
+ALTER TABLE "payment_operations" ADD CONSTRAINT "payment_operations_hold_moves_have_authorization" CHECK ("payment_operations"."kind" NOT IN ('capture', 'void', 'reauthorize') OR "payment_operations"."authorization_id" IS NOT NULL);

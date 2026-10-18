@@ -43,6 +43,13 @@
       "when": 1792298135565,
       "tag": "0005_payment_operations",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792298367467,
+      "tag": "0006_hold_moves_need_authorization",
+      "breakpoints": true
     }
   ]
 }

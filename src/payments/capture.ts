@@ -4,30 +4,28 @@
  * written back. Retrying an operation reuses its request id, so PayPal returns
  * the original capture instead of taking the money twice.
  */
-import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { paymentOperations, paypalAuthorizations, paypalCaptures } from "../db/schema";
+import { paymentOperations, paypalCaptures } from "../db/schema";
+import { claimOperation, databaseMessage, newOperationIds, recordFailure, updateOperation, type PaymentOperation } from "./operations";
 import type { CaptureReceipt, PayPalPayments } from "./paypal";
 
-export type PaymentOperation = typeof paymentOperations.$inferSelect;
+export type { PaymentOperation } from "./operations";
 
 /** Writes down a capture to be made. Nothing is sent to PayPal yet. */
 export async function requestCapture(
   db: Db,
   input: { projectId: string; authorizationId: string; amountCents: number; finalCapture?: boolean },
 ): Promise<PaymentOperation> {
-  const id = randomUUID();
   const [operation] = await db
     .insert(paymentOperations)
     .values({
-      id,
+      ...newOperationIds(),
       projectId: input.projectId,
       kind: "capture",
       authorizationId: input.authorizationId,
       amountCents: input.amountCents,
       finalCapture: input.finalCapture ?? false,
-      requestId: `setti-op-${id}`,
     })
     .returning();
   return operation;
@@ -38,20 +36,7 @@ export async function requestCapture(
  * returned as they are, without calling PayPal again.
  */
 export async function executeCapture(db: Db, paypal: PayPalPayments, operationId: string): Promise<PaymentOperation> {
-  const claim = await db.transaction(async (tx) => {
-    const [operation] = await tx.select().from(paymentOperations).where(eq(paymentOperations.id, operationId)).for("update");
-    if (!operation) throw new Error(`Payment operation ${operationId} does not exist`);
-    if (operation.kind !== "capture") throw new Error(`Payment operation ${operationId} is a ${operation.kind}, not a capture`);
-    if (operation.status === "succeeded" || operation.status === "failed") return { operation, finished: true as const };
-
-    const [authorization] = await tx.select().from(paypalAuthorizations).where(eq(paypalAuthorizations.id, operation.authorizationId!));
-    const [counted] = await tx
-      .update(paymentOperations)
-      .set({ attempts: operation.attempts + 1, updatedAt: new Date() })
-      .where(eq(paymentOperations.id, operationId))
-      .returning();
-    return { operation: counted, authorization, finished: false as const };
-  });
+  const claim = await claimOperation(db, operationId, "capture");
   if (claim.finished) return claim.operation;
 
   const { operation, authorization } = claim;
@@ -61,17 +46,7 @@ export async function executeCapture(db: Db, paypal: PayPalPayments, operationId
     finalCapture: operation.finalCapture,
     requestId: operation.requestId,
   });
-
-  switch (result.kind) {
-    case "ok":
-      return recordCapture(db, operation, result.value);
-    case "rejected":
-      return update(db, operation.id, { status: "failed", failureCode: result.code, failureMessage: result.message });
-    case "unknown":
-      return update(db, operation.id, { status: "unknown", failureCode: null, failureMessage: result.message });
-    case "retryable":
-      return update(db, operation.id, { status: "pending", failureCode: null, failureMessage: result.message });
-  }
+  return result.kind === "ok" ? recordCapture(db, operation, result.value) : recordFailure(db, operation.id, result);
 }
 
 async function recordCapture(db: Db, operation: PaymentOperation, receipt: CaptureReceipt): Promise<PaymentOperation> {
@@ -100,21 +75,11 @@ async function recordCapture(db: Db, operation: PaymentOperation, receipt: Captu
     });
   } catch (error) {
     // PayPal took the money but our records refuse it. Keep PayPal's id so a person can look into it.
-    const cause = (error as { cause?: { message?: string } }).cause?.message ?? (error as Error).message;
-    return update(db, operation.id, {
+    return updateOperation(db, operation.id, {
       status: "unknown",
       paypalResourceId: receipt.paypalCaptureId,
       failureCode: "LOCAL_RECORD_REJECTED",
-      failureMessage: cause,
+      failureMessage: databaseMessage(error),
     });
   }
-}
-
-async function update(db: Db, id: string, fields: Partial<typeof paymentOperations.$inferInsert>): Promise<PaymentOperation> {
-  const [operation] = await db
-    .update(paymentOperations)
-    .set({ ...fields, updatedAt: new Date() })
-    .where(eq(paymentOperations.id, id))
-    .returning();
-  return operation;
 }

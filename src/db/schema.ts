@@ -197,7 +197,7 @@ export const paymentOperations = pgTable(
   },
   (t) => [
     check("payment_operations_amount_positive", sql`${t.amountCents} > 0`),
-    check("payment_operations_capture_has_authorization", sql`${t.kind} <> 'capture' OR ${t.authorizationId} IS NOT NULL`),
+    check("payment_operations_hold_moves_have_authorization", sql`${t.kind} NOT IN ('capture', 'void', 'reauthorize') OR ${t.authorizationId} IS NOT NULL`),
   ],
 );
 

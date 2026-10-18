@@ -26,6 +26,20 @@ export function createSdkPayPal(payments: PaymentsController): PayPalPayments {
         return fromError(error);
       }
     },
+
+    async voidAuthorization(command) {
+      try {
+        const res = await payments.voidPayment({
+          authorizationId: command.paypalAuthorizationId,
+          paypalRequestId: command.requestId,
+          prefer: FULL,
+        });
+        const value = res.result?.amount?.value;
+        return { kind: "ok", value: { reportedAmountCents: value === undefined ? undefined : Math.round(Number(value) * 100) } };
+      } catch (error) {
+        return fromError(error);
+      }
+    },
   };
 }
 
