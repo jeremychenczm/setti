@@ -8,5 +8,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    globalSetup: ["src/db/global-setup.ts"],
+    // Database tests share one test database and truncate its tables, so files run one at a time.
+    fileParallelism: false,
   },
 });

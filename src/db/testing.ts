@@ -1,22 +1,19 @@
 /**
  * Helpers for tests that need a real database. They run only when
  * TEST_DATABASE_URL is set (see .env.example), so `npm test` still works
- * without Docker.
+ * without Docker. Migrations are applied once in the global setup.
  */
 import { existsSync } from "node:fs";
 import { sql } from "drizzle-orm";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { createDb } from "./client";
 
 if (existsSync(".env.local")) process.loadEnvFile(".env.local");
 
 export const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 
-/** Connects to the test database and brings it to the latest migration. */
+/** Connects to the test database (already migrated by the global setup). */
 export async function openTestDb() {
-  const handle = createDb(testDatabaseUrl);
-  await migrate(handle.db, { migrationsFolder: "drizzle" });
-  return handle;
+  return createDb(testDatabaseUrl);
 }
 
 /** Empties the given tables so each test starts from a clean state. */

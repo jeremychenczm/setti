@@ -8,6 +8,20 @@
       "when": 1792287688832,
       "tag": "0000_init_projects",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792287928211,
+      "tag": "0001_quotes",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792287930484,
+      "tag": "0002_quote_rules",
+      "breakpoints": true
     }
   ]
 }
