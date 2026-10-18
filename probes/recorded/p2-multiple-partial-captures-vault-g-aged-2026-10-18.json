@@ -1,0 +1,431 @@
+{
+  "probe": "p2-multiple-partial-captures-vault-g-aged",
+  "recordedAt": "2026-10-18T00:53:02.784Z",
+  "environment": "sandbox",
+  "notes": [
+    "Captured 3000 + 3000 + 4000 cents of 10000."
+  ],
+  "steps": [
+    {
+      "step": "capture 1 of 3",
+      "request": {
+        "authorizationId": "48J85160R96400828",
+        "amountCents": 3000,
+        "finalCapture": false
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:52:56.097Z",
+      "durationMs": 1827,
+      "statusCode": 201,
+      "debugId": "f826393e65abf",
+      "response": {
+        "status": "COMPLETED",
+        "id": "3N040364NE3073139",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "30.00"
+        },
+        "customId": "probe-p7-vault-g-aged",
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "finalCapture": false,
+        "sellerReceivableBreakdown": {
+          "grossAmount": {
+            "currencyCode": "USD",
+            "value": "30.00"
+          },
+          "paypalFee": {
+            "currencyCode": "USD",
+            "value": "1.32"
+          },
+          "netAmount": {
+            "currencyCode": "USD",
+            "value": "28.68"
+          },
+          "exchangeRate": {}
+        },
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/3N040364NE3073139",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/3N040364NE3073139/refund",
+            "rel": "refund",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/48J85160R96400828",
+            "rel": "up",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-18T00:52:59Z",
+        "updateTime": "2026-10-18T00:52:59Z"
+      }
+    },
+    {
+      "step": "read after capture 1",
+      "request": {
+        "authorizationId": "48J85160R96400828"
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:52:57.924Z",
+      "durationMs": 411,
+      "statusCode": 200,
+      "debugId": "f668116fcd5b5",
+      "response": {
+        "status": "PARTIALLY_CAPTURED",
+        "id": "48J85160R96400828",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "100.00"
+        },
+        "customId": "probe-p7-vault-g-aged",
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "expirationTime": "2026-11-16T00:52:51Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/48J85160R96400828",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/48J85160R96400828/capture",
+            "rel": "capture",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/48J85160R96400828/void",
+            "rel": "void",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/48J85160R96400828/reauthorize",
+            "rel": "reauthorize",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/10377736XJ592501N",
+            "rel": "up",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-18T00:52:51Z",
+        "updateTime": "2026-10-18T00:52:59Z",
+        "supplementaryData": {
+          "relatedIds": {
+            "orderId": "10377736XJ592501N"
+          }
+        },
+        "payee": {
+          "emailAddress": "[redacted]",
+          "merchantId": "ZXK85KF9DE8H4"
+        }
+      }
+    },
+    {
+      "step": "capture 2 of 3",
+      "request": {
+        "authorizationId": "48J85160R96400828",
+        "amountCents": 3000,
+        "finalCapture": false
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:52:58.335Z",
+      "durationMs": 1497,
+      "statusCode": 201,
+      "debugId": "f668116b0466a",
+      "response": {
+        "status": "COMPLETED",
+        "id": "68H45489PM219352G",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "30.00"
+        },
+        "customId": "probe-p7-vault-g-aged",
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "finalCapture": false,
+        "sellerReceivableBreakdown": {
+          "grossAmount": {
+            "currencyCode": "USD",
+            "value": "30.00"
+          },
+          "paypalFee": {
+            "currencyCode": "USD",
+            "value": "1.32"
+          },
+          "netAmount": {
+            "currencyCode": "USD",
+            "value": "28.68"
+          },
+          "exchangeRate": {}
+        },
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/68H45489PM219352G",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/68H45489PM219352G/refund",
+            "rel": "refund",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/48J85160R96400828",
+            "rel": "up",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-18T00:53:00Z",
+        "updateTime": "2026-10-18T00:53:00Z"
+      }
+    },
+    {
+      "step": "read after capture 2",
+      "request": {
+        "authorizationId": "48J85160R96400828"
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:52:59.832Z",
+      "durationMs": 409,
+      "statusCode": 200,
+      "debugId": "f8907779c9f0e",
+      "response": {
+        "status": "PARTIALLY_CAPTURED",
+        "id": "48J85160R96400828",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "100.00"
+        },
+        "customId": "probe-p7-vault-g-aged",
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "expirationTime": "2026-11-16T00:52:51Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/48J85160R96400828",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/48J85160R96400828/capture",
+            "rel": "capture",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/48J85160R96400828/void",
+            "rel": "void",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/48J85160R96400828/reauthorize",
+            "rel": "reauthorize",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/10377736XJ592501N",
+            "rel": "up",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-18T00:52:51Z",
+        "updateTime": "2026-10-18T00:53:00Z",
+        "supplementaryData": {
+          "relatedIds": {
+            "orderId": "10377736XJ592501N"
+          }
+        },
+        "payee": {
+          "emailAddress": "[redacted]",
+          "merchantId": "ZXK85KF9DE8H4"
+        }
+      }
+    },
+    {
+      "step": "final capture",
+      "request": {
+        "authorizationId": "48J85160R96400828",
+        "amountCents": 4000,
+        "finalCapture": true
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:53:00.241Z",
+      "durationMs": 1523,
+      "statusCode": 201,
+      "debugId": "f662555d9e5e2",
+      "response": {
+        "status": "COMPLETED",
+        "id": "9MF16602R8879793Y",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "40.00"
+        },
+        "customId": "probe-p7-vault-g-aged",
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "finalCapture": true,
+        "sellerReceivableBreakdown": {
+          "grossAmount": {
+            "currencyCode": "USD",
+            "value": "40.00"
+          },
+          "paypalFee": {
+            "currencyCode": "USD",
+            "value": "1.66"
+          },
+          "netAmount": {
+            "currencyCode": "USD",
+            "value": "38.34"
+          },
+          "exchangeRate": {}
+        },
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/9MF16602R8879793Y",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/9MF16602R8879793Y/refund",
+            "rel": "refund",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/48J85160R96400828",
+            "rel": "up",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-18T00:53:02Z",
+        "updateTime": "2026-10-18T00:53:02Z"
+      }
+    },
+    {
+      "step": "read after final capture",
+      "request": {
+        "authorizationId": "48J85160R96400828"
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:53:01.764Z",
+      "durationMs": 344,
+      "statusCode": 200,
+      "debugId": "f686797260bc6",
+      "response": {
+        "status": "CAPTURED",
+        "id": "48J85160R96400828",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "100.00"
+        },
+        "customId": "probe-p7-vault-g-aged",
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "expirationTime": "2026-11-16T00:52:51Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/48J85160R96400828",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/48J85160R96400828/capture",
+            "rel": "capture",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/48J85160R96400828/void",
+            "rel": "void",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/48J85160R96400828/reauthorize",
+            "rel": "reauthorize",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/10377736XJ592501N",
+            "rel": "up",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-18T00:52:51Z",
+        "updateTime": "2026-10-18T00:53:02Z",
+        "supplementaryData": {
+          "relatedIds": {
+            "orderId": "10377736XJ592501N"
+          }
+        },
+        "payee": {
+          "emailAddress": "[redacted]",
+          "merchantId": "ZXK85KF9DE8H4"
+        }
+      }
+    },
+    {
+      "step": "capture after final (expect rejection)",
+      "request": {
+        "authorizationId": "48J85160R96400828",
+        "amountCents": 100,
+        "finalCapture": false
+      },
+      "ok": false,
+      "startedAt": "2026-10-18T00:53:02.108Z",
+      "durationMs": 674,
+      "statusCode": 422,
+      "debugId": "f960900c12c14",
+      "error": {
+        "name": "[redacted]",
+        "message": "The requested action could not be performed, semantically incorrect, or failed business validation.",
+        "debug_id": "f960900c12c14",
+        "details": [
+          {
+            "issue": "AUTHORIZATION_ALREADY_CAPTURED",
+            "description": "Authorization has already been captured."
+          }
+        ],
+        "links": [
+          {
+            "href": "https://developer.paypal.com/docs/api/payments/v2/#error-AUTHORIZATION_ALREADY_CAPTURED",
+            "rel": "information_link",
+            "encType": "application/json"
+          }
+        ]
+      }
+    }
+  ]
+}

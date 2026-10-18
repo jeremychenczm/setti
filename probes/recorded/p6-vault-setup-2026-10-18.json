@@ -1,0 +1,107 @@
+{
+  "probe": "p6-vault-setup",
+  "recordedAt": "2026-10-18T00:50:37.129Z",
+  "environment": "sandbox",
+  "notes": [
+    "Vault payment token saved to probes/.state.json (kept out of this recording)."
+  ],
+  "steps": [
+    {
+      "step": "create setup token",
+      "request": {
+        "paymentSource": {
+          "paypal": {
+            "description": "ROOM probe: save PayPal for this project",
+            "usageType": "MERCHANT",
+            "usagePattern": "UNSCHEDULED_POSTPAID",
+            "permitMultiplePaymentTokens": true,
+            "experienceContext": {
+              "brandName": "ROOM Probe",
+              "returnUrl": "https://example.com/room-probe/return",
+              "cancelUrl": "https://example.com/room-probe/cancel",
+              "shippingPreference": "NO_SHIPPING",
+              "userAction": "CONTINUE"
+            }
+          }
+        }
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:42:36.743Z",
+      "durationMs": 741,
+      "statusCode": 201,
+      "debugId": "ca4c381183d4b",
+      "response": {
+        "id": "77G69537C8116090W",
+        "customer": {
+          "id": "[redacted]"
+        },
+        "status": "PAYER_ACTION_REQUIRED",
+        "paymentSource": {
+          "paypal": {
+            "description": "ROOM probe: save PayPal for this project",
+            "usagePattern": "UNSCHEDULED_POSTPAID",
+            "permitMultiplePaymentTokens": true,
+            "usageType": "MERCHANT"
+          }
+        },
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v3/vault/setup-tokens/77G69537C8116090W",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://www.sandbox.paypal.com/agreements/approve?approval_session_id=77G69537C8116090W",
+            "rel": "approve",
+            "method": "GET"
+          }
+        ]
+      }
+    },
+    {
+      "step": "exchange setup token for payment token",
+      "request": {
+        "paymentSource": {
+          "token": {
+            "id": "77G69537C8116090W",
+            "type": "SETUP_TOKEN"
+          }
+        }
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:50:36.499Z",
+      "durationMs": 629,
+      "statusCode": 201,
+      "debugId": "ca4c38ccc5d8f",
+      "response": {
+        "id": "[redacted]",
+        "customer": {
+          "id": "[redacted]"
+        },
+        "paymentSource": {
+          "paypal": {
+            "description": "ROOM probe: save PayPal for this project",
+            "usagePattern": "UNSCHEDULED_POSTPAID",
+            "permitMultiplePaymentTokens": true,
+            "usageType": "MERCHANT",
+            "emailAddress": "[redacted]",
+            "payerId": "[redacted]",
+            "name": "[redacted]"
+          }
+        },
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v3/vault/payment-tokens/[redacted]",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v3/vault/payment-tokens/[redacted]",
+            "rel": "delete",
+            "method": "DELETE"
+          }
+        ]
+      }
+    }
+  ]
+}

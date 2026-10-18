@@ -1,0 +1,171 @@
+{
+  "probe": "p3-over-capture-vault-e-aged-vault-f-aged",
+  "recordedAt": "2026-10-18T00:52:32.798Z",
+  "environment": "sandbox",
+  "notes": [
+    "Allowance used: 7500 cents on 100000; tried 7501 cents on 100000. The second authorization stays open if the capture was rejected; void it or reuse it."
+  ],
+  "steps": [
+    {
+      "step": "capture at authorized amount + allowance",
+      "request": {
+        "authorizationId": "3H8681336F117921L",
+        "authorizedCents": 100000,
+        "captureCents": 107500
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:52:30.202Z",
+      "durationMs": 1564,
+      "statusCode": 201,
+      "debugId": "f7753150a169e",
+      "response": {
+        "status": "COMPLETED",
+        "id": "34E50668N2417161P",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "1075.00"
+        },
+        "customId": "probe-p7-vault-e-aged",
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "finalCapture": true,
+        "sellerReceivableBreakdown": {
+          "grossAmount": {
+            "currencyCode": "USD",
+            "value": "1075.00"
+          },
+          "paypalFee": {
+            "currencyCode": "USD",
+            "value": "36.85"
+          },
+          "netAmount": {
+            "currencyCode": "USD",
+            "value": "1038.15"
+          },
+          "exchangeRate": {}
+        },
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/34E50668N2417161P",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/34E50668N2417161P/refund",
+            "rel": "refund",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/3H8681336F117921L",
+            "rel": "up",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-18T00:52:33Z",
+        "updateTime": "2026-10-18T00:52:33Z"
+      }
+    },
+    {
+      "step": "capture at allowance + 1 cent (expect rejection)",
+      "request": {
+        "authorizationId": "7MD96487JM081505D",
+        "authorizedCents": 100000,
+        "captureCents": 107501
+      },
+      "ok": false,
+      "startedAt": "2026-10-18T00:52:31.766Z",
+      "durationMs": 755,
+      "statusCode": 422,
+      "debugId": "f157591cd8b35",
+      "error": {
+        "name": "[redacted]",
+        "message": "The requested action could not be performed, semantically incorrect, or failed business validation.",
+        "debug_id": "f157591cd8b35",
+        "details": [
+          {
+            "issue": "MAX_CAPTURE_AMOUNT_EXCEEDED",
+            "description": "Capture amount exceeds allowable limit. Please contact customer service or your account manager to request the change to your overage limit. The default overage limit is 115%, which allows the sum of all captures to be up to 115% of the order amount."
+          }
+        ],
+        "links": [
+          {
+            "href": "https://developer.paypal.com/docs/api/payments/v2/#error-MAX_CAPTURE_AMOUNT_EXCEEDED",
+            "rel": "information_link",
+            "encType": "application/json"
+          }
+        ]
+      }
+    },
+    {
+      "step": "read beyond authorization afterwards",
+      "request": {
+        "authorizationId": "7MD96487JM081505D"
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:52:32.522Z",
+      "durationMs": 273,
+      "statusCode": 200,
+      "debugId": "f200956ebab27",
+      "response": {
+        "status": "CREATED",
+        "id": "7MD96487JM081505D",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "1000.00"
+        },
+        "customId": "probe-p7-vault-f-aged",
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "expirationTime": "2026-11-16T00:52:25Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/7MD96487JM081505D",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/7MD96487JM081505D/capture",
+            "rel": "capture",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/7MD96487JM081505D/void",
+            "rel": "void",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/7MD96487JM081505D/reauthorize",
+            "rel": "reauthorize",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/8Y346570YD828022D",
+            "rel": "up",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-18T00:52:25Z",
+        "updateTime": "2026-10-18T00:52:25Z",
+        "supplementaryData": {
+          "relatedIds": {
+            "orderId": "8Y346570YD828022D"
+          }
+        },
+        "payee": {
+          "emailAddress": "[redacted]",
+          "merchantId": "ZXK85KF9DE8H4"
+        }
+      }
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 /**
  * Sandbox-only guard for every PayPal call this project makes.
  *
- * ROOM is a hackathon build: it must never touch a live PayPal account.
+ * Setti is a hackathon build: it must never touch a live PayPal account.
  * Anything that constructs a PayPal client goes through `assertSandbox()`
  * first, so a misconfigured environment fails loudly instead of moving
  * real money.

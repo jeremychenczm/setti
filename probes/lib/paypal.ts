@@ -32,8 +32,8 @@ export const vault = new VaultController(client);
 export const FULL = "return=representation";
 
 /** Placeholder redirect targets for buyer approval in the sandbox. */
-export const RETURN_URL = "https://example.com/room-probe/return";
-export const CANCEL_URL = "https://example.com/room-probe/cancel";
+export const RETURN_URL = "https://example.com/setti-probe/return";
+export const CANCEL_URL = "https://example.com/setti-probe/cancel";
 
 export function usd(cents: number) {
   return { currencyCode: "USD", value: (cents / 100).toFixed(2) };
@@ -41,7 +41,7 @@ export function usd(cents: number) {
 
 /** Deterministic request id so a re-run of the same step is idempotent on PayPal's side. */
 export function requestId(probe: string, step: string, key: string): string {
-  return `room-${probe}-${step}-${key}`.slice(0, 108);
+  return `setti-${probe}-${step}-${key}`.slice(0, 108);
 }
 
 export function linkHref(links: { rel: string; href: string }[] | undefined, ...rels: string[]): string | undefined {

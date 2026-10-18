@@ -11,7 +11,7 @@ import {
   PaypalExperienceUserAction,
   PaypalWalletContextShippingPreference,
 } from "@paypal/paypal-server-sdk";
-import { arg, run, waitForEnter } from "./lib/cli";
+import { arg, run, waitForApproval } from "./lib/cli";
 import {
   CANCEL_URL,
   FULL,
@@ -32,11 +32,11 @@ run(async () => {
   const rec = new Recorder("p8-pay-later-authorize");
   const body = {
     intent: CheckoutPaymentIntent.Authorize,
-    purchaseUnits: [{ amount: usd(amountCents), description: "ROOM probe Pay Later hold", customId: `probe-p8-${stamp}` }],
+    purchaseUnits: [{ amount: usd(amountCents), description: "Setti probe Pay Later hold", customId: `probe-p8-${stamp}` }],
     paymentSource: {
       paypal: {
         experienceContext: {
-          brandName: "ROOM Probe",
+          brandName: "Setti Probe",
           returnUrl: RETURN_URL,
           cancelUrl: CANCEL_URL,
           userAction: PaypalExperienceUserAction.PayNow,
@@ -51,10 +51,11 @@ run(async () => {
   );
   if (!order?.id) return void rec.save();
 
-  await waitForEnter(
+  await waitForApproval(
     "Open this link as the sandbox BUYER (US personal account). If a Pay Later / Pay in 4 option is shown, choose it; " +
       "otherwise note that it was not offered and approve with the wallet.\n" +
       linkHref(order.links, "payer-action", "approve"),
+    async () => String((await orders.getOrder({ id: order.id! })).result.status) === "APPROVED",
   );
 
   const authorized = await rec.step("authorize order", { orderId: order.id }, () =>

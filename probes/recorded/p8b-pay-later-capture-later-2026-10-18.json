@@ -1,0 +1,73 @@
+{
+  "probe": "p8b-pay-later-capture-later",
+  "recordedAt": "2026-10-18T01:10:51.936Z",
+  "environment": "sandbox",
+  "notes": [
+    "Capture status: COMPLETED, amount {\"currencyCode\":\"USD\",\"value\":\"200.00\"}"
+  ],
+  "steps": [
+    {
+      "step": "capture Pay Later authorization later",
+      "request": {
+        "authorizationId": "4P292567G80818940",
+        "finalCapture": true
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T01:10:50.175Z",
+      "durationMs": 1760,
+      "statusCode": 201,
+      "debugId": "f535018a68cef",
+      "response": {
+        "status": "COMPLETED",
+        "id": "0CV48041HJ649300B",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "200.00"
+        },
+        "customId": "probe-p8b",
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "finalCapture": true,
+        "sellerReceivableBreakdown": {
+          "grossAmount": {
+            "currencyCode": "USD",
+            "value": "200.00"
+          },
+          "paypalFee": {
+            "currencyCode": "USD",
+            "value": "7.10"
+          },
+          "netAmount": {
+            "currencyCode": "USD",
+            "value": "192.90"
+          },
+          "exchangeRate": {}
+        },
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/0CV48041HJ649300B",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/0CV48041HJ649300B/refund",
+            "rel": "refund",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/4P292567G80818940",
+            "rel": "up",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-18T01:10:52Z",
+        "updateTime": "2026-10-18T01:10:52Z"
+      }
+    }
+  ]
+}

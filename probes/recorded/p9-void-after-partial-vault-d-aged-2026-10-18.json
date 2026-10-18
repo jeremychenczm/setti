@@ -1,0 +1,175 @@
+{
+  "probe": "p9-void-after-partial-vault-d-aged",
+  "recordedAt": "2026-10-18T00:51:56.882Z",
+  "environment": "sandbox",
+  "notes": [
+    "Authorized 10000, captured 4000, so 6000 should be released. PayPal now reports amount 10000 and status VOIDED."
+  ],
+  "steps": [
+    {
+      "step": "partial capture (not final)",
+      "request": {
+        "authorizationId": "1LR44544CT833924T",
+        "captureCents": 4000
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:51:53.846Z",
+      "durationMs": 1845,
+      "statusCode": 201,
+      "debugId": "f5246493b616e",
+      "response": {
+        "status": "COMPLETED",
+        "id": "0T6595865R1477231",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "40.00"
+        },
+        "customId": "probe-p7-vault-d-aged",
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "finalCapture": false,
+        "sellerReceivableBreakdown": {
+          "grossAmount": {
+            "currencyCode": "USD",
+            "value": "40.00"
+          },
+          "paypalFee": {
+            "currencyCode": "USD",
+            "value": "1.66"
+          },
+          "netAmount": {
+            "currencyCode": "USD",
+            "value": "38.34"
+          },
+          "exchangeRate": {}
+        },
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/0T6595865R1477231",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/0T6595865R1477231/refund",
+            "rel": "refund",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/1LR44544CT833924T",
+            "rel": "up",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-18T00:51:56Z",
+        "updateTime": "2026-10-18T00:51:56Z"
+      }
+    },
+    {
+      "step": "void the remainder",
+      "request": {
+        "authorizationId": "1LR44544CT833924T"
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:51:55.691Z",
+      "durationMs": 801,
+      "statusCode": 200,
+      "debugId": "f4346660fa1d9",
+      "response": {
+        "status": "VOIDED",
+        "id": "1LR44544CT833924T",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "100.00"
+        },
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "expirationTime": "2026-11-15T16:51:44-08:00",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/1LR44544CT833924T",
+            "rel": "self",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-17T17:51:44-07:00",
+        "updateTime": "2026-10-17T17:51:57-07:00"
+      }
+    },
+    {
+      "step": "read authorization after void",
+      "request": {
+        "authorizationId": "1LR44544CT833924T"
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:51:56.492Z",
+      "durationMs": 389,
+      "statusCode": 200,
+      "debugId": "f462647039118",
+      "response": {
+        "status": "VOIDED",
+        "id": "1LR44544CT833924T",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "100.00"
+        },
+        "customId": "probe-p7-vault-d-aged",
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "expirationTime": "2026-11-16T00:51:44Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/1LR44544CT833924T",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/1LR44544CT833924T/capture",
+            "rel": "capture",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/1LR44544CT833924T/void",
+            "rel": "void",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/1LR44544CT833924T/reauthorize",
+            "rel": "reauthorize",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/6YU80641HM058124B",
+            "rel": "up",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-18T00:51:44Z",
+        "updateTime": "2026-10-18T00:51:57Z",
+        "supplementaryData": {
+          "relatedIds": {
+            "orderId": "6YU80641HM058124B"
+          }
+        },
+        "payee": {
+          "emailAddress": "[redacted]",
+          "merchantId": "ZXK85KF9DE8H4"
+        }
+      }
+    }
+  ]
+}

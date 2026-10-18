@@ -10,7 +10,7 @@ import {
   PaypalExperienceUserAction,
   PaypalWalletContextShippingPreference,
 } from "@paypal/paypal-server-sdk";
-import { arg, run, waitForEnter } from "./lib/cli";
+import { arg, run, waitForApproval } from "./lib/cli";
 import {
   CANCEL_URL,
   FULL,
@@ -22,7 +22,7 @@ import {
   usd,
 } from "./lib/paypal";
 import { Recorder } from "./lib/record";
-import { loadState, saveState } from "./lib/state";
+import { loadState, updateState } from "./lib/state";
 
 run(async () => {
   const label = arg("label");
@@ -36,12 +36,12 @@ run(async () => {
   const body = {
     intent: CheckoutPaymentIntent.Authorize,
     purchaseUnits: [
-      { amount: usd(amountCents), description: `ROOM probe hold ${label}`, customId: `probe-p1-${label}` },
+      { amount: usd(amountCents), description: `Setti probe hold ${label}`, customId: `probe-p1-${label}` },
     ],
     paymentSource: {
       paypal: {
         experienceContext: {
-          brandName: "ROOM Probe",
+          brandName: "Setti Probe",
           returnUrl: RETURN_URL,
           cancelUrl: CANCEL_URL,
           userAction: PaypalExperienceUserAction.PayNow,
@@ -57,23 +57,26 @@ run(async () => {
   if (!order?.id) return void rec.save();
 
   const approve = linkHref(order.links, "payer-action", "approve");
-  await waitForEnter(`Open this link, log in as the sandbox BUYER and approve:\n${approve}`);
+  await waitForApproval(
+    `Open this link, log in as the sandbox BUYER and approve:\n${approve}`,
+    async () => String((await orders.getOrder({ id: order.id! })).result.status) === "APPROVED",
+  );
 
   const authorized = await rec.step("authorize order", { orderId: order.id }, () =>
     orders.authorizeOrder({ id: order.id!, prefer: FULL, paypalRequestId: requestId("p1", "authorize", label) }),
   );
   const auth = firstAuthorization(authorized);
   if (auth?.id) {
-    state.authorizations.push({
+    const saved = {
       label,
       orderId: order.id,
       authorizationId: auth.id,
       amountCents,
       createdAt: auth.createTime ?? new Date().toISOString(),
       expiresAt: auth.expirationTime,
-      source: "checkout",
-    });
-    saveState(state);
+      source: "checkout" as const,
+    };
+    updateState((s) => void s.authorizations.push(saved));
     rec.note(`Standing authorization "${label}" saved: ${auth.id}, status ${auth.status}, expires ${auth.expirationTime}`);
   }
   rec.save();

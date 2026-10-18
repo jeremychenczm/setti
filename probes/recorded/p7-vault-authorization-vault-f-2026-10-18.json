@@ -1,0 +1,466 @@
+{
+  "probe": "p7-vault-authorization-vault-f",
+  "recordedAt": "2026-10-18T00:52:28.314Z",
+  "environment": "sandbox",
+  "notes": [
+    "Vault hold \"vault-f\": 79P64582745208458, status CREATED, order status COMPLETED.",
+    "Vault hold \"vault-f-aged\": 7MD96487JM081505D, status CREATED, order status COMPLETED.",
+    "Run P4 or P5 with --auth vault-f-aged once it is at least 3 days old."
+  ],
+  "steps": [
+    {
+      "step": "create vault AUTHORIZE order (vault-f)",
+      "request": {
+        "intent": "AUTHORIZE",
+        "purchaseUnits": [
+          {
+            "amount": {
+              "currencyCode": "USD",
+              "value": "1000.00"
+            },
+            "description": "ROOM probe vault hold vault-f",
+            "customId": "probe-p7-vault-f"
+          }
+        ],
+        "paymentSource": {
+          "paypal": {
+            "vaultId": "[redacted]",
+            "storedCredential": {
+              "paymentInitiator": "MERCHANT",
+              "usage": "SUBSEQUENT",
+              "usagePattern": "UNSCHEDULED_POSTPAID"
+            }
+          }
+        }
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:52:20.466Z",
+      "durationMs": 2299,
+      "statusCode": 201,
+      "debugId": "f486106a85a1b",
+      "response": {
+        "createTime": "2026-10-18T00:52:22Z",
+        "updateTime": "2026-10-18T00:52:23Z",
+        "id": "36X47504827101933",
+        "paymentSource": {
+          "paypal": {
+            "emailAddress": "[redacted]",
+            "accountId": "[redacted]",
+            "accountStatus": "VERIFIED",
+            "name": "[redacted]",
+            "address": "[redacted]",
+            "storedCredential": {
+              "paymentInitiator": "MERCHANT",
+              "usagePattern": "UNSCHEDULED_POSTPAID",
+              "usage": "SUBSEQUENT"
+            }
+          }
+        },
+        "intent": "AUTHORIZE",
+        "payer": {
+          "emailAddress": "[redacted]",
+          "payerId": "[redacted]",
+          "name": "[redacted]",
+          "address": "[redacted]"
+        },
+        "purchaseUnits": [
+          {
+            "referenceId": "default",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "1000.00"
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "description": "ROOM probe vault hold vault-f",
+            "customId": "probe-p7-vault-f",
+            "softDescriptor": "PAYPAL *TEST SE8H4",
+            "payments": {
+              "authorizations": [
+                {
+                  "status": "CREATED",
+                  "id": "79P64582745208458",
+                  "amount": {
+                    "currencyCode": "USD",
+                    "value": "1000.00"
+                  },
+                  "customId": "probe-p7-vault-f",
+                  "sellerProtection": {
+                    "status": "ELIGIBLE",
+                    "disputeCategories": [
+                      "ITEM_NOT_RECEIVED",
+                      "UNAUTHORIZED_TRANSACTION"
+                    ]
+                  },
+                  "expirationTime": "2026-11-16T00:52:23Z",
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/79P64582745208458",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/79P64582745208458/capture",
+                      "rel": "capture",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/79P64582745208458/void",
+                      "rel": "void",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/79P64582745208458/reauthorize",
+                      "rel": "reauthorize",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/36X47504827101933",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "createTime": "2026-10-18T00:52:23Z",
+                  "updateTime": "2026-10-18T00:52:23Z"
+                }
+              ]
+            }
+          }
+        ],
+        "status": "COMPLETED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/36X47504827101933",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      }
+    },
+    {
+      "step": "create vault AUTHORIZE order (vault-f-aged)",
+      "request": {
+        "intent": "AUTHORIZE",
+        "purchaseUnits": [
+          {
+            "amount": {
+              "currencyCode": "USD",
+              "value": "1000.00"
+            },
+            "description": "ROOM probe vault hold vault-f-aged",
+            "customId": "probe-p7-vault-f-aged"
+          }
+        ],
+        "paymentSource": {
+          "paypal": {
+            "vaultId": "[redacted]",
+            "storedCredential": {
+              "paymentInitiator": "MERCHANT",
+              "usage": "SUBSEQUENT",
+              "usagePattern": "UNSCHEDULED_POSTPAID"
+            }
+          }
+        }
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:52:22.766Z",
+      "durationMs": 2090,
+      "statusCode": 201,
+      "debugId": "f323779ee9cd6",
+      "response": {
+        "createTime": "2026-10-18T00:52:24Z",
+        "updateTime": "2026-10-18T00:52:25Z",
+        "id": "8Y346570YD828022D",
+        "paymentSource": {
+          "paypal": {
+            "emailAddress": "[redacted]",
+            "accountId": "[redacted]",
+            "accountStatus": "VERIFIED",
+            "name": "[redacted]",
+            "address": "[redacted]",
+            "storedCredential": {
+              "paymentInitiator": "MERCHANT",
+              "usagePattern": "UNSCHEDULED_POSTPAID",
+              "usage": "SUBSEQUENT"
+            }
+          }
+        },
+        "intent": "AUTHORIZE",
+        "payer": {
+          "emailAddress": "[redacted]",
+          "payerId": "[redacted]",
+          "name": "[redacted]",
+          "address": "[redacted]"
+        },
+        "purchaseUnits": [
+          {
+            "referenceId": "default",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "1000.00"
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "description": "ROOM probe vault hold vault-f-aged",
+            "customId": "probe-p7-vault-f-aged",
+            "softDescriptor": "PAYPAL *TEST SE8H4",
+            "payments": {
+              "authorizations": [
+                {
+                  "status": "CREATED",
+                  "id": "7MD96487JM081505D",
+                  "amount": {
+                    "currencyCode": "USD",
+                    "value": "1000.00"
+                  },
+                  "customId": "probe-p7-vault-f-aged",
+                  "sellerProtection": {
+                    "status": "ELIGIBLE",
+                    "disputeCategories": [
+                      "ITEM_NOT_RECEIVED",
+                      "UNAUTHORIZED_TRANSACTION"
+                    ]
+                  },
+                  "expirationTime": "2026-11-16T00:52:25Z",
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/7MD96487JM081505D",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/7MD96487JM081505D/capture",
+                      "rel": "capture",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/7MD96487JM081505D/void",
+                      "rel": "void",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/7MD96487JM081505D/reauthorize",
+                      "rel": "reauthorize",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/8Y346570YD828022D",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "createTime": "2026-10-18T00:52:25Z",
+                  "updateTime": "2026-10-18T00:52:25Z"
+                }
+              ]
+            }
+          }
+        ],
+        "status": "COMPLETED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/8Y346570YD828022D",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      }
+    },
+    {
+      "step": "partial capture on vault hold (not final)",
+      "request": {
+        "authorizationId": "79P64582745208458",
+        "captureCents": 50000
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:52:24.857Z",
+      "durationMs": 1471,
+      "statusCode": 201,
+      "debugId": "f4209340eb1b0",
+      "response": {
+        "status": "COMPLETED",
+        "id": "2F34973787203290J",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "500.00"
+        },
+        "customId": "probe-p7-vault-f",
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "finalCapture": false,
+        "sellerReceivableBreakdown": {
+          "grossAmount": {
+            "currencyCode": "USD",
+            "value": "500.00"
+          },
+          "paypalFee": {
+            "currencyCode": "USD",
+            "value": "17.30"
+          },
+          "netAmount": {
+            "currencyCode": "USD",
+            "value": "482.70"
+          },
+          "exchangeRate": {}
+        },
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/2F34973787203290J",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/2F34973787203290J/refund",
+            "rel": "refund",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/79P64582745208458",
+            "rel": "up",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-18T00:52:27Z",
+        "updateTime": "2026-10-18T00:52:27Z"
+      }
+    },
+    {
+      "step": "final capture on vault hold",
+      "request": {
+        "authorizationId": "79P64582745208458",
+        "captureCents": 50000
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:52:26.328Z",
+      "durationMs": 1485,
+      "statusCode": 201,
+      "debugId": "f7100782007ea",
+      "response": {
+        "status": "COMPLETED",
+        "id": "524891474W7438402",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "500.00"
+        },
+        "customId": "probe-p7-vault-f",
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "finalCapture": true,
+        "sellerReceivableBreakdown": {
+          "grossAmount": {
+            "currencyCode": "USD",
+            "value": "500.00"
+          },
+          "paypalFee": {
+            "currencyCode": "USD",
+            "value": "17.30"
+          },
+          "netAmount": {
+            "currencyCode": "USD",
+            "value": "482.70"
+          },
+          "exchangeRate": {}
+        },
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/524891474W7438402",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/524891474W7438402/refund",
+            "rel": "refund",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/79P64582745208458",
+            "rel": "up",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-18T00:52:28Z",
+        "updateTime": "2026-10-18T00:52:28Z"
+      }
+    },
+    {
+      "step": "read vault hold afterwards",
+      "request": {
+        "authorizationId": "79P64582745208458"
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:52:27.813Z",
+      "durationMs": 500,
+      "statusCode": 200,
+      "debugId": "f956379387960",
+      "response": {
+        "status": "CAPTURED",
+        "id": "79P64582745208458",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "1000.00"
+        },
+        "customId": "probe-p7-vault-f",
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "expirationTime": "2026-11-16T00:52:23Z",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/79P64582745208458",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/79P64582745208458/capture",
+            "rel": "capture",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/79P64582745208458/void",
+            "rel": "void",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/79P64582745208458/reauthorize",
+            "rel": "reauthorize",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/36X47504827101933",
+            "rel": "up",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-18T00:52:23Z",
+        "updateTime": "2026-10-18T00:52:28Z",
+        "supplementaryData": {
+          "relatedIds": {
+            "orderId": "36X47504827101933"
+          }
+        },
+        "payee": {
+          "emailAddress": "[redacted]",
+          "merchantId": "ZXK85KF9DE8H4"
+        }
+      }
+    }
+  ]
+}

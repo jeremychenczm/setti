@@ -25,12 +25,13 @@ run(async () => {
   const state = loadState();
   if (!state.vaultTokenId) throw new Error("No vault token in probes/.state.json. Run P6 first.");
   const rec = new Recorder(`p7-vault-authorization-${label}`);
+  rec.scrub(state.vaultTokenId);
 
   async function vaultHold(holdLabel: string): Promise<StandingAuthorization | undefined> {
     const body = {
       intent: CheckoutPaymentIntent.Authorize,
       purchaseUnits: [
-        { amount: usd(amountCents), description: `ROOM probe vault hold ${holdLabel}`, customId: `probe-p7-${holdLabel}` },
+        { amount: usd(amountCents), description: `Setti probe vault hold ${holdLabel}`, customId: `probe-p7-${holdLabel}` },
       ],
       paymentSource: {
         paypal: {

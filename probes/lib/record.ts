@@ -24,6 +24,10 @@ const REDACT_KEYS = new Set([
   "address",
   "birthDate",
   "taxInfo",
+  // Vault and customer identifiers are credentials-like: keep them out of recordings.
+  "vaultId",
+  "vault_id",
+  "customer",
 ]);
 
 export function redact(value: unknown): unknown {
@@ -31,7 +35,9 @@ export function redact(value: unknown): unknown {
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = REDACT_KEYS.has(k) ? "[redacted]" : redact(v);
+      // A string "name" is an error name or an item name, not a person's name (those are objects).
+      const personal = REDACT_KEYS.has(k) && !(k === "name" && typeof v === "string");
+      out[k] = personal ? "[redacted]" : redact(v);
     }
     return out;
   }
@@ -53,8 +59,14 @@ export interface StepRecord {
 export class Recorder {
   readonly steps: StepRecord[] = [];
   readonly notes: string[] = [];
+  private readonly secrets = new Set<string>();
 
   constructor(readonly probe: string) {}
+
+  /** A value (such as a vault payment token id) that must never appear in the saved recording. */
+  scrub(value: string | undefined): void {
+    if (value) this.secrets.add(value);
+  }
 
   note(text: string): void {
     this.notes.push(text);
@@ -114,7 +126,9 @@ export class Recorder {
       notes: this.notes,
       steps: this.steps,
     };
-    writeFileSync(file, JSON.stringify(body, null, 2) + "\n");
+    let text = JSON.stringify(body, null, 2);
+    for (const secret of this.secrets) text = text.split(secret).join("[redacted]");
+    writeFileSync(file, text + "\n");
     console.log(`\nRecorded ${this.steps.length} step(s) to ${file}. Review it before committing.`);
     return file;
   }

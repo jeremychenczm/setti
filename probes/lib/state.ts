@@ -34,6 +34,13 @@ export function saveState(state: ProbeState): void {
   writeFileSync(FILE, JSON.stringify(state, null, 2) + "\n");
 }
 
+/** Re-reads the file before changing it, so probes running side by side do not overwrite each other. */
+export function updateState(change: (state: ProbeState) => void): void {
+  const state = loadState();
+  change(state);
+  saveState(state);
+}
+
 export function findAuthorization(state: ProbeState, label: string): StandingAuthorization {
   const auth = state.authorizations.find((a) => a.label === label);
   if (!auth) {

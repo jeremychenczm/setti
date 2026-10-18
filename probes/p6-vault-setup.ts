@@ -12,25 +12,24 @@ import {
   VaultTokenRequestType,
   VaultUserAction,
 } from "@paypal/paypal-server-sdk";
-import { run, waitForEnter } from "./lib/cli";
+import { run, waitForApproval } from "./lib/cli";
 import { CANCEL_URL, RETURN_URL, linkHref, requestId, vault } from "./lib/paypal";
 import { Recorder } from "./lib/record";
-import { loadState, saveState } from "./lib/state";
+import { updateState } from "./lib/state";
 
 run(async () => {
-  const state = loadState();
   const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "");
   const rec = new Recorder("p6-vault-setup");
 
   const body = {
     paymentSource: {
       paypal: {
-        description: "ROOM probe: save PayPal for this project",
+        description: "Setti probe: save PayPal for this project",
         usageType: PaypalPaymentTokenUsageType.Merchant,
         usagePattern: UsagePattern.UnscheduledPostpaid,
         permitMultiplePaymentTokens: true,
         experienceContext: {
-          brandName: "ROOM Probe",
+          brandName: "Setti Probe",
           returnUrl: RETURN_URL,
           cancelUrl: CANCEL_URL,
           shippingPreference: ExperienceContextShippingPreference.NoShipping,
@@ -45,8 +44,9 @@ run(async () => {
   );
   if (!setup?.id) return void rec.save();
 
-  await waitForEnter(
+  await waitForApproval(
     `Open this link, log in as the sandbox BUYER and agree to save PayPal:\n${linkHref(setup.links, "approve")}`,
+    async () => String((await vault.getSetupToken(setup.id!)).result.status) === "APPROVED",
   );
 
   const tokenBody = { paymentSource: { token: { id: setup.id, type: VaultTokenRequestType.SetupToken } } };
@@ -54,9 +54,12 @@ run(async () => {
     vault.createPaymentToken({ body: tokenBody, paypalRequestId: requestId("p6", "token", stamp) }),
   );
   if (token?.id) {
-    state.vaultTokenId = token.id;
-    saveState(state);
-    rec.note(`Vault payment token saved to probes/.state.json (${token.id.slice(0, 4)}...).`);
+    const tokenId = token.id;
+    rec.scrub(tokenId);
+    updateState((s) => {
+      s.vaultTokenId = tokenId;
+    });
+    rec.note("Vault payment token saved to probes/.state.json (kept out of this recording).");
   }
   rec.save();
 });

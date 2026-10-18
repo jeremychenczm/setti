@@ -1,0 +1,287 @@
+{
+  "probe": "p8-pay-later-authorize",
+  "recordedAt": "2026-10-18T00:55:53.319Z",
+  "environment": "sandbox",
+  "notes": [
+    "Record in this file whether Pay Later was offered and chosen; the API response alone may not say."
+  ],
+  "steps": [
+    {
+      "step": "create AUTHORIZE order",
+      "request": {
+        "intent": "AUTHORIZE",
+        "purchaseUnits": [
+          {
+            "amount": {
+              "currencyCode": "USD",
+              "value": "200.00"
+            },
+            "description": "ROOM probe Pay Later hold",
+            "customId": "probe-p8-20261018005305"
+          }
+        ],
+        "paymentSource": {
+          "paypal": {
+            "experienceContext": {
+              "brandName": "ROOM Probe",
+              "returnUrl": "https://example.com/room-probe/return",
+              "cancelUrl": "https://example.com/room-probe/cancel",
+              "userAction": "PAY_NOW",
+              "shippingPreference": "NO_SHIPPING"
+            }
+          }
+        }
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:53:05.325Z",
+      "durationMs": 1124,
+      "statusCode": 200,
+      "debugId": "f597636b2fb69",
+      "response": {
+        "id": "00D94723FY2502615",
+        "paymentSource": {
+          "paypal": {}
+        },
+        "intent": "AUTHORIZE",
+        "purchaseUnits": [
+          {
+            "referenceId": "default",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "200.00"
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "description": "ROOM probe Pay Later hold",
+            "customId": "probe-p8-20261018005305"
+          }
+        ],
+        "status": "PAYER_ACTION_REQUIRED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/00D94723FY2502615",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://www.sandbox.paypal.com/checkoutnow?token=00D94723FY2502615",
+            "rel": "payer-action",
+            "method": "GET"
+          }
+        ]
+      }
+    },
+    {
+      "step": "authorize order",
+      "request": {
+        "orderId": "00D94723FY2502615"
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:55:52.047Z",
+      "durationMs": 942,
+      "statusCode": 201,
+      "debugId": "ca4c39480892f",
+      "response": {
+        "createTime": "2026-10-18T00:53:07Z",
+        "updateTime": "2026-10-18T00:55:54Z",
+        "id": "00D94723FY2502615",
+        "paymentSource": {
+          "paypal": {
+            "emailAddress": "[redacted]",
+            "accountId": "[redacted]",
+            "accountStatus": "VERIFIED",
+            "name": "[redacted]",
+            "address": "[redacted]"
+          }
+        },
+        "intent": "AUTHORIZE",
+        "payer": {
+          "emailAddress": "[redacted]",
+          "payerId": "[redacted]",
+          "name": "[redacted]",
+          "address": "[redacted]"
+        },
+        "purchaseUnits": [
+          {
+            "referenceId": "default",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "200.00"
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "description": "ROOM probe Pay Later hold",
+            "customId": "probe-p8-20261018005305",
+            "payments": {
+              "authorizations": [
+                {
+                  "status": "CREATED",
+                  "id": "50B42993U3334930D",
+                  "amount": {
+                    "currencyCode": "USD",
+                    "value": "200.00"
+                  },
+                  "customId": "probe-p8-20261018005305",
+                  "sellerProtection": {
+                    "status": "ELIGIBLE",
+                    "disputeCategories": [
+                      "ITEM_NOT_RECEIVED",
+                      "UNAUTHORIZED_TRANSACTION"
+                    ]
+                  },
+                  "expirationTime": "2026-11-16T00:55:54Z",
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/50B42993U3334930D",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/50B42993U3334930D/capture",
+                      "rel": "capture",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/50B42993U3334930D/void",
+                      "rel": "void",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/50B42993U3334930D/reauthorize",
+                      "rel": "reauthorize",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/00D94723FY2502615",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "createTime": "2026-10-18T00:55:54Z",
+                  "updateTime": "2026-10-18T00:55:54Z"
+                }
+              ]
+            }
+          }
+        ],
+        "status": "COMPLETED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/00D94723FY2502615",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      }
+    },
+    {
+      "step": "read order (funding details)",
+      "request": {
+        "orderId": "00D94723FY2502615"
+      },
+      "ok": true,
+      "startedAt": "2026-10-18T00:55:52.989Z",
+      "durationMs": 323,
+      "statusCode": 200,
+      "debugId": "ca4c394866d7c",
+      "response": {
+        "createTime": "2026-10-18T00:55:54Z",
+        "updateTime": "2026-10-18T00:55:54Z",
+        "id": "00D94723FY2502615",
+        "paymentSource": {
+          "paypal": {
+            "emailAddress": "[redacted]",
+            "accountId": "[redacted]",
+            "accountStatus": "VERIFIED",
+            "name": "[redacted]",
+            "address": "[redacted]"
+          }
+        },
+        "intent": "AUTHORIZE",
+        "payer": {
+          "emailAddress": "[redacted]",
+          "payerId": "[redacted]",
+          "name": "[redacted]",
+          "address": "[redacted]"
+        },
+        "purchaseUnits": [
+          {
+            "referenceId": "default",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "200.00"
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "description": "ROOM probe Pay Later hold",
+            "customId": "probe-p8-20261018005305",
+            "payments": {
+              "authorizations": [
+                {
+                  "status": "CREATED",
+                  "id": "50B42993U3334930D",
+                  "amount": {
+                    "currencyCode": "USD",
+                    "value": "200.00"
+                  },
+                  "customId": "probe-p8-20261018005305",
+                  "sellerProtection": {
+                    "status": "ELIGIBLE",
+                    "disputeCategories": [
+                      "ITEM_NOT_RECEIVED",
+                      "UNAUTHORIZED_TRANSACTION"
+                    ]
+                  },
+                  "expirationTime": "2026-11-16T00:55:54Z",
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/50B42993U3334930D",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/50B42993U3334930D/capture",
+                      "rel": "capture",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/50B42993U3334930D/void",
+                      "rel": "void",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/50B42993U3334930D/reauthorize",
+                      "rel": "reauthorize",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/00D94723FY2502615",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "createTime": "2026-10-18T00:55:54Z",
+                  "updateTime": "2026-10-18T00:55:54Z"
+                }
+              ]
+            }
+          }
+        ],
+        "status": "COMPLETED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/00D94723FY2502615",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      }
+    }
+  ]
+}
