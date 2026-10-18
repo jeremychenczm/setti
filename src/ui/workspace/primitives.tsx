@@ -1,12 +1,21 @@
+import Image from "next/image";
+import { avatarFor } from "../avatars";
 import type { ItemState, Person } from "../demo-data";
 
+const AVATAR_PX = { sm: 24, md: 36, lg: 44 };
+
 export function Avatar({ person, size = "md" }: { person: Person; size?: "sm" | "md" | "lg" }) {
-  const box = { sm: "h-6 w-6 text-[10px]", md: "h-9 w-9 text-xs", lg: "h-11 w-11 text-sm" }[size];
-  const shape = person.role === "agent" ? "rounded-lg" : "rounded-full";
+  const px = AVATAR_PX[size];
   return (
-    <span className={`inline-flex shrink-0 items-center justify-center font-semibold ${box} ${shape} ${person.tone}`} aria-hidden>
-      {person.initials}
-    </span>
+    <Image
+      src={avatarFor(person)}
+      alt=""
+      width={px}
+      height={px}
+      unoptimized
+      className="shrink-0 rounded-full"
+      style={{ width: px, height: px }}
+    />
   );
 }
 

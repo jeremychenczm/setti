@@ -9,10 +9,9 @@ export type PersonRole = "designer" | "client" | "agent";
 export interface Person {
   id: string;
   name: string;
-  initials: string;
   role: PersonRole;
-  /** Tailwind classes for the avatar circle. */
-  tone: string;
+  /** Path under public/; people without one get a default from the avatar set. */
+  avatar?: string;
 }
 
 export interface Agent extends Person {
@@ -107,14 +106,13 @@ export interface Alert {
   urgent: boolean;
 }
 
-export const me: Person = { id: "jordan", name: "Jordan Lee", initials: "J", role: "designer", tone: "bg-slate-600 text-white" };
+export const me: Person = { id: "jordan", name: "Jordan Lee", role: "designer", avatar: "/avatars/designer.webp" };
 
 export const changeAgent: Agent = {
   id: "change-agent",
   name: "Change Agent",
-  initials: "CA",
   role: "agent",
-  tone: "bg-amber-200 text-amber-900",
+  avatar: "/avatars/project-manager.webp",
   blurb: "Turns client messages into change drafts",
   can: [
     "Spots changes in project chats, including \"don't order yet\"",
@@ -126,9 +124,8 @@ export const changeAgent: Agent = {
 export const docsAgent: Agent = {
   id: "docs-agent",
   name: "Vendor Docs",
-  initials: "VD",
   role: "agent",
-  tone: "bg-orange-100 text-orange-800",
+  avatar: "/avatars/supplier.webp",
   blurb: "Reads quotes, return terms and surcharge notices",
   can: [
     "Pulls price, lead time and return terms out of links, PDFs and screenshots",
@@ -140,9 +137,8 @@ export const docsAgent: Agent = {
 export const moneyAgent: Agent = {
   id: "money-agent",
   name: "Money Agent",
-  initials: "MA",
   role: "agent",
-  tone: "bg-teal-100 text-teal-800",
+  avatar: "/avatars/budget-manager.webp",
   blurb: "Checks every dollar against PayPal and explains it",
   can: [
     "Compares what the chat says with live PayPal holds, charges and refunds",
@@ -153,10 +149,10 @@ export const moneyAgent: Agent = {
 
 export const agents: Agent[] = [changeAgent, docsAgent, moneyAgent];
 
-const emma: Person = { id: "emma", name: "Emma Park", initials: "EP", role: "client", tone: "bg-rose-100 text-rose-700" };
-const liam: Person = { id: "liam", name: "Liam Chen", initials: "LC", role: "client", tone: "bg-sky-100 text-sky-700" };
-const ava: Person = { id: "ava", name: "Ava Johnson", initials: "AJ", role: "client", tone: "bg-emerald-100 text-emerald-700" };
-const noah: Person = { id: "noah", name: "Noah Garcia", initials: "NG", role: "client", tone: "bg-violet-100 text-violet-700" };
+const emma: Person = { id: "emma", name: "Emma Park", role: "client", avatar: "/avatars/client.webp" };
+const liam: Person = { id: "liam", name: "Liam Chen", role: "client", avatar: "/avatars/consultant.webp" };
+const ava: Person = { id: "ava", name: "Ava Johnson", role: "client", avatar: "/avatars/report-specialist.webp" };
+const noah: Person = { id: "noah", name: "Noah Garcia", role: "client", avatar: "/avatars/contractor.webp" };
 
 export const people: Record<string, Person> = Object.fromEntries(
   [me, emma, liam, ava, noah, ...agents].map((p) => [p.id, p]),
