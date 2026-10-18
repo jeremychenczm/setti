@@ -8,7 +8,7 @@ import { StateChip } from "./primitives";
 
 export type PanelTab = "items" | "money" | "files";
 
-export function RightPanel({ conversation, tab, onTab }: { conversation: Conversation; tab: PanelTab; onTab: (t: PanelTab) => void }) {
+export function RightPanel({ conversation, tab, onTab, onOpenQuote }: { conversation: Conversation; tab: PanelTab; onTab: (t: PanelTab) => void; onOpenQuote?: () => void }) {
   if (conversation.kind === "agent") return <AgentAbout agent={conversation.counterpart as Agent} />;
 
   const tabs: { id: PanelTab; label: string }[] = [
@@ -30,6 +30,14 @@ export function RightPanel({ conversation, tab, onTab }: { conversation: Convers
           </button>
         ))}
       </div>
+      {conversation.id === "maple" && onOpenQuote && (
+        <div className="border-b border-[var(--line)] px-4 py-2.5">
+          <button onClick={onOpenQuote} className="flex items-center gap-1.5 text-[12px] font-medium text-[var(--primary)] hover:underline">
+            <FileText className="h-3.5 w-3.5" />
+            View approved quote
+          </button>
+        </div>
+      )}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {tab === "items" && <ItemsTab key={conversation.id} items={conversation.items} />}
         {tab === "money" && <MoneyTab conversation={conversation} />}

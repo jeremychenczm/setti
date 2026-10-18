@@ -1,7 +1,10 @@
 "use client";
 
 import { CircleAlert, FileText } from "lucide-react";
+import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
+import { mapleApprovedQuote } from "@/quotes/demo-quote";
+import { willowApprovedQuote } from "@/quotes/willow-quote";
 import type { Conversation, Message } from "../demo-data";
 import { agents, alerts, conversations, me } from "../demo-data";
 import { ChatPane } from "./ChatPane";
@@ -10,8 +13,13 @@ import { AgentTag, Avatar } from "./primitives";
 import { RightPanel, type PanelTab } from "./RightPanel";
 import { Sidebar, type View } from "./Sidebar";
 
-export function Workspace() {
-  const [view, setView] = useState<View>("chats");
+const ApprovedQuoteView = dynamic(() => import("../quotes/ApprovedQuoteView").then((m) => m.ApprovedQuoteView), {
+  loading: () => <div className="flex flex-1 items-center justify-center rounded-xl bg-white text-sm text-[var(--muted)]">Loading quote…</div>,
+});
+
+export function Workspace({ initialView = "chats", initialQuote = "willow" }: { initialView?: View; initialQuote?: "maple" | "willow" }) {
+  const [view, setView] = useState<View>(initialView);
+  const [quoteId, setQuoteId] = useState<"maple" | "willow">(initialQuote);
   const [activeId, setActiveId] = useState("maple");
   const [read, setRead] = useState<Set<string>>(() => new Set(["maple"]));
   const [sent, setSent] = useState<Record<string, Message[]>>({});
@@ -35,6 +43,11 @@ export function Workspace() {
     setSent((prev) => ({ ...prev, [active.id]: [...(prev[active.id] ?? []), message] }));
   };
 
+  const openMapleQuote = () => {
+    setQuoteId("maple");
+    setView("quotes");
+  };
+
   return (
     <div className="flex h-screen gap-2 bg-[var(--canvas)] p-2 text-[var(--ink)]">
       <Sidebar view={view} onView={setView} unread={totalUnread} alertCount={alerts.length} quietHours={quietHours} onQuietHours={() => setQuietHours((q) => !q)} />
@@ -50,16 +63,18 @@ export function Workspace() {
               setPanelOpen(true);
               setTab("money");
             }}
+            onOpenQuote={openMapleQuote}
             panelOpen={panelOpen}
             onTogglePanel={() => setPanelOpen((o) => !o)}
           />
-          {panelOpen && <RightPanel conversation={active} tab={tab} onTab={setTab} />}
+          {panelOpen && <RightPanel conversation={active} tab={tab} onTab={setTab} onOpenQuote={openMapleQuote} />}
         </>
       )}
 
       {view === "alerts" && <AlertsView onOpen={open} />}
       {view === "agents" && <AgentsView onOpen={open} />}
       {view === "files" && <FilesView onOpen={open} />}
+      {view === "quotes" && <ApprovedQuoteView key={quoteId} quote={quoteId === "willow" ? willowApprovedQuote : mapleApprovedQuote} onSelectQuote={setQuoteId} onBack={() => setView("chats")} />}
       {view === "items" && <ComingNext title="Items" text="Every item across projects, with its price, approval and money state." />}
       {view === "procurement" && <ComingNext title="Procurement" text="Order, ship, deliver and install dates, with hold expiry and refund due dates on the same timeline." />}
     </div>

@@ -1,9 +1,9 @@
-import { Bell, Bot, CalendarRange, FileText, LayoutList, MessageCircle, Moon, Search, Sun, UserPlus } from "lucide-react";
+import { Bell, Bot, CalendarRange, FileSpreadsheet, FileText, LayoutList, MessageCircle, Moon, Search, Sun, UserPlus } from "lucide-react";
 import type { ComponentType } from "react";
 import { me } from "../demo-data";
 import { Avatar, Badge } from "./primitives";
 
-export type View = "chats" | "alerts" | "agents" | "items" | "procurement" | "files";
+export type View = "chats" | "alerts" | "agents" | "quotes" | "items" | "procurement" | "files";
 
 interface NavItem {
   view: View;
@@ -38,6 +38,7 @@ export function Sidebar({
     {
       title: "Boards",
       items: [
+        { view: "quotes", label: "Quotes", icon: FileSpreadsheet },
         { view: "items", label: "Items", icon: LayoutList },
         { view: "procurement", label: "Procurement", icon: CalendarRange },
       ],

@@ -11,6 +11,7 @@ export function ChatPane({
   messages,
   onSend,
   onOpenDetails,
+  onOpenQuote,
   panelOpen,
   onTogglePanel,
 }: {
@@ -18,6 +19,7 @@ export function ChatPane({
   messages: Message[];
   onSend: (text: string) => void;
   onOpenDetails: () => void;
+  onOpenQuote?: () => void;
   panelOpen: boolean;
   onTogglePanel: () => void;
 }) {
@@ -42,6 +44,15 @@ export function ChatPane({
           </div>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {conversation.id === "maple" && onOpenQuote && (
+            <button
+              onClick={onOpenQuote}
+              className="flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--primary-soft)] px-3 py-1.5 text-[12px] font-medium text-[var(--primary)] hover:bg-[var(--primary)] hover:text-white"
+            >
+              <FileText className="h-3.5 w-3.5" />
+              Quote V1
+            </button>
+          )}
           <span className="flex items-center gap-2 rounded-full bg-[var(--canvas)] py-1 pl-1 pr-3 text-[12px]">
             <span className="flex -space-x-1.5">
               {participants.slice(0, 4).map((p) => (
