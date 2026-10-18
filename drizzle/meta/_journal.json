@@ -22,6 +22,20 @@
       "when": 1792287930484,
       "tag": "0002_quote_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792297756083,
+      "tag": "0003_paypal_money",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792297758462,
+      "tag": "0004_money_rules",
+      "breakpoints": true
     }
   ]
 }

@@ -100,6 +100,70 @@ export const revisionLines = pgTable(
   ],
 );
 
+export const authorizationStatus = pgEnum("authorization_status", ["created", "partially_captured", "captured", "voided", "expired"]);
+export const captureStatus = pgEnum("capture_status", ["completed", "pending", "declined"]);
+export const refundStatus = pgEnum("refund_status", ["pending", "completed", "failed"]);
+
+/**
+ * A hold PayPal placed on the client's money. Captures may not exceed the
+ * amount plus PayPal's allowance (enforced by the money-rules migration).
+ */
+export const paypalAuthorizations = pgTable(
+  "paypal_authorizations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id),
+    /** The item this hold is for, when each item has its own hold. */
+    itemId: uuid("item_id").references(() => items.id),
+    paypalOrderId: text("paypal_order_id").notNull(),
+    paypalAuthorizationId: text("paypal_authorization_id").notNull().unique(),
+    amountCents: integer("amount_cents").notNull(),
+    status: authorizationStatus("status").notNull().default("created"),
+    honorExpiresAt: timestamp("honor_expires_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    /** Set on the new authorization PayPal returns after a reauthorization. */
+    reauthorizedFromId: uuid("reauthorized_from_id").references((): AnyPgColumn => paypalAuthorizations.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check("paypal_authorizations_amount_positive", sql`${t.amountCents} > 0`)],
+);
+
+/** Money PayPal took: from a hold, or directly (for example a service fee charged on approval). */
+export const paypalCaptures = pgTable(
+  "paypal_captures",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id),
+    authorizationId: uuid("authorization_id").references(() => paypalAuthorizations.id),
+    paypalCaptureId: text("paypal_capture_id").notNull().unique(),
+    amountCents: integer("amount_cents").notNull(),
+    finalCapture: boolean("final_capture").notNull().default(false),
+    status: captureStatus("status").notNull().default("completed"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check("paypal_captures_amount_positive", sql`${t.amountCents} > 0`)],
+);
+
+/** Money returned from a capture. Refunds of one capture may not add up to more than it. */
+export const paypalRefunds = pgTable(
+  "paypal_refunds",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    captureId: uuid("capture_id")
+      .notNull()
+      .references(() => paypalCaptures.id),
+    paypalRefundId: text("paypal_refund_id").notNull().unique(),
+    amountCents: integer("amount_cents").notNull(),
+    status: refundStatus("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [check("paypal_refunds_amount_positive", sql`${t.amountCents} > 0`)],
+);
+
 export const decision = pgEnum("decision", ["approved", "declined"]);
 
 /** The client's decision on one line of a sent revision, bound to its exact content. */
