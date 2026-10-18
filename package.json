@@ -16,6 +16,7 @@
     "@anthropic-ai/sdk": "^0.135.0",
     "@paypal/paypal-server-sdk": "^2.5.0",
     "drizzle-orm": "^0.45.4",
+    "lucide-react": "^1.59.0",
     "next": "15.5.4",
     "pg": "^8.23.1",
     "pg-boss": "^12.38.0",
