@@ -19,35 +19,69 @@ export class ApprovalStoreError extends Error {
   constructor(readonly code: string, message: string) { super(message); this.name = "ApprovalStoreError"; }
 }
 
+export interface ProjectLedger {
+  authorizations: (typeof paypalAuthorizations.$inferSelect)[];
+  captures: (typeof paypalCaptures.$inferSelect)[];
+  refunds: (typeof paypalRefunds.$inferSelect)[];
+  operations: (typeof paymentOperations.$inferSelect)[];
+}
+
+/** Every money record and operation of one business project. */
+export async function readLedger(db: Reader, projectId: string): Promise<ProjectLedger> {
+  const authorizations = await db.select().from(paypalAuthorizations).where(eq(paypalAuthorizations.projectId, projectId));
+  const captures = await db.select().from(paypalCaptures).where(eq(paypalCaptures.projectId, projectId));
+  const refunds = (await db.select({ refund: paypalRefunds }).from(paypalRefunds)
+    .innerJoin(paypalCaptures, eq(paypalRefunds.captureId, paypalCaptures.id)).where(eq(paypalCaptures.projectId, projectId))).map(({ refund }) => refund);
+  const operations = await db.select().from(paymentOperations).where(eq(paymentOperations.projectId, projectId));
+  return { authorizations, captures, refunds, operations };
+}
+
+export interface FundingIdentity { itemId: string; side: "baseline" | "proposed" }
+
+/**
+ * The business item behind each funding group of a frozen document. A
+ * replacement keeps the quote's item id but is a different business item, so
+ * its money is never counted as the old product's (and the other way round).
+ */
+export function fundingIdentities(document: FrozenChangeOrder, itemMapping: Record<string, string>) {
+  const byBusiness = new Map<string, FundingIdentity>();
+  const blockers: string[] = [];
+  for (const line of document.baselineLines) {
+    const businessId = itemMapping[itemMappingKey({ ...line, sourceUrl: line.source.url ?? null })];
+    if (!businessId) { blockers.push(`The baseline funding identity for ${line.name} is missing.`); continue; }
+    if (byBusiness.has(businessId)) blockers.push("A business payment identity maps to more than one baseline item.");
+    byBusiness.set(businessId, { itemId: line.itemId, side: "baseline" });
+  }
+  for (const line of document.lines) {
+    const businessId = itemMapping[itemMappingKey(line)];
+    if (!businessId) { blockers.push(`The proposed funding identity for ${line.name} is missing.`); continue; }
+    const existing = byBusiness.get(businessId);
+    if (existing && existing.itemId !== line.itemId) blockers.push("A business payment identity maps to different quote items.");
+    if (!existing) byBusiness.set(businessId, { itemId: line.itemId, side: "proposed" });
+  }
+  const byGroup = new Map([...byBusiness].map(([businessId, identity]) => [`${identity.side}:${identity.itemId}`, businessId]));
+  return { byBusiness, byGroup, blockers };
+}
+
 /** Read settled ledger facts, never infer payments from quote or approval totals. */
 export async function fundingFacts(db: Reader, document: FrozenChangeOrder, caseId: string): Promise<FundingFacts> {
-  const checkedAt = new Date().toISOString();
   const [bridge] = await db.select().from(pricingCases).where(eq(pricingCases.caseId, caseId));
-  if (!bridge) return { status: "no_records", checkedAt, lines: [], blockers: ["The business project for this document is unavailable."] };
-  const authorizations = await db.select().from(paypalAuthorizations).where(eq(paypalAuthorizations.projectId, bridge.projectId));
-  const captures = await db.select().from(paypalCaptures).where(eq(paypalCaptures.projectId, bridge.projectId));
-  const refunds = await db.select({ refund: paypalRefunds }).from(paypalRefunds)
-    .innerJoin(paypalCaptures, eq(paypalRefunds.captureId, paypalCaptures.id)).where(eq(paypalCaptures.projectId, bridge.projectId));
-  const operations = await db.select().from(paymentOperations).where(eq(paymentOperations.projectId, bridge.projectId));
+  if (!bridge) return { status: "no_records", checkedAt: new Date().toISOString(), lines: [], blockers: ["The business project for this document is unavailable."] };
+  return fundingFactsFrom(document, bridge.itemMapping, await readLedger(db, bridge.projectId));
+}
+
+export function fundingFactsFrom(document: FrozenChangeOrder, itemMapping: Record<string, string>, ledger: ProjectLedger, now = new Date()): FundingFacts {
+  const checkedAt = now.toISOString();
+  const { authorizations, captures, operations } = ledger;
+  const refunds = ledger.refunds.map((refund) => ({ refund }));
   const blockers: string[] = [];
   if (operations.some((operation) => operation.status === "pending" || operation.status === "unknown")) blockers.push("A payment operation is pending or has an unknown outcome. Reconcile it before preparing executable amounts.");
   if (captures.some((capture) => capture.status === "pending")) blockers.push("A capture is pending. Its outcome must be reconciled before calculating settled funds.");
   if (refunds.some(({ refund }) => refund.status === "pending")) blockers.push("A refund is pending. Do not promise another refund or charge until it is reconciled.");
 
-  const identities = new Map<string, { itemId: string; side: "baseline" | "proposed" }>();
-  for (const line of document.baselineLines) {
-    const businessId = bridge.itemMapping[itemMappingKey({ ...line, sourceUrl: line.source.url ?? null })];
-    if (!businessId) { blockers.push(`The baseline funding identity for ${line.name} is missing.`); continue; }
-    if (identities.has(businessId)) blockers.push("A business payment identity maps to more than one baseline item.");
-    identities.set(businessId, { itemId: line.itemId, side: "baseline" });
-  }
-  for (const line of document.lines) {
-    const businessId = bridge.itemMapping[itemMappingKey(line)];
-    if (!businessId) { blockers.push(`The proposed funding identity for ${line.name} is missing.`); continue; }
-    const existing = identities.get(businessId);
-    if (existing && existing.itemId !== line.itemId) blockers.push("A business payment identity maps to different quote items.");
-    if (!existing) identities.set(businessId, { itemId: line.itemId, side: "proposed" });
-  }
+  const mapped = fundingIdentities(document, itemMapping);
+  const identities = mapped.byBusiness;
+  blockers.push(...mapped.blockers);
 
   const facts = new Map<string, FundingLineFact>();
   const authorizationIds = new Set(authorizations.map((authorization) => authorization.id));
@@ -59,7 +93,7 @@ export async function fundingFacts(db: Reader, document: FrozenChangeOrder, case
     const capturedIds = new Set(settled.map((capture) => capture.id));
     const refundedCents = refunds.filter(({ refund }) => capturedIds.has(refund.captureId) && refund.status === "completed").reduce((total, { refund }) => total + refund.amountCents, 0);
     const closed = ["voided", "expired", "captured"].includes(authorization.status) || settled.some((capture) => capture.finalCapture)
-      || !!(authorization.expiresAt && authorization.expiresAt.getTime() <= Date.now());
+      || !!(authorization.expiresAt && authorization.expiresAt.getTime() <= now.getTime());
     const heldCents = closed ? 0 : Math.max(0, authorization.amountCents - capturedCents);
     const identity = authorization.itemId ? identities.get(authorization.itemId) : undefined;
     if (!identity) {

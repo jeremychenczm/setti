@@ -8,6 +8,7 @@ describe("classifyFailure", () => {
       code: "MAX_CAPTURE_AMOUNT_EXCEEDED",
       message: "no",
       debugId: "d1",
+      trace: { httpStatus: 422, debugId: "d1" },
     });
   });
 

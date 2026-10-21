@@ -1,79 +1,173 @@
 /**
  * PayPal adapter on top of the official server SDK. The SDK client is created
- * elsewhere (behind the sandbox guard) and passed in.
+ * elsewhere (behind the sandbox guard) and passed in. Receipts copy only what
+ * PayPal returned; payer details are never read.
  */
-import { ApiError, CaptureStatus, type CapturedPayment, type PaymentsController } from "@paypal/paypal-server-sdk";
-import { classifyFailure, type CaptureReceipt, type PayPalPayments, type PayPalResult } from "./paypal";
+import {
+  ApiError,
+  CheckoutPaymentIntent,
+  PaypalExperienceUserAction,
+  PaypalWalletContextShippingPreference,
+  type AuthorizationWithAdditionalData,
+  type CapturedPayment,
+  type Order,
+  type OrderAuthorizeResponse,
+  type OrdersController,
+  type PaymentAuthorization,
+  type PaymentsController,
+  type Refund,
+} from "@paypal/paypal-server-sdk";
+import { classifyFailure, type AuthorizationReceipt, type CallTrace, type CaptureReceipt, type OrderReceipt, type PayPalFailure, type PayPalPayments, type PayPalResult, type RefundReceipt } from "./paypal";
+import { formatCents, parseCents } from "./receipts";
 
 /** Ask PayPal for the full resource; the default minimal body leaves out the amount. */
 const FULL = "return=representation";
+const BRAND = "Setti (sandbox demo)";
 
-export function createSdkPayPal(payments: PaymentsController): PayPalPayments {
+export function createSdkPayPal(controllers: { orders: OrdersController; payments: PaymentsController }): PayPalPayments {
+  const { orders, payments } = controllers;
   return {
-    async captureAuthorization(command) {
-      try {
-        const res = await payments.captureAuthorizedPayment({
-          authorizationId: command.paypalAuthorizationId,
-          paypalRequestId: command.requestId,
-          prefer: FULL,
-          body: {
-            amount: { currencyCode: "USD", value: (command.amountCents / 100).toFixed(2) },
-            finalCapture: command.finalCapture,
+    createOrder: (command) => call(async () => {
+      const res = await orders.createOrder({
+        paypalRequestId: command.requestId,
+        prefer: FULL,
+        body: {
+          intent: CheckoutPaymentIntent.Authorize,
+          purchaseUnits: [{
+            referenceId: command.referenceId,
+            amount: { currencyCode: "USD", value: formatCents(command.amountCents) },
+            description: command.description.slice(0, 127),
+            customId: command.customId,
+            invoiceId: command.invoiceId,
+          }],
+          paymentSource: {
+            paypal: {
+              experienceContext: {
+                brandName: BRAND,
+                returnUrl: command.returnUrl,
+                cancelUrl: command.cancelUrl,
+                userAction: PaypalExperienceUserAction.PayNow,
+                shippingPreference: PaypalWalletContextShippingPreference.NoShipping,
+              },
+            },
           },
-        });
-        return { kind: "ok", value: toReceipt(res.result, command.amountCents) };
-      } catch (error) {
-        return fromError(error);
-      }
-    },
+        },
+      });
+      return [orderReceipt(res.result), res];
+    }),
 
-    async voidAuthorization(command) {
-      try {
-        const res = await payments.voidPayment({
-          authorizationId: command.paypalAuthorizationId,
-          paypalRequestId: command.requestId,
-          prefer: FULL,
-        });
-        const value = res.result?.amount?.value;
-        return { kind: "ok", value: { reportedAmountCents: value === undefined ? undefined : Math.round(Number(value) * 100) } };
-      } catch (error) {
-        return fromError(error);
-      }
-    },
+    getOrder: (orderId) => call(async () => {
+      const res = await orders.getOrder({ id: orderId });
+      return [orderReceipt(res.result), res];
+    }),
+
+    authorizeOrder: (command) => call(async () => {
+      const res = await orders.authorizeOrder({ id: command.orderId, paypalRequestId: command.requestId, prefer: FULL });
+      return [orderReceipt(res.result), res];
+    }),
+
+    getAuthorization: (id) => call(async () => {
+      const res = await payments.getAuthorizedPayment({ authorizationId: id });
+      return [authorizationReceipt(res.result), res];
+    }),
+
+    captureAuthorization: (command) => call(async () => {
+      const res = await payments.captureAuthorizedPayment({
+        authorizationId: command.paypalAuthorizationId,
+        paypalRequestId: command.requestId,
+        prefer: FULL,
+        body: { amount: { currencyCode: "USD", value: formatCents(command.amountCents) }, finalCapture: command.finalCapture },
+      });
+      return [captureReceipt(res.result), res];
+    }),
+
+    getCapture: (id) => call(async () => {
+      const res = await payments.getCapturedPayment({ captureId: id });
+      return [captureReceipt(res.result), res];
+    }),
+
+    voidAuthorization: (command) => call(async () => {
+      const res = await payments.voidPayment({ authorizationId: command.paypalAuthorizationId, paypalRequestId: command.requestId, prefer: FULL });
+      // A minimal (empty) answer still means PayPal accepted the void; the executor reads the hold back.
+      return [res.result ? authorizationReceipt(res.result) : {}, res];
+    }),
+
+    refundCapture: (command) => call(async () => {
+      const res = await payments.refundCapturedPayment({
+        captureId: command.paypalCaptureId,
+        paypalRequestId: command.requestId,
+        prefer: FULL,
+        body: { amount: { currencyCode: "USD", value: formatCents(command.amountCents) }, customId: command.customId },
+      });
+      return [refundReceipt(res.result), res];
+    }),
+
+    getRefund: (id) => call(async () => {
+      const res = await payments.getRefund({ refundId: id });
+      return [refundReceipt(res.result), res];
+    }),
   };
 }
 
-function toReceipt(capture: CapturedPayment, requestedCents: number): CaptureReceipt {
-  if (!capture.id) throw new Error("PayPal returned a capture without an id");
-  const value = capture.amount?.value;
-  return {
-    paypalCaptureId: capture.id,
-    status: captureStatus(capture.status),
-    amountCents: value === undefined ? requestedCents : Math.round(Number(value) * 100),
-  };
-}
+type Response = { statusCode: number; headers: Record<string, string> };
 
-function captureStatus(status: CaptureStatus | undefined): CaptureReceipt["status"] {
-  switch (status) {
-    case CaptureStatus.Pending:
-      return "pending";
-    case CaptureStatus.Declined:
-    case CaptureStatus.Failed:
-      return "declined";
-    default:
-      // COMPLETED, and captures that were later (partially) refunded, still took the money.
-      return "completed";
+async function call<T>(send: () => Promise<[T, Response]>): Promise<PayPalResult<T>> {
+  try {
+    const [value, res] = await send();
+    return { kind: "ok", value, trace: trace(res) };
+  } catch (error) {
+    return fromError(error);
   }
 }
 
-function fromError(error: unknown): Exclude<PayPalResult<never>, { kind: "ok" }> {
+function trace(res: Response): CallTrace {
+  return { httpStatus: res.statusCode, debugId: header(res.headers, "paypal-debug-id") };
+}
+
+function header(headers: Record<string, string> | undefined, name: string): string | undefined {
+  if (!headers) return undefined;
+  const key = Object.keys(headers).find((candidate) => candidate.toLowerCase() === name);
+  return key ? headers[key] : undefined;
+}
+
+function money(amount: { currencyCode?: string; value?: string } | undefined) {
+  return { amountCents: parseCents(amount?.value), currency: amount?.currencyCode };
+}
+
+function authorizationReceipt(auth: PaymentAuthorization | AuthorizationWithAdditionalData, orderId?: string): AuthorizationReceipt {
+  const related = "supplementaryData" in auth ? auth.supplementaryData?.relatedIds?.orderId : undefined;
+  return {
+    paypalAuthorizationId: auth.id, status: auth.status, ...money(auth.amount),
+    orderId: related ?? orderId, customId: auth.customId, createTime: auth.createTime, expirationTime: auth.expirationTime,
+  };
+}
+
+function orderReceipt(order: Order | OrderAuthorizeResponse): OrderReceipt {
+  const unit = order.purchaseUnits?.[0];
+  const authorization = unit?.payments?.authorizations?.[0];
+  return {
+    orderId: order.id, status: order.status, ...money(unit?.amount), customId: unit?.customId,
+    approvalUrl: order.links?.find((link) => link.rel === "payer-action" || link.rel === "approve")?.href,
+    authorization: authorization ? authorizationReceipt(authorization, order.id) : undefined,
+  };
+}
+
+function captureReceipt(capture: CapturedPayment): CaptureReceipt {
+  return { paypalCaptureId: capture.id, status: capture.status, ...money(capture.amount), finalCapture: capture.finalCapture, createTime: capture.createTime };
+}
+
+function refundReceipt(refund: Refund): RefundReceipt {
+  return { paypalRefundId: refund.id, status: refund.status, ...money(refund.amount), createTime: refund.createTime };
+}
+
+function fromError(error: unknown): PayPalFailure {
   if (error instanceof ApiError) {
     const body = (error.result ?? {}) as { name?: string; message?: string; debug_id?: string; details?: { issue?: string }[] };
     return classifyFailure({
       statusCode: error.statusCode,
       code: body.details?.[0]?.issue ?? body.name,
       message: body.message ?? error.message,
-      debugId: body.debug_id,
+      debugId: body.debug_id ?? header(error.headers, "paypal-debug-id"),
     });
   }
   const networkCode = (error as { code?: unknown })?.code;

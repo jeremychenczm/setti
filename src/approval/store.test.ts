@@ -153,7 +153,7 @@ describe.skipIf(!testDatabaseUrl)("whole-document client decisions", () => {
     const result = await store.decide(session, order.id, command(order));
     expect(result.fundingPlan?.status).toBe("preview");
     expect(result.fundingPlan?.current.heldCents).toBe(10_000);
-    await handle.db.insert(paymentOperations).values({ id: randomUUID(), projectId: bridge.projectId, authorizationId: authorization.id, kind: "capture", amountCents: 100, status: "unknown", requestId: randomUUID() });
+    await handle.db.insert(paymentOperations).values({ id: randomUUID(), businessKey: `test:${randomUUID()}`, projectId: bridge.projectId, authorizationId: authorization.id, kind: "capture", amountCents: 100, status: "unknown", requestId: randomUUID() });
     const pending = await store.getWorkspace(session, order.id);
     expect(pending?.fundingPlan?.status).toBe("blocked");
     expect(pending?.fundingPlan?.money.newAuthorizationCents).toBeNull();

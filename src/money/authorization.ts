@@ -1,10 +1,16 @@
 /**
- * Authorization lifecycle rules (PayPal, US):
- * - an authorization is valid for 29 days;
- * - capture is guaranteed within the first 3 days (the honor period);
- * - it can be reauthorized ONCE, between day 4 and day 29;
- * - reauthorizing gives a new authorization ID and a fresh 3-day honor
- *   period, but does NOT extend the original 29-day expiry.
+ * Authorization timing (PayPal checkout docs, checked 2026-10-20):
+ * - an authorization reserves funds for up to 29 days;
+ * - capture has the highest success rate within the first 3 days (the honor
+ *   period); it is not guaranteed, and PayPal or the bank can still decline it;
+ * - after day 3 it may be reauthorized (days 4-29); the new authorization has
+ *   its own 3-day honor period and does not extend the original 29 days.
+ *
+ * PayPal does not promise a number of reauthorizations, so Setti plans for at
+ * most one and treats a lapsed second honor period as "capture not assured".
+ * That is Setti's own conservative policy, never a promise to the client.
+ * Sandbox authorizations do not expire on their own; expiry is tested with
+ * PayPal's negative testing instead.
  *
  * "Day N" means the N-th 24-hour period after the original authorization.
  */
@@ -26,7 +32,7 @@ export type AuthorizationDecision =
   | { kind: "within_honor_period"; honorEndsAt: Date; expiresAt: Date }
   /** Past the honor period, still valid, and the one reauthorization is unused. */
   | { kind: "reauthorize"; expiresAt: Date }
-  /** Past the honor period after the one reauthorization was used: capture is not guaranteed. */
+  /** Past the honor period after the one planned reauthorization: capture is not assured. */
   | {
       kind: "honor_period_lapsed";
       expiresAt: Date;

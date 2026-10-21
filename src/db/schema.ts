@@ -18,6 +18,7 @@ import {
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
+import { changeOrders } from "../pricing/schema";
 
 /** One design project: a space for one client, with its own chat, items and money. */
 export const projects = pgTable("projects", {
@@ -120,14 +121,22 @@ export const paypalAuthorizations = pgTable(
     paypalOrderId: text("paypal_order_id").notNull(),
     paypalAuthorizationId: text("paypal_authorization_id").notNull().unique(),
     amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("USD"),
     status: authorizationStatus("status").notNull().default("created"),
     honorExpiresAt: timestamp("honor_expires_at", { withTimezone: true }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     /** Set on the new authorization PayPal returns after a reauthorization. */
     reauthorizedFromId: uuid("reauthorized_from_id").references((): AnyPgColumn => paypalAuthorizations.id),
+    /** The client-confirmed version this hold was created for; later versions reuse it for the same business item. */
+    changeOrderId: uuid("change_order_id").references((): AnyPgColumn => changeOrders.id),
+    /** The authorize operation that produced this hold. */
+    operationId: uuid("operation_id").unique().references((): AnyPgColumn => paymentOperations.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [check("paypal_authorizations_amount_positive", sql`${t.amountCents} > 0`)],
+  (t) => [
+    check("paypal_authorizations_amount_positive", sql`${t.amountCents} > 0`),
+    check("paypal_authorizations_usd", sql`${t.currency} = 'USD'`),
+  ],
 );
 
 /** Money PayPal took: from a hold, or directly (for example a service fee charged on approval). */
@@ -141,11 +150,16 @@ export const paypalCaptures = pgTable(
     authorizationId: uuid("authorization_id").references(() => paypalAuthorizations.id),
     paypalCaptureId: text("paypal_capture_id").notNull().unique(),
     amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("USD"),
     finalCapture: boolean("final_capture").notNull().default(false),
     status: captureStatus("status").notNull().default("completed"),
+    operationId: uuid("operation_id").unique().references((): AnyPgColumn => paymentOperations.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [check("paypal_captures_amount_positive", sql`${t.amountCents} > 0`)],
+  (t) => [
+    check("paypal_captures_amount_positive", sql`${t.amountCents} > 0`),
+    check("paypal_captures_usd", sql`${t.currency} = 'USD'`),
+  ],
 );
 
 /** Money returned from a capture. Refunds of one capture may not add up to more than it. */
@@ -158,21 +172,31 @@ export const paypalRefunds = pgTable(
       .references(() => paypalCaptures.id),
     paypalRefundId: text("paypal_refund_id").notNull().unique(),
     amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("USD"),
     status: refundStatus("status").notNull().default("pending"),
+    operationId: uuid("operation_id").unique().references((): AnyPgColumn => paymentOperations.id),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [check("paypal_refunds_amount_positive", sql`${t.amountCents} > 0`)],
+  (t) => [
+    check("paypal_refunds_amount_positive", sql`${t.amountCents} > 0`),
+    check("paypal_refunds_usd", sql`${t.currency} = 'USD'`),
+  ],
 );
 
-/** Every kind of money move Setti asks PayPal for. Only `capture` is executed so far. */
+/** Every kind of money move Setti asks PayPal for. */
 export const operationKind = pgEnum("operation_kind", ["capture", "void", "refund", "authorize", "reauthorize"]);
-/** `unknown` means PayPal may or may not have done it; retry with the same request id to find out. */
+/**
+ * `succeeded` means PayPal returned a verified receipt; the money record keeps its own
+ * status (a capture can still be pending). `unknown` means PayPal may or may not have
+ * done it: reconcile the same operation, never start a replacement.
+ */
 export const operationStatus = pgEnum("operation_status", ["pending", "succeeded", "failed", "unknown"]);
 
 /**
  * One money move, written before PayPal is called so a crash or timeout never
  * loses track of it. Every attempt sends the same request id, which PayPal
- * uses to avoid doing the same move twice.
+ * uses to avoid doing the same move twice; the business key makes a repeated
+ * click or a second window find the same operation instead of creating another.
  */
 export const paymentOperations = pgTable(
   "payment_operations",
@@ -183,11 +207,25 @@ export const paymentOperations = pgTable(
       .references(() => projects.id),
     kind: operationKind("kind").notNull(),
     status: operationStatus("status").notNull().default("pending"),
+    /** One business event, for example "authorize this item for this confirmed version". */
+    businessKey: text("business_key").notNull().unique(),
     authorizationId: uuid("authorization_id").references(() => paypalAuthorizations.id),
+    /** The capture a refund returns money from. */
+    captureId: uuid("capture_id").references((): AnyPgColumn => paypalCaptures.id),
     amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull().default("USD"),
     finalCapture: boolean("final_capture").notNull().default(false),
+    /** The client-confirmed version this move executes, with both frozen hashes and the business item. */
+    changeOrderId: uuid("change_order_id").references((): AnyPgColumn => changeOrders.id),
+    revisionId: uuid("revision_id").references((): AnyPgColumn => revisions.id),
+    contentHash: text("content_hash"),
+    revisionContentHash: text("revision_content_hash"),
+    itemId: uuid("item_id").references((): AnyPgColumn => items.id),
     requestId: text("request_id").notNull().unique(),
     attempts: integer("attempts").notNull().default(0),
+    /** PayPal order created for an authorization, and the buyer approval link it returned. */
+    paypalOrderId: text("paypal_order_id"),
+    approvalUrl: text("approval_url"),
     /** The PayPal id of what this move produced, for example the capture id. */
     paypalResourceId: text("paypal_resource_id"),
     failureCode: text("failure_code"),
@@ -197,7 +235,14 @@ export const paymentOperations = pgTable(
   },
   (t) => [
     check("payment_operations_amount_positive", sql`${t.amountCents} > 0`),
+    check("payment_operations_usd", sql`${t.currency} = 'USD'`),
     check("payment_operations_hold_moves_have_authorization", sql`${t.kind} NOT IN ('capture', 'void', 'reauthorize') OR ${t.authorizationId} IS NOT NULL`),
+    check("payment_operations_refund_has_capture", sql`${t.kind} <> 'refund' OR ${t.captureId} IS NOT NULL`),
+    check("payment_operations_authorize_is_bound", sql`${t.kind} <> 'authorize' OR ${t.changeOrderId} IS NOT NULL`),
+    check(
+      "payment_operations_binding_complete",
+      sql`(${t.changeOrderId} IS NULL AND ${t.revisionId} IS NULL AND ${t.contentHash} IS NULL AND ${t.revisionContentHash} IS NULL) OR (${t.changeOrderId} IS NOT NULL AND ${t.revisionId} IS NOT NULL AND ${t.contentHash} IS NOT NULL AND ${t.revisionContentHash} IS NOT NULL AND ${t.itemId} IS NOT NULL)`,
+    ),
   ],
 );
 
@@ -228,3 +273,4 @@ export const approvals = pgTable(
 export { chatCases, chatMessages } from "../chat/schema";
 export { pricingCases, pricingReviews, changeOrders } from "../pricing/schema";
 export { changeOrderDecisions } from "../approval/schema";
+export { paypalCalls } from "../payments/schema";

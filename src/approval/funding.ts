@@ -35,6 +35,23 @@ export interface FundingAction {
   reason: string;
 }
 
+/** One funding group of the frozen document with the money recorded against it. */
+export interface FundingLine {
+  itemId: string;
+  side: "baseline" | "proposed";
+  label: string;
+  category: ItemCategory;
+  /** True for lines this version changes; unchanged lines carry over from the baseline. */
+  changed: boolean;
+  /** The change that produced the line: the old product of a replacement is `replace` on the baseline side. */
+  change: ReviewedChange["action"] | null;
+  /** The complete reviewed amount this version assigns to the line, including retained old-item costs. */
+  targetCents: number;
+  heldCents: number;
+  capturedCents: number;
+  refundedCents: number;
+}
+
 export interface FundingPlan {
   orderId: string;
   contentHash: string;
@@ -51,6 +68,8 @@ export interface FundingPlan {
     chargeCents: number | null;
     refundCents: number | null;
   };
+  /** Every funding group with its target and recorded money; empty when the document cannot be read. */
+  lines: FundingLine[];
   actions: FundingAction[];
   blockers: string[];
   notices: string[];
@@ -62,6 +81,8 @@ interface Group {
   label: string;
   category: ItemCategory;
   targetCents: number;
+  changed: boolean;
+  change: ReviewedChange["action"] | null;
   handling?: ReviewedChange["oldItemHandling"];
 }
 
@@ -94,7 +115,7 @@ export function buildFundingPlan(order: FrozenChangeOrder, facts: FundingFacts):
     quoteDeltaCents: order.deltaTotalCents, factsAsOf: facts.checkedAt,
     status: facts.status === "no_records" ? "not_authorized" : "preview", executable: false,
     current: { heldCents: 0, capturedCents: 0, refundedCents: 0 },
-    money: zeroMoney(), actions: [], blockers, notices,
+    money: zeroMoney(), lines: [], actions: [], blockers, notices,
   };
   const groups: Group[] = [];
   const grouped = new Set<string>();
@@ -129,7 +150,7 @@ export function buildFundingPlan(order: FrozenChangeOrder, facts: FundingFacts):
       const after = proposed.get(before.itemId);
       if (!change) {
         if (!after) throw new Error("An unchanged baseline item is missing from the proposed quote.");
-        addGroup({ itemId: before.itemId, side: "baseline", label: after.name, category: after.category, targetCents: calculateLineTotals(after).totalCents });
+        addGroup({ itemId: before.itemId, side: "baseline", label: after.name, category: after.category, targetCents: calculateLineTotals(after).totalCents, changed: false, change: null });
         consumed.add(after.itemId);
         continue;
       }
@@ -144,15 +165,15 @@ export function buildFundingPlan(order: FrozenChangeOrder, facts: FundingFacts):
         throw new Error("An unexpected old-item fee line needs review.");
       }
       if (change.action === "replace" || change.action === "remove") {
-        addGroup({ itemId: before.itemId, side: "baseline", label: before.name, category: change.oldItemHandling === "retained" ? before.category : "service", targetCents: change.oldItemCostCents, handling: change.oldItemHandling });
+        addGroup({ itemId: before.itemId, side: "baseline", label: before.name, category: change.oldItemHandling === "retained" ? before.category : "service", targetCents: change.oldItemCostCents, changed: true, change: change.action, handling: change.oldItemHandling });
         if (change.action === "replace") {
           if (!after || !change.after) throw new Error("The replacement product is missing from the frozen quote.");
-          addGroup({ itemId: after.itemId, side: "proposed", label: after.name, category: after.category, targetCents: calculateLineTotals(after).totalCents });
+          addGroup({ itemId: after.itemId, side: "proposed", label: after.name, category: after.category, targetCents: calculateLineTotals(after).totalCents, changed: true, change: "replace" });
           consumed.add(after.itemId);
         } else if (after) throw new Error("A removed item still appears in the proposed quote.");
       } else if (change.action === "quantity") {
         if (!after) throw new Error("The changed quantity is missing from the frozen quote.");
-        addGroup({ itemId: before.itemId, side: "baseline", label: after.name, category: after.category, targetCents: sum([calculateLineTotals(after).totalCents, change.oldItemCostCents]), handling: change.oldItemHandling });
+        addGroup({ itemId: before.itemId, side: "baseline", label: after.name, category: after.category, targetCents: sum([calculateLineTotals(after).totalCents, change.oldItemCostCents]), changed: true, change: "quantity", handling: change.oldItemHandling });
         consumed.add(after.itemId);
       } else {
         throw new Error("An existing item has an unsupported change type.");
@@ -165,7 +186,7 @@ export function buildFundingPlan(order: FrozenChangeOrder, facts: FundingFacts):
       if (consumed.has(line.itemId)) continue;
       const addition = order.changes.find((change) => change.action === "add" && change.after?.itemId === line.itemId);
       if (!addition || baseline.has(line.itemId)) throw new Error("A proposed line cannot be matched to its frozen change.");
-      addGroup({ itemId: line.itemId, side: "proposed", label: line.name, category: line.category, targetCents: calculateLineTotals(line).totalCents });
+      addGroup({ itemId: line.itemId, side: "proposed", label: line.name, category: line.category, targetCents: calculateLineTotals(line).totalCents, changed: true, change: "add" });
       consumed.add(line.itemId);
     }
     if (sum(groups.map((group) => group.targetCents)) !== order.totals.totalCents) throw new Error("Funding targets do not reconcile to the complete proposed quote.");
@@ -187,6 +208,10 @@ export function buildFundingPlan(order: FrozenChangeOrder, facts: FundingFacts):
       capturedCents: sum([...byFact.values()].map((fact) => fact.capturedCents)),
       refundedCents: sum([...byFact.values()].map((fact) => fact.refundedCents)),
     };
+    result.lines = groups.map((group) => {
+      const fact = byFact.get(key(group.itemId, group.side)) ?? emptyFact(group);
+      return { itemId: group.itemId, side: group.side, label: group.label, category: group.category, changed: group.changed, change: group.change, targetCents: group.targetCents, heldCents: fact.heldCents, capturedCents: fact.capturedCents, refundedCents: fact.refundedCents };
+    });
     if (blockers.length) throw new Error("Resolve the funding blockers before calculating payment actions.");
 
     const push = (group: Group, kind: FundingAction["kind"], amountCents: number, timing: FundingAction["timing"], reason: string) => {
@@ -211,6 +236,8 @@ export function buildFundingPlan(order: FrozenChangeOrder, facts: FundingFacts):
         push(group, "release_authorization", release, remaining > 0 ? "after_vendor_confirmation" : "on_payment_execution",
           remaining > 0 ? "The excess is released only when the remaining authorized amount is captured and the hold is closed." : "Close the unused authorization; this is a release, not a refund.");
         if (remaining > 0) push(group, "capture", remaining, "after_vendor_confirmation", "Capture only the reviewed remaining amount, then close the hold to release the excess.");
+      } else if (fact.heldCents > 0) {
+        push(group, "capture", fact.heldCents, "after_vendor_confirmation", "Capture the authorized amount only after the supplier confirms the reviewed order.");
       }
       const unfunded = Math.max(remaining - fact.heldCents, 0);
       if (unfunded > 0) {

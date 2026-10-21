@@ -1,7 +1,58 @@
 /**
- * The PayPal calls the money executor needs, behind an interface so tests can
+ * The PayPal calls the money executors need, behind an interface so tests can
  * use a fake built from recorded sandbox responses.
+ *
+ * Receipts carry exactly what PayPal returned: a missing status, amount or
+ * currency stays missing and statuses keep PayPal's own words. The executors
+ * decide what an incomplete receipt means (see receipts.ts); nothing here turns
+ * "PayPal did not say" into "completed".
  */
+
+/** The amount PayPal reported, in exact cents, and its currency code. */
+export interface ReportedMoney {
+  amountCents?: number;
+  currency?: string;
+}
+
+export interface CreateOrderCommand {
+  /** Sent as PayPal-Request-Id; the same for every attempt to create this operation's order. */
+  requestId: string;
+  amountCents: number;
+  /** Purchase unit reference: the business item the hold is for. */
+  referenceId: string;
+  /** Setti operation id; PayPal echoes it on the order and its authorization. */
+  customId: string;
+  invoiceId: string;
+  description: string;
+  returnUrl: string;
+  cancelUrl: string;
+}
+
+export interface AuthorizeOrderCommand {
+  orderId: string;
+  requestId: string;
+}
+
+export interface AuthorizationReceipt extends ReportedMoney {
+  paypalAuthorizationId?: string;
+  /** CREATED, CAPTURED, DENIED, PARTIALLY_CAPTURED, VOIDED or PENDING. */
+  status?: string;
+  orderId?: string;
+  customId?: string;
+  createTime?: string;
+  expirationTime?: string;
+}
+
+export interface OrderReceipt extends ReportedMoney {
+  orderId?: string;
+  /** CREATED, SAVED, APPROVED, VOIDED, COMPLETED or PAYER_ACTION_REQUIRED. */
+  status?: string;
+  /** Where the buyer approves the order (PayPal's payer-action or approve link). */
+  approvalUrl?: string;
+  customId?: string;
+  /** The order's authorization, once it has been authorized. */
+  authorization?: AuthorizationReceipt;
+}
 
 export interface CaptureCommand {
   paypalAuthorizationId: string;
@@ -11,10 +62,12 @@ export interface CaptureCommand {
   requestId: string;
 }
 
-export interface CaptureReceipt {
-  paypalCaptureId: string;
-  status: "completed" | "pending" | "declined";
-  amountCents: number;
+export interface CaptureReceipt extends ReportedMoney {
+  paypalCaptureId?: string;
+  /** COMPLETED, DECLINED, PARTIALLY_REFUNDED, PENDING, REFUNDED or FAILED. */
+  status?: string;
+  finalCapture?: boolean;
+  createTime?: string;
 }
 
 export interface VoidCommand {
@@ -22,9 +75,25 @@ export interface VoidCommand {
   requestId: string;
 }
 
-export interface VoidReceipt {
-  /** PayPal keeps reporting the original amount after a void, so this is not the amount released. */
-  reportedAmountCents?: number;
+export interface RefundCommand {
+  paypalCaptureId: string;
+  amountCents: number;
+  requestId: string;
+  /** Setti operation id, for PayPal's transaction reports. */
+  customId: string;
+}
+
+export interface RefundReceipt extends ReportedMoney {
+  paypalRefundId?: string;
+  /** CANCELLED, FAILED, PENDING or COMPLETED. */
+  status?: string;
+  createTime?: string;
+}
+
+/** HTTP status and PayPal debug id of a call, kept as evidence. */
+export interface CallTrace {
+  httpStatus?: number;
+  debugId?: string;
 }
 
 /**
@@ -34,15 +103,26 @@ export interface VoidReceipt {
  * - `retryable`: PayPal did not process it; safe to try again later.
  */
 export type PayPalResult<T> =
-  | { kind: "ok"; value: T }
-  | { kind: "rejected"; code: string; message: string; debugId?: string }
-  | { kind: "unknown"; message: string }
-  | { kind: "retryable"; message: string };
+  | { kind: "ok"; value: T; trace?: CallTrace }
+  | { kind: "rejected"; code: string; message: string; debugId?: string; trace?: CallTrace }
+  | { kind: "unknown"; message: string; trace?: CallTrace }
+  | { kind: "retryable"; message: string; trace?: CallTrace };
+
+export type PayPalFailure = Exclude<PayPalResult<never>, { kind: "ok" }>;
 
 export interface PayPalPayments {
+  /** Creates an AUTHORIZE order the buyer then approves on PayPal. */
+  createOrder(command: CreateOrderCommand): Promise<PayPalResult<OrderReceipt>>;
+  getOrder(orderId: string): Promise<PayPalResult<OrderReceipt>>;
+  /** Authorizes an approved order; the new authorization is on the returned order. */
+  authorizeOrder(command: AuthorizeOrderCommand): Promise<PayPalResult<OrderReceipt>>;
+  getAuthorization(paypalAuthorizationId: string): Promise<PayPalResult<AuthorizationReceipt>>;
   captureAuthorization(command: CaptureCommand): Promise<PayPalResult<CaptureReceipt>>;
+  getCapture(paypalCaptureId: string): Promise<PayPalResult<CaptureReceipt>>;
   /** Releases whatever is still held on the authorization. */
-  voidAuthorization(command: VoidCommand): Promise<PayPalResult<VoidReceipt>>;
+  voidAuthorization(command: VoidCommand): Promise<PayPalResult<AuthorizationReceipt>>;
+  refundCapture(command: RefundCommand): Promise<PayPalResult<RefundReceipt>>;
+  getRefund(paypalRefundId: string): Promise<PayPalResult<RefundReceipt>>;
 }
 
 /** Network error codes that mean the request never reached PayPal. */
@@ -60,12 +140,13 @@ export interface FailureFacts {
 }
 
 /** Sorts a failed PayPal call into rejected, unknown or retryable. */
-export function classifyFailure(facts: FailureFacts): Exclude<PayPalResult<never>, { kind: "ok" }> {
+export function classifyFailure(facts: FailureFacts): PayPalFailure {
   const { statusCode, message } = facts;
+  const trace = { httpStatus: statusCode, debugId: facts.debugId };
   if (statusCode === undefined) {
-    return facts.networkCode && NOT_SENT.has(facts.networkCode) ? { kind: "retryable", message } : { kind: "unknown", message };
+    return facts.networkCode && NOT_SENT.has(facts.networkCode) ? { kind: "retryable", message, trace } : { kind: "unknown", message, trace };
   }
-  if (statusCode === 429) return { kind: "retryable", message };
-  if (statusCode >= 500 || statusCode === 408 || statusCode === 409) return { kind: "unknown", message };
-  return { kind: "rejected", code: facts.code ?? `HTTP_${statusCode}`, message, debugId: facts.debugId };
+  if (statusCode === 429) return { kind: "retryable", message, trace };
+  if (statusCode >= 500 || statusCode === 408 || statusCode === 409) return { kind: "unknown", message, trace };
+  return { kind: "rejected", code: facts.code ?? `HTTP_${statusCode}`, message, debugId: facts.debugId, trace };
 }

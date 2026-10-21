@@ -100,8 +100,20 @@ describe.skipIf(!testDatabaseUrl)("PayPal money records", () => {
     const charged = await capture(15_000);
     await expectRejected(handle.db.update(paypalCaptures).set({ amountCents: 1 }).where(eq(paypalCaptures.id, charged.id)), /amount_cents cannot change/);
     await expectRejected(handle.db.delete(paypalCaptures).where(eq(paypalCaptures.id, charged.id)), /cannot be deleted/);
-    // Status is allowed to move, for example when PayPal reports a pending capture as declined.
-    await handle.db.update(paypalCaptures).set({ status: "declined" }).where(eq(paypalCaptures.id, charged.id));
+    // Status moves only forward: a completed capture stays completed...
+    await expectRejected(handle.db.update(paypalCaptures).set({ status: "declined" }).where(eq(paypalCaptures.id, charged.id)), /cannot go from completed to declined/);
+    // ...while PayPal may still report a pending capture as declined.
+    const [pending] = await handle.db.insert(paypalCaptures).values({ projectId, paypalCaptureId: nextId("CAPTURE"), amountCents: 15_000, status: "pending" }).returning();
+    await handle.db.update(paypalCaptures).set({ status: "declined" }).where(eq(paypalCaptures.id, pending.id));
+  });
+
+  it("moves hold and refund statuses only forward", async () => {
+    const voided = await hold(10_000, "voided");
+    await expectRejected(handle.db.update(paypalAuthorizations).set({ status: "created" }).where(eq(paypalAuthorizations.id, voided.id)), /cannot go from voided to created/);
+    await expectRejected(handle.db.update(paypalAuthorizations).set({ itemId: null, changeOrderId: null, currency: "EUR" }).where(eq(paypalAuthorizations.id, voided.id)), /cannot change|paypal_authorizations_usd/);
+    const charged = await capture(10_000);
+    const [done] = await handle.db.insert(paypalRefunds).values({ captureId: charged.id, paypalRefundId: nextId("REFUND"), amountCents: 1_000, status: "completed" }).returning();
+    await expectRejected(handle.db.update(paypalRefunds).set({ status: "pending" }).where(eq(paypalRefunds.id, done.id)), /cannot go from completed to pending/);
   });
 
   it("checks two simultaneous captures one at a time, so together they cannot exceed the hold", async () => {
