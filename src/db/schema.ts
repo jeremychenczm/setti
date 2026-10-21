@@ -88,7 +88,7 @@ export const revisionLines = pgTable(
     freightCents: integer("freight_cents").notNull().default(0),
     /** Restocking fee in basis points (2000 = 20%), from the vendor's return terms. */
     restockingFeeBps: integer("restocking_fee_bps"),
-    returnable: boolean("returnable").notNull().default(true),
+    returnable: boolean("returnable").default(true),
     customMade: boolean("custom_made").notNull().default(false),
     leadTimeDays: integer("lead_time_days"),
   },
@@ -224,3 +224,6 @@ export const approvals = pgTable(
   },
   (t) => [unique("approvals_one_per_line").on(t.revisionLineId)],
 );
+
+export { chatCases, chatMessages } from "../chat/schema";
+export { pricingCases, pricingReviews, changeOrders } from "../pricing/schema";

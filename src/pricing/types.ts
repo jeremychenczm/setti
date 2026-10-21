@@ -1,0 +1,179 @@
+import type { CaseKey, CaseMessage, ChangeDraft, DraftChange, ProductPage } from "@/chat/types";
+import type { ApprovedQuoteLine, ApprovedQuoteReport, QuoteCategory } from "@/quotes/types";
+import type { QuoteTotals } from "@/quotes/totals";
+
+export type OldItemHandling = "pending" | "not_ordered" | "cancelled" | "returned" | "retained" | "not_applicable";
+
+/** Editable amounts stay nullable until a designer explicitly checks them. */
+export interface PricingItem {
+  name: string;
+  vendor: string;
+  brand: string | null;
+  sku: string;
+  specification: string;
+  category: QuoteCategory;
+  room: string;
+  quantity: number;
+  unitLabel: string;
+  currency: string | null;
+  unitPriceCents: number | null;
+  taxCents: number | null;
+  freightCents: number | null;
+  sourceUrl: string | null;
+  returnPolicy: string;
+  returnable: boolean | null;
+  restockingFeeBps: number | null;
+  customMade: boolean;
+  leadTimeDays: number | null;
+}
+
+export interface PricingChangeInput {
+  key: string;
+  action: DraftChange["action"];
+  itemId: string | null;
+  after: PricingItem | null;
+  priceEvidence: string;
+  confirmed: boolean;
+  oldItemHandling: OldItemHandling;
+  /** Total retained old-item cost / handling charge including its applicable fees. */
+  oldItemCostCents: number | null;
+  oldItemNote: string;
+}
+
+export interface PricingIssue {
+  id: string;
+  label: string;
+  resolved: boolean;
+  note: string;
+}
+
+export interface PricingInput {
+  baselineFingerprint: string;
+  title: string;
+  changes: PricingChangeInput[];
+  issues: PricingIssue[];
+  terms: string;
+  reviewNotes: string;
+}
+
+export interface PricingPreview {
+  baselineTotals: QuoteTotals;
+  proposedTotals: QuoteTotals | null;
+  deltaTotalCents: number | null;
+  problems: string[];
+  ready: boolean;
+}
+
+export interface PricingReview {
+  id: string;
+  sourceDraftId: string;
+  sourceDraftRevision: number;
+  version: number;
+  input: PricingInput;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FinalQuoteLine extends Omit<PricingItem, "unitPriceCents" | "taxCents" | "freightCents" | "currency"> {
+  itemId: string;
+  unitPriceCents: number;
+  taxCents: number;
+  freightCents: number;
+  currency: "USD";
+  origin: "unchanged" | "changed" | "old_item_cost";
+}
+
+export interface ReviewedChange {
+  key: string;
+  action: DraftChange["action"];
+  itemId: string | null;
+  before: ApprovedQuoteLine | null;
+  after: FinalQuoteLine | null;
+  oldItemHandling: OldItemHandling;
+  oldItemCostCents: number;
+  oldItemNote: string;
+  priceEvidence: string;
+}
+
+/** Everything a client reads is frozen here, including names, terms and sources. */
+export interface PricingDocumentBody {
+  baselineFingerprint: string;
+  projectKey: CaseKey;
+  basedOnQuoteId: string;
+  basedOnVersion: number;
+  projectName: string;
+  clientName: string;
+  designerName: string;
+  currency: "USD";
+  isDemo: true;
+  title: string;
+  sourceDraftId: string;
+  sourceDraftRevision: number;
+  changes: ReviewedChange[];
+  lines: FinalQuoteLine[];
+  baselineLines: ApprovedQuoteLine[];
+  baselineTotals: QuoteTotals;
+  totals: QuoteTotals;
+  deltaTotalCents: number;
+  terms: string;
+  reviewNotes: string;
+  issues: PricingIssue[];
+  constraints: string[];
+  sourceMessages: Pick<CaseMessage, "id" | "actor" | "text" | "createdAt">[];
+  sources: ProductPage[];
+}
+
+export interface FrozenChangeOrder extends PricingDocumentBody {
+  id: string;
+  version: number;
+  issuedAt: string;
+  reviewId: string;
+  reviewVersion: number;
+  revisionId: string;
+  revisionContentHash: string;
+  contentHash: string;
+}
+
+export interface ChangeOrderView {
+  order: FrozenChangeOrder;
+  status: "awaiting_client_confirmation" | "superseded";
+}
+
+export interface ChangeOrderSummary {
+  id: string;
+  version: number;
+  issuedAt: string;
+  totalCents: number;
+  deltaTotalCents: number;
+  status: ChangeOrderView["status"];
+}
+
+export interface PricingWorkspace {
+  caseId: string;
+  projectKey: CaseKey;
+  quote: ApprovedQuoteReport;
+  sourceDraft: ChangeDraft | null;
+  review: PricingReview | null;
+  preview: PricingPreview | null;
+  stale: boolean;
+  orders: ChangeOrderSummary[];
+}
+
+export interface SavePricingInput {
+  sourceDraftId: string;
+  sourceDraftRevision: number;
+  expectedVersion: number | null;
+  input: PricingInput;
+}
+
+export interface IssuePricingInput {
+  reviewId: string;
+  expectedVersion: number;
+}
+
+export interface PricingStore {
+  getWorkspace(sessionId: string, key: CaseKey): Promise<PricingWorkspace>;
+  saveReview(sessionId: string, key: CaseKey, input: SavePricingInput): Promise<PricingWorkspace>;
+  issueReview(sessionId: string, key: CaseKey, input: IssuePricingInput): Promise<ChangeOrderView>;
+  getOrder(id: string): Promise<ChangeOrderView | null>;
+}

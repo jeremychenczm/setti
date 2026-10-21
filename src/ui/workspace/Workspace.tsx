@@ -3,8 +3,10 @@
 import { CircleAlert, FileText } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useMemo, useState } from "react";
+import type { CaseKey } from "@/chat/types";
 import { mapleApprovedQuote } from "@/quotes/demo-quote";
 import { willowApprovedQuote } from "@/quotes/willow-quote";
+import { CaseChat } from "../chat/CaseChat";
 import type { Conversation, Message } from "../demo-data";
 import { agents, alerts, conversations, me } from "../demo-data";
 import { ChatPane } from "./ChatPane";
@@ -17,22 +19,41 @@ const ApprovedQuoteView = dynamic(() => import("../quotes/ApprovedQuoteView").th
   loading: () => <div className="flex flex-1 items-center justify-center rounded-xl bg-white text-sm text-[var(--muted)]">Loading quote…</div>,
 });
 
-export function Workspace({ initialView = "chats", initialQuote = "willow" }: { initialView?: View; initialQuote?: "maple" | "willow" }) {
+const willowConversation: Conversation = {
+  id: "willow",
+  kind: "project",
+  title: "Willow Residence",
+  subtitle: "Whole home",
+  counterpart: { id: "willow-client", name: "Sofia Martinez", role: "client", avatar: "/avatars/client.webp" },
+  agents: ["change-agent"],
+  preview: "Discuss changes, share product links and ask @AI to draft.",
+  time: "",
+  unread: 0,
+  messages: [],
+  items: [],
+  files: [],
+};
+const workspaceConversations: Conversation[] = [willowConversation, ...conversations.map((conversation) => conversation.id === "maple" ? { ...conversation, preview: "Project chat · live AI drafts on request. Legacy demo kept separately.", unread: 0, time: "" } : conversation)];
+
+export function Workspace({ initialView = "chats", initialQuote = "willow", initialCase }: { initialView?: View; initialQuote?: CaseKey; initialCase?: CaseKey }) {
   const [view, setView] = useState<View>(initialView);
   const [quoteId, setQuoteId] = useState<"maple" | "willow">(initialQuote);
-  const [activeId, setActiveId] = useState("maple");
-  const [read, setRead] = useState<Set<string>>(() => new Set(["maple"]));
+  const [activeId, setActiveId] = useState<string>(initialCase ?? (initialView === "quotes" ? initialQuote : "willow"));
+  const [read, setRead] = useState<Set<string>>(() => new Set(["maple", "willow"]));
   const [sent, setSent] = useState<Record<string, Message[]>>({});
   const [panelOpen, setPanelOpen] = useState(true);
   const [tab, setTab] = useState<PanelTab>("items");
   const [quietHours, setQuietHours] = useState(false);
+  const [legacyMaple, setLegacyMaple] = useState(false);
 
-  const active = conversations.find((c) => c.id === activeId) ?? conversations[0];
+  const active = workspaceConversations.find((c) => c.id === activeId) ?? workspaceConversations[0];
   const unreadOf = (c: Conversation) => (read.has(c.id) ? 0 : c.unread);
-  const totalUnread = useMemo(() => conversations.reduce((n, c) => n + (read.has(c.id) ? 0 : c.unread), 0), [read]);
+  const totalUnread = useMemo(() => workspaceConversations.reduce((n, c) => n + (read.has(c.id) ? 0 : c.unread), 0), [read]);
+  const liveCase = active.id === "willow" || active.id === "maple" ? active.id : null;
 
   const open = (id: string) => {
     setActiveId(id);
+    setLegacyMaple(false);
     setRead((prev) => new Set(prev).add(id));
     setView("chats");
   };
@@ -47,14 +68,21 @@ export function Workspace({ initialView = "chats", initialQuote = "willow" }: { 
     setQuoteId("maple");
     setView("quotes");
   };
+  const openCaseQuote = () => {
+    setQuoteId(liveCase ?? "maple");
+    setView("quotes");
+  };
 
   return (
-    <div className="flex h-screen gap-2 bg-[var(--canvas)] p-2 text-[var(--ink)]">
-      <Sidebar view={view} onView={setView} unread={totalUnread} alertCount={alerts.length} quietHours={quietHours} onQuietHours={() => setQuietHours((q) => !q)} />
+    <div className="flex h-dvh min-h-0 gap-2 bg-[var(--canvas)] p-2 text-[var(--ink)]">
+      <div className="hidden shrink-0 xl:flex"><Sidebar view={view} onView={setView} unread={totalUnread} alertCount={alerts.length} quietHours={quietHours} onQuietHours={() => setQuietHours((q) => !q)} /></div>
 
       {view === "chats" && (
         <>
-          <ConversationList conversations={conversations} activeId={active.id} onOpen={open} alerts={alerts} unreadOf={unreadOf} />
+          <div className="hidden min-h-0 shrink-0 2xl:flex"><ConversationList conversations={workspaceConversations} activeId={active.id} onOpen={open} alerts={alerts.filter((alert) => alert.conversationId !== "maple")} unreadOf={unreadOf} /></div>
+          {liveCase && !legacyMaple ? <CaseChat key={liveCase} projectKey={liveCase} quote={liveCase === "willow" ? willowApprovedQuote : mapleApprovedQuote} onOpenQuote={openCaseQuote} onSelectCase={open} onOpenLegacy={liveCase === "maple" ? () => setLegacyMaple(true) : undefined} /> : <>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+          {legacyMaple && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-[11px] text-amber-800"><span>Legacy mock-up · prewritten history and local interactions are not sent to AI.</span><button onClick={() => setLegacyMaple(false)} className="font-semibold text-[var(--primary)] hover:underline">Back to live Maple chat</button></div>}
           <ChatPane
             conversation={active}
             messages={[...active.messages, ...(sent[active.id] ?? [])]}
@@ -67,14 +95,16 @@ export function Workspace({ initialView = "chats", initialQuote = "willow" }: { 
             panelOpen={panelOpen}
             onTogglePanel={() => setPanelOpen((o) => !o)}
           />
-          {panelOpen && <RightPanel conversation={active} tab={tab} onTab={setTab} onOpenQuote={openMapleQuote} />}
+          </div>
+          {panelOpen && <div className="hidden min-h-0 2xl:flex"><RightPanel conversation={active} tab={tab} onTab={setTab} onOpenQuote={openMapleQuote} /></div>}
+          </>}
         </>
       )}
 
       {view === "alerts" && <AlertsView onOpen={open} />}
       {view === "agents" && <AgentsView onOpen={open} />}
       {view === "files" && <FilesView onOpen={open} />}
-      {view === "quotes" && <ApprovedQuoteView key={quoteId} quote={quoteId === "willow" ? willowApprovedQuote : mapleApprovedQuote} onSelectQuote={setQuoteId} onBack={() => setView("chats")} />}
+      {view === "quotes" && <ApprovedQuoteView key={quoteId} quote={quoteId === "willow" ? willowApprovedQuote : mapleApprovedQuote} onSelectQuote={(id) => { setQuoteId(id); setActiveId(id); setLegacyMaple(false); }} onBack={() => setView("chats")} />}
       {view === "items" && <ComingNext title="Items" text="Every item across projects, with its price, approval and money state." />}
       {view === "procurement" && <ComingNext title="Procurement" text="Order, ship, deliver and install dates, with hold expiry and refund due dates on the same timeline." />}
     </div>

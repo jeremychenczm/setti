@@ -1,0 +1,178 @@
+import { randomUUID } from "node:crypto";
+import { and, asc, eq, gt, ne } from "drizzle-orm";
+import { isAiInvocation } from "../ai/intent";
+import type { Db } from "../db/client";
+import { chatCases, chatMessages } from "./schema";
+import type { AppendMessageInput, BeginAiResult, CaseKey, CaseMessage, ChatStore, StoredCase } from "./types";
+
+const RUN_TIMEOUT_MS = 180_000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
+type CaseRow = typeof chatCases.$inferSelect;
+type MessageRow = typeof chatMessages.$inferSelect;
+
+export class ChatStoreError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message);
+    this.name = "ChatStoreError";
+  }
+}
+
+function validateScope(sessionId: string, projectKey: CaseKey): void {
+  if (!UUID.test(sessionId) || !["willow", "maple"].includes(projectKey)) {
+    throw new ChatStoreError("INVALID_INPUT", "A valid demo session and case are required.");
+  }
+}
+
+function validateMessageId(id: string): void {
+  if (!UUID.test(id)) throw new ChatStoreError("INVALID_INPUT", "Message id must be a UUID.");
+}
+
+async function lockCase(tx: Transaction, sessionId: string, projectKey: CaseKey): Promise<CaseRow> {
+  await tx.insert(chatCases).values({ sessionId, projectKey }).onConflictDoNothing({ target: [chatCases.sessionId, chatCases.projectKey] });
+  const [row] = await tx.select().from(chatCases).where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, projectKey))).for("update");
+  return row;
+}
+
+async function readMessage(tx: Transaction, caseId: string, messageId: string): Promise<MessageRow> {
+  const [message] = await tx.select().from(chatMessages).where(and(eq(chatMessages.caseId, caseId), eq(chatMessages.id, messageId)));
+  if (!message || message.actor === "assistant") {
+    throw new ChatStoreError("MESSAGE_NOT_FOUND", "The human message does not belong to this case.");
+  }
+  return message;
+}
+
+function publicMessage(message: MessageRow): CaseMessage {
+  return {
+    id: message.id,
+    actor: message.actor,
+    text: message.text,
+    createdAt: message.createdAt.toISOString(),
+    replyToMessageId: message.replyToMessageId,
+    aiState: message.aiState,
+    error: message.error,
+    model: message.model,
+  };
+}
+
+async function snapshot(tx: Transaction, row: CaseRow): Promise<StoredCase> {
+  const messages = await tx.select().from(chatMessages).where(eq(chatMessages.caseId, row.id)).orderBy(asc(chatMessages.sequence));
+  return { id: row.id, projectKey: row.projectKey, messages: messages.map(publicMessage), draft: row.draft, activeMessageId: row.activeMessageId };
+}
+
+async function expireRun(tx: Transaction, row: CaseRow): Promise<CaseRow> {
+  if (!row.activeRunStartedAt || Date.now() - row.activeRunStartedAt.getTime() < RUN_TIMEOUT_MS) return row;
+  await tx.update(chatMessages).set({ aiState: "failed", error: "AI reply timed out. Retry this message." })
+    .where(and(eq(chatMessages.caseId, row.id), eq(chatMessages.id, row.activeMessageId!), eq(chatMessages.lastRunId, row.activeRunId!)));
+  const [updated] = await tx.update(chatCases).set({ activeMessageId: null, activeRunId: null, activeRunStartedAt: null, updatedAt: new Date() })
+    .where(eq(chatCases.id, row.id)).returning();
+  return updated;
+}
+
+/** All writes lock one session/case row; no model or network call holds the lock. */
+export function createChatStore(db: Db): ChatStore {
+  async function withinCase<T>(sessionId: string, projectKey: CaseKey, work: (tx: Transaction, row: CaseRow) => Promise<T>): Promise<T> {
+    validateScope(sessionId, projectKey);
+    return db.transaction(async (tx) => work(tx, await expireRun(tx, await lockCase(tx, sessionId, projectKey))));
+  }
+
+  return {
+    getCase(sessionId, projectKey) {
+      return withinCase(sessionId, projectKey, snapshot);
+    },
+
+    appendMessage(sessionId, projectKey, input: AppendMessageInput) {
+      validateMessageId(input.id);
+      if (!["client", "designer"].includes(input.actor) || !input.text.trim() || input.text.length > 8_000) {
+        throw new ChatStoreError("INVALID_INPUT", "Send a non-empty client or designer message of at most 8,000 characters.");
+      }
+      return withinCase(sessionId, projectKey, async (tx, row) => {
+        const [existing] = await tx.select().from(chatMessages).where(and(eq(chatMessages.caseId, row.id), eq(chatMessages.id, input.id)));
+        if (existing) {
+          if (existing.actor !== input.actor || existing.text !== input.text) {
+            throw new ChatStoreError("IDEMPOTENCY_CONFLICT", "This message id has already been used for different content.");
+          }
+          return snapshot(tx, row);
+        }
+        if (row.activeRunId) throw new ChatStoreError("CASE_BUSY", "Wait for the current AI reply before sending another message.");
+        await tx.insert(chatMessages).values({ caseId: row.id, id: input.id, actor: input.actor, text: input.text });
+        await tx.update(chatCases).set({ updatedAt: new Date() }).where(eq(chatCases.id, row.id));
+        return snapshot(tx, row);
+      });
+    },
+
+    beginAi(sessionId, projectKey, messageId): Promise<BeginAiResult> {
+      validateMessageId(messageId);
+      return withinCase(sessionId, projectKey, async (tx, row) => {
+        const message = await readMessage(tx, row.id, messageId);
+        if (!isAiInvocation(message.text)) {
+          throw new ChatStoreError("INVALID_AI_TRIGGER", "Start the message with @AI or @Change Agent to request a reply.");
+        }
+        if (message.aiState === "completed") return { status: "completed", state: await snapshot(tx, row) };
+        if (row.activeRunId) {
+          if (row.activeMessageId !== messageId) {
+            await tx.update(chatMessages).set({ aiState: "failed", error: "Another AI reply is in progress. Retry this message when it finishes." })
+              .where(and(eq(chatMessages.caseId, row.id), eq(chatMessages.id, messageId)));
+          }
+          return { status: "busy", state: await snapshot(tx, row) };
+        }
+        const [newerHuman] = await tx.select({ id: chatMessages.id }).from(chatMessages)
+          .where(and(eq(chatMessages.caseId, row.id), gt(chatMessages.sequence, message.sequence), ne(chatMessages.actor, "assistant"))).limit(1);
+        if (newerHuman || message.sequence < row.latestCompletedSequence) {
+          throw new ChatStoreError("STALE_MESSAGE", "Newer messages already exist. Start a new @AI message so the latest direction is included.");
+        }
+        const runId = randomUUID();
+        await tx.update(chatMessages).set({ aiState: "running", error: null, model: null, lastRunId: runId })
+          .where(and(eq(chatMessages.caseId, row.id), eq(chatMessages.id, messageId)));
+        const [updated] = await tx.update(chatCases).set({ activeMessageId: messageId, activeRunId: runId, activeRunStartedAt: new Date(), updatedAt: new Date() })
+          .where(eq(chatCases.id, row.id)).returning();
+        return { status: "started", runId, state: await snapshot(tx, updated) };
+      });
+    },
+
+    async completeAi(sessionId, projectKey, messageId, runId, result) {
+      validateMessageId(messageId);
+      if (!result.text.trim() || !result.model.trim() || (result.draft && result.draft.projectKey !== projectKey)) {
+        throw new ChatStoreError("INVALID_INPUT", "The AI result must contain text and a model for this case.");
+      }
+      const outcome = await withinCase(sessionId, projectKey, async (tx, row) => {
+        const message = await readMessage(tx, row.id, messageId);
+        if (message.aiState === "completed" && message.lastRunId === runId) return { state: await snapshot(tx, row), stale: false };
+        if (row.activeRunId !== runId || row.activeMessageId !== messageId || message.aiState !== "running" || message.lastRunId !== runId) {
+          return { state: await snapshot(tx, row), stale: true };
+        }
+        await tx.insert(chatMessages).values({ caseId: row.id, id: randomUUID(), actor: "assistant", text: result.text, replyToMessageId: messageId, aiState: "completed", model: result.model });
+        await tx.update(chatMessages).set({ aiState: "completed", error: null, model: result.model })
+          .where(and(eq(chatMessages.caseId, row.id), eq(chatMessages.id, messageId)));
+        const [updated] = await tx.update(chatCases).set({
+          ...("draft" in result ? { draft: result.draft ?? null } : {}),
+          activeMessageId: null, activeRunId: null, activeRunStartedAt: null,
+          latestCompletedSequence: message.sequence, updatedAt: new Date(),
+        }).where(eq(chatCases.id, row.id)).returning();
+        return { state: await snapshot(tx, updated), stale: false };
+      });
+      if (outcome.stale) throw new ChatStoreError("STALE_AI_RUN", "This AI run is no longer current; its result was not saved.");
+      return outcome.state;
+    },
+
+    async failAi(sessionId, projectKey, messageId, runId, error) {
+      validateMessageId(messageId);
+      const outcome = await withinCase(sessionId, projectKey, async (tx, row) => {
+        const message = await readMessage(tx, row.id, messageId);
+        if (message.aiState === "failed" && message.lastRunId === runId && row.activeRunId !== runId) {
+          return { state: await snapshot(tx, row), stale: false };
+        }
+        if (row.activeRunId !== runId || row.activeMessageId !== messageId || message.lastRunId !== runId) {
+          return { state: await snapshot(tx, row), stale: true };
+        }
+        await tx.update(chatMessages).set({ aiState: "failed", error: error.trim().slice(0, 2_000) || "AI reply failed. Retry this message." })
+          .where(and(eq(chatMessages.caseId, row.id), eq(chatMessages.id, messageId)));
+        const [updated] = await tx.update(chatCases).set({ activeMessageId: null, activeRunId: null, activeRunStartedAt: null, updatedAt: new Date() })
+          .where(eq(chatCases.id, row.id)).returning();
+        return { state: await snapshot(tx, updated), stale: false };
+      });
+      if (outcome.stale) throw new ChatStoreError("STALE_AI_RUN", "This AI run is no longer current; the current state was not changed.");
+      return outcome.state;
+    },
+  };
+}

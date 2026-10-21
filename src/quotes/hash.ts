@@ -8,7 +8,7 @@ export interface LineSnapshot {
   taxCents: number;
   freightCents: number;
   restockingFeeBps: number | null;
-  returnable: boolean;
+  returnable: boolean | null;
   customMade: boolean;
   leadTimeDays: number | null;
 }
