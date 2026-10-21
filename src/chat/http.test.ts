@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatStore, StoredCase } from "./types";
+import { caseQuote } from "./cases";
 
 const mocks = vi.hoisted(() => ({ store: {} as ChatStore, run: vi.fn(), configured: vi.fn(() => false) }));
 vi.mock("./server", () => ({ chatStore: () => mocks.store }));
@@ -39,6 +40,16 @@ describe("case chat HTTP boundary", () => {
     const session = randomUUID();
     await getCaseResponse(new NextRequest("http://localhost:3002/api/chat/willow", { headers: { cookie: `setti-demo-chat=${session}` } }), "willow");
     expect(mocks.store.getCase).toHaveBeenCalledWith(session, "willow");
+  });
+  it("returns the session store's latest confirmed quote rather than the static demo V1", async () => {
+    const approved = structuredClone(caseQuote("willow"));
+    approved.id = "approved-willow-v3";
+    approved.version = 3;
+    state.quote = approved;
+    const response = await getCaseResponse(new NextRequest("http://localhost:3002/api/chat/willow"), "willow");
+    const body = await response.json();
+    expect(body.quote).toEqual(approved);
+    expect(body.quote.id).not.toBe(caseQuote("willow").id);
   });
   it("saves ordinary discussion and links without invoking AI", async () => {
     const input = { id: randomUUID(), actor: "client", text: "这把椅子怎么样 https://shop.example/chair" };

@@ -1,6 +1,7 @@
 "use client";
 
 import { AtSign, Bot, ChevronDown, FileText, History, Link2, LoaderCircle, MessageSquare, PanelRight, RefreshCw, SendHorizontal, X } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { isAiInvocation } from "@/ai/intent";
 import type { CaseKey, CaseMessage, HumanActor } from "@/chat/types";
@@ -43,6 +44,8 @@ export function CaseChat({ projectKey, quote, onOpenQuote, onSelectCase, onOpenL
   const bottom = useRef<HTMLDivElement>(null);
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentQuote = snapshot?.quote ?? quote;
+  const confirmedQuoteHref = currentQuote.version > quote.version && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentQuote.id)
+    ? `/change-orders/${currentQuote.id}` : null;
   const draft = snapshot?.draft ?? null;
   const designer: Person = { id: "jordan", name: displayName(currentQuote.designerName), role: "designer", avatar: "/avatars/designer.webp" };
   const client: Person = { id: `${projectKey}-client`, name: displayName(currentQuote.clientName), role: "client", avatar: "/avatars/client.webp" };
@@ -95,11 +98,11 @@ export function CaseChat({ projectKey, quote, onOpenQuote, onSelectCase, onOpenL
           </label>
           <p className="truncate text-[11px] text-[var(--muted)]">{designer.name} · {client.name} · Change Agent</p>
         </div>
-        <button onClick={onOpenQuote} className="flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--primary-soft)] px-3 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-blue-100"><FileText className="h-3.5 w-3.5" />Quote V{currentQuote.version}</button>
+        {confirmedQuoteHref ? <Link href={confirmedQuoteHref} aria-label={`View client-confirmed quote V${currentQuote.version}`} className="flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--primary-soft)] px-3 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-blue-100"><FileText className="h-3.5 w-3.5" />Quote V{currentQuote.version}</Link> : <button onClick={onOpenQuote} className="flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--primary-soft)] px-3 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-blue-100"><FileText className="h-3.5 w-3.5" />Quote V{currentQuote.version}</button>}
         <button onClick={() => setDraftOpen((open) => !open)} aria-label={draftOpen ? "Close current draft" : "Open current draft"} aria-pressed={draftOpen} className={`rounded-lg p-2 ${draftOpen ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "text-[var(--muted)] hover:bg-[var(--canvas)]"}`}><PanelRight className="h-4 w-4" /></button>
       </header>
 
-      <div className="flex items-center gap-2 border-b border-[var(--line)] bg-slate-50/60 px-4 py-2 text-[10px] leading-relaxed text-slate-500 sm:px-5"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" /><span className="flex-1">Demo case · saved to this browser session · V{currentQuote.version} stays read-only</span>{onOpenLegacy && <button onClick={onOpenLegacy} className="flex shrink-0 items-center gap-1 text-[var(--primary)] hover:underline"><History className="h-3 w-3" />Legacy demo</button>}</div>
+      <div className="flex items-center gap-2 border-b border-[var(--line)] bg-slate-50/60 px-4 py-2 text-[10px] leading-relaxed text-slate-500 sm:px-5"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" /><span className="flex-1">Demo case · saved to this browser session · {confirmedQuoteHref ? "Client-confirmed baseline" : "Initial approved baseline"} V{currentQuote.version} · read-only</span>{onOpenLegacy && <button onClick={onOpenLegacy} className="flex shrink-0 items-center gap-1 text-[var(--primary)] hover:underline"><History className="h-3 w-3" />Legacy demo</button>}</div>
 
       <div className="relative flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
@@ -108,7 +111,7 @@ export function CaseChat({ projectKey, quote, onOpenQuote, onSelectCase, onOpenL
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
             <div className="mx-auto max-w-3xl space-y-4">
               {loading && <div role="status" className="flex items-center justify-center gap-2 py-12 text-[12px] text-[var(--muted)]"><LoaderCircle className="h-4 w-4 animate-spin" />Loading saved conversation…</div>}
-              {!loading && snapshot && messages.length === 0 && <div className="mx-auto max-w-md px-2 py-10 text-center sm:py-16"><span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-[var(--primary)]"><MessageSquare className="h-6 w-6" strokeWidth={1.5} /></span><h1 className="mt-4 text-[17px] font-semibold">Start with the project conversation</h1><p className="mt-2 text-[13px] leading-relaxed text-slate-500">Discuss changes together and paste product links here. Mention <strong className="font-medium text-slate-700">@AI</strong> with what you want it to do when you are ready.</p><p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">This case starts with the V{currentQuote.version} demo quote. The AI drafts for designer review; it cannot approve, order or move money.</p></div>}
+              {!loading && snapshot && messages.length === 0 && <div className="mx-auto max-w-md px-2 py-10 text-center sm:py-16"><span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-[var(--primary)]"><MessageSquare className="h-6 w-6" strokeWidth={1.5} /></span><h1 className="mt-4 text-[17px] font-semibold">Start with the project conversation</h1><p className="mt-2 text-[13px] leading-relaxed text-slate-500">Discuss changes together and paste product links here. Mention <strong className="font-medium text-slate-700">@AI</strong> with what you want it to do when you are ready.</p><p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">{confirmedQuoteHref ? "New changes use the client-confirmed" : "This case starts with the initial approved"} V{currentQuote.version} demo quote. The AI drafts for designer review; it cannot approve, order or move money.</p></div>}
 
               {messages.map((message, index) => <MessageBubble key={message.id} message={message} person={message.actor === "designer" ? designer : client} highlighted={highlightedId === message.id} unsaved={unsavedMessageId === message.id} running={running} canRetryAi={!messages.slice(index + 1).some((later) => later.actor !== "assistant")} onRetry={() => retry(message.id)} />)}
 
@@ -130,7 +133,7 @@ export function CaseChat({ projectKey, quote, onOpenQuote, onSelectCase, onOpenL
           </div>
         </div>
 
-        {draftOpen && <aside aria-label="Current change draft" className="absolute inset-y-0 right-0 z-20 flex w-full shrink-0 flex-col border-l border-[var(--line)] bg-white shadow-xl sm:w-[360px] 2xl:static 2xl:w-[350px] 2xl:shadow-none"><div className="flex items-center gap-2 border-b border-[var(--line)] px-4 py-3"><FileText className="h-4 w-4 text-[var(--primary)]" /><h2 className="flex-1 text-[13px] font-semibold">Current draft</h2><button onClick={() => setDraftOpen(false)} aria-label="Close draft panel" className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--canvas)]"><X className="h-4 w-4" /></button></div><div className="min-h-0 flex-1 overflow-y-auto">{draft ? <DraftCard draft={draft} messages={messages} onSourceMessage={sourceMessage} pricingHref={`/pricing/${projectKey}`} canPrice={actor === "designer" && !running} /> : <div className="p-6 text-center"><FileText className="mx-auto h-6 w-6 text-slate-300" /><h3 className="mt-3 text-[13px] font-medium">No draft yet</h3><p className="mt-2 text-[12px] leading-relaxed text-[var(--muted)]">Discuss your changes, then mention @AI and ask it to prepare a draft.</p><button onClick={onOpenQuote} className="mt-4 text-[12px] font-medium text-[var(--primary)] hover:underline">View approved quote V{currentQuote.version}</button></div>}</div></aside>}
+        {draftOpen && <aside aria-label="Current change draft" className="absolute inset-y-0 right-0 z-20 flex w-full shrink-0 flex-col border-l border-[var(--line)] bg-white shadow-xl sm:w-[360px] 2xl:static 2xl:w-[350px] 2xl:shadow-none"><div className="flex items-center gap-2 border-b border-[var(--line)] px-4 py-3"><FileText className="h-4 w-4 text-[var(--primary)]" /><h2 className="flex-1 text-[13px] font-semibold">Current draft</h2><button onClick={() => setDraftOpen(false)} aria-label="Close draft panel" className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--canvas)]"><X className="h-4 w-4" /></button></div><div className="min-h-0 flex-1 overflow-y-auto">{draft ? <DraftCard draft={draft} messages={messages} onSourceMessage={sourceMessage} pricingHref={`/pricing/${projectKey}`} canPrice={actor === "designer" && !running} /> : <div className="p-6 text-center"><FileText className="mx-auto h-6 w-6 text-slate-300" /><h3 className="mt-3 text-[13px] font-medium">No draft yet</h3><p className="mt-2 text-[12px] leading-relaxed text-[var(--muted)]">Discuss your changes, then mention @AI and ask it to prepare a draft.</p>{confirmedQuoteHref ? <Link href={confirmedQuoteHref} className="mt-4 inline-block text-[12px] font-medium text-[var(--primary)] hover:underline">View client-confirmed quote V{currentQuote.version}</Link> : <button onClick={onOpenQuote} className="mt-4 text-[12px] font-medium text-[var(--primary)] hover:underline">View approved quote V{currentQuote.version}</button>}</div>}</div></aside>}
       </div>
     </section>
   );

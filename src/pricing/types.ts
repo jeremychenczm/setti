@@ -1,6 +1,7 @@
 import type { CaseKey, CaseMessage, ChangeDraft, DraftChange, ProductPage } from "@/chat/types";
 import type { ApprovedQuoteLine, ApprovedQuoteReport, QuoteCategory } from "@/quotes/types";
 import type { QuoteTotals } from "@/quotes/totals";
+import type { ClientDecision } from "@/approval/types";
 
 export type OldItemHandling = "pending" | "not_ordered" | "cancelled" | "returned" | "retained" | "not_applicable";
 
@@ -136,7 +137,8 @@ export interface FrozenChangeOrder extends PricingDocumentBody {
 
 export interface ChangeOrderView {
   order: FrozenChangeOrder;
-  status: "awaiting_client_confirmation" | "superseded";
+  status: "awaiting_client_confirmation" | "approved" | "declined" | "superseded";
+  decision?: ClientDecision | null;
 }
 
 export interface ChangeOrderSummary {

@@ -1,9 +1,11 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, ne } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { approvals, items, projects, revisionLines, revisions } from "../db/schema";
 import { chatCases, chatMessages } from "../chat/schema";
-import { caseQuote } from "../chat/cases";
+import { currentCaseQuote } from "../approval/baseline";
+import { changeOrderDecisions } from "../approval/schema";
+import { changeOrderView } from "../approval/view";
 import { createChatStore } from "../chat/store";
 import type { CaseKey, CaseMessage, ChangeDraft } from "../chat/types";
 import { hashRevision } from "../quotes/hash";
@@ -11,7 +13,9 @@ import { quoteFingerprint } from "../quotes/fingerprint";
 import type { ApprovedQuoteReport } from "../quotes/types";
 import { createPricingInput, prepareChangeOrder, previewPricing, validatePricingInput, PricingValidationError } from "./calculation";
 import { changeOrders, pricingCases, pricingReviews } from "./schema";
-import type { ChangeOrderView, FrozenChangeOrder, PricingReview, PricingStore, PricingWorkspace } from "./types";
+import type { FrozenChangeOrder, PricingReview, PricingStore, PricingWorkspace } from "./types";
+import { changeOrderContentHash, itemMappingKey } from "./document";
+export { changeOrderContentHash } from "./document";
 
 type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type CaseRow = typeof chatCases.$inferSelect;
@@ -31,29 +35,6 @@ function sameSource(review: Pick<PricingReview, "sourceDraftId" | "sourceDraftRe
 
 function publicReview(row: ReviewRow): PricingReview {
   return { id: row.id, sourceDraftId: row.sourceDraftId, sourceDraftRevision: row.sourceDraftRevision, version: row.version, input: row.input, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() };
-}
-
-function publicOrder(document: FrozenChangeOrder, status: string): ChangeOrderView {
-  return { order: document, status: status === "superseded" ? "superseded" : "awaiting_client_confirmation" };
-}
-
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value !== null && typeof value === "object") {
-    const object = value as Record<string, unknown>;
-    return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${canonical(object[key])}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-
-/** Covers the entire client-visible document, independently of the numeric revision-line hash. */
-export function changeOrderContentHash(document: Omit<FrozenChangeOrder, "contentHash">): string {
-  return createHash("sha256").update(canonical(document)).digest("hex");
-}
-
-function itemMappingKey(item: { itemId: string; name: string; vendor: string; category: string; sourceUrl: string | null; sku: string; specification: string }): string {
-  const identity = { name: item.name, vendor: item.vendor, category: item.category, sourceUrl: item.sourceUrl, sku: item.sku, specification: item.specification };
-  return `${item.itemId}:${createHash("sha256").update(canonical(identity)).digest("hex")}`;
 }
 
 async function currentReview(tx: Transaction, caseId: string): Promise<ReviewRow | undefined> {
@@ -95,7 +76,7 @@ async function workspace(tx: Transaction, row: CaseRow, quote: ApprovedQuoteRepo
     caseId: row.id, projectKey: row.projectKey, quote, sourceDraft, review,
     preview: review && sourceDraft && !stale ? previewPricing(quote, sourceDraft, review.input) : null,
     stale,
-    orders: orders.map(({ document, status }) => ({ id: document.id, version: document.version, issuedAt: document.issuedAt, totalCents: document.totals.totalCents, deltaTotalCents: document.deltaTotalCents, status: publicOrder(document, status).status })),
+    orders: orders.map(({ document, status }) => ({ id: document.id, version: document.version, issuedAt: document.issuedAt, totalCents: document.totals.totalCents, deltaTotalCents: document.deltaTotalCents, status: changeOrderView(document, status).status })),
   };
 }
 
@@ -113,7 +94,13 @@ async function freezeRevision(tx: Transaction, revisionId: string): Promise<stri
 async function businessBridge(tx: Transaction, caseId: string, quote: ApprovedQuoteReport) {
   const [existing] = await tx.select().from(pricingCases).where(eq(pricingCases.caseId, caseId)).for("update");
   if (existing) {
-    if (existing.baselineQuoteId !== quote.id) throw new PricingStoreError("PRICING_STALE_SOURCE", "The imported baseline quote has changed.");
+    if (existing.baselineQuoteId !== quote.id) {
+      const [accepted] = await tx.select({ revisionId: changeOrders.revisionId }).from(changeOrders)
+        .innerJoin(changeOrderDecisions, eq(changeOrderDecisions.orderId, changeOrders.id))
+        .where(and(eq(changeOrders.caseId, caseId), eq(changeOrders.id, quote.id), eq(changeOrderDecisions.decision, "approved")));
+      if (!accepted) throw new PricingStoreError("PRICING_STALE_SOURCE", "The approved baseline no longer belongs to this case.");
+      return { ...existing, baselineRevisionId: accepted.revisionId };
+    }
     const [firstOrder] = await tx.select({ document: changeOrders.document }).from(changeOrders).where(eq(changeOrders.caseId, caseId)).orderBy(asc(changeOrders.issuedAt)).limit(1);
     if (!firstOrder || firstOrder.document.baselineFingerprint !== quoteFingerprint(quote)) {
       throw new PricingStoreError("PRICING_STALE_SOURCE", "This case already has a frozen V1 with different or unverified contents. Start a fresh demo case instead of reusing that baseline.");
@@ -151,7 +138,7 @@ export function createPricingStore(db: Db): PricingStore {
     await chat.getCase(sessionId, key); // Also recovers expired AI leases before taking the pricing lock.
     return db.transaction(async (tx) => {
       const [row] = await tx.select().from(chatCases).where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, key))).for("update");
-      return work(tx, row, caseQuote(key));
+      return work(tx, row, await currentCaseQuote(tx, row.id, key));
     });
   }
 
@@ -193,7 +180,10 @@ export function createPricingStore(db: Db): PricingStore {
         const [issued] = await tx.select({ document: changeOrders.document, status: revisions.status }).from(changeOrders)
           .innerJoin(revisions, eq(changeOrders.revisionId, revisions.id))
           .where(and(eq(changeOrders.caseId, row.id), eq(changeOrders.reviewId, review.id), eq(changeOrders.reviewVersion, command.expectedVersion)));
-        if (issued) return publicOrder(issued.document, issued.status);
+        if (issued) {
+          const [decision] = await tx.select().from(changeOrderDecisions).where(eq(changeOrderDecisions.orderId, issued.document.id));
+          return changeOrderView(issued.document, issued.status, decision);
+        }
         const draft = requireDraft(row, quote);
         if (!sameSource(review, draft)) throw new PricingStoreError("PRICING_STALE_SOURCE", "AI has updated the source draft. Reset and save the pricing review before issuing.");
         if (review.input.baselineFingerprint !== quoteFingerprint(quote)) throw new PricingStoreError("PRICING_STALE_SOURCE", "The saved review is based on different or unverified quote contents. Reset and save it against the current baseline before issuing.");
@@ -230,7 +220,7 @@ export function createPricingStore(db: Db): PricingStore {
         await tx.update(revisions).set({ status: "superseded" }).where(and(eq(revisions.projectId, bridge.projectId), eq(revisions.status, "sent"), ne(revisions.id, revision.id)));
         await tx.update(pricingCases).set({ itemMapping: mapping }).where(eq(pricingCases.caseId, row.id));
         await tx.insert(changeOrders).values({ id: document.id, caseId: row.id, reviewId: review.id, reviewVersion: review.version, revisionId: revision.id, contentHash: document.contentHash, document, issuedAt });
-        return publicOrder(document, "sent");
+        return changeOrderView(document, "sent");
       });
     },
 
@@ -238,7 +228,9 @@ export function createPricingStore(db: Db): PricingStore {
       if (!UUID.test(id)) return null;
       const [found] = await db.select({ document: changeOrders.document, status: revisions.status }).from(changeOrders)
         .innerJoin(revisions, eq(changeOrders.revisionId, revisions.id)).where(eq(changeOrders.id, id));
-      return found ? publicOrder(found.document, found.status) : null;
+      if (!found) return null;
+      const [decision] = await db.select().from(changeOrderDecisions).where(eq(changeOrderDecisions.orderId, id));
+      return changeOrderView(found.document, found.status, decision);
     },
   };
 }

@@ -4,6 +4,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import { chatCases } from "./schema";
 import { createChatStore } from "./store";
+import { caseQuote } from "./cases";
+import { quoteFingerprint } from "../quotes/fingerprint";
 import type { AppendMessageInput, ChangeDraft, ChatStore } from "./types";
 
 describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
@@ -27,6 +29,7 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     const now = new Date().toISOString();
     return {
       id: randomUUID(), projectKey: "willow", basedOnQuoteId: "demo-willow-v1", basedOnVersion: 1,
+      basedOnQuoteFingerprint: quoteFingerprint(caseQuote("willow")),
       revision: 1, status: "needs_designer_review", title, summary: "A reviewable proposal; no payment.",
       changes: [], sourceMessageIds: [messageId], sources: [], unresolved: [], constraints: [],
       deltaSubtotalCents: 0, createdAt: now, updatedAt: now, model: "test-model",
@@ -47,6 +50,33 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     expect((await store.getCase(sessionId, "maple")).messages).toEqual([]);
     expect((await store.getCase(randomUUID(), "willow")).messages).toEqual([]);
     expect((await store.getCase(sessionId, "willow")).messages[0].id).toBe(message.id);
+    expect((await store.getCase(sessionId, "willow")).quote).toEqual(caseQuote("willow"));
+  });
+
+  it("rejects an AI result bound to another baseline without saving its draft or reply", async () => {
+    const input = human();
+    await store.appendMessage(sessionId, "willow", input);
+    const run = await start(input.id);
+    const stale = { ...draft(input.id), basedOnQuoteId: randomUUID(), basedOnVersion: 3 };
+    await expect(store.completeAi(sessionId, "willow", input.id, run.runId, { text: "Stale result", draft: stale, model: "test-model" })).rejects.toMatchObject({ code: "STALE_BASELINE" });
+    const state = await store.getCase(sessionId, "willow");
+    expect(state.draft).toBeNull();
+    expect(state.messages).toHaveLength(1);
+    expect(state.messages[0].aiState).toBe("running");
+    // The orchestration layer can recover this failure through its normal run-bound failure path.
+    await store.failAi(sessionId, "willow", input.id, run.runId, "The approved baseline changed.");
+    expect((await store.getCase(sessionId, "willow")).activeMessageId).toBeNull();
+  });
+
+  it("requires the full baseline fingerprint on newly completed AI drafts", async () => {
+    const input = human();
+    await store.appendMessage(sessionId, "willow", input);
+    const run = await start(input.id);
+    const missing = draft(input.id);
+    delete missing.basedOnQuoteFingerprint;
+    await expect(store.completeAi(sessionId, "willow", input.id, run.runId, { text: "Unverified baseline", draft: missing, model: "test-model" })).rejects.toMatchObject({ code: "STALE_BASELINE" });
+    await expect(store.completeAi(sessionId, "willow", input.id, run.runId, { text: "Mismatched contents", draft: { ...draft(input.id), basedOnQuoteFingerprint: "different contents" }, model: "test-model" })).rejects.toMatchObject({ code: "STALE_BASELINE" });
+    expect((await store.getCase(sessionId, "willow")).draft).toBeNull();
   });
 
   it("deduplicates a client UUID, rejects changed content and permits that UUID in another case", async () => {

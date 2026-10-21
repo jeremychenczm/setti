@@ -64,6 +64,20 @@
       "when": 1792528445290,
       "tag": "0008_pricing_review",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792548841637,
+      "tag": "0009_client_decisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792549302059,
+      "tag": "0010_client_decision_guards",
+      "breakpoints": true
     }
   ]
 }

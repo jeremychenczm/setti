@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ChatStore, StoredCase } from "./types";
 import { messageUrls, runCaseAi } from "./service";
+import { caseQuote } from "./cases";
+import { quoteFingerprint } from "../quotes/fingerprint";
 
 function scenario(text = "@AI，餐椅从四把改成六把。") {
   const state: StoredCase = {
@@ -37,6 +39,22 @@ describe("AI orchestration", () => {
     await runCaseAi(s.store, "session", "willow", "request", s.deps);
     expect(s.deps.callModel).toHaveBeenCalledWith(expect.objectContaining({ triggerId: "request", quote: expect.objectContaining({ projectId: "willow" }) }));
     expect(s.store.completeAi).toHaveBeenCalledWith("session", "willow", "request", "run", expect.objectContaining({ model: "test-model", draft: expect.objectContaining({ status: "needs_designer_review", deltaSubtotalCents: 16000 }) }));
+  });
+  it("uses the latest customer-confirmed snapshot for the next round instead of returning to V1", async () => {
+    const s = scenario("@AI Increase the approved six chairs to eight.");
+    const approved = structuredClone(caseQuote("willow"));
+    approved.id = "confirmed-willow-v3";
+    approved.version = 3;
+    const chair = approved.lines.find((line) => line.itemId === "willow-lisabo-dining-chair")!;
+    chair.quantity = 6;
+    chair.unitPriceCents = 12_500;
+    s.state.quote = approved;
+    s.modelOutput.changes[0].quantity = 8;
+    await runCaseAi(s.store, "session", "willow", "request", s.deps);
+    expect(s.deps.callModel).toHaveBeenCalledWith(expect.objectContaining({ quote: approved }));
+    expect(s.store.completeAi).toHaveBeenCalledWith("session", "willow", "request", "run", expect.objectContaining({
+      draft: expect.objectContaining({ basedOnQuoteId: approved.id, basedOnVersion: 3, basedOnQuoteFingerprint: quoteFingerprint(approved), deltaSubtotalCents: 25_000 }),
+    }));
   });
   it("deduplicates links, preserves failed retrieval and never invents a product", async () => {
     const s = scenario("@AI，改成这个4把 https://shop.example/chair。 https://shop.example/chair");

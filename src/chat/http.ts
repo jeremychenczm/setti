@@ -14,7 +14,7 @@ const messageSchema = z.strictObject({ id: uuid, actor: z.enum(["designer", "cli
 const retrySchema = z.strictObject({ messageId: uuid });
 
 function snapshot(state: StoredCase): CaseSnapshot {
-  return { ...state, quote: caseQuote(state.projectKey), aiConfigured: aiConfigured() };
+  return { ...state, quote: state.quote ?? caseQuote(state.projectKey), aiConfigured: aiConfigured() };
 }
 
 function session(req: NextRequest): string {
@@ -90,9 +90,9 @@ export async function postCaseResponse(req: NextRequest, rawKey: string, retry =
     if (error instanceof z.ZodError) return respond(req, sessionId, { code: "INVALID_REQUEST", error: "消息格式错误：需要有效 ID、发言身份和不超过 8000 字符的正文。", state }, 400);
     if (error instanceof CaseAiError) return respond(req, sessionId, { code: "AI_FAILED", error: error.message, state }, 502);
     const code = error && typeof error === "object" && "code" in error ? String(error.code) : "STORAGE_UNAVAILABLE";
-    const statuses: Record<string, number> = { CASE_BUSY: 409, IDEMPOTENCY_CONFLICT: 409, MESSAGE_NOT_FOUND: 404, INVALID_AI_TRIGGER: 400, STALE_AI_RUN: 409, STALE_MESSAGE: 409, INVALID_INPUT: 400 };
+    const statuses: Record<string, number> = { CASE_BUSY: 409, IDEMPOTENCY_CONFLICT: 409, MESSAGE_NOT_FOUND: 404, INVALID_AI_TRIGGER: 400, STALE_AI_RUN: 409, STALE_MESSAGE: 409, STALE_BASELINE: 409, INVALID_INPUT: 400 };
     if (statuses[code]) {
-      const message = code === "CASE_BUSY" ? "AI 正在处理当前项目，请稍后重试。" : code === "MESSAGE_NOT_FOUND" ? "找不到本项目中的这条消息。" : code === "STALE_MESSAGE" ? "项目中已有更新的讨论。请发送一条新的 @AI 指令，避免旧消息覆盖当前意图。" : "消息状态已变化或请求无效，请刷新后重试。";
+      const message = code === "CASE_BUSY" ? "AI 正在处理当前项目，请稍后重试。" : code === "MESSAGE_NOT_FOUND" ? "找不到本项目中的这条消息。" : code === "STALE_MESSAGE" ? "项目中已有更新的讨论。请发送一条新的 @AI 指令，避免旧消息覆盖当前意图。" : code === "STALE_BASELINE" ? "客户已确认新的报价版本。请发送新的 @AI 指令，按最新已确认版本起草。" : "消息状态已变化或请求无效，请刷新后重试。";
       return respond(req, sessionId, { code, error: message, state }, statuses[code]);
     }
     return respond(req, sessionId, { code: "STORAGE_UNAVAILABLE", error: "聊天存储暂不可用，请确认数据库与迁移状态。", state }, 503);

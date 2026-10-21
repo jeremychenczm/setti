@@ -227,3 +227,4 @@ export const approvals = pgTable(
 
 export { chatCases, chatMessages } from "../chat/schema";
 export { pricingCases, pricingReviews, changeOrders } from "../pricing/schema";
+export { changeOrderDecisions } from "../approval/schema";

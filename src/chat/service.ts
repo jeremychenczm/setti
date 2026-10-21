@@ -44,7 +44,7 @@ export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKe
       try { return await deps.readPage(url); }
       catch (error) { return failedPage(url, error instanceof Error ? error.message : "商品页面读取失败"); }
     }));
-    const quote = caseQuote(key);
+    const quote = state.quote ?? caseQuote(key);
     const result = await deps.callModel({ quote, messages, pages, current: state.draft, triggerId: messageId });
     const generated = buildDraft({ output: result.output, quote, messages, pages, current: state.draft, triggerId: messageId, model: result.model });
     return await store.completeAi(sessionId, key, messageId, runId, { ...generated, model: result.model });

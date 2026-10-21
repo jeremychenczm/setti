@@ -90,6 +90,8 @@ export interface StoredCase {
   messages: CaseMessage[];
   draft: ChangeDraft | null;
   activeMessageId: string | null;
+  /** Server-owned current approved baseline; optional for legacy store adapters. */
+  quote?: ApprovedQuoteReport;
 }
 
 export interface CaseSnapshot extends StoredCase {
