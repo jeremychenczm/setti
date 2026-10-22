@@ -54,6 +54,14 @@ export interface ApprovedQuoteLine {
   approval: QuoteLineApproval;
 }
 
+/** A quote line as the designer sends it, before the client has decided on it. */
+export type QuoteLine = Omit<ApprovedQuoteLine, "approval">;
+
+/** A whole quote as the designer sends it: no approval, signature or approval date. */
+export type QuoteDocument = Omit<ApprovedQuoteReport, "status" | "approvedAt" | "approvedBy" | "signature" | "lines"> & {
+  lines: readonly QuoteLine[];
+};
+
 export interface ApprovedQuoteReport {
   id: string;
   version: number;

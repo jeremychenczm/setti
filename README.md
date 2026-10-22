@@ -67,6 +67,8 @@ Supplier confirmations are demo records that the designer types in; there is no 
 
 Open **Quotes** in the sidebar, or `/quotes/maple` and `/quotes/willow`. The report uses **AG Grid Community** for sorting, category and room filtering, search, pagination and a full-quote CSV export. Select an item's **Details** to inspect specifications, price sources and return terms. Totals are calculated from integer-cent line items and stay unchanged when filtering. Approved versions are read-only.
 
+Willow's V1 starts as the designer's draft. Signed in as Jordan Lee, open the Willow chat and select **+** → **Send quote V1**: the server freezes its own copy with a SHA-256 hash and posts it as a quote card. Clients see quotes under **Proposals** only after they are sent, and changes can be drafted only after the client confirms V1. Switch accounts from the avatar at the bottom left of the sidebar.
+
 Willow has **28 lines: 22 products from four fictional supplier quotes and six simulated design services**. Each product's details name its supplier quote, price note and return terms. Suppliers, products and prices are invented; service rates, an 8.75% goods-only tax assumption and a single $99 delivery budget are test inputs, not supplier commitments or a location-specific tax calculation.
 
 All project scopes, approvals and signatures are **demo data**. Maple's prices, return fees, $0 tax and delivery remain illustrative. Opening a quote report makes no payment calls.

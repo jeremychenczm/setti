@@ -169,6 +169,23 @@ export function useCaseChat(projectKey: CaseKey) {
     return unsent;
   }, [optimistic, retryAction]);
 
+  /**
+   * Sends V1 with the designer's message. The caller keeps `id` for retries, so a
+   * lost response never posts the quote twice. Returns an error to show, or null.
+   */
+  const sendQuote = useCallback(async (id: string, text: string): Promise<string | null> => {
+    try {
+      const response = await fetch(`${endpoint}/quote`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, text }) });
+      const body = await readResponse(response);
+      if (!response.ok) return (body as ChatErrorResponse | null)?.error ?? "The quote could not be sent. Please retry.";
+      if (!isSnapshot(body, projectKey)) return "The server returned an unexpected conversation. Please reload the chat.";
+      if (alive.current) setSnapshot(body);
+      return null;
+    } catch {
+      return "Connection interrupted. Retry: the same send cannot post the quote twice.";
+    }
+  }, [endpoint, projectKey]);
+
   const messages = snapshot?.messages ?? [];
   return {
     snapshot,
@@ -180,6 +197,7 @@ export function useCaseChat(projectKey: CaseKey) {
     unsavedMessageId: optimistic && !messages.some((message) => message.id === optimistic.id) ? optimistic.id : null,
     hasUnsent: Boolean(optimistic && retryAction?.input),
     send,
+    sendQuote,
     retry,
     editUnsent,
     reload: load,

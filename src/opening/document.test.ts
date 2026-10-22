@@ -1,0 +1,27 @@
+import { describe, expect, it } from "vitest";
+import { willowApprovedQuote } from "@/quotes/willow-quote";
+import { defaultOpening, documentHash, openingDocument, withoutApproval } from "./document";
+
+describe("opening quote document", () => {
+  it("carries the quote's lines and terms but no approval, signature or approval date", () => {
+    const document = openingDocument("willow");
+    expect(document.lines).toHaveLength(28);
+    expect(document.lines[0]).toMatchObject({ itemId: "willow-sofa", unitPriceCents: 79_900, freightCents: 9_900 });
+    for (const field of ["status", "approvedAt", "approvedBy", "signature"]) expect(document).not.toHaveProperty(field);
+    for (const line of document.lines) expect(line).not.toHaveProperty("approval");
+  });
+
+  it("hashes the canonical document, so the same content always gives the same hash", () => {
+    const hash = documentHash(openingDocument("willow"));
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(documentHash(withoutApproval(structuredClone(willowApprovedQuote)))).toBe(hash);
+    const changed = openingDocument("willow");
+    changed.lines = changed.lines.map((line, index) => index === 0 ? { ...line, unitPriceCents: line.unitPriceCents + 1 } : line);
+    expect(documentHash(changed)).not.toBe(hash);
+  });
+
+  it("starts Willow as an unsent draft and Maple as the demo's approved V1", () => {
+    expect(defaultOpening("willow")).toMatchObject({ status: "draft", version: 1, lineCount: 28, totalCents: 869_278, messageId: null, contentHash: null });
+    expect(defaultOpening("maple")).toMatchObject({ status: "approved", lineCount: 3, totalCents: 150_000 });
+  });
+});

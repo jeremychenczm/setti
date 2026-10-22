@@ -31,7 +31,7 @@ function scenario(text = "@AI，为什么预算和付款金额不同？") {
     mandatoryFactIds: ["pending"],
   };
   const store = {
-    getCase: vi.fn().mockResolvedValue(state), appendMessage: vi.fn().mockResolvedValue(state),
+    getCase: vi.fn().mockResolvedValue(state), appendMessage: vi.fn().mockResolvedValue(state), sendQuote: vi.fn(), getQuote: vi.fn(),
     beginAi: vi.fn().mockResolvedValue({ status: "started", runId: "run", state }),
     completeAi: vi.fn<ChatStore["completeAi"]>().mockResolvedValue(state), failAi: vi.fn().mockResolvedValue(state),
     readMoneyContext: vi.fn<NonNullable<ChatStore["readMoneyContext"]>>().mockResolvedValue(context),

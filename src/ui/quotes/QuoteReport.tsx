@@ -2,14 +2,15 @@
 
 import { AllCommunityModule, themeQuartz, type ColDef, type GridApi, type ICellRendererParams } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
-import { Armchair, ArrowLeft, ArrowUpRight, Check, ChevronRight, Download, FileText, LockKeyhole, Palette, Search, X } from "lucide-react";
+import { Armchair, ArrowLeft, ArrowUpRight, Check, ChevronRight, Clock, Download, FileText, LockKeyhole, Palette, PencilLine, Search, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { calculateLineTotals, calculateQuoteTotals, type QuoteLineTotals } from "@/quotes/totals";
 import type { CaseKey } from "@/chat/types";
-import type { ApprovedQuoteLine, ApprovedQuoteReport } from "@/quotes/types";
+import type { OpeningStatus, QuoteView } from "@/opening/types";
+import type { QuoteLine } from "@/quotes/types";
 import { usd } from "../demo-data";
 
-type QuoteRow = ApprovedQuoteLine & QuoteLineTotals;
+type QuoteRow = QuoteLine & QuoteLineTotals;
 type CategoryFilter = "all" | "furniture" | "service";
 
 const modules = [AllCommunityModule];
@@ -44,13 +45,24 @@ function ItemCell({ data }: ICellRendererParams<QuoteRow>) {
   );
 }
 
-function ApprovedBadge() {
-  return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-medium leading-none text-emerald-700"><Check className="h-3 w-3" />Approved</span>;
+const STATUS_LABELS: Record<OpeningStatus, string> = { draft: "Draft", sent: "Awaiting client", approved: "Approved (demo)" };
+
+function StatusBadge({ status }: { status: OpeningStatus }) {
+  if (status === "approved") return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-medium leading-none text-emerald-700"><Check className="h-3 w-3" />Approved</span>;
+  if (status === "sent") return <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[11px] font-medium leading-none text-amber-800"><Clock className="h-3 w-3" />Awaiting client</span>;
+  return <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium leading-none text-slate-600"><PencilLine className="h-3 w-3" />Draft</span>;
+}
+
+function dateLabel(value: string): string {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" }).format(new Date(value));
 }
 
 const QUOTE_LABELS: Record<CaseKey, string> = { willow: "Willow Residence · 28-line test quote", maple: "Maple Ave · 3-line payment example" };
 
-export function ApprovedQuoteView({ quote, options, onBack, onSelectQuote }: { quote: ApprovedQuoteReport; options: CaseKey[]; onBack: () => void; onSelectQuote: (id: CaseKey) => void }) {
+/** One project's V1 as the signed-in account may see it: a designer's draft, a sent version, or an approved one. */
+export function QuoteReport({ view, options, onBack, onSelectQuote }: { view: QuoteView; options: CaseKey[]; onBack: () => void; onSelectQuote: (id: CaseKey) => void }) {
+  const { document: quote, opening, approval } = view;
+  const status = opening.status;
   const totals = useMemo(() => calculateQuoteTotals(quote.lines), [quote]);
   const allRows = useMemo<QuoteRow[]>(() => quote.lines.map((line) => ({ ...line, ...calculateLineTotals(line) })), [quote]);
   const [query, setQuery] = useState("");
@@ -66,7 +78,9 @@ export function ApprovedQuoteView({ quote, options, onBack, onSelectQuote }: { q
   const supplierLines = quote.lines.filter((line) => line.category === "furniture" && line.source.kind === "demo");
   const supplierCount = new Set(supplierLines.map((line) => line.vendor)).size;
   const estimateCount = quote.lines.filter((line) => line.source.kind === "estimate").length;
-  const approvedDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" }).format(new Date(quote.approvedAt));
+  const approvedDate = approval ? dateLabel(approval.approvedAt) : null;
+  const sentDate = opening.sentAt ? dateLabel(opening.sentAt) : null;
+  const totalLabel = approval ? "Approved quote total" : "Quote total";
 
   const columnDefs = useMemo<ColDef<QuoteRow>[]>(() => [
     { field: "name", headerName: "Item / supplier", pinned: "left", minWidth: 240, flex: 2, cellRenderer: ItemCell, getQuickFilterText: ({ data }) => data ? `${data.name} ${data.vendor} ${data.sku} ${data.specification} ${data.returnPolicy} ${data.source.name}` : "" },
@@ -75,7 +89,7 @@ export function ApprovedQuoteView({ quote, options, onBack, onSelectQuote }: { q
     { field: "taxCents", headerName: "Tax", width: 85, minWidth: 75, type: "numericColumn", valueFormatter: ({ value }) => usd(value ?? 0) },
     { field: "freightCents", headerName: "Delivery", width: 95, minWidth: 85, type: "numericColumn", valueFormatter: ({ value }) => usd(value ?? 0) },
     { field: "totalCents", headerName: "Line total", width: 115, minWidth: 105, type: "numericColumn", valueFormatter: ({ value }) => usd(value ?? 0), cellStyle: { fontWeight: 600 } },
-    { colId: "approval", headerName: "Approval", width: 120, minWidth: 110, valueGetter: () => "Approved (demo)", cellRenderer: ApprovedBadge },
+    { colId: "approval", headerName: "Status", width: 135, minWidth: 120, valueGetter: () => STATUS_LABELS[status], cellRenderer: () => <StatusBadge status={status} /> },
     { colId: "details", headerName: "", width: 95, minWidth: 90, sortable: false, cellRenderer: ({ data }: ICellRendererParams<QuoteRow>) => data && <button aria-label={`View details for ${data.name}`} onClick={() => setSelectedId(data.itemId)} className="inline-flex items-center gap-0.5 text-[12px] font-medium text-[var(--primary)] hover:underline">Details<ChevronRight className="h-3.5 w-3.5" /></button> },
     { field: "vendor", headerName: "Supplier", hide: true },
     { field: "category", hide: true, filter: "agTextColumnFilter" },
@@ -89,7 +103,7 @@ export function ApprovedQuoteView({ quote, options, onBack, onSelectQuote }: { q
     { field: "source.kind", headerName: "Source type", hide: true },
     { field: "source.checkedAt", headerName: "Price checked", hide: true },
     { field: "source.priceNote", headerName: "Price note", hide: true },
-  ], []);
+  ], [status]);
   const defaultColDef = useMemo<ColDef<QuoteRow>>(() => ({ sortable: true, resizable: true, editable: false, suppressMovable: true }), []);
 
   function downloadCsv() {
@@ -100,7 +114,7 @@ export function ApprovedQuoteView({ quote, options, onBack, onSelectQuote }: { q
       processCellCallback: (params) => params.column.getColId() === "quantity" ? String(params.value) : params.formatValue(params.value) ?? String(params.value ?? ""),
       prependContent: [
         [{ data: { value: `Setti | ${quote.projectName} | Quote V${quote.version} | DEMO` } }],
-        [{ data: { value: "Sample approval. This quote does not confirm payment." } }],
+        [{ data: { value: status === "approved" ? "Sample approval. This quote does not confirm payment." : status === "sent" ? `Sent ${sentDate}, awaiting the client's review. This quote does not confirm payment.` : "Draft, not sent to the client." } }],
         [{ data: { value: `Full quote total: ${usd(totals.totalCents)} USD` } }],
         ...quote.assumptions.map((assumption) => [{ data: { value: assumption } }]),
       ],
@@ -132,22 +146,22 @@ export function ApprovedQuoteView({ quote, options, onBack, onSelectQuote }: { q
           <div className="flex flex-wrap items-start justify-between gap-5">
             <div>
               <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--muted)]"><FileText className="h-3.5 w-3.5" />{quote.projectName} / Quote 001</div>
-              <div className="flex items-center gap-3"><h1 className="text-[28px] font-semibold tracking-tight">Approved quote</h1><span className="rounded-md bg-[var(--canvas)] px-2 py-1 text-[12px] font-medium">V{quote.version}</span></div>
-              <p className="mt-1.5 text-[13px] text-[var(--muted)]">{quote.room} · Agreed scope and itemized prices.</p>
+              <div className="flex items-center gap-3"><h1 className="text-[28px] font-semibold tracking-tight">{approval ? "Approved quote" : "Quote"}</h1><span className="rounded-md bg-[var(--canvas)] px-2 py-1 text-[12px] font-medium">V{quote.version}</span>{!approval && <StatusBadge status={status} />}</div>
+              <p className="mt-1.5 text-[13px] text-[var(--muted)]">{quote.room} · {approval ? "Agreed scope and itemized prices." : "Proposed scope and itemized prices."}</p>
             </div>
-            <div className="text-right"><div className="text-[11px] text-[var(--muted)]">Approved quote total · USD</div><div className="mt-1 text-[32px] font-semibold tracking-tight tabular-nums">{usd(totals.totalCents)}</div><div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-[var(--muted)]"><LockKeyhole className="h-3 w-3" />V{quote.version} is read-only</div></div>
+            <div className="text-right"><div className="text-[11px] text-[var(--muted)]">{totalLabel} · USD</div><div className="mt-1 text-[32px] font-semibold tracking-tight tabular-nums">{usd(totals.totalCents)}</div><div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-[var(--muted)]">{status === "draft" ? <><PencilLine className="h-3 w-3" />Not sent yet</> : <><LockKeyhole className="h-3 w-3" />V{quote.version} is read-only</>}</div></div>
           </div>
 
           <div className="my-6 grid grid-cols-2 gap-5 border-y border-[var(--line)] py-5 xl:grid-cols-4">
             <Meta label="Project" value={quote.projectName} note={quote.room} />
             <Meta label="Prepared for" value={quote.clientName} note="Client" />
             <Meta label="Prepared by" value={quote.designerName} note="Lee Studio" />
-            <Meta label="Sample approval" value={approvedDate} note={`By ${quote.approvedBy}`} />
+            {approval ? <Meta label="Sample approval" value={approvedDate ?? ""} note={`By ${approval.approvedBy}`} /> : sentDate ? <Meta label="Sent" value={sentDate} note={`By ${opening.sentBy ?? quote.designerName}`} /> : <Meta label="Status" value="Draft" note="Not sent to the client" />}
           </div>
 
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2"><h2 className="text-[14px] font-semibold">Quote details</h2><span className="rounded-full bg-[var(--canvas)] px-2 py-0.5 text-[11px] text-[var(--muted)]">{totals.lineCount} items</span></div>
-            <button onClick={downloadCsv} title="Download all items in the approved quote, including filtered items" className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-3 py-2 text-[12px] font-medium hover:bg-[var(--canvas)]"><Download className="h-3.5 w-3.5" />Download CSV</button>
+            <button onClick={downloadCsv} title="Download all items in the quote, including filtered items" className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-3 py-2 text-[12px] font-medium hover:bg-[var(--canvas)]"><Download className="h-3.5 w-3.5" />Download CSV</button>
           </div>
           {supplierCount > 1 && <p className="mb-3 rounded-lg bg-blue-50 px-3 py-2.5 text-[11px] leading-relaxed text-blue-800">{supplierLines.length} items from {supplierCount} fictional supplier quotes + {estimateCount} simulated service estimates. Tax and delivery are test assumptions; select Details for the supplier quote, price note and return terms of each line.</p>}
           <div className="overflow-hidden rounded-xl border border-[var(--line)]">
@@ -191,18 +205,22 @@ export function ApprovedQuoteView({ quote, options, onBack, onSelectQuote }: { q
           {selected && <LineDetails key={selected.itemId} line={selected} onClose={() => setSelectedId(null)} />}
 
           <div className="mt-6 grid items-start gap-6 lg:grid-cols-[1fr_300px]">
-            <div className="rounded-xl border border-[var(--line)] p-5">
-              <div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-700"><Check className="h-4 w-4" /></span><div><h2 className="text-[13px] font-semibold">Approved by {quote.approvedBy}</h2><p className="text-[11px] text-[var(--muted)]">{approvedDate} · Sample approval</p></div></div>
-              <div className="mt-4 border-t border-[var(--line)] pt-3"><div className="font-serif text-xl italic text-slate-600">{quote.approvedBy}</div><p className="mt-1 text-[10px] text-[var(--muted)]">Demo typed signature · not an actual client signature</p></div>
+            {approval ? <div className="rounded-xl border border-[var(--line)] p-5">
+              <div className="flex items-center gap-2"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-700"><Check className="h-4 w-4" /></span><div><h2 className="text-[13px] font-semibold">Approved by {approval.approvedBy}</h2><p className="text-[11px] text-[var(--muted)]">{approvedDate} · Sample approval</p></div></div>
+              <div className="mt-4 border-t border-[var(--line)] pt-3"><div className="font-serif text-xl italic text-slate-600">{approval.approvedBy}</div><p className="mt-1 text-[10px] text-[var(--muted)]">Demo typed signature · not an actual client signature</p></div>
               <p className="mt-3 text-[12px] leading-relaxed text-[var(--muted)]">This approved version is read-only. Any change to items, prices or terms belongs in a new version.</p>
-            </div>
+            </div> : <div className="rounded-xl border border-[var(--line)] p-5">
+              <div className="flex items-center gap-2">{status === "sent" ? <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-50 text-amber-700"><Clock className="h-4 w-4" /></span> : <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600"><PencilLine className="h-4 w-4" /></span>}<div><h2 className="text-[13px] font-semibold">{status === "sent" ? `Awaiting review by ${quote.clientName.replace(" (demo client)", "")}` : "Draft · only the studio can see it"}</h2><p className="text-[11px] text-[var(--muted)]">{status === "sent" ? `Sent ${sentDate} by ${opening.sentBy ?? quote.designerName}` : "Prepared from the supplier quotes"}</p></div></div>
+              <p className="mt-4 border-t border-[var(--line)] pt-3 text-[12px] leading-relaxed text-[var(--muted)]">{status === "sent" ? "This version was locked when it was sent: the client reviews exactly these lines and prices, and any change needs a new version. No one has approved it yet, and nothing has been charged." : "Send it from the project chat. Sending locks this version for the client's review."}</p>
+              {opening.contentHash && <details className="mt-3 text-[11px] text-[var(--muted)]"><summary className="cursor-pointer select-none font-medium hover:text-[var(--ink)]">Verification code</summary><p className="mt-1.5 leading-relaxed">Setti recorded this fingerprint of the sent version. If any line, price or term were changed later, it would no longer match.</p><p className="mt-1 break-all font-mono text-[10px]">SHA-256 {opening.contentHash}</p></details>}
+            </div>}
             <div className="space-y-2.5 rounded-xl bg-[var(--canvas)] p-5 text-[12px]">
               <Amount label="Products" value={productSubtotal} />
               <Amount label="Design services" value={serviceSubtotal} />
               <Amount label="Tax" value={totals.taxCents} />
               <Amount label="Delivery" value={totals.freightCents} />
-              <div className="border-t border-slate-200 pt-3"><Amount label="Approved quote total" value={totals.totalCents} strong /></div>
-              <p className="pt-1 text-[10px] leading-relaxed text-[var(--muted)]">Includes the tax and delivery assumptions listed below. Approval is simulated.</p>
+              <div className="border-t border-slate-200 pt-3"><Amount label={totalLabel} value={totals.totalCents} strong /></div>
+              <p className="pt-1 text-[10px] leading-relaxed text-[var(--muted)]">Includes the tax and delivery assumptions listed below.{approval ? " Approval is simulated." : ""}</p>
             </div>
           </div>
 

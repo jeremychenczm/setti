@@ -16,6 +16,12 @@ export function failedPage(url: string, error: string): ProductPage {
   return { id: `page-${createHash("sha256").update(url).digest("hex").slice(0, 12)}`, url, fetchedAt: new Date().toISOString(), title: url, text: "", products: [], error };
 }
 
+/** Changes are drafted against a V1 the client approved; before that the AI says so instead of drafting. */
+const OPENING_GUIDANCE = {
+  draft: "Quote V1 has not been sent to the client yet. The designer sends it from the + menu in this chat; changes can be drafted once the client confirms it.",
+  sent: "Quote V1 is with the client for review. Changes can be drafted once the client confirms V1.",
+} as const;
+
 export interface DraftDependencies {
   readPage: typeof readProductPage;
   callModel: typeof callChangeModel;
@@ -31,6 +37,9 @@ export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKe
   }
   const { runId, state } = start;
   try {
+    if (state.opening && state.opening.status !== "approved") {
+      return await store.completeAi(sessionId, key, messageId, runId, { text: OPENING_GUIDANCE[state.opening.status], model: "system" });
+    }
     const triggerIndex = state.messages.findIndex((message) => message.id === messageId);
     const trigger = state.messages[triggerIndex];
     if (!trigger || trigger.actor === "assistant" || !isAiInvocation(trigger.text)) throw new Error("Only your own @AI messages can be retried.");

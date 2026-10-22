@@ -10,7 +10,7 @@ import { CaseChat } from "../chat/CaseChat";
 import { ConversationList, type ProjectChat } from "./ConversationList";
 import { Sidebar, type View } from "./Sidebar";
 
-const ApprovedQuoteView = dynamic(() => import("../quotes/ApprovedQuoteView").then((m) => m.ApprovedQuoteView), {
+const QuoteBoard = dynamic(() => import("../quotes/QuoteBoard").then((m) => m.QuoteBoard), {
   loading: () => <div className="flex flex-1 items-center justify-center rounded-xl bg-white text-sm text-[var(--muted)]">Loading quote…</div>,
 });
 
@@ -64,7 +64,7 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
         </>
       )}
 
-      {view === "quotes" && <ApprovedQuoteView key={quoteId} quote={quotes[quoteId]} options={visibleProjects.map((project) => project.key)} onSelectQuote={(id) => { setQuoteId(id); setActiveId(id); }} onBack={() => setView("chats")} />}
+      {view === "quotes" && <QuoteBoard key={`${account.id}:${quoteId}`} projectKey={quoteId} viewer={account} options={visibleProjects.map((project) => project.key)} onSelectQuote={(id) => { setQuoteId(id); setActiveId(id); }} onBack={() => setView("chats")} />}
     </div>
   );
 }

@@ -10,7 +10,7 @@ function scenario(text = "@AI，餐椅从四把改成六把。") {
     messages: [{ id: "request", actor: "client", text, createdAt: "2026-10-18T12:00:00Z", replyToMessageId: null, aiState: "running", error: null, model: null }],
   };
   const store: ChatStore = {
-    getCase: vi.fn().mockResolvedValue(state), appendMessage: vi.fn().mockResolvedValue(state),
+    getCase: vi.fn().mockResolvedValue(state), appendMessage: vi.fn().mockResolvedValue(state), sendQuote: vi.fn(), getQuote: vi.fn(),
     beginAi: vi.fn().mockResolvedValue({ status: "started", runId: "run", state }),
     completeAi: vi.fn().mockResolvedValue(state), failAi: vi.fn().mockResolvedValue(state),
   };
@@ -20,6 +20,15 @@ function scenario(text = "@AI，餐椅从四把改成六把。") {
 }
 
 describe("AI orchestration", () => {
+  it("answers without a model or draft until the client has an approved V1", async () => {
+    for (const status of ["draft", "sent"] as const) {
+      const s = scenario();
+      s.state.opening = { status, version: 1, messageId: null, sentAt: null, sentBy: null, contentHash: null, lineCount: 28, totalCents: 869_278 };
+      await runCaseAi(s.store, "session", "willow", "request", s.deps);
+      expect(s.deps.callModel).not.toHaveBeenCalled();
+      expect(s.store.completeAi).toHaveBeenCalledWith("session", "willow", "request", "run", { text: expect.stringContaining("Quote V1"), model: "system" });
+    }
+  });
   it("handles a bare mention without calling a model or requiring a key", async () => {
     const s = scenario("@AI");
     await runCaseAi(s.store, "session", "willow", "request", { ...s.deps, configured: () => false });

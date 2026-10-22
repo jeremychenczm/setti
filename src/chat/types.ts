@@ -1,5 +1,6 @@
 import type { ApprovedQuoteReport } from "@/quotes/types";
 import type { MoneyAnswer, MoneyContext } from "../ai/money-types";
+import type { OpeningQuote, QuoteView } from "../opening/types";
 
 export type CaseKey = "willow" | "maple";
 export type HumanActor = "designer" | "client";
@@ -94,10 +95,13 @@ export interface StoredCase {
   activeMessageId: string | null;
   /** Server-owned current approved baseline; optional for legacy store adapters. */
   quote?: ApprovedQuoteReport;
+  /** Where the project's V1 is with the client; optional for legacy store adapters. */
+  opening?: OpeningQuote;
 }
 
 export interface CaseSnapshot extends StoredCase {
   quote: ApprovedQuoteReport;
+  opening: OpeningQuote;
   aiConfigured: boolean;
 }
 
@@ -113,6 +117,13 @@ export interface AppendMessageInput {
   text: string;
 }
 
+/** The designer's message that carries V1; `sentBy` is the demo account's name. */
+export interface SendQuoteInput {
+  id: string;
+  text: string;
+  sentBy: string;
+}
+
 export type BeginAiResult =
   | { status: "started"; runId: string; state: StoredCase }
   | { status: "busy" | "completed"; state: StoredCase };
@@ -121,6 +132,9 @@ export interface ChatStore {
   readMoneyContext?(sessionId: string, projectKey: CaseKey): Promise<MoneyContext>;
   getCase(sessionId: string, projectKey: CaseKey): Promise<StoredCase>;
   appendMessage(sessionId: string, projectKey: CaseKey, input: AppendMessageInput): Promise<StoredCase>;
+  /** Freezes the prepared V1 and posts it as the designer's message; repeating it changes nothing. */
+  sendQuote(sessionId: string, projectKey: CaseKey, input: SendQuoteInput): Promise<StoredCase>;
+  getQuote(sessionId: string, projectKey: CaseKey): Promise<QuoteView>;
   beginAi(sessionId: string, projectKey: CaseKey, messageId: string): Promise<BeginAiResult>;
   completeAi(sessionId: string, projectKey: CaseKey, messageId: string, runId: string, result: { text: string; draft?: ChangeDraft | null; moneyAnswer?: MoneyAnswer; model: string }): Promise<StoredCase>;
   failAi(sessionId: string, projectKey: CaseKey, messageId: string, runId: string, error: string): Promise<StoredCase>;

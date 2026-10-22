@@ -8,14 +8,16 @@ const mocks = vi.hoisted(() => ({ store: {} as ChatStore, run: vi.fn(), configur
 vi.mock("./server", () => ({ chatStore: () => mocks.store }));
 vi.mock("./service", () => ({ runCaseAi: mocks.run, CaseAiError: class CaseAiError extends Error {} }));
 vi.mock("@/ai/model", () => ({ aiConfigured: mocks.configured }));
-import { getCaseResponse, postCaseResponse } from "./http";
+import { getCaseResponse, getQuoteResponse, postCaseResponse, postQuoteResponse } from "./http";
+import { defaultOpening, openingDocument } from "@/opening/document";
 
 let state: StoredCase;
 beforeEach(() => {
   vi.clearAllMocks();
   state = { id: randomUUID(), projectKey: "willow", messages: [], draft: null, activeMessageId: null };
   mocks.store = {
-    getCase: vi.fn().mockResolvedValue(state), appendMessage: vi.fn().mockResolvedValue(state),
+    getCase: vi.fn().mockResolvedValue(state), appendMessage: vi.fn().mockResolvedValue(state), sendQuote: vi.fn().mockResolvedValue(state),
+    getQuote: vi.fn().mockResolvedValue({ projectKey: "willow", opening: defaultOpening("willow"), document: openingDocument("willow"), approval: null }),
     beginAi: vi.fn(), completeAi: vi.fn(), failAi: vi.fn(),
   };
   mocks.run.mockResolvedValue(state);
@@ -88,5 +90,43 @@ describe("case chat HTTP boundary", () => {
   it("bounds request bodies before touching storage", async () => {
     expect((await postCaseResponse(post({ id: randomUUID(), actor: "client", text: "x".repeat(33000) }), "willow")).status).toBe(413);
     expect(mocks.store.appendMessage).not.toHaveBeenCalled();
+  });
+});
+
+function sendQuote(body: unknown, headers: Record<string, string> = {}, key = "willow") {
+  return postQuoteResponse(new NextRequest(`http://localhost:3002/api/chat/${key}/quote`, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", ...headers } }), key);
+}
+
+describe("quote V1 HTTP boundary", () => {
+  it("lets only the designer send, with nothing but a message: the server freezes its own copy", async () => {
+    const id = randomUUID();
+    expect((await sendQuote({ id, text: "Here is the quote." }, { cookie: "setti-demo-account=jordan" })).status).toBe(200);
+    expect(mocks.store.sendQuote).toHaveBeenCalledWith(expect.any(String), "willow", { id, text: "Here is the quote.", sentBy: "Jordan Lee" });
+    vi.mocked(mocks.store.sendQuote).mockClear();
+    const asClient = await sendQuote({ id, text: "Here is the quote." }, { cookie: "setti-demo-account=sofia" });
+    expect(asClient.status).toBe(403);
+    expect((await asClient.json()).error).toBe("Only the designer can send a quote.");
+    expect((await sendQuote({ id, text: "Here is the quote.", lines: [] })).status).toBe(400);
+    expect((await sendQuote({ id, text: "" })).status).toBe(400);
+    expect((await sendQuote({ id, text: "Hi" }, { origin: "https://another.example" })).status).toBe(403);
+    expect(mocks.store.sendQuote).not.toHaveBeenCalled();
+  });
+  it("explains why a project without a draft V1 has nothing to send", async () => {
+    vi.mocked(mocks.store.sendQuote).mockRejectedValueOnce(Object.assign(new Error("approved"), { code: "NOT_AVAILABLE" }));
+    const response = await sendQuote({ id: randomUUID(), text: "Quote" }, {}, "maple");
+    expect(response.status).toBe(409);
+    expect((await response.json()).code).toBe("NOT_AVAILABLE");
+  });
+  it("shows a draft V1 to the designer only, and a client only their own project", async () => {
+    const quote = (account?: string, key = "willow") => getQuoteResponse(new NextRequest(`http://localhost:3002/api/quotes/${key}`, { headers: account ? { cookie: `setti-demo-account=${account}` } : {} }), key);
+    const designer = await quote("jordan");
+    expect(designer.status).toBe(200);
+    expect((await designer.json()).opening.status).toBe("draft");
+    const client = await quote("sofia");
+    expect(client.status).toBe(404);
+    expect((await client.json()).code).toBe("NOT_SHARED");
+    expect((await quote("emma")).status).toBe(403);
+    vi.mocked(mocks.store.getQuote).mockResolvedValueOnce({ projectKey: "willow", opening: { ...defaultOpening("willow"), status: "sent", messageId: randomUUID(), sentAt: new Date().toISOString(), sentBy: "Jordan Lee", contentHash: "a".repeat(64) }, document: openingDocument("willow"), approval: null });
+    expect((await quote("sofia")).status).toBe(200);
   });
 });

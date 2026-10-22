@@ -279,3 +279,4 @@ export { pricingCases, pricingReviews, changeOrders } from "../pricing/schema";
 export { changeOrderDecisions } from "../approval/schema";
 export { paypalCalls, supplierEvents } from "../payments/schema";
 export { trySeeds } from "../try/schema";
+export { openingQuotes } from "../opening/schema";

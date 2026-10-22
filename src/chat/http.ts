@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ACCOUNT_COOKIE, canOpenProject, findAccount } from "@/accounts/demo";
+import { ACCOUNT_COOKIE, accountOrDefault, canOpenProject, findAccount } from "@/accounts/demo";
 import { aiConfigured } from "@/ai/model";
 import { isAiInvocation } from "@/ai/intent";
+import { defaultOpening } from "@/opening/document";
+import { QUOTE_MESSAGE_MAX } from "@/opening/types";
 import { caseQuote, isCaseKey } from "./cases";
 import { chatStore } from "./server";
 import { CaseAiError, runCaseAi } from "./service";
@@ -13,9 +15,10 @@ const cookieName = "setti-demo-chat";
 const uuid = z.uuid();
 const messageSchema = z.strictObject({ id: uuid, actor: z.enum(["designer", "client"]), text: z.string().trim().min(1).max(8000) });
 const retrySchema = z.strictObject({ messageId: uuid });
+const quoteSchema = z.strictObject({ id: uuid, text: z.string().trim().min(1).max(QUOTE_MESSAGE_MAX) });
 
 function snapshot(state: StoredCase): CaseSnapshot {
-  return { ...state, quote: state.quote ?? caseQuote(state.projectKey), aiConfigured: aiConfigured() };
+  return { ...state, quote: state.quote ?? caseQuote(state.projectKey), opening: state.opening ?? defaultOpening(state.projectKey), aiConfigured: aiConfigured() };
 }
 
 function session(req: NextRequest): string {
@@ -116,5 +119,49 @@ export async function postCaseResponse(req: NextRequest, rawKey: string, retry =
       return respond(req, sessionId, { code, error: message, state }, statuses[code]);
     }
     return respond(req, sessionId, { code: "STORAGE_UNAVAILABLE", error: "Chat storage is unavailable. Check the database and migrations.", state }, 503);
+  }
+}
+
+/** The designer posts the prepared V1 to the project chat. The server freezes its own copy; the request carries only the message. */
+export async function postQuoteResponse(req: NextRequest, rawKey: string) {
+  if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404 });
+  const sessionId = session(req);
+  try {
+    const input = quoteSchema.parse(await boundedJson(req));
+    const refusal = accountRefusal(req, rawKey);
+    if (refusal) return respond(req, sessionId, { code: "FORBIDDEN", error: refusal }, 403);
+    const account = accountOrDefault(req.cookies.get(ACCOUNT_COOKIE)?.value);
+    if (account.role !== "designer") return respond(req, sessionId, { code: "FORBIDDEN", error: "Only the designer can send a quote." }, 403);
+    const sentBy = account.name;
+    return respond(req, sessionId, snapshot(await chatStore().sendQuote(sessionId, rawKey, { ...input, sentBy })));
+  } catch (error) {
+    if (error instanceof HttpError) return respond(req, sessionId, { code: "INVALID_REQUEST", error: error.message }, error.status);
+    if (error instanceof z.ZodError) return respond(req, sessionId, { code: "INVALID_REQUEST", error: `Send the quote with a message of at most ${QUOTE_MESSAGE_MAX.toLocaleString("en-US")} characters.` }, 400);
+    const code = error && typeof error === "object" && "code" in error ? String(error.code) : "STORAGE_UNAVAILABLE";
+    const known: Record<string, [number, string]> = {
+      NOT_AVAILABLE: [409, "This project starts from a quote the client already approved, so there is nothing to send."],
+      CASE_BUSY: [409, "The AI is working on this project. Send the quote again shortly."],
+      IDEMPOTENCY_CONFLICT: [409, "This send was already used for another message. Reload the chat and try again."],
+      INVALID_INPUT: [400, "Send the quote with a short message to the client."],
+    };
+    const [status, message] = known[code] ?? [503, "Chat storage is unavailable. Check the database and migrations."];
+    return respond(req, sessionId, { code: known[code] ? code : "STORAGE_UNAVAILABLE", error: message }, status);
+  }
+}
+
+/** The quote report: the designer sees a draft V1, a client only what was sent to them. */
+export async function getQuoteResponse(req: NextRequest, rawKey: string) {
+  if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404 });
+  const sessionId = session(req);
+  const refusal = accountRefusal(req, rawKey);
+  if (refusal) return respond(req, sessionId, { code: "FORBIDDEN", error: refusal }, 403);
+  try {
+    const view = await chatStore().getQuote(sessionId, rawKey);
+    if (findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value)?.role === "client" && view.opening.status === "draft") {
+      return respond(req, sessionId, { code: "NOT_SHARED", error: "The designer has not sent this quote yet." }, 404);
+    }
+    return respond(req, sessionId, view);
+  } catch {
+    return respond(req, sessionId, { code: "STORAGE_UNAVAILABLE", error: "Quote storage is unavailable. Make sure the database is running and migrated." }, 503);
   }
 }
