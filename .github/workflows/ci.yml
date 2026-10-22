@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      # Database tests run against a real Postgres, as they do locally.
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: setti
+          POSTGRES_PASSWORD: setti
+          POSTGRES_DB: setti_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U setti -d setti_test"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      # Without it the database tests would be skipped; the test setup fails instead when CI is set.
+      TEST_DATABASE_URL: postgres://setti:setti@localhost:5432/setti_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
