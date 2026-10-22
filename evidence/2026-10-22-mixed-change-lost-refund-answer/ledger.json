@@ -1,0 +1,492 @@
+{
+  "changeOrders": [
+    {
+      "label": "First confirmed version",
+      "id": "513f361b-0d4b-4a97-8a51-e4178c03893f",
+      "version": 2,
+      "contentHash": "2c9f501005dfd56ae9cf8e37730d6d9b9b88f737acada7801a044cabf86f0178"
+    },
+    {
+      "label": "Mixed change",
+      "id": "c8dea87a-1dc1-481d-85d4-6d06cf3590a0",
+      "version": 3,
+      "contentHash": "9a341c5a28634d31f2c96d983f7151f6d809f0975b64848dadd679290877dd31"
+    }
+  ],
+  "steps": [
+    {
+      "label": "Authorize the lounge chair ($800.00)",
+      "operations": [
+        {
+          "id": "06eb2ca0-b574-4c93-8f58-5964578a318f",
+          "kind": "authorize",
+          "status": "succeeded",
+          "amountCents": 80000,
+          "attempts": 1,
+          "paypalOrderId": "6NC21383849530012",
+          "paypalResourceId": "1GM257889T578012B"
+        }
+      ]
+    },
+    {
+      "label": "Authorize the wool rug ($300.00)",
+      "operations": [
+        {
+          "id": "b2ff2103-6c7c-449a-bc56-3e0af4f38817",
+          "kind": "authorize",
+          "status": "succeeded",
+          "amountCents": 30000,
+          "attempts": 1,
+          "paypalOrderId": "7J224378F75142154",
+          "paypalResourceId": "5HM215209C4369018"
+        }
+      ]
+    },
+    {
+      "label": "Capture the rug after supplier confirmation",
+      "operations": [
+        {
+          "id": "c087e678-5ddc-4349-8e1a-1953ef96aa59",
+          "kind": "capture",
+          "status": "succeeded",
+          "amountCents": 30000,
+          "attempts": 1,
+          "paypalOrderId": null,
+          "paypalResourceId": "8HM7406342578603W"
+        }
+      ]
+    },
+    {
+      "label": "Release the lounge chair hold",
+      "operations": [
+        {
+          "id": "cc206a38-af47-4ff5-9ef9-a25db05a1917",
+          "kind": "void",
+          "status": "succeeded",
+          "amountCents": 80000,
+          "attempts": 1,
+          "paypalOrderId": null,
+          "paypalResourceId": "1GM257889T578012B"
+        }
+      ]
+    },
+    {
+      "label": "Authorize the writing desk ($1,100.00)",
+      "operations": [
+        {
+          "id": "d71abe70-021a-4b60-ae20-793552a5715d",
+          "kind": "authorize",
+          "status": "succeeded",
+          "amountCents": 110000,
+          "attempts": 1,
+          "paypalOrderId": "2YF73904CB732241D",
+          "paypalResourceId": "8E002103LB3280808"
+        }
+      ]
+    },
+    {
+      "label": "Capture the desk after supplier confirmation",
+      "operations": [
+        {
+          "id": "cfb02100-936d-4d1b-af14-87ccb1c66c1b",
+          "kind": "capture",
+          "status": "succeeded",
+          "amountCents": 110000,
+          "attempts": 1,
+          "paypalOrderId": null,
+          "paypalResourceId": "9RA17236TV607770F"
+        }
+      ]
+    },
+    {
+      "label": "Refund the rug minus the restocking fee",
+      "operations": [
+        {
+          "id": "8769b1bc-fdfe-4d87-afb1-4fc2aec5e366",
+          "kind": "refund",
+          "status": "unknown",
+          "amountCents": 24000,
+          "attempts": 1,
+          "paypalOrderId": null,
+          "paypalResourceId": null
+        }
+      ]
+    },
+    {
+      "label": "Check the refund whose answer was lost",
+      "operations": [
+        {
+          "id": "8769b1bc-fdfe-4d87-afb1-4fc2aec5e366",
+          "kind": "refund",
+          "status": "succeeded",
+          "amountCents": 24000,
+          "attempts": 2,
+          "paypalOrderId": null,
+          "paypalResourceId": "0FS14777WJ130534X"
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "label": "Lounge chair",
+      "side": "baseline",
+      "targetCents": 0,
+      "heldCents": 0,
+      "capturedCents": 0,
+      "refundedCents": 0,
+      "releasedCents": 80000
+    },
+    {
+      "label": "Oak writing desk",
+      "side": "proposed",
+      "targetCents": 110000,
+      "heldCents": 0,
+      "capturedCents": 110000,
+      "refundedCents": 0,
+      "releasedCents": 0
+    },
+    {
+      "label": "Wool rug",
+      "side": "baseline",
+      "targetCents": 6000,
+      "heldCents": 0,
+      "capturedCents": 30000,
+      "refundedCents": 24000,
+      "releasedCents": 0
+    }
+  ],
+  "ledger": {
+    "authorizations": [
+      {
+        "id": "a3a4f75c-38d6-4f62-b7fc-066d45fd01b5",
+        "projectId": "84b23eaf-9018-4a89-b6e6-30276d031f39",
+        "itemId": "14d1da36-0c56-4640-adce-0374b9bdbc1f",
+        "paypalOrderId": "7J224378F75142154",
+        "paypalAuthorizationId": "5HM215209C4369018",
+        "amountCents": 30000,
+        "currency": "USD",
+        "status": "captured",
+        "honorExpiresAt": "2026-10-25T07:16:11.000Z",
+        "expiresAt": "2026-11-20T07:16:11.000Z",
+        "reauthorizedFromId": null,
+        "changeOrderId": "513f361b-0d4b-4a97-8a51-e4178c03893f",
+        "operationId": "b2ff2103-6c7c-449a-bc56-3e0af4f38817",
+        "createdAt": "2026-10-22T07:16:11.944Z"
+      },
+      {
+        "id": "c1a7fa34-0cce-4dac-91c0-7f48b7e74397",
+        "projectId": "84b23eaf-9018-4a89-b6e6-30276d031f39",
+        "itemId": "22456870-39ef-4ee6-9fe3-3ab8f0635d47",
+        "paypalOrderId": "6NC21383849530012",
+        "paypalAuthorizationId": "1GM257889T578012B",
+        "amountCents": 80000,
+        "currency": "USD",
+        "status": "voided",
+        "honorExpiresAt": "2026-10-25T07:15:53.000Z",
+        "expiresAt": "2026-11-20T07:15:53.000Z",
+        "reauthorizedFromId": null,
+        "changeOrderId": "513f361b-0d4b-4a97-8a51-e4178c03893f",
+        "operationId": "06eb2ca0-b574-4c93-8f58-5964578a318f",
+        "createdAt": "2026-10-22T07:15:53.966Z"
+      },
+      {
+        "id": "bf16cab8-53f1-4229-885e-b5f6c8750264",
+        "projectId": "84b23eaf-9018-4a89-b6e6-30276d031f39",
+        "itemId": "242c0dc0-3c26-44d7-9ae8-33de028216f6",
+        "paypalOrderId": "2YF73904CB732241D",
+        "paypalAuthorizationId": "8E002103LB3280808",
+        "amountCents": 110000,
+        "currency": "USD",
+        "status": "captured",
+        "honorExpiresAt": "2026-10-25T07:16:32.000Z",
+        "expiresAt": "2026-11-20T07:16:32.000Z",
+        "reauthorizedFromId": null,
+        "changeOrderId": "c8dea87a-1dc1-481d-85d4-6d06cf3590a0",
+        "operationId": "d71abe70-021a-4b60-ae20-793552a5715d",
+        "createdAt": "2026-10-22T07:16:33.124Z"
+      }
+    ],
+    "captures": [
+      {
+        "id": "22d9f2bd-cb86-4ad2-9032-62afd4d81158",
+        "projectId": "84b23eaf-9018-4a89-b6e6-30276d031f39",
+        "authorizationId": "a3a4f75c-38d6-4f62-b7fc-066d45fd01b5",
+        "paypalCaptureId": "8HM7406342578603W",
+        "amountCents": 30000,
+        "currency": "USD",
+        "finalCapture": true,
+        "status": "completed",
+        "operationId": "c087e678-5ddc-4349-8e1a-1953ef96aa59",
+        "createdAt": "2026-10-22T07:16:13.639Z"
+      },
+      {
+        "id": "27677e03-d551-451a-b692-26c0c293d5b4",
+        "projectId": "84b23eaf-9018-4a89-b6e6-30276d031f39",
+        "authorizationId": "bf16cab8-53f1-4229-885e-b5f6c8750264",
+        "paypalCaptureId": "9RA17236TV607770F",
+        "amountCents": 110000,
+        "currency": "USD",
+        "finalCapture": true,
+        "status": "completed",
+        "operationId": "cfb02100-936d-4d1b-af14-87ccb1c66c1b",
+        "createdAt": "2026-10-22T07:16:34.728Z"
+      }
+    ],
+    "refunds": [
+      {
+        "id": "245e0da6-232b-436f-86d0-cb9de308929b",
+        "captureId": "22d9f2bd-cb86-4ad2-9032-62afd4d81158",
+        "paypalRefundId": "0FS14777WJ130534X",
+        "amountCents": 24000,
+        "currency": "USD",
+        "status": "completed",
+        "operationId": "8769b1bc-fdfe-4d87-afb1-4fc2aec5e366",
+        "createdAt": "2026-10-22T07:16:36.794Z"
+      }
+    ],
+    "supplierEvents": [
+      {
+        "id": "ea51e71c-84f3-47c5-b47f-7817162215c9",
+        "projectId": "84b23eaf-9018-4a89-b6e6-30276d031f39",
+        "changeOrderId": "513f361b-0d4b-4a97-8a51-e4178c03893f",
+        "itemId": "14d1da36-0c56-4640-adce-0374b9bdbc1f",
+        "kind": "order_confirmed",
+        "quantity": 1,
+        "unitPriceCents": 30000,
+        "taxCents": 0,
+        "freightCents": 0,
+        "inStock": true,
+        "leadTimeDays": 14,
+        "totalCents": 30000,
+        "reference": "DEMO-ORDER-rug",
+        "note": "Demo supplier confirmation entered by the designer.",
+        "isDemo": true,
+        "sessionId": "8ab71491-83ab-4a71-ad6d-f2970fecfc5c",
+        "createdAt": "2026-10-22T07:16:11.958Z"
+      },
+      {
+        "id": "402f6ae8-0765-4232-b772-1d25b884f68d",
+        "projectId": "84b23eaf-9018-4a89-b6e6-30276d031f39",
+        "changeOrderId": "c8dea87a-1dc1-481d-85d4-6d06cf3590a0",
+        "itemId": "242c0dc0-3c26-44d7-9ae8-33de028216f6",
+        "kind": "order_confirmed",
+        "quantity": 1,
+        "unitPriceCents": 110000,
+        "taxCents": 0,
+        "freightCents": 0,
+        "inStock": true,
+        "leadTimeDays": 14,
+        "totalCents": 110000,
+        "reference": "DEMO-ORDER-chair",
+        "note": "Demo supplier confirmation entered by the designer.",
+        "isDemo": true,
+        "sessionId": "8ab71491-83ab-4a71-ad6d-f2970fecfc5c",
+        "createdAt": "2026-10-22T07:16:33.137Z"
+      },
+      {
+        "id": "172709c4-b54f-4ccb-9273-16940df01103",
+        "projectId": "84b23eaf-9018-4a89-b6e6-30276d031f39",
+        "changeOrderId": "c8dea87a-1dc1-481d-85d4-6d06cf3590a0",
+        "itemId": "14d1da36-0c56-4640-adce-0374b9bdbc1f",
+        "kind": "credit_confirmed",
+        "quantity": null,
+        "unitPriceCents": null,
+        "taxCents": null,
+        "freightCents": null,
+        "inStock": null,
+        "leadTimeDays": null,
+        "totalCents": 24000,
+        "reference": "DEMO-RUG-CREDIT",
+        "note": "Demo return credit, net of the confirmed $60 restocking fee.",
+        "isDemo": true,
+        "sessionId": "8ab71491-83ab-4a71-ad6d-f2970fecfc5c",
+        "createdAt": "2026-10-22T07:16:34.742Z"
+      }
+    ],
+    "operations": [
+      {
+        "id": "d71abe70-021a-4b60-ae20-793552a5715d",
+        "projectId": "84b23eaf-9018-4a89-b6e6-30276d031f39",
+        "kind": "authorize",
+        "status": "succeeded",
+        "businessKey": "authorize:c8dea87a-1dc1-481d-85d4-6d06cf3590a0:242c0dc0-3c26-44d7-9ae8-33de028216f6:1",
+        "authorizationId": null,
+        "captureId": null,
+        "amountCents": 110000,
+        "currency": "USD",
+        "finalCapture": false,
+        "changeOrderId": "c8dea87a-1dc1-481d-85d4-6d06cf3590a0",
+        "revisionId": "dba22cd0-14e7-4c7f-b2da-259ba24c5de0",
+        "contentHash": "9a341c5a28634d31f2c96d983f7151f6d809f0975b64848dadd679290877dd31",
+        "revisionContentHash": "ccb769379f3fe9acf8ba2cc15a7d9f319ee0d66c5c4d7ee7e1cc704aa16f272a",
+        "itemId": "242c0dc0-3c26-44d7-9ae8-33de028216f6",
+        "supplierEventId": null,
+        "requestId": "setti-op-d71abe70-021a-4b60-ae20-793552a5715d",
+        "attempts": 1,
+        "paypalOrderId": "2YF73904CB732241D",
+        "paypalResourceId": "8E002103LB3280808",
+        "failureCode": null,
+        "failureMessage": null,
+        "createdAt": "2026-10-22T07:16:14.506Z",
+        "updatedAt": "2026-10-22T07:16:33.133Z"
+      },
+      {
+        "id": "06eb2ca0-b574-4c93-8f58-5964578a318f",
+        "projectId": "84b23eaf-9018-4a89-b6e6-30276d031f39",
+        "kind": "authorize",
+        "status": "succeeded",
+        "businessKey": "authorize:513f361b-0d4b-4a97-8a51-e4178c03893f:22456870-39ef-4ee6-9fe3-3ab8f0635d47:1",
+        "authorizationId": null,
+        "captureId": null,
+        "amountCents": 80000,
+        "currency": "USD",
+        "finalCapture": false,
+        "changeOrderId": "513f361b-0d4b-4a97-8a51-e4178c03893f",
+        "revisionId": "3836604e-d698-405c-824a-f88285ed6d94",
+        "contentHash": "2c9f501005dfd56ae9cf8e37730d6d9b9b88f737acada7801a044cabf86f0178",
+        "revisionContentHash": "805868f665dd936f098c206fb5fe9cff04032dc0cd28fdd7685bf7b38870f098",
+        "itemId": "22456870-39ef-4ee6-9fe3-3ab8f0635d47",
+        "supplierEventId": null,
+        "requestId": "setti-op-06eb2ca0-b574-4c93-8f58-5964578a318f",
+        "attempts": 1,
+        "paypalOrderId": "6NC21383849530012",
+        "paypalResourceId": "1GM257889T578012B",
+        "failureCode": null,
+        "failureMessage": null,
+        "createdAt": "2026-10-22T07:14:52.792Z",
+        "updatedAt": "2026-10-22T07:15:53.975Z"
+      },
+      {
+        "id": "b2ff2103-6c7c-449a-bc56-3e0af4f38817",
+        "projectId": "84b23eaf-9018-4a89-b6e6-30276d031f39",
+        "kind": "authorize",
+        "status": "succeeded",
+        "businessKey": "authorize:513f361b-0d4b-4a97-8a51-e4178c03893f:14d1da36-0c56-4640-adce-0374b9bdbc1f:1",
+        "authorizationId": null,
+        "captureId": null,
+        "amountCents": 30000,
+        "currency": "USD",
+        "finalCapture": false,
+        "changeOrderId": "513f361b-0d4b-4a97-8a51-e4178c03893f",
+        "revisionId": "3836604e-d698-405c-824a-f88285ed6d94",
+        "contentHash": "2c9f501005dfd56ae9cf8e37730d6d9b9b88f737acada7801a044cabf86f0178",
+        "revisionContentHash": "805868f665dd936f098c206fb5fe9cff04032dc0cd28fdd7685bf7b38870f098",
+        "itemId": "14d1da36-0c56-4640-adce-0374b9bdbc1f",
+        "supplierEventId": null,
+        "requestId": "setti-op-b2ff2103-6c7c-449a-bc56-3e0af4f38817",
+        "attempts": 1,
+        "paypalOrderId": "7J224378F75142154",
+        "paypalResourceId": "5HM215209C4369018",
+        "failureCode": null,
+        "failureMessage": null,
+        "createdAt": "2026-10-22T07:15:53.981Z",
+        "updatedAt": "2026-10-22T07:16:11.952Z"
+      },
+      {
+        "id": "cfb02100-936d-4d1b-af14-87ccb1c66c1b",
+        "projectId": "84b23eaf-9018-4a89-b6e6-30276d031f39",
+        "kind": "capture",
+        "status": "succeeded",
+        "businessKey": "capture:402f6ae8-0765-4232-b772-1d25b884f68d:bf16cab8-53f1-4229-885e-b5f6c8750264:1",
+        "authorizationId": "bf16cab8-53f1-4229-885e-b5f6c8750264",
+        "captureId": null,
+        "amountCents": 110000,
+        "currency": "USD",
+        "finalCapture": true,
+        "changeOrderId": "c8dea87a-1dc1-481d-85d4-6d06cf3590a0",
+        "revisionId": "dba22cd0-14e7-4c7f-b2da-259ba24c5de0",
+        "contentHash": "9a341c5a28634d31f2c96d983f7151f6d809f0975b64848dadd679290877dd31",
+        "revisionContentHash": "ccb769379f3fe9acf8ba2cc15a7d9f319ee0d66c5c4d7ee7e1cc704aa16f272a",
+        "itemId": "242c0dc0-3c26-44d7-9ae8-33de028216f6",
+        "supplierEventId": "402f6ae8-0765-4232-b772-1d25b884f68d",
+        "requestId": "setti-op-cfb02100-936d-4d1b-af14-87ccb1c66c1b",
+        "attempts": 1,
+        "paypalOrderId": null,
+        "paypalResourceId": "9RA17236TV607770F",
+        "failureCode": null,
+        "failureMessage": null,
+        "createdAt": "2026-10-22T07:16:33.158Z",
+        "updatedAt": "2026-10-22T07:16:34.738Z"
+      },
+      {
+        "id": "c087e678-5ddc-4349-8e1a-1953ef96aa59",
+        "projectId": "84b23eaf-9018-4a89-b6e6-30276d031f39",
+        "kind": "capture",
+        "status": "succeeded",
+        "businessKey": "capture:ea51e71c-84f3-47c5-b47f-7817162215c9:a3a4f75c-38d6-4f62-b7fc-066d45fd01b5:1",
+        "authorizationId": "a3a4f75c-38d6-4f62-b7fc-066d45fd01b5",
+        "captureId": null,
+        "amountCents": 30000,
+        "currency": "USD",
+        "finalCapture": true,
+        "changeOrderId": "513f361b-0d4b-4a97-8a51-e4178c03893f",
+        "revisionId": "3836604e-d698-405c-824a-f88285ed6d94",
+        "contentHash": "2c9f501005dfd56ae9cf8e37730d6d9b9b88f737acada7801a044cabf86f0178",
+        "revisionContentHash": "805868f665dd936f098c206fb5fe9cff04032dc0cd28fdd7685bf7b38870f098",
+        "itemId": "14d1da36-0c56-4640-adce-0374b9bdbc1f",
+        "supplierEventId": "ea51e71c-84f3-47c5-b47f-7817162215c9",
+        "requestId": "setti-op-c087e678-5ddc-4349-8e1a-1953ef96aa59",
+        "attempts": 1,
+        "paypalOrderId": null,
+        "paypalResourceId": "8HM7406342578603W",
+        "failureCode": null,
+        "failureMessage": null,
+        "createdAt": "2026-10-22T07:16:11.982Z",
+        "updatedAt": "2026-10-22T07:16:13.649Z"
+      },
+      {
+        "id": "cc206a38-af47-4ff5-9ef9-a25db05a1917",
+        "projectId": "84b23eaf-9018-4a89-b6e6-30276d031f39",
+        "kind": "void",
+        "status": "succeeded",
+        "businessKey": "void:c8dea87a-1dc1-481d-85d4-6d06cf3590a0:c1a7fa34-0cce-4dac-91c0-7f48b7e74397:1",
+        "authorizationId": "c1a7fa34-0cce-4dac-91c0-7f48b7e74397",
+        "captureId": null,
+        "amountCents": 80000,
+        "currency": "USD",
+        "finalCapture": false,
+        "changeOrderId": "c8dea87a-1dc1-481d-85d4-6d06cf3590a0",
+        "revisionId": "dba22cd0-14e7-4c7f-b2da-259ba24c5de0",
+        "contentHash": "9a341c5a28634d31f2c96d983f7151f6d809f0975b64848dadd679290877dd31",
+        "revisionContentHash": "ccb769379f3fe9acf8ba2cc15a7d9f319ee0d66c5c4d7ee7e1cc704aa16f272a",
+        "itemId": "22456870-39ef-4ee6-9fe3-3ab8f0635d47",
+        "supplierEventId": null,
+        "requestId": "setti-op-cc206a38-af47-4ff5-9ef9-a25db05a1917",
+        "attempts": 1,
+        "paypalOrderId": null,
+        "paypalResourceId": "1GM257889T578012B",
+        "failureCode": null,
+        "failureMessage": null,
+        "createdAt": "2026-10-22T07:16:13.793Z",
+        "updatedAt": "2026-10-22T07:16:14.502Z"
+      },
+      {
+        "id": "8769b1bc-fdfe-4d87-afb1-4fc2aec5e366",
+        "projectId": "84b23eaf-9018-4a89-b6e6-30276d031f39",
+        "kind": "refund",
+        "status": "succeeded",
+        "businessKey": "refund:172709c4-b54f-4ccb-9273-16940df01103:22d9f2bd-cb86-4ad2-9032-62afd4d81158:1",
+        "authorizationId": null,
+        "captureId": "22d9f2bd-cb86-4ad2-9032-62afd4d81158",
+        "amountCents": 24000,
+        "currency": "USD",
+        "finalCapture": false,
+        "changeOrderId": "c8dea87a-1dc1-481d-85d4-6d06cf3590a0",
+        "revisionId": "dba22cd0-14e7-4c7f-b2da-259ba24c5de0",
+        "contentHash": "9a341c5a28634d31f2c96d983f7151f6d809f0975b64848dadd679290877dd31",
+        "revisionContentHash": "ccb769379f3fe9acf8ba2cc15a7d9f319ee0d66c5c4d7ee7e1cc704aa16f272a",
+        "itemId": "14d1da36-0c56-4640-adce-0374b9bdbc1f",
+        "supplierEventId": "172709c4-b54f-4ccb-9273-16940df01103",
+        "requestId": "setti-op-8769b1bc-fdfe-4d87-afb1-4fc2aec5e366",
+        "attempts": 2,
+        "paypalOrderId": null,
+        "paypalResourceId": "0FS14777WJ130534X",
+        "failureCode": null,
+        "failureMessage": null,
+        "createdAt": "2026-10-22T07:16:34.761Z",
+        "updatedAt": "2026-10-22T07:16:36.800Z"
+      }
+    ]
+  }
+}

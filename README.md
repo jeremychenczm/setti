@@ -2,7 +2,7 @@
 
 A project chat for independent interior designers that keeps every dollar in sync with what was agreed: when a client changes their mind after money has already moved, one approval turns into the right PayPal actions (release a hold, capture less, refund minus the restocking fee, charge the difference), each tracked on its own.
 
-> **Status: in development.** The workspace UI, a read-only AG Grid quote viewer, database schema, money rules engine and PayPal sandbox probes exist. Live AI, client approval and payment execution are not yet connected to the app.
+> **Status: in development.** AI change drafts, designer pricing review, client confirmation and the PayPal Sandbox payment steps (authorize, capture, release, refund) are connected. The Alerts, Agents, Items and Procurement boards still show demo data. See [Sandbox evidence](#sandbox-evidence).
 
 ## Try it
 
@@ -15,6 +15,12 @@ The report uses **AG Grid Community** for sorting, category and room filtering, 
 Willow has **28 lines: 22 products with IKEA US public reference prices checked on October 17, 2026, and six simulated design services**. Product details link to their official sources. Service rates, an 8.75% goods-only tax assumption and a single $99 delivery budget are test inputs, not supplier commitments or a location-specific tax calculation.
 
 All project scopes, approvals and signatures are **demo data**. Maple's prices, return fees, $0 tax and delivery remain illustrative. Neither report confirms a client approval or PayPal payment, and opening a quote makes no payment calls.
+
+## Sandbox evidence
+
+`npm run sandbox:proof` runs one complete change through the app against the PayPal Sandbox, reads every PayPal resource back and writes the results to `evidence/` (see [probes/README.md](probes/README.md#app-level-proof)).
+
+- [2026-10-22 · one change, three money actions](evidence/2026-10-22-mixed-change-lost-refund-answer/README.md): releases an $800 hold, authorizes and captures a $1,100 desk, and refunds a rug minus a $60 restocking fee. The first refund answer was deliberately discarded and recovered without a second refund. All 14 checks passed.
 
 ## Testing instructions
 

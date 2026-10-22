@@ -1,0 +1,298 @@
+{
+  "generatedAt": "2026-10-22T07:16:36.874Z",
+  "environment": "sandbox",
+  "source": {
+    "commit": "90f978f3391896fc62cf4a47c80645a035d64c1c",
+    "dirty": false,
+    "files": [
+      {
+        "path": "src/payments/actions.ts",
+        "sha256": "232eedcc9359243b982b0f73a7ac8ed37bd6ff215aade2912a8a11377840c0d0"
+      },
+      {
+        "path": "src/payments/authorize.ts",
+        "sha256": "ae2aeec61831dc66e8000603c1db61c1c7535366c8318e66cc72e717ddd4556d"
+      },
+      {
+        "path": "src/payments/binding.ts",
+        "sha256": "b983cd74872b5bf933dd60f2e85e9875c5ce11af98f23f3c864a5b1e36264fe7"
+      },
+      {
+        "path": "src/payments/callback-state.ts",
+        "sha256": "5c32d98054287095a3aef1e261804691543ecb7dcc81ed4d3fcfe36120a08b10"
+      },
+      {
+        "path": "src/payments/capture.ts",
+        "sha256": "95b09315f75168fe03dddde93c96259d91af68d212aae82d142290bcacb8c6e2"
+      },
+      {
+        "path": "src/payments/fee-evidence.ts",
+        "sha256": "e442a6c544963fb5878ffa2037773108c21732c504fe216ca3a6cd34321442b0"
+      },
+      {
+        "path": "src/payments/fee-refresh.ts",
+        "sha256": "2c3cb320a687ddedeaf82a6f0bb90a259e4071520351b594eddd798fa573ae85"
+      },
+      {
+        "path": "src/payments/fee-summary.ts",
+        "sha256": "e32d4b47b639d65ee01a05de7bd9232308914af4c2de5ba19d162a5b923f7b11"
+      },
+      {
+        "path": "src/payments/fees.ts",
+        "sha256": "98011969a8f655ff76cc3b5ea284e0b8d460ba5d89967d6e6fad12e9ee11ee18"
+      },
+      {
+        "path": "src/payments/holds.ts",
+        "sha256": "499ed6942e071fe21316a27932708a443d7102c43af8942c01dbdc3fae8ab8bc"
+      },
+      {
+        "path": "src/payments/http.ts",
+        "sha256": "83226cec2370a987cd076a697d600f996e9bd3e230956f17fd97bfd0a3b5413a"
+      },
+      {
+        "path": "src/payments/notes.ts",
+        "sha256": "8df8f7235079b7ed1f8e38c38065764999e170fbe504a1cb57c3b179ed5f44cb"
+      },
+      {
+        "path": "src/payments/operations.ts",
+        "sha256": "32742265254b5612878a22928a1a16e246f1e80ba3bc7ce92307ea2f9a568177"
+      },
+      {
+        "path": "src/payments/paypal-sdk.ts",
+        "sha256": "2a61124ae20bf23d1f6b6f76371184ceea4c68f10fc33a40e20835394cfd0b64"
+      },
+      {
+        "path": "src/payments/paypal.ts",
+        "sha256": "3d8847eac8c7616f5bbc50a078a26fd2b5ae1eac6f30ffe50654c397a54ba0fe"
+      },
+      {
+        "path": "src/payments/receipts.ts",
+        "sha256": "6fecb295f39f5c37b4ca3692096a5bc8e6c489ee77ce9a3e3bd57e026f7add1d"
+      },
+      {
+        "path": "src/payments/refund.ts",
+        "sha256": "1196358c833c5599aab273f55b6690f4bdccfad464784d5ae0a3f67f3fbf3650"
+      },
+      {
+        "path": "src/payments/schema.ts",
+        "sha256": "8a93dbb71bbaed28c54c64caeb23a833cf7ccb1855fafa973ceea9f78e3a10a5"
+      },
+      {
+        "path": "src/payments/server.ts",
+        "sha256": "058bd3aede3dc7999170932c72fd1cf511d8271ecf497990a25599eed963300f"
+      },
+      {
+        "path": "src/payments/supplier-terms.ts",
+        "sha256": "4ad1cf6812cfba19a9ad36851e926c83b0f95d99f0f83836b87e0948a106c91c"
+      },
+      {
+        "path": "src/payments/supplier.ts",
+        "sha256": "a7b020f8ed91d011c167116b78b00c15a50b9e33b008ac8d439e35f027e2467d"
+      },
+      {
+        "path": "src/payments/types.ts",
+        "sha256": "4be876240fdccdc96172e56a11454f9bef5287516e1195ed730c94f8ebdf6183"
+      },
+      {
+        "path": "src/payments/void.ts",
+        "sha256": "ec769303038f80dea25d93cf5af0b18b725d186f7a37f5339b9a46fad59e0678"
+      },
+      {
+        "path": "src/payments/workspace.ts",
+        "sha256": "a1272f5c6140794234010bb294534853f9046376707228236dfe5466807d1dc1"
+      }
+    ]
+  },
+  "provider": [
+    {
+      "kind": "authorization",
+      "id": "5HM215209C4369018",
+      "outcome": "ok",
+      "status": "CAPTURED",
+      "amountCents": 30000,
+      "currency": "USD",
+      "httpStatus": 200,
+      "debugId": "ca4e6b7b289e2"
+    },
+    {
+      "kind": "authorization",
+      "id": "1GM257889T578012B",
+      "outcome": "ok",
+      "status": "VOIDED",
+      "amountCents": 80000,
+      "currency": "USD",
+      "httpStatus": 200,
+      "debugId": "ca4e6b7b45adb"
+    },
+    {
+      "kind": "authorization",
+      "id": "8E002103LB3280808",
+      "outcome": "ok",
+      "status": "CAPTURED",
+      "amountCents": 110000,
+      "currency": "USD",
+      "httpStatus": 200,
+      "debugId": "ca4e6b7b5db8e"
+    },
+    {
+      "kind": "capture",
+      "id": "8HM7406342578603W",
+      "outcome": "ok",
+      "status": "PARTIALLY_REFUNDED",
+      "amountCents": 30000,
+      "currency": "USD",
+      "httpStatus": 200,
+      "debugId": "ca4e6b7b7ecd5",
+      "settlement": {
+        "grossCents": 30000,
+        "feeCents": 1200,
+        "netCents": 28800,
+        "currency": "USD"
+      }
+    },
+    {
+      "kind": "capture",
+      "id": "9RA17236TV607770F",
+      "outcome": "ok",
+      "status": "COMPLETED",
+      "amountCents": 110000,
+      "currency": "USD",
+      "httpStatus": 200,
+      "debugId": "ca4e6b7b95d81",
+      "settlement": {
+        "grossCents": 110000,
+        "feeCents": 4320,
+        "netCents": 105680,
+        "currency": "USD"
+      }
+    },
+    {
+      "kind": "refund",
+      "id": "0FS14777WJ130534X",
+      "outcome": "ok",
+      "status": "COMPLETED",
+      "amountCents": 24000,
+      "currency": "USD",
+      "httpStatus": 200,
+      "debugId": "ca4e6b7bb2e8d",
+      "customId": "8769b1bc-fdfe-4d87-afb1-4fc2aec5e366",
+      "settlement": {
+        "grossCents": 24000,
+        "feeCents": 0,
+        "netCents": 24000,
+        "currency": "USD"
+      }
+    },
+    {
+      "kind": "order",
+      "id": "7J224378F75142154",
+      "outcome": "ok",
+      "status": "COMPLETED",
+      "amountCents": 30000,
+      "currency": "USD",
+      "httpStatus": 200,
+      "debugId": "ca4e6b7bc8f35",
+      "refunds": [
+        {
+          "id": "0FS14777WJ130534X",
+          "customId": "8769b1bc-fdfe-4d87-afb1-4fc2aec5e366"
+        }
+      ]
+    },
+    {
+      "kind": "order",
+      "id": "6NC21383849530012",
+      "outcome": "ok",
+      "status": "COMPLETED",
+      "amountCents": 80000,
+      "currency": "USD",
+      "httpStatus": 200,
+      "debugId": "ca4e6b7bf1889",
+      "refunds": []
+    },
+    {
+      "kind": "order",
+      "id": "2YF73904CB732241D",
+      "outcome": "ok",
+      "status": "COMPLETED",
+      "amountCents": 110000,
+      "currency": "USD",
+      "httpStatus": 200,
+      "debugId": "ca4e6b7c29a2a",
+      "refunds": []
+    }
+  ],
+  "checks": [
+    {
+      "name": "Authorization 5HM215209C4369018 matches the ledger",
+      "ok": true,
+      "detail": "PayPal CAPTURED 30000¢; ledger captured 30000¢"
+    },
+    {
+      "name": "Authorization 1GM257889T578012B matches the ledger",
+      "ok": true,
+      "detail": "PayPal VOIDED 80000¢; ledger voided 80000¢"
+    },
+    {
+      "name": "Authorization 8E002103LB3280808 matches the ledger",
+      "ok": true,
+      "detail": "PayPal CAPTURED 110000¢; ledger captured 110000¢"
+    },
+    {
+      "name": "Capture 8HM7406342578603W matches the ledger",
+      "ok": true,
+      "detail": "PayPal PARTIALLY_REFUNDED 30000¢; ledger completed 30000¢"
+    },
+    {
+      "name": "Capture 9RA17236TV607770F matches the ledger",
+      "ok": true,
+      "detail": "PayPal COMPLETED 110000¢; ledger completed 110000¢"
+    },
+    {
+      "name": "Refund 0FS14777WJ130534X matches the ledger",
+      "ok": true,
+      "detail": "PayPal COMPLETED 24000¢ custom_id 8769b1bc-fdfe-4d87-afb1-4fc2aec5e366; ledger completed 24000¢ operation 8769b1bc-fdfe-4d87-afb1-4fc2aec5e366"
+    },
+    {
+      "name": "Order 7J224378F75142154 lists exactly the recorded refunds",
+      "ok": true,
+      "detail": "PayPal [0FS14777WJ130534X]; ledger [0FS14777WJ130534X]"
+    },
+    {
+      "name": "Order 6NC21383849530012 lists exactly the recorded refunds",
+      "ok": true,
+      "detail": "PayPal []; ledger []"
+    },
+    {
+      "name": "Order 2YF73904CB732241D lists exactly the recorded refunds",
+      "ok": true,
+      "detail": "PayPal []; ledger []"
+    },
+    {
+      "name": "Refund step 8769b1bc-fdfe-4d87-afb1-4fc2aec5e366 produced exactly one PayPal refund",
+      "ok": true,
+      "detail": "1 PayPal refund(s) carry this step's custom_id"
+    },
+    {
+      "name": "A refund whose answer was lost is recovered without a second refund",
+      "ok": true,
+      "detail": "operation succeeded after 2 attempt(s); order lookup found the refund by custom_id"
+    },
+    {
+      "name": "Lounge chair hold released, nothing charged",
+      "ok": true,
+      "detail": "as confirmed"
+    },
+    {
+      "name": "Writing desk captured in full",
+      "ok": true,
+      "detail": "as confirmed"
+    },
+    {
+      "name": "Rug refunded except the $60 restocking fee",
+      "ok": true,
+      "detail": "as confirmed"
+    }
+  ],
+  "passed": true
+}
