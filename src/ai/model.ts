@@ -73,12 +73,12 @@ export function modelContext(input: ChangeModelInput): string {
     moneyEvidence: input.moneyContext ?? null,
   });
   // Refuse, rather than silently omitting messages or pretending a summary is complete.
-  if (payload.length > 120_000) throw new ContextLimitError("当前项目上下文超过本轮输入预算。聊天已保存，请缩小测试项目后重试；系统没有静默截断历史。");
+  if (payload.length > 120_000) throw new ContextLimitError("This project's context exceeds the input budget for one request. The chat is saved; shorten the test project and retry. History was not silently truncated.");
   return payload;
 }
 
 export async function callChangeModel(input: ChangeModelInput): Promise<{ output: ChangeModelOutput; model: string }> {
-  if (!aiConfigured()) throw new AiConfigurationError("尚未配置模型 API。请在服务端 .env.local 设置 ANTHROPIC_API_KEY 后重启；聊天已保存，可配置后重试。");
+  if (!aiConfigured()) throw new AiConfigurationError("The model API is not configured. Set ANTHROPIC_API_KEY in the server .env.local and restart. The chat is saved, so you can retry after configuring.");
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 90_000, maxRetries: 0 });
   const response = await client.messages.parse({
     model: process.env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-5-5",
@@ -87,6 +87,6 @@ export async function callChangeModel(input: ChangeModelInput): Promise<{ output
     messages: [{ role: "user", content: modelContext(input) }],
     output_config: { format: zodOutputFormat(changeModelOutputSchema) },
   });
-  if (response.stop_reason !== "end_turn" || !response.parsed_output) throw new Error("模型未返回完整且可校验的结果，请重试。");
+  if (response.stop_reason !== "end_turn" || !response.parsed_output) throw new Error("The model did not return a complete, valid result. Retry.");
   return { output: changeModelOutputSchema.parse(response.parsed_output), model: response.model };
 }

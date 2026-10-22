@@ -7,8 +7,8 @@ function evidence(): MoneyContext {
     projectKey: "maple", quoteId: "demo-maple-v1", version: 1, checkedAt: "2026-10-21T20:00:00Z", providerRecordedAt: null, mode: "recorded_sandbox",
     sources: [{ id: "quote", kind: "quote", label: "Approved quote", href: "/quotes/maple", recordedAt: null }],
     facts: [
-      { id: "budget", text: { en: "Budget changed by $60.", zh: "预算增加 $60。" }, sourceIds: ["quote"] },
-      { id: "unknown", text: { en: "No recorded payment evidence.", zh: "没有已记录的付款依据。" }, sourceIds: ["quote"] },
+      { id: "budget", text: { en: "Budget changed by $60." }, sourceIds: ["quote"] },
+      { id: "unknown", text: { en: "No recorded payment evidence." }, sourceIds: ["quote"] },
     ], mandatoryFactIds: ["unknown"],
   };
 }
@@ -16,25 +16,25 @@ function evidence(): MoneyContext {
 describe("recorded money answers", () => {
   it("renders only server facts, always retains uncertainty, and snapshots their evidence", () => {
     const context = evidence();
-    const result = buildMoneyAnswer(context, ["budget"], "@AI 为什么预算只增加60？");
+    const result = buildMoneyAnswer(context, ["budget"]);
     expect(result.moneyAnswer.facts.map((f) => f.id)).toEqual(["budget", "unknown"]);
     expect(result.moneyAnswer.sources).toEqual(context.sources);
-    expect(result.text).toContain("保存");
-    context.facts[0].text.zh = "Changed later";
+    expect(result.text).toContain("recorded approvals and payments");
+    context.facts[0].text.en = "Changed later";
     context.sources[0].label = "Changed later";
-    expect(result.moneyAnswer.facts[0].text.zh).toBe("预算增加 $60。");
+    expect(result.moneyAnswer.facts[0].text.en).toBe("Budget changed by $60.");
     expect(result.moneyAnswer.sources[0].label).toBe("Approved quote");
   });
   it.each([{ ids: [] }, { ids: ["foreign"] }, { ids: ["budget", "budget"] }])("rejects invalid fact selection $ids", ({ ids }) => {
-    expect(() => buildMoneyAnswer(evidence(), ids, "Explain payments")).toThrow();
+    expect(() => buildMoneyAnswer(evidence(), ids)).toThrow();
   });
   it("rejects invented citations and external source links", () => {
     const context = evidence();
     context.facts[0].sourceIds = ["fake"];
-    expect(() => buildMoneyAnswer(context, ["budget"], "Explain payments")).toThrow();
+    expect(() => buildMoneyAnswer(context, ["budget"])).toThrow();
     context.facts[0].sourceIds = ["quote"];
     context.sources[0].href = "https://evil.example/pay";
-    expect(() => buildMoneyAnswer(context, ["budget"], "Explain payments")).toThrow();
+    expect(() => buildMoneyAnswer(context, ["budget"])).toThrow();
   });
   it.each(["@AI 为什么书桌已扣款但地毯还没有退款？", "@AI Explain the holds and refunds.", "@AI Where is my money?", "@AI 核对这次预算和付款情况", "@AI Why did we replace the chair and pay more?", "@AI Please explain why replacing the chair cost more.", "@AI 请解释为什么把餐椅换成新款后预算变多了"])('recognizes a read-only money question: %s', (text) => {
     expect(isMoneyQuestion(text)).toBe(true);

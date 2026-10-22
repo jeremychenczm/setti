@@ -83,10 +83,10 @@ export function buildDraft(input: {
           quantity: change.quantity!, unitLabel: product.unitLabel,
           unitPriceCents: product.unitPriceCents, currency: product.currency,
         };
-        if (!product.sku) unresolved.push(`${product.name}: 型号或货号待设计师确认。`);
+        if (!product.sku) unresolved.push(`${product.name}: model or SKU needs designer confirmation.`);
         if (!product.priceEvidence) {
           after.unitPriceCents = null;
-          unresolved.push(`${product.name}: 页面价格缺少可追溯依据，待核价。`);
+          unresolved.push(`${product.name}: the page price has no traceable source and needs pricing review.`);
         }
       } else {
         if (!change.description.trim()) throw new InvalidAiOutputError("Missing new product description");
@@ -95,19 +95,19 @@ export function buildDraft(input: {
           specification: change.description, quantity: change.quantity!,
           unitLabel: null, unitPriceCents: null, currency: null,
         };
-        unresolved.push(`${change.description}: 新商品资料和价格待确认。`);
+        unresolved.push(`${change.description}: new product details and price need confirmation.`);
       }
     }
     const beforeSubtotalCents = subtotal(before);
     const afterSubtotalCents = subtotal(after);
     const deltaSubtotalCents = beforeSubtotalCents === null || afterSubtotalCents === null ? null : afterSubtotalCents - beforeSubtotalCents;
     if (deltaSubtotalCents !== null && !Number.isSafeInteger(deltaSubtotalCents)) throw new InvalidAiOutputError("Unsafe delta");
-    if (after && afterSubtotalCents === null) unresolved.push(`${after.name}: 币种、计价单位或价格待确认，暂不计算差额。`);
-    if (change.action === "replace" || change.action === "remove") unresolved.push(`${before!.name}: 旧款是否已采购、是否需退货及处理费用待确认。`);
+    if (after && afterSubtotalCents === null) unresolved.push(`${after.name}: currency, pricing unit or price needs confirmation; the difference is not calculated yet.`);
+    if (change.action === "replace" || change.action === "remove") unresolved.push(`${before!.name}: confirm whether the old item was purchased, whether it must be returned, and the handling cost.`);
     return { action: change.action, itemId: change.itemId, before, after, productOptionId: change.productOptionId, sourceMessageIds, beforeSubtotalCents, afterSubtotalCents, deltaSubtotalCents };
   });
-  for (const page of pages.filter((page) => page.error)) unresolved.push(`商品链接读取失败：${page.url}。${page.error}`);
-  unresolved.push("税费、配送及其他费用待设计师核实；此处仅为税前商品/服务差额预览。");
+  for (const page of pages.filter((page) => page.error)) unresolved.push(`Could not read product link ${page.url}. ${page.error}`);
+  unresolved.push("Tax, delivery and other charges need designer verification. This is only a pre-tax preview of the goods and services difference.");
   const now = input.now ?? new Date().toISOString();
   const current = input.current;
   if (current && (current.projectKey !== quote.projectId || current.basedOnQuoteId !== quote.id || current.basedOnVersion !== quote.version)) {
@@ -123,7 +123,7 @@ export function buildDraft(input: {
       basedOnQuoteId: quote.id, basedOnVersion: quote.version,
       basedOnQuoteFingerprint: quoteFingerprint(quote),
       revision: (current?.revision ?? 0) + 1, status: "needs_designer_review",
-      title: output.title || "变更草稿", summary: output.message, changes,
+      title: output.title || "Change draft", summary: output.message, changes,
       sourceMessageIds: [...new Set(changes.flatMap((change) => change.sourceMessageIds))],
       sources: pages.map((page) => ({ ...page, text: "" })),
       unresolved: [...new Set(unresolved)], constraints: [...new Set(output.constraints)],

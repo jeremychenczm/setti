@@ -24,7 +24,7 @@ export function hasUnsupportedMoneyClaim(text: string): boolean {
 }
 
 /** The model selects relevance; it cannot supply amounts, statuses, sources or URLs. */
-export function buildMoneyAnswer(context: MoneyContext, selected: readonly string[], question: string): { text: string; moneyAnswer: MoneyAnswer } {
+export function buildMoneyAnswer(context: MoneyContext, selected: readonly string[]): { text: string; moneyAnswer: MoneyAnswer } {
   if (!selected.length || selected.length > 16 || new Set(selected).size !== selected.length) throw new Error("Invalid money fact selection");
   const byId = new Map(context.facts.map((fact) => [fact.id, fact]));
   const bySource = new Map(context.sources.map((source) => [source.id, source]));
@@ -37,7 +37,7 @@ export function buildMoneyAnswer(context: MoneyContext, selected: readonly strin
   const sources = context.sources.filter((source) => facts.some((fact) => fact.sourceIds.includes(source.id)));
   if (sources.some((source) => !/^\/(?:quotes\/(?:maple|willow)|change-orders\/[0-9a-f-]{36})(?:#[a-zA-Z0-9_%.-]+)?$/.test(source.href))) throw new Error("Invalid money source");
   return {
-    text: /[\u3400-\u9fff]/u.test(question) ? "根据本项目保存的批准内容和资金记录，与你的问题相关的依据如下。" : "Here is the evidence relevant to your question from this project's recorded approvals and payments.",
+    text: "Here is the evidence relevant to your question from this project's recorded approvals and payments.",
     moneyAnswer: {
       quoteId: context.quoteId, version: context.version, checkedAt: context.checkedAt,
       providerRecordedAt: context.providerRecordedAt, mode: context.mode, facts, sources: structuredClone(sources),

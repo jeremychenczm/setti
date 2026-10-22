@@ -79,7 +79,7 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     await store.appendMessage(sessionId, "willow", question);
     const run = await start(question.id);
     const context = await store.readMoneyContext!(sessionId, "willow");
-    const answer = buildMoneyAnswer(context, ["quote"], question.text);
+    const answer = buildMoneyAnswer(context, ["quote"]);
     const expected = structuredClone(answer.moneyAnswer);
     const result = { ...answer, model: "test-model" };
     await store.completeAi(sessionId, "willow", question.id, run.runId, result);
@@ -97,7 +97,7 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     await store.appendMessage(sessionId, "willow", question);
     const run = await start(question.id);
     const context = await store.readMoneyContext!(sessionId, "willow");
-    const answer = buildMoneyAnswer(context, ["quote"], question.text);
+    const answer = buildMoneyAnswer(context, ["quote"]);
     await expect(store.completeAi(sessionId, "willow", question.id, run.runId, { ...answer, moneyAnswer: { ...answer.moneyAnswer, quoteId: randomUUID(), version: 9 }, model: "test-model" })).rejects.toMatchObject({ code: "STALE_BASELINE" });
     await expect(store.completeAi(sessionId, "willow", question.id, run.runId, { ...answer, draft: null, model: "test-model" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
     expect((await store.getCase(sessionId, "willow")).messages).toHaveLength(1);

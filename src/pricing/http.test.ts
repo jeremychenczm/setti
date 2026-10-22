@@ -91,7 +91,7 @@ describe("pricing HTTP boundaries", () => {
   });
 
   it("returns actionable conflicts and redacts unexpected storage errors", async () => {
-    mock.issueReview.mockRejectedValueOnce(new PricingStoreError("PRICING_CONFLICT", "核价已在其他页面更新。"));
+    mock.issueReview.mockRejectedValueOnce(new PricingStoreError("PRICING_CONFLICT", "This pricing review was changed elsewhere. Reload it before saving."));
     expect((await issuePricingResponse(request("/api/pricing/willow/issue", "POST", { reviewId: randomUUID(), expectedVersion: 1 }), "willow")).status).toBe(409);
     mock.saveReview.mockRejectedValueOnce(new Error("postgres password=do-not-return SELECT private_data"));
     const response = await savePricingResponse(request("/api/pricing/willow", "PUT", saveBody()), "willow");

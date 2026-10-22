@@ -13,7 +13,7 @@ const sourceUrl = z.string().max(4096).url().refine((value) => {
     const url = new URL(value);
     return url.protocol === "https:" && !url.username && !url.password;
   } catch { return false; }
-}, "来源链接须为不含登录凭据的 HTTPS 地址").nullable();
+}, "Source links must be HTTPS addresses without login credentials").nullable();
 
 export const pricingInputSchema = z.strictObject({
   baselineFingerprint: z.string().min(1).max(1_000_000),
@@ -43,7 +43,7 @@ export class PricingValidationError extends Error {
   readonly problems: string[];
   constructor(problems: string[] | string) {
     const entries = typeof problems === "string" ? [problems] : problems;
-    super(entries.join("；"));
+    super(entries.join("; "));
     this.name = "PricingValidationError";
     this.problems = [...entries];
   }
@@ -55,25 +55,25 @@ export function requiresOldItemHandling(change: { action: DraftChange["action"];
 }
 
 function baseline(quote: ApprovedQuoteReport, draft: ChangeDraft): Map<string, ApprovedQuoteLine> {
-  if (draft.basedOnQuoteId !== quote.id || draft.basedOnVersion !== quote.version || draft.projectKey !== quote.projectId) throw new PricingValidationError("变更草稿与当前批准报价不一致，请重新核价。");
-  if (draft.basedOnQuoteFingerprint !== undefined && draft.basedOnQuoteFingerprint !== quoteFingerprint(quote)) throw new PricingValidationError("原批准报价内容已变化；请在聊天重新 @AI 生成草稿并重新核价。");
-  if (!draft.changes.length || draft.changes.length > 100) throw new PricingValidationError("变更草稿必须包含 1 至 100 行变更。");
+  if (draft.basedOnQuoteId !== quote.id || draft.basedOnVersion !== quote.version || draft.projectKey !== quote.projectId) throw new PricingValidationError("The change draft does not match the current approved quote. Review pricing again.");
+  if (draft.basedOnQuoteFingerprint !== undefined && draft.basedOnQuoteFingerprint !== quoteFingerprint(quote)) throw new PricingValidationError("The approved quote has changed. Ask @AI in the chat for a new draft, then review pricing again.");
+  if (!draft.changes.length || draft.changes.length > 100) throw new PricingValidationError("A change draft must contain 1 to 100 changed lines.");
   const byId = new Map(quote.lines.map((line) => [line.itemId, line]));
-  if (byId.size !== quote.lines.length) throw new PricingValidationError("原批准报价含重复物品编号。");
+  if (byId.size !== quote.lines.length) throw new PricingValidationError("The approved quote contains duplicate item IDs.");
   const touched = new Set<string>();
   for (const change of draft.changes) {
     if (change.action === "add") {
-      if (change.itemId !== null) throw new PricingValidationError("新增条目不能指向原报价物品。");
+      if (change.itemId !== null) throw new PricingValidationError("An added line cannot refer to an item in the approved quote.");
     } else {
-      if (!change.itemId || !byId.has(change.itemId) || touched.has(change.itemId)) throw new PricingValidationError("变更引用了未知或重复的原报价物品。");
+      if (!change.itemId || !byId.has(change.itemId) || touched.has(change.itemId)) throw new PricingValidationError("A change refers to an unknown or duplicated item in the approved quote.");
       touched.add(change.itemId);
       if (draft.basedOnQuoteFingerprint === undefined) {
         const previous = byId.get(change.itemId)!;
         const before = change.before;
-        if (!before || before.name !== previous.name || before.vendor !== previous.vendor || before.sku !== previous.sku || before.specification !== previous.specification || before.quantity !== previous.quantity || before.unitLabel !== (previous.unitLabel ?? "each") || before.unitPriceCents !== previous.unitPriceCents || before.currency !== "USD") throw new PricingValidationError("旧草稿的原物品与当前批准报价不一致；请在聊天重新 @AI 生成草稿。");
+        if (!before || before.name !== previous.name || before.vendor !== previous.vendor || before.sku !== previous.sku || before.specification !== previous.specification || before.quantity !== previous.quantity || before.unitLabel !== (previous.unitLabel ?? "each") || before.unitPriceCents !== previous.unitPriceCents || before.currency !== "USD") throw new PricingValidationError("The original item in this older draft no longer matches the approved quote. Ask @AI in the chat for a new draft.");
       }
     }
-    if ((change.action === "remove") !== (change.after === null)) throw new PricingValidationError("变更类型与草稿的新条目不一致。");
+    if ((change.action === "remove") !== (change.after === null)) throw new PricingValidationError("The change type does not match the draft's new line.");
   }
   return byId;
 }
@@ -122,28 +122,28 @@ export function createPricingInput(quote: ApprovedQuoteReport, draft: ChangeDraf
 export function validatePricingInput(quote: ApprovedQuoteReport, draft: ChangeDraft, value: unknown): PricingInput {
   const old = baseline(quote, draft);
   const input = pricingInputSchema.parse(value);
-  if (input.baselineFingerprint !== quoteFingerprint(quote)) throw new PricingValidationError("原批准报价内容已变化；这份核价不能沿用，请重新核价。");
+  if (input.baselineFingerprint !== quoteFingerprint(quote)) throw new PricingValidationError("The approved quote has changed, so this pricing review cannot be reused. Review pricing again.");
   const source = createPricingInput(quote, draft);
   const changes = new Map(input.changes.map((change) => [change.key, change]));
-  if (changes.size !== input.changes.length || changes.size !== source.changes.length) throw new PricingValidationError("核价条目不能新增、删除或重复；请基于原变更草稿核价。");
+  if (changes.size !== input.changes.length || changes.size !== source.changes.length) throw new PricingValidationError("Pricing lines cannot be added, removed or duplicated. Review pricing from the original change draft.");
   const ordered = source.changes.map((expected) => {
     const actual = changes.get(expected.key);
-    if (!actual || actual.action !== expected.action || actual.itemId !== expected.itemId || (actual.after === null) !== (expected.after === null)) throw new PricingValidationError("核价条目的编号、操作或原物品不能被修改。");
+    if (!actual || actual.action !== expected.action || actual.itemId !== expected.itemId || (actual.after === null) !== (expected.after === null)) throw new PricingValidationError("A pricing line's ID, action or original item cannot be changed.");
     if (actual.action === "quantity") {
       const previous = old.get(actual.itemId!)!;
       const after = actual.after!;
-      if (after.name !== previous.name || after.vendor !== previous.vendor || after.sku !== previous.sku || after.specification !== previous.specification || after.category !== previous.category || after.unitLabel !== (previous.unitLabel ?? "each")) throw new PricingValidationError("数量变更不能换成另一商品或计价单位；换款请在聊天重新 @AI 生成替换草稿。");
+      if (after.name !== previous.name || after.vendor !== previous.vendor || after.sku !== previous.sku || after.specification !== previous.specification || after.category !== previous.category || after.unitLabel !== (previous.unitLabel ?? "each")) throw new PricingValidationError("A quantity change cannot switch to another product or pricing unit. To swap products, ask @AI in the chat for a replacement draft.");
     }
     if (requiresOldItemHandling(actual, actual.itemId ? old.get(actual.itemId) : undefined)) {
-      if (actual.oldItemHandling === "not_applicable") throw new PricingValidationError("替换、移除或减少数量必须核实旧款处理方式。");
-    } else if (actual.oldItemHandling !== "not_applicable" || actual.oldItemCostCents !== 0) throw new PricingValidationError("新增数量或新增物品不应包含旧款处理费用。");
+      if (actual.oldItemHandling === "not_applicable") throw new PricingValidationError("Replacing, removing or reducing an item requires verified old-item handling.");
+    } else if (actual.oldItemHandling !== "not_applicable" || actual.oldItemCostCents !== 0) throw new PricingValidationError("Added quantities or new items cannot carry old-item handling costs.");
     return actual;
   });
   const issues = new Map(input.issues.map((issue) => [issue.id, issue]));
-  if (issues.size !== input.issues.length || issues.size !== source.issues.length) throw new PricingValidationError("待确认问题不能新增、删除或重复。");
+  if (issues.size !== input.issues.length || issues.size !== source.issues.length) throw new PricingValidationError("Open questions cannot be added, removed or duplicated.");
   const orderedIssues = source.issues.map((expected) => {
     const actual = issues.get(expected.id);
-    if (!actual || actual.label !== expected.label) throw new PricingValidationError("待确认问题的编号或原文不能修改。");
+    if (!actual || actual.label !== expected.label) throw new PricingValidationError("An open question's ID or original text cannot be changed.");
     return actual;
   });
   return { ...input, changes: ordered, issues: orderedIssues };
@@ -170,12 +170,12 @@ function finalAfter(draft: ChangeDraft, change: PricingChangeInput): FinalQuoteL
 
 function feeLine(draft: ChangeDraft, change: PricingChangeInput, before: ApprovedQuoteLine): FinalQuoteLine {
   return {
-    itemId: `old-cost-${draft.id}-${change.key}`, name: `旧款保留与处理成本：${before.name}`, vendor: before.vendor,
+    itemId: `old-cost-${draft.id}-${change.key}`, name: `Old item retention and handling cost: ${before.name}`, vendor: before.vendor,
     brand: null, sku: `OLD-COST-${change.key}`,
-    specification: `${change.oldItemNote.trim()}。本行包含旧款保留、取消或退货的全部已核实成本及适用税费，按整项金额收取，不再次计税或配送。`,
+    specification: `${change.oldItemNote.trim()}. This line includes every verified cost and applicable tax for keeping, cancelling or returning the old item. It is charged as one amount, with no further tax or delivery.`,
     category: "service", room: before.room, quantity: 1, unitLabel: "total", currency: "USD",
     unitPriceCents: change.oldItemCostCents!, taxCents: 0, freightCents: 0, sourceUrl: null,
-    returnPolicy: "本行是经设计师核实的旧款处理总成本；具体处理和退回安排以本次条款及旧款处理说明为准。",
+    returnPolicy: "This line is the designer-verified total cost of handling the old item. This change order's terms and old-item notes govern how it is handled or returned.",
     returnable: null, restockingFeeBps: null, customMade: false, leadTimeDays: null, origin: "old_item_cost",
   };
 }
@@ -207,10 +207,10 @@ function assembledLines(quote: ApprovedQuoteReport, draft: ChangeDraft, input: P
 function boundedTotals(lines: readonly { quantity: number; unitPriceCents: number; taxCents: number; freightCents: number }[]) {
   for (const line of lines) {
     const values = [line.unitPriceCents, line.taxCents, line.freightCents, calculateLineTotals(line).totalCents];
-    if (values.some((amount) => amount > MAX_CENTS)) throw new PricingValidationError("条目金额超过安全上限，请拆分或重新核实报价。");
+    if (values.some((amount) => amount > MAX_CENTS)) throw new PricingValidationError("A line amount exceeds the safe limit. Split the line or verify the quote again.");
   }
   const totals = calculateQuoteTotals(lines);
-  if ([totals.subtotalCents, totals.taxCents, totals.freightCents, totals.totalCents].some((amount) => amount > MAX_CENTS)) throw new PricingValidationError("报价总金额超过安全上限，请重新核实。");
+  if ([totals.subtotalCents, totals.taxCents, totals.freightCents, totals.totalCents].some((amount) => amount > MAX_CENTS)) throw new PricingValidationError("The quote total exceeds the safe limit. Verify it again.");
   return totals;
 }
 
@@ -230,50 +230,50 @@ export function previewPricing(quote: ApprovedQuoteReport, draft: ChangeDraft, v
   let input: PricingInput;
   try { input = validatePricingInput(quote, draft, value); }
   catch (error) {
-    const problems = error instanceof PricingValidationError ? error.problems : error instanceof z.ZodError ? error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`) : ["核价资料不合法。"];
+    const problems = error instanceof PricingValidationError ? error.problems : error instanceof z.ZodError ? error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`) : ["The pricing details are invalid."];
     return { baselineTotals, proposedTotals: null, deltaTotalCents: null, problems, ready: false };
   }
   const problems: string[] = [];
   const originalCurrencies = new Map(draft.changes.map((change, index) => [`change-${index}`, change.after?.currency ?? null]));
   const initialEvidence = new Map(createPricingInput(quote, draft).changes.map((change) => [change.key, change.priceEvidence]));
-  if (!input.title.trim()) problems.push("请填写变更单标题。");
-  if (!input.terms.trim()) problems.push("请填写本次报价与旧款处理条款。");
+  if (!input.title.trim()) problems.push("Enter a change order title.");
+  if (!input.terms.trim()) problems.push("Enter the terms for this quote and old-item handling.");
   for (const change of input.changes) {
     const label = change.after?.name.trim() || quote.lines.find((line) => line.itemId === change.itemId)?.name || change.key;
-    if (!change.confirmed) problems.push(`${label}：设计师尚未确认本行核价。`);
+    if (!change.confirmed) problems.push(`${label}: the designer has not confirmed this line's pricing.`);
     if (change.after) {
       const item = change.after;
-      const required: [keyof PricingItem, string][] = [["name", "名称"], ["vendor", "供应商"], ["sku", "货号"], ["specification", "规格"], ["room", "房间"], ["unitLabel", "计价单位"], ["returnPolicy", "退货或取消条款"]];
-      for (const [key, name] of required) if (typeof item[key] !== "string" || !(item[key] as string).trim()) problems.push(`${label}：${name}待确认。`);
-      if (item.currency !== "USD") problems.push(`${label}：需明确核实美元报价，不能自动换算未知或外币价格。`);
-      if (item.unitPriceCents === null) problems.push(`${label}：单价待确认。`);
-      if (item.taxCents === null) problems.push(`${label}：本行税额待确认。`);
-      if (item.freightCents === null) problems.push(`${label}：本行配送费待确认。`);
-      if (!change.priceEvidence.trim()) problems.push(`${label}：请填写核价依据。`);
-      if (originalCurrencies.get(change.key) !== "USD" && item.currency === "USD" && change.priceEvidence.trim() === initialEvidence.get(change.key)?.trim()) problems.push(`${label}：原币种并非已确认美元，请补充本次美元核价依据，不能只修改币种标签。`);
+      const required: [keyof PricingItem, string][] = [["name", "Name"], ["vendor", "Vendor"], ["sku", "SKU"], ["specification", "Specification"], ["room", "Room"], ["unitLabel", "Pricing unit"], ["returnPolicy", "Return or cancellation terms"]];
+      for (const [key, name] of required) if (typeof item[key] !== "string" || !(item[key] as string).trim()) problems.push(`${label}: ${name} needs confirmation.`);
+      if (item.currency !== "USD") problems.push(`${label}: confirm a USD price. Unknown or foreign-currency prices are not converted automatically.`);
+      if (item.unitPriceCents === null) problems.push(`${label}: unit price needs confirmation.`);
+      if (item.taxCents === null) problems.push(`${label}: tax for this line needs confirmation.`);
+      if (item.freightCents === null) problems.push(`${label}: delivery for this line needs confirmation.`);
+      if (!change.priceEvidence.trim()) problems.push(`${label}: enter the price evidence.`);
+      if (originalCurrencies.get(change.key) !== "USD" && item.currency === "USD" && change.priceEvidence.trim() === initialEvidence.get(change.key)?.trim()) problems.push(`${label}: the original currency was not confirmed USD. Add USD price evidence; changing the currency label alone is not enough.`);
     }
     const before = quote.lines.find((line) => line.itemId === change.itemId);
     if (requiresOldItemHandling(change, before)) {
-      if (change.oldItemHandling === "pending" || change.oldItemHandling === "not_applicable") problems.push(`${label}：旧款处理方式待确认。`);
-      if (change.oldItemCostCents === null) problems.push(`${label}：旧款全部处理成本待确认，免费也需明确填 0。`);
-      if (!change.oldItemNote.trim()) problems.push(`${label}：请填写旧款处理及费用说明。`);
+      if (change.oldItemHandling === "pending" || change.oldItemHandling === "not_applicable") problems.push(`${label}: old-item handling needs confirmation.`);
+      if (change.oldItemCostCents === null) problems.push(`${label}: the full old-item handling cost needs confirmation. Enter 0 if there is no cost.`);
+      if (!change.oldItemNote.trim()) problems.push(`${label}: describe the old-item handling and its cost.`);
       const retainedMinimum = change.action === "quantity" ? (before!.quantity - change.after!.quantity) * before!.unitPriceCents : calculateLineTotals(before!).totalCents;
-      if (change.oldItemHandling === "retained" && change.oldItemCostCents !== null && change.oldItemCostCents < retainedMinimum) problems.push(change.action === "quantity" ? `${label}：保留被减少的旧数量，其成本至少应包含被减少数量的原单价合计；相关税与配送需在说明中另行核实。` : `${label}：保留旧款的成本至少应包含原报价整行总额（含原税和配送）。`);
+      if (change.oldItemHandling === "retained" && change.oldItemCostCents !== null && change.oldItemCostCents < retainedMinimum) problems.push(change.action === "quantity" ? `${label}: keeping the reduced quantity costs at least its original unit prices in total. Verify the related tax and delivery in the notes.` : `${label}: keeping the old item costs at least its full original line total, including the original tax and delivery.`);
     }
   }
-  for (const issue of input.issues) if (!issue.resolved || !issue.note.trim()) problems.push(`${issue.label}：需勾选已解决并填写核实说明。`);
+  for (const issue of input.issues) if (!issue.resolved || !issue.note.trim()) problems.push(`${issue.label}: mark it resolved and enter a verification note.`);
   const lines = assembledLines(quote, draft, input);
   let proposedTotals: QuoteTotals | null = null;
   let deltaTotalCents: number | null = null;
   if (lines) {
-    if (!lines.length) problems.push("新报价至少需保留一行；整项目取消不在本轮范围内。");
-    if (new Set(lines.map((line) => line.itemId)).size !== lines.length) problems.push("新报价的物品编号存在冲突。");
+    if (!lines.length) problems.push("The new quote must keep at least one line. Cancelling the whole project is out of scope for this version.");
+    if (new Set(lines.map((line) => line.itemId)).size !== lines.length) problems.push("The new quote has conflicting item IDs.");
     try {
       proposedTotals = boundedTotals(lines);
       deltaTotalCents = proposedTotals.totalCents - baselineTotals.totalCents;
-      if (!Number.isSafeInteger(deltaTotalCents)) throw new PricingValidationError("报价差额不在安全范围内。");
-      if (noCommercialChange(quote, lines)) problems.push("未修改任何报价内容；无需生成变更单。");
-    } catch (error) { problems.push(error instanceof Error ? error.message : "报价金额不合法。"); proposedTotals = null; deltaTotalCents = null; }
+      if (!Number.isSafeInteger(deltaTotalCents)) throw new PricingValidationError("The quote difference is outside the safe range.");
+      if (noCommercialChange(quote, lines)) problems.push("No quote content changed, so no change order is needed.");
+    } catch (error) { problems.push(error instanceof Error ? error.message : "The quote amount is invalid."); proposedTotals = null; deltaTotalCents = null; }
   }
   return { baselineTotals, proposedTotals, deltaTotalCents, problems, ready: problems.length === 0 && lines !== null && lines.length > 0 && proposedTotals !== null };
 }
@@ -282,11 +282,11 @@ export function previewPricing(quote: ApprovedQuoteReport, draft: ChangeDraft, v
 export function prepareChangeOrder(quote: ApprovedQuoteReport, draft: ChangeDraft, value: PricingInput, messages: readonly CaseMessage[]): PricingDocumentBody {
   const input = validatePricingInput(quote, draft, value);
   const preview = previewPricing(quote, draft, input);
-  if (!preview.ready || !preview.proposedTotals || preview.deltaTotalCents === null) throw new PricingValidationError(preview.problems.length ? preview.problems : ["核价资料未齐全，暂不能发出变更单。"]);
+  if (!preview.ready || !preview.proposedTotals || preview.deltaTotalCents === null) throw new PricingValidationError(preview.problems.length ? preview.problems : ["Pricing is incomplete, so the change order cannot be issued yet."]);
   const lines = assembledLines(quote, draft, input)!;
   const sources = new Set([...draft.sourceMessageIds, ...draft.changes.flatMap((change) => change.sourceMessageIds)]);
   const sourceMessages = messages.filter((message) => sources.has(message.id));
-  if (new Set(sourceMessages.map((message) => message.id)).size !== sources.size || sourceMessages.length !== sources.size || sourceMessages.some((message) => message.actor === "assistant")) throw new PricingValidationError("变更引用的聊天原文缺失、重复或并非人工消息，请重新核对来源。");
+  if (new Set(sourceMessages.map((message) => message.id)).size !== sources.size || sourceMessages.length !== sources.size || sourceMessages.some((message) => message.actor === "assistant")) throw new PricingValidationError("A change cites chat messages that are missing, duplicated or not written by a person. Check the sources again.");
   const reviewed: ReviewedChange[] = input.changes.map((change) => ({
     key: change.key, action: change.action, itemId: change.itemId,
     before: change.itemId ? clone(quote.lines.find((line) => line.itemId === change.itemId)!) : null,

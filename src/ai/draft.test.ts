@@ -33,8 +33,8 @@ describe("server-validated change drafts", () => {
     expect(draft.status).toBe("needs_designer_review");
     expect(draft.basedOnQuoteFingerprint).toBe(quoteFingerprint(willowApprovedQuote));
     expect(draft.deltaSubtotalCents).toBe(18000);
-    expect(draft.unresolved.join(" ")).toContain("旧款是否已采购");
-    expect(draft.unresolved.join(" ")).toContain("税费");
+    expect(draft.unresolved.join(" ")).toContain("whether the old item was purchased");
+    expect(draft.unresolved.join(" ")).toContain("Tax, delivery");
     expect(JSON.stringify(willowApprovedQuote)).toBe(original);
     expect(draft.sources[0].text).toBe("");
   });
@@ -114,6 +114,6 @@ describe("server-validated change drafts", () => {
     expect(withCurrent.currentDraft.changes).toHaveLength(1);
     const data = input();
     data.messages[0].text = "长".repeat(120001);
-    expect(() => modelContext(data)).toThrow("没有静默截断");
+    expect(() => modelContext(data)).toThrow("not silently truncated");
   });
 });

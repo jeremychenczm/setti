@@ -32,10 +32,10 @@ function respond(req: NextRequest, sessionId: string, body: unknown, status = 20
 }
 
 async function boundedJson(req: NextRequest): Promise<unknown> {
-  if (!req.headers.get("content-type")?.startsWith("application/json")) throw new HttpError("请求需要 JSON 格式。", 415);
+  if (!req.headers.get("content-type")?.startsWith("application/json")) throw new HttpError("The request must be JSON.", 415);
   const origin = req.headers.get("origin");
-  if (origin && origin !== req.nextUrl.origin) throw new HttpError("不接受来自其他站点的聊天写入。", 403);
-  if (!req.body) throw new HttpError("消息不能为空。", 400);
+  if (origin && origin !== req.nextUrl.origin) throw new HttpError("Chat writes from other sites are not accepted.", 403);
+  if (!req.body) throw new HttpError("The message is empty.", 400);
   const reader = req.body.getReader();
   let size = 0;
   const chunks: Uint8Array[] = [];
@@ -43,11 +43,11 @@ async function boundedJson(req: NextRequest): Promise<unknown> {
     const { value, done } = await reader.read();
     if (done) break;
     size += value.byteLength;
-    if (size > 32_768) { await reader.cancel(); throw new HttpError("消息过长，请控制在 8000 字符内。", 413); }
+    if (size > 32_768) { await reader.cancel(); throw new HttpError("The message is too long. Keep it under 8,000 characters.", 413); }
     chunks.push(value);
   }
   try { return JSON.parse(Buffer.concat(chunks).toString("utf8")); }
-  catch { throw new HttpError("无法解析消息 JSON。", 400); }
+  catch { throw new HttpError("The message JSON could not be parsed.", 400); }
 }
 
 class HttpError extends Error {
@@ -55,14 +55,14 @@ class HttpError extends Error {
 }
 
 export async function getCaseResponse(req: NextRequest, rawKey: string) {
-  if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "项目不存在。" }, { status: 404 });
+  if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404 });
   const sessionId = session(req);
   try { return respond(req, sessionId, snapshot(await chatStore().getCase(sessionId, rawKey))); }
-  catch { return respond(req, sessionId, { code: "STORAGE_UNAVAILABLE", error: "聊天存储暂不可用，请确认数据库已启动并执行迁移。" }, 503); }
+  catch { return respond(req, sessionId, { code: "STORAGE_UNAVAILABLE", error: "Chat storage is unavailable. Make sure the database is running and migrated." }, 503); }
 }
 
 export async function postCaseResponse(req: NextRequest, rawKey: string, retry = false) {
-  if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "项目不存在。" }, { status: 404 });
+  if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404 });
   const sessionId = session(req);
   let persisted = false;
   try {
@@ -87,14 +87,14 @@ export async function postCaseResponse(req: NextRequest, rawKey: string, retry =
       try { state = snapshot(await chatStore().getCase(sessionId, rawKey as CaseKey)); } catch { /* Original error remains authoritative. */ }
     }
     if (error instanceof HttpError) return respond(req, sessionId, { code: "INVALID_REQUEST", error: error.message, state }, error.status);
-    if (error instanceof z.ZodError) return respond(req, sessionId, { code: "INVALID_REQUEST", error: "消息格式错误：需要有效 ID、发言身份和不超过 8000 字符的正文。", state }, 400);
+    if (error instanceof z.ZodError) return respond(req, sessionId, { code: "INVALID_REQUEST", error: "Invalid message: it needs a valid ID, a speaker and text of no more than 8,000 characters.", state }, 400);
     if (error instanceof CaseAiError) return respond(req, sessionId, { code: "AI_FAILED", error: error.message, state }, 502);
     const code = error && typeof error === "object" && "code" in error ? String(error.code) : "STORAGE_UNAVAILABLE";
     const statuses: Record<string, number> = { CASE_BUSY: 409, IDEMPOTENCY_CONFLICT: 409, MESSAGE_NOT_FOUND: 404, INVALID_AI_TRIGGER: 400, STALE_AI_RUN: 409, STALE_MESSAGE: 409, STALE_BASELINE: 409, INVALID_INPUT: 400 };
     if (statuses[code]) {
-      const message = code === "CASE_BUSY" ? "AI 正在处理当前项目，请稍后重试。" : code === "MESSAGE_NOT_FOUND" ? "找不到本项目中的这条消息。" : code === "STALE_MESSAGE" ? "项目中已有更新的讨论。请发送一条新的 @AI 指令，避免旧消息覆盖当前意图。" : code === "STALE_BASELINE" ? "客户已确认新的报价版本。请发送新的 @AI 指令，按最新已确认版本起草。" : "消息状态已变化或请求无效，请刷新后重试。";
+      const message = code === "CASE_BUSY" ? "The AI is working on this project. Try again shortly." : code === "MESSAGE_NOT_FOUND" ? "This message was not found in the project." : code === "STALE_MESSAGE" ? "The project has newer discussion. Send a new @AI request so an older message does not override the current intent." : code === "STALE_BASELINE" ? "The client confirmed a newer quote version. Send a new @AI request to draft from the latest confirmed version." : "The message state changed or the request is invalid. Refresh and try again.";
       return respond(req, sessionId, { code, error: message, state }, statuses[code]);
     }
-    return respond(req, sessionId, { code: "STORAGE_UNAVAILABLE", error: "聊天存储暂不可用，请确认数据库与迁移状态。", state }, 503);
+    return respond(req, sessionId, { code: "STORAGE_UNAVAILABLE", error: "Chat storage is unavailable. Check the database and migrations.", state }, 503);
   }
 }

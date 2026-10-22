@@ -29,7 +29,7 @@ describe("AI orchestration", () => {
   });
   it("saves a real failure rather than manufacturing a result when not configured", async () => {
     const s = scenario();
-    await expect(runCaseAi(s.store, "session", "willow", "request", { ...s.deps, configured: () => false })).rejects.toThrow("尚未配置");
+    await expect(runCaseAi(s.store, "session", "willow", "request", { ...s.deps, configured: () => false })).rejects.toThrow("is not configured");
     expect(s.store.failAi).toHaveBeenCalledOnce();
     expect(s.store.completeAi).not.toHaveBeenCalled();
     expect(s.deps.callModel).not.toHaveBeenCalled();
@@ -68,7 +68,7 @@ describe("AI orchestration", () => {
   it("marks invalid model output failed without persisting a draft", async () => {
     const s = scenario();
     s.modelOutput.changes[0].itemId = "foreign-item";
-    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("结果校验失败");
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
     expect(s.store.completeAi).not.toHaveBeenCalled();
     expect(s.store.failAi).toHaveBeenCalledOnce();
   });

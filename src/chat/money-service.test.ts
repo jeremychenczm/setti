@@ -24,8 +24,8 @@ function scenario(text = "@AI，为什么预算和付款金额不同？") {
     projectKey: "willow", quoteId: quote.id, version: quote.version,
     checkedAt: "2026-10-21T12:10:00Z", providerRecordedAt: "2026-10-21T12:09:00Z", mode: "recorded_sandbox",
     facts: [
-      { id: "budget", text: { en: "The approved budget is not a payment receipt.", zh: "已批准预算不代表付款回执。" }, sourceIds: ["quote"] },
-      { id: "pending", text: { en: "A payment outcome is unknown; check the existing operation first.", zh: "一笔付款结果未知，需要先核对原操作。" }, sourceIds: ["quote"] },
+      { id: "budget", text: { en: "The approved budget is not a payment receipt." }, sourceIds: ["quote"] },
+      { id: "pending", text: { en: "A payment outcome is unknown; check the existing operation first." }, sourceIds: ["quote"] },
     ],
     sources: [{ id: "quote", kind: "quote", label: "Approved quote", href: "/quotes/willow", recordedAt: quote.approvedAt }],
     mandatoryFactIds: ["pending"],
@@ -64,14 +64,14 @@ describe("grounded money chat orchestration", () => {
     expect(saved.moneyAnswer).toMatchObject({ quoteId: s.context.quoteId, checkedAt: s.context.checkedAt, providerRecordedAt: s.context.providerRecordedAt });
     expect(saved.moneyAnswer?.facts.map((fact) => fact.id)).toEqual(["budget", "pending"]);
     expect(saved.moneyAnswer?.sources).toEqual(s.context.sources);
-    s.context.facts[0].text.zh = "A later transaction changed the records";
-    expect(saved.moneyAnswer?.facts[0].text.zh).toBe("已批准预算不代表付款回执。");
+    s.context.facts[0].text.en = "A later transaction changed the records";
+    expect(saved.moneyAnswer?.facts[0].text.en).toBe("The approved budget is not a payment receipt.");
   });
 
   it.each([{ ids: ["foreign-fact"] }, { ids: [] }, { ids: ["budget", "budget"] }])("rejects invalid model-selected evidence $ids", async ({ ids }) => {
     const s = scenario();
     s.output.money = { factIds: ids };
-    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("结果校验失败");
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
     expect(s.store.completeAi).not.toHaveBeenCalled();
     expect(s.store.failAi).toHaveBeenCalledOnce();
   });
@@ -79,14 +79,14 @@ describe("grounded money chat orchestration", () => {
   it("rejects a fact referencing an absent source", async () => {
     const s = scenario();
     s.context.facts[0].sourceIds = ["foreign-source"];
-    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("结果校验失败");
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
     expect(s.store.completeAi).not.toHaveBeenCalled();
   });
 
   it.each(["answer", "draft", "cancel"] as const)("does not turn a money question into ungrounded %s output", async (intent) => {
     const s = scenario();
     Object.assign(s.output, { intent, message: "已经退款 $999。", money: null });
-    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("结果校验失败");
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
     expect(s.store.completeAi).not.toHaveBeenCalled();
     expect(s.store.failAi).toHaveBeenCalledOnce();
   });
@@ -102,21 +102,21 @@ describe("grounded money chat orchestration", () => {
   it("does not permit financial claims through clarification prose", async () => {
     const s = scenario();
     Object.assign(s.output, { intent: "clarify", message: "已经退款 $999。你还想问哪笔？", money: null });
-    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("结果校验失败");
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
     expect(s.store.completeAi).not.toHaveBeenCalled();
   });
 
   it.each(["The rug was refunded.", "已经退款。", "Paid $999.", "The rug has not been refunded.", "The desk is not paid.", "地毯款项已退还。", "款项尚未收取。"])("blocks unsupported money claims in a generic answer: %s", async (message) => {
     const s = scenario("@AI What happened to this item?");
     Object.assign(s.output, { intent: "answer", message, money: null });
-    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("结果校验失败");
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
     expect(s.store.completeAi).not.toHaveBeenCalled();
   });
 
   it("fails closed before calling a model if the money snapshot cannot be read", async () => {
     const s = scenario();
     s.store.readMoneyContext.mockRejectedValue(new Error("storage unavailable"));
-    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("结果校验失败");
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
     expect(s.deps.callModel).not.toHaveBeenCalled();
     expect(s.deps.readPage).not.toHaveBeenCalled();
     expect(s.store.completeAi).not.toHaveBeenCalled();
@@ -128,7 +128,7 @@ describe("grounded money chat orchestration", () => {
     if (drift === "quote") s.context.quoteId = "different-quote";
     if (drift === "version") s.context.version += 1;
     if (drift === "case") s.context.projectKey = "maple";
-    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("批准版本已变化");
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("approved version for this project has changed");
     expect(s.deps.callModel).not.toHaveBeenCalled();
     expect(s.store.completeAi).not.toHaveBeenCalled();
   });
@@ -136,7 +136,7 @@ describe("grounded money chat orchestration", () => {
   it("preserves no-record uncertainty instead of inventing settled zero balances", async () => {
     const s = scenario();
     s.context.providerRecordedAt = null;
-    s.context.facts[1] = { id: "missing", text: { en: "No recorded payment evidence is available; payment status is unknown.", zh: "没有可用的付款记录，付款状态未知。" }, sourceIds: ["quote"] };
+    s.context.facts[1] = { id: "missing", text: { en: "No recorded payment evidence is available; payment status is unknown." }, sourceIds: ["quote"] };
     s.context.mandatoryFactIds = ["missing"];
     await runCaseAi(s.store, "session", "willow", "request", s.deps);
     const saved = s.store.completeAi.mock.calls[0][4].moneyAnswer!;
@@ -147,7 +147,7 @@ describe("grounded money chat orchestration", () => {
 
   it("omits prior reply evidence metadata from model history and supplies the fresh snapshot separately", () => {
     const s = scenario();
-    const historical: MoneyAnswer = { ...structuredClone(s.context), quoteId: "historic-quote", facts: [{ id: "historical-only-fact", text: { en: "Historical marker", zh: "历史记录标记" }, sourceIds: ["historic-source"] }], sources: [{ id: "historic-source", kind: "payment", label: "old-provider-only-marker", href: "/quotes/willow", recordedAt: "2026-10-20T00:00:00Z" }] };
+    const historical: MoneyAnswer = { ...structuredClone(s.context), quoteId: "historic-quote", facts: [{ id: "historical-only-fact", text: { en: "Historical marker" }, sourceIds: ["historic-source"] }], sources: [{ id: "historic-source", kind: "payment", label: "old-provider-only-marker", href: "/quotes/willow", recordedAt: "2026-10-20T00:00:00Z" }] };
     const previous: CaseMessage = { ...human("previous-reply", "An earlier money answer."), actor: "assistant", moneyAnswer: historical };
     const serialized = modelContext({ quote: s.state.quote!, messages: [previous, ...s.state.messages], pages: [], current: s.state.draft, triggerId: "request", moneyContext: s.context });
     const payload = JSON.parse(serialized);

@@ -30,7 +30,7 @@ export function DraftCard({ draft, messages, onSourceMessage, pricingHref, canPr
     <article className="space-y-5 p-4">
       <div>
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px]">
-          <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-800">待设计师核价</span>
+          <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-800">Awaiting designer pricing</span>
           <span className="text-[var(--muted)]">Draft {draft.revision} · based on V{draft.basedOnVersion}</span>
           {draft.changes.length > 1 && <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">{draft.changes.length} changes · one draft</span>}
         </div>

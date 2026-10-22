@@ -69,7 +69,7 @@ describe("pricing review calculation", () => {
     d.sources[0].products[0].currency = "EUR";
     d.sources[0].products[0].priceEvidence = '{"price":"125.00","priceCurrency":"EUR"}';
     const input = ready(q, d); input.changes[0].after!.currency = "USD";
-    expect(previewPricing(q, d, input).problems.join()).toContain("不能只修改币种标签");
+    expect(previewPricing(q, d, input).problems.join()).toContain("changing the currency label alone is not enough");
     input.changes[0].priceEvidence += " Designer obtained a separate USD vendor quote: USD 125 per item.";
     expect(previewPricing(q, d, input).ready).toBe(true);
   });
@@ -83,7 +83,7 @@ describe("pricing review calculation", () => {
     const body = prepareChangeOrder(q, d, input, messages());
     expect(body.lines.find((entry) => entry.itemId === "rug")).toMatchObject({ origin: "unchanged", unitPriceCents: 30_000, taxCents: 2_400, freightCents: 600 });
     expect(body.lines.find((entry) => entry.origin === "old_item_cost")).toMatchObject({ itemId: "old-cost-draft-1-change-0", quantity: 1, category: "service", unitPriceCents: 2_000, taxCents: 0, freightCents: 0 });
-    expect(body.lines.find((entry) => entry.origin === "old_item_cost")?.specification).toContain("全部已核实成本");
+    expect(body.lines.find((entry) => entry.origin === "old_item_cost")?.specification).toContain("every verified cost");
     expect(body.changes[0].before?.unitPriceCents).toBe(10_000);
     expect(body.changes[0].before?.quantity).toBe(2);
     expect(body.constraints).toEqual(d.constraints);
@@ -94,7 +94,7 @@ describe("pricing review calculation", () => {
   it("old handling uses server-owned quote even if AI before/subtotals are wrong", () => {
     const q = quote(); const d = draft(); d.changes[0].before!.unitPriceCents = 1;
     const input = ready(q, d); input.changes[0].oldItemHandling = "retained"; input.changes[0].oldItemCostCents = 21_999;
-    expect(previewPricing(q, d, input).problems.join()).toContain("原报价整行总额");
+    expect(previewPricing(q, d, input).problems.join()).toContain("full original line total");
     input.changes[0].oldItemCostCents = 22_000;
     expect(previewPricing(q, d, input).ready).toBe(true);
     expect(prepareChangeOrder(q, d, input, messages()).changes[0].before?.unitPriceCents).toBe(10_000);
@@ -216,7 +216,7 @@ describe("pricing review calculation", () => {
   it("rejects an empty V2 but permits a real same-price replacement", () => {
     const q = quote(); const removeAll = draft([change("remove"), change("remove", "rug")]); const empty = ready(q, removeAll);
     empty.changes.forEach((entry) => { entry.oldItemCostCents = 0; });
-    expect(previewPricing(q, removeAll, empty).problems.join()).toContain("至少需保留一行");
+    expect(previewPricing(q, removeAll, empty).problems.join()).toContain("must keep at least one line");
     const d = draft(); const input = ready(q, d);
     input.changes[0].after!.quantity = 2; input.changes[0].after!.unitPriceCents = 10_000; input.changes[0].after!.taxCents = 1_500; input.changes[0].after!.freightCents = 500; input.changes[0].oldItemCostCents = 0;
     expect(previewPricing(q, d, input)).toMatchObject({ ready: true, deltaTotalCents: 0 });
@@ -225,7 +225,7 @@ describe("pricing review calculation", () => {
   it("blocks a true no-op but recognizes a changed brand as business content", () => {
     const q = quote(); const d = draft([change("quantity")]); const input = ready(q, d);
     const old = q.lines[0]; Object.assign(input.changes[0].after!, item(old), { returnPolicy: old.returnPolicy, taxCents: old.taxCents, freightCents: old.freightCents, returnable: null, restockingFeeBps: null, customMade: false, leadTimeDays: old.leadTimeDays });
-    expect(previewPricing(q, d, input).problems.join()).toContain("未修改任何报价内容");
+    expect(previewPricing(q, d, input).problems.join()).toContain("No quote content changed");
     input.changes[0].after!.brand = "New confirmed brand";
     expect(previewPricing(q, d, input)).toMatchObject({ ready: true, deltaTotalCents: 0 });
   });
@@ -270,7 +270,7 @@ describe("pricing review calculation", () => {
     for (const patch of [{ name: "Different chair" }, { vendor: "Another supplier" }, { sku: "ANOTHER-SKU" }, { specification: "Another selected variant" }, { category: "service" }, { unitLabel: "2-pack" }]) {
       const input = ready(q, d);
       Object.assign(input.changes[0].after!, patch);
-      expect(() => validatePricingInput(q, d, input)).toThrow("数量变更不能换成另一商品");
+      expect(() => validatePricingInput(q, d, input)).toThrow("A quantity change cannot switch to another product");
       expect(previewPricing(q, d, input).ready).toBe(false);
     }
     const priced = ready(q, d);
@@ -283,16 +283,16 @@ describe("pricing review calculation", () => {
     d.basedOnQuoteFingerprint = quoteFingerprint(q);
     const input = ready(q, d);
     q.lines[1].taxCents += 100;
-    expect(() => createPricingInput(q, d)).toThrow("原批准报价内容已变化");
-    expect(() => validatePricingInput(q, d, input)).toThrow("原批准报价内容已变化");
+    expect(() => createPricingInput(q, d)).toThrow("The approved quote has changed");
+    expect(() => validatePricingInput(q, d, input)).toThrow("The approved quote has changed");
     const legacy = draft();
     delete legacy.basedOnQuoteFingerprint;
-    expect(() => validatePricingInput(q, legacy, input)).toThrow("原批准报价内容已变化");
+    expect(() => validatePricingInput(q, legacy, input)).toThrow("The approved quote has changed");
     const restored = quote();
     const touchedLegacy = draft();
     delete touchedLegacy.basedOnQuoteFingerprint;
     restored.lines[0].unitPriceCents += 1;
-    expect(() => createPricingInput(restored, touchedLegacy)).toThrow("原物品与当前批准报价不一致");
+    expect(() => createPricingInput(restored, touchedLegacy)).toThrow("no longer matches the approved quote");
   });
 
   it("uses a baseline tag stable across JSON object key ordering", () => {

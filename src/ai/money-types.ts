@@ -11,8 +11,8 @@ export interface MoneySource {
 
 export interface MoneyFact {
   id: string;
-  /** Localized complete statements derived from the same recorded facts. */
-  text: { en: string; zh: string };
+  /** A complete statement derived from the recorded facts. Older stored answers may also carry a legacy translation, which is not shown. */
+  text: { en: string };
   sourceIds: string[];
 }
 

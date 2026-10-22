@@ -27,10 +27,10 @@ export interface ProductPageOptions {
 
 function safeUrl(value: string): URL {
   let url: URL;
-  try { url = new URL(value); } catch { throw new ProductPageError("商品链接不是有效的网址。", "UNSAFE_URL"); }
+  try { url = new URL(value); } catch { throw new ProductPageError("The product link is not a valid URL.", "UNSAFE_URL"); }
   const host = url.hostname.toLowerCase().replace(/\.$/, "");
   if (value.length > 4096 || url.protocol !== "https:" || (url.port && url.port !== "443") || url.username || url.password || isIP(host.replace(/^\[|\]$/g, "")) || !host.includes(".") || /(^|\.)(localhost|local|internal|lan|home|test|invalid|onion)$/.test(host)) {
-    throw new ProductPageError("仅支持公共 HTTPS 商品链接；不允许本地地址、IP 地址、登录凭据或非标准端口。", "UNSAFE_URL");
+    throw new ProductPageError("Only public HTTPS product links are supported. Local addresses, IP addresses, login credentials and non-standard ports are not allowed.", "UNSAFE_URL");
   }
   url.hash = "";
   return url;
@@ -53,7 +53,7 @@ function publicAddress(address: string): boolean {
 
 function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
-    const aborted = () => reject(new ProductPageError("读取商品页超时，请稍后重试。", "TIMEOUT"));
+    const aborted = () => reject(new ProductPageError("Reading the product page timed out. Try again shortly.", "TIMEOUT"));
     if (signal.aborted) { aborted(); return; }
     signal.addEventListener("abort", aborted, { once: true });
     promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", aborted));
@@ -75,7 +75,7 @@ async function pinnedFetch(url: URL, address: Address, signal: AbortSignal): Pro
       let size = 0;
       res.on("data", (chunk: Buffer) => {
         size += chunk.length;
-        if (size > MAX_BYTES) { res.destroy(new ProductPageError("商品页过大，未读取。", "TOO_LARGE")); return; }
+        if (size > MAX_BYTES) { res.destroy(new ProductPageError("The product page is too large to read.", "TOO_LARGE")); return; }
         chunks.push(chunk);
       });
       res.on("error", reject);
@@ -93,11 +93,11 @@ async function pinnedFetch(url: URL, address: Address, signal: AbortSignal): Pro
 
 async function boundedHtml(response: Response, signal: AbortSignal): Promise<string> {
   const length = Number(response.headers.get("content-length"));
-  if (length > MAX_BYTES) throw new ProductPageError("商品页过大，未读取。", "TOO_LARGE");
+  if (length > MAX_BYTES) throw new ProductPageError("The product page is too large to read.", "TOO_LARGE");
   const type = response.headers.get("content-type")?.toLowerCase() ?? "";
-  if (!/^(text\/html|application\/xhtml\+xml)(;|$)/.test(type)) throw new ProductPageError("链接没有返回 HTML 商品页。", "UNSUPPORTED_CONTENT");
-  if (response.headers.get("content-encoding") && response.headers.get("content-encoding") !== "identity") throw new ProductPageError("商品页返回了不支持的压缩格式，资料仍待确认。", "UNSUPPORTED_CONTENT");
-  if (!response.body) throw new ProductPageError("商品页内容为空。", "EMPTY_PAGE");
+  if (!/^(text\/html|application\/xhtml\+xml)(;|$)/.test(type)) throw new ProductPageError("The link did not return an HTML product page.", "UNSUPPORTED_CONTENT");
+  if (response.headers.get("content-encoding") && response.headers.get("content-encoding") !== "identity") throw new ProductPageError("The product page used an unsupported compression format. Product details still need confirmation.", "UNSUPPORTED_CONTENT");
+  if (!response.body) throw new ProductPageError("The product page is empty.", "EMPTY_PAGE");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let bytes = 0;
@@ -107,7 +107,7 @@ async function boundedHtml(response: Response, signal: AbortSignal): Promise<str
       const part = await abortable(reader.read(), signal);
       if (part.done) break;
       bytes += part.value.byteLength;
-      if (bytes > MAX_BYTES) throw new ProductPageError("商品页过大，未读取。", "TOO_LARGE");
+      if (bytes > MAX_BYTES) throw new ProductPageError("The product page is too large to read.", "TOO_LARGE");
       html += decoder.decode(part.value, { stream: true });
     }
     return html + decoder.decode();
@@ -166,7 +166,7 @@ function extract(html: string, pageId: string): { title: string; text: string; p
     const attrs = attributes(tag);
     if (attrs.content) meta[(attrs.property ?? attrs.name ?? "").toLowerCase()] = attrs.content;
   }
-  const title = plain(meta["og:title"] ?? html.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i)?.[1] ?? "商品页");
+  const title = plain(meta["og:title"] ?? html.match(/<title\b[^>]*>([\s\S]*?)<\/title\s*>/i)?.[1] ?? "Product page");
   const main = html.match(/<main\b[^>]*>([\s\S]*?)<\/main\s*>/i)?.[1] ?? html.match(/<body\b[^>]*>([\s\S]*?)<\/body\s*>/i)?.[1] ?? html;
   const text = plain(main).slice(0, 20_000);
   const nodes: JsonObject[] = [];
@@ -244,8 +244,8 @@ function extract(html: string, pageId: string): { title: string; text: string; p
       product.currency = null;
     }
   }
-  if (!text && !products.length) throw new ProductPageError("商品页没有可读内容。", "EMPTY_PAGE");
-  if (!products.length && /access denied|request blocked|verify you are human|captcha|robot check/i.test(`${title} ${text.slice(0, 2000)}`)) throw new ProductPageError("商家阻止了自动读取，商品资料仍待确认。", "BLOCKED_BY_MERCHANT");
+  if (!text && !products.length) throw new ProductPageError("The product page has no readable content.", "EMPTY_PAGE");
+  if (!products.length && /access denied|request blocked|verify you are human|captcha|robot check/i.test(`${title} ${text.slice(0, 2000)}`)) throw new ProductPageError("The merchant blocked automated reading. Product details still need confirmation.", "BLOCKED_BY_MERCHANT");
   return { title, text, products };
 }
 
@@ -258,25 +258,25 @@ export async function readProductPage(value: string, options: ProductPageOptions
   try {
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
       const addresses = await abortable(resolve(current.hostname), controller.signal);
-      if (!addresses.length || addresses.some(({ address }) => !publicAddress(address))) throw new ProductPageError("商品链接解析到了非公共网络地址，已拒绝读取。", "UNSAFE_DNS");
+      if (!addresses.length || addresses.some(({ address }) => !publicAddress(address))) throw new ProductPageError("The product link resolved to a non-public network address, so it was not read.", "UNSAFE_DNS");
       const response = await abortable(options.fetcher ? options.fetcher(current.toString(), { method: "GET", redirect: "manual", signal: controller.signal, headers: { Accept: "text/html,application/xhtml+xml" } }) : pinnedFetch(current, addresses[0], controller.signal), controller.signal);
-      if (response.redirected) throw new ProductPageError("读取器不允许未检查的自动跳转。", "UNSAFE_REDIRECT");
+      if (response.redirected) throw new ProductPageError("The reader does not follow unchecked redirects.", "UNSAFE_REDIRECT");
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         await response.body?.cancel();
         const location = response.headers.get("location");
-        if (!location || hop === MAX_REDIRECTS) throw new ProductPageError("商品链接跳转过多或跳转地址缺失。", "REDIRECT_LIMIT");
+        if (!location || hop === MAX_REDIRECTS) throw new ProductPageError("The product link redirected too many times or without a location.", "REDIRECT_LIMIT");
         current = safeUrl(new URL(location, current).toString());
         continue;
       }
-      if (!response.ok) { await response.body?.cancel(); throw new ProductPageError(`商家商品页返回 HTTP ${response.status}，资料仍待确认。`, "HTTP_ERROR"); }
+      if (!response.ok) { await response.body?.cancel(); throw new ProductPageError(`The merchant's product page returned HTTP ${response.status}. Product details still need confirmation.`, "HTTP_ERROR"); }
       const html = await boundedHtml(response, controller.signal);
       const result = extract(html, id);
       return { id, url: current.toString(), fetchedAt: (options.now?.() ?? new Date()).toISOString(), ...result, error: null };
     }
-    throw new ProductPageError("商品链接跳转过多。", "REDIRECT_LIMIT");
+    throw new ProductPageError("The product link redirected too many times.", "REDIRECT_LIMIT");
   } catch (error) {
     if (error instanceof ProductPageError) throw error;
-    if (controller.signal.aborted) throw new ProductPageError("读取商品页超时，请稍后重试。", "TIMEOUT");
-    throw new ProductPageError("无法读取商家商品页；请稍后重试或由设计师确认商品资料。", "FETCH_FAILED");
+    if (controller.signal.aborted) throw new ProductPageError("Reading the product page timed out. Try again shortly.", "TIMEOUT");
+    throw new ProductPageError("The merchant's product page could not be read. Try again shortly, or have the designer confirm the product details.", "FETCH_FAILED");
   } finally { clearTimeout(timer); }
 }
