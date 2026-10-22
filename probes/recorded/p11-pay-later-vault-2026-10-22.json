@@ -1,0 +1,829 @@
+{
+  "probe": "p11-pay-later-vault",
+  "recordedAt": "2026-10-22T23:33:38.074Z",
+  "environment": "sandbox",
+  "notes": [
+    "Buttons eligible with intent=authorize: PayPal yes, Pay Later yes",
+    "Buttons eligible with intent=authorize: PayPal yes, Pay Later yes",
+    "paylater result: {\"button\":\"paylater\",\"authorized\":true,\"authorizationStatus\":\"CREATED\",\"vaultStatus\":\"VAULTED\",\"vaultTokenReturned\":true,\"followUpOrderStatus\":\"COMPLETED\",\"followUpHold\":\"CREATED\"}",
+    "paypal result: {\"button\":\"paypal\",\"authorized\":true,\"authorizationStatus\":\"CREATED\",\"vaultStatus\":\"VAULTED\",\"vaultTokenReturned\":true,\"followUpOrderStatus\":\"COMPLETED\",\"followUpHold\":\"CREATED\"}",
+    "Both buttons tested."
+  ],
+  "steps": [
+    {
+      "step": "create AUTHORIZE order that saves PayPal (paylater button)",
+      "request": {
+        "intent": "AUTHORIZE",
+        "purchaseUnits": [
+          {
+            "amount": {
+              "currencyCode": "USD",
+              "value": "200.00"
+            },
+            "description": "Setti probe save PayPal with paylater",
+            "customId": "probe-p11-paylater"
+          }
+        ],
+        "paymentSource": {
+          "paypal": {
+            "attributes": {
+              "vault": {
+                "storeInVault": "ON_SUCCESS",
+                "usageType": "MERCHANT",
+                "usagePattern": "UNSCHEDULED_POSTPAID",
+                "permitMultiplePaymentTokens": true,
+                "description": "Setti probe: save PayPal for this project"
+              }
+            },
+            "experienceContext": {
+              "brandName": "Setti Probe",
+              "returnUrl": "https://example.com/setti-probe/return",
+              "cancelUrl": "https://example.com/setti-probe/cancel",
+              "shippingPreference": "NO_SHIPPING",
+              "userAction": "PAY_NOW"
+            }
+          }
+        }
+      },
+      "ok": true,
+      "startedAt": "2026-10-22T23:24:25.061Z",
+      "durationMs": 1328,
+      "statusCode": 200,
+      "debugId": "f636970a0709f",
+      "response": {
+        "id": "00H9495806042334S",
+        "paymentSource": {
+          "paypal": {}
+        },
+        "intent": "AUTHORIZE",
+        "purchaseUnits": [
+          {
+            "referenceId": "default",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "200.00"
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "description": "Setti probe save PayPal with paylater",
+            "customId": "probe-p11-paylater"
+          }
+        ],
+        "status": "PAYER_ACTION_REQUIRED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/00H9495806042334S",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://www.sandbox.paypal.com/checkoutnow?token=00H9495806042334S",
+            "rel": "payer-action",
+            "method": "GET"
+          }
+        ]
+      }
+    },
+    {
+      "step": "authorize order (paylater button)",
+      "request": {
+        "orderId": "00H9495806042334S"
+      },
+      "ok": true,
+      "startedAt": "2026-10-22T23:27:05.064Z",
+      "durationMs": 1763,
+      "statusCode": 201,
+      "debugId": "f31723030cc3e",
+      "response": {
+        "createTime": "2026-10-22T23:24:25Z",
+        "updateTime": "2026-10-22T23:27:05Z",
+        "id": "00H9495806042334S",
+        "paymentSource": {
+          "paypal": {
+            "emailAddress": "[redacted]",
+            "accountId": "[redacted]",
+            "accountStatus": "VERIFIED",
+            "name": "[redacted]",
+            "address": "[redacted]",
+            "attributes": {
+              "vault": {
+                "id": "[redacted]",
+                "status": "VAULTED",
+                "links": [
+                  {
+                    "href": "https://api.sandbox.paypal.com/v3/vault/payment-tokens/[redacted]",
+                    "rel": "self",
+                    "method": "GET"
+                  },
+                  {
+                    "href": "https://api.sandbox.paypal.com/v3/vault/payment-tokens/[redacted]",
+                    "rel": "delete",
+                    "method": "DELETE"
+                  },
+                  {
+                    "href": "https://api.sandbox.paypal.com/v2/checkout/orders/00H9495806042334S",
+                    "rel": "up",
+                    "method": "GET"
+                  }
+                ],
+                "customer": "[redacted]"
+              }
+            }
+          }
+        },
+        "intent": "AUTHORIZE",
+        "payer": {
+          "emailAddress": "[redacted]",
+          "payerId": "[redacted]",
+          "name": "[redacted]",
+          "address": "[redacted]"
+        },
+        "purchaseUnits": [
+          {
+            "referenceId": "default",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "200.00"
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "description": "Setti probe save PayPal with paylater",
+            "customId": "probe-p11-paylater",
+            "softDescriptor": "TEST STORE",
+            "payments": {
+              "authorizations": [
+                {
+                  "status": "CREATED",
+                  "id": "8EN44158R18749940",
+                  "amount": {
+                    "currencyCode": "USD",
+                    "value": "200.00"
+                  },
+                  "customId": "probe-p11-paylater",
+                  "sellerProtection": {
+                    "status": "ELIGIBLE",
+                    "disputeCategories": [
+                      "ITEM_NOT_RECEIVED",
+                      "UNAUTHORIZED_TRANSACTION"
+                    ]
+                  },
+                  "expirationTime": "2026-11-20T23:27:05Z",
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/8EN44158R18749940",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/8EN44158R18749940/capture",
+                      "rel": "capture",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/8EN44158R18749940/void",
+                      "rel": "void",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/8EN44158R18749940/reauthorize",
+                      "rel": "reauthorize",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/00H9495806042334S",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "createTime": "2026-10-22T23:27:05Z",
+                  "updateTime": "2026-10-22T23:27:05Z"
+                }
+              ]
+            }
+          }
+        ],
+        "status": "COMPLETED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/00H9495806042334S",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      }
+    },
+    {
+      "step": "create follow-up hold from the saved token (paylater), no buyer",
+      "request": {
+        "intent": "AUTHORIZE",
+        "purchaseUnits": [
+          {
+            "amount": {
+              "currencyCode": "USD",
+              "value": "50.00"
+            },
+            "description": "Setti probe follow-up hold from the paylater token",
+            "customId": "probe-p11-paylater-follow"
+          }
+        ],
+        "paymentSource": {
+          "paypal": {
+            "vaultId": "[redacted]",
+            "storedCredential": {
+              "paymentInitiator": "MERCHANT",
+              "usage": "SUBSEQUENT",
+              "usagePattern": "UNSCHEDULED_POSTPAID"
+            }
+          }
+        }
+      },
+      "ok": true,
+      "startedAt": "2026-10-22T23:27:06.828Z",
+      "durationMs": 1880,
+      "statusCode": 201,
+      "debugId": "f875415050c2a",
+      "response": {
+        "createTime": "2026-10-22T23:27:07Z",
+        "updateTime": "2026-10-22T23:27:08Z",
+        "id": "5MG9750598077735S",
+        "paymentSource": {
+          "paypal": {
+            "emailAddress": "[redacted]",
+            "accountId": "[redacted]",
+            "accountStatus": "VERIFIED",
+            "name": "[redacted]",
+            "address": "[redacted]",
+            "storedCredential": {
+              "paymentInitiator": "MERCHANT",
+              "usagePattern": "UNSCHEDULED_POSTPAID",
+              "usage": "SUBSEQUENT"
+            }
+          }
+        },
+        "intent": "AUTHORIZE",
+        "payer": {
+          "emailAddress": "[redacted]",
+          "payerId": "[redacted]",
+          "name": "[redacted]",
+          "address": "[redacted]"
+        },
+        "purchaseUnits": [
+          {
+            "referenceId": "default",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "50.00"
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "description": "Setti probe follow-up hold from the paylater token",
+            "customId": "probe-p11-paylater-follow",
+            "payments": {
+              "authorizations": [
+                {
+                  "status": "CREATED",
+                  "id": "05C634205J8851312",
+                  "amount": {
+                    "currencyCode": "USD",
+                    "value": "50.00"
+                  },
+                  "customId": "probe-p11-paylater-follow",
+                  "sellerProtection": {
+                    "status": "ELIGIBLE",
+                    "disputeCategories": [
+                      "ITEM_NOT_RECEIVED",
+                      "UNAUTHORIZED_TRANSACTION"
+                    ]
+                  },
+                  "expirationTime": "2026-11-20T23:27:08Z",
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/05C634205J8851312",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/05C634205J8851312/capture",
+                      "rel": "capture",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/05C634205J8851312/void",
+                      "rel": "void",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/05C634205J8851312/reauthorize",
+                      "rel": "reauthorize",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/5MG9750598077735S",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "createTime": "2026-10-22T23:27:08Z",
+                  "updateTime": "2026-10-22T23:27:08Z"
+                }
+              ]
+            }
+          }
+        ],
+        "status": "COMPLETED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/5MG9750598077735S",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      }
+    },
+    {
+      "step": "create AUTHORIZE order that saves PayPal (paypal button)",
+      "request": {
+        "intent": "AUTHORIZE",
+        "purchaseUnits": [
+          {
+            "amount": {
+              "currencyCode": "USD",
+              "value": "200.00"
+            },
+            "description": "Setti probe save PayPal with paypal",
+            "customId": "probe-p11-paypal"
+          }
+        ],
+        "paymentSource": {
+          "paypal": {
+            "attributes": {
+              "vault": {
+                "storeInVault": "ON_SUCCESS",
+                "usageType": "MERCHANT",
+                "usagePattern": "UNSCHEDULED_POSTPAID",
+                "permitMultiplePaymentTokens": true,
+                "description": "Setti probe: save PayPal for this project"
+              }
+            },
+            "experienceContext": {
+              "brandName": "Setti Probe",
+              "returnUrl": "https://example.com/setti-probe/return",
+              "cancelUrl": "https://example.com/setti-probe/cancel",
+              "shippingPreference": "NO_SHIPPING",
+              "userAction": "PAY_NOW"
+            }
+          }
+        }
+      },
+      "ok": true,
+      "startedAt": "2026-10-22T23:32:53.649Z",
+      "durationMs": 980,
+      "statusCode": 200,
+      "debugId": "f132516b2f606",
+      "response": {
+        "id": "5FH723302W515512L",
+        "paymentSource": {
+          "paypal": {}
+        },
+        "intent": "AUTHORIZE",
+        "purchaseUnits": [
+          {
+            "referenceId": "default",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "200.00"
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "description": "Setti probe save PayPal with paypal",
+            "customId": "probe-p11-paypal"
+          }
+        ],
+        "status": "PAYER_ACTION_REQUIRED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/5FH723302W515512L",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://www.sandbox.paypal.com/checkoutnow?token=5FH723302W515512L",
+            "rel": "payer-action",
+            "method": "GET"
+          }
+        ]
+      }
+    },
+    {
+      "step": "authorize order (paypal button)",
+      "request": {
+        "orderId": "5FH723302W515512L"
+      },
+      "ok": true,
+      "startedAt": "2026-10-22T23:33:31.226Z",
+      "durationMs": 1533,
+      "statusCode": 201,
+      "debugId": "f695348383f7c",
+      "response": {
+        "createTime": "2026-10-22T23:32:54Z",
+        "updateTime": "2026-10-22T23:33:31Z",
+        "id": "5FH723302W515512L",
+        "paymentSource": {
+          "paypal": {
+            "emailAddress": "[redacted]",
+            "accountId": "[redacted]",
+            "accountStatus": "VERIFIED",
+            "name": "[redacted]",
+            "address": "[redacted]",
+            "attributes": {
+              "vault": {
+                "id": "[redacted]",
+                "status": "VAULTED",
+                "links": [
+                  {
+                    "href": "https://api.sandbox.paypal.com/v3/vault/payment-tokens/[redacted]",
+                    "rel": "self",
+                    "method": "GET"
+                  },
+                  {
+                    "href": "https://api.sandbox.paypal.com/v3/vault/payment-tokens/[redacted]",
+                    "rel": "delete",
+                    "method": "DELETE"
+                  },
+                  {
+                    "href": "https://api.sandbox.paypal.com/v2/checkout/orders/5FH723302W515512L",
+                    "rel": "up",
+                    "method": "GET"
+                  }
+                ],
+                "customer": "[redacted]"
+              }
+            }
+          }
+        },
+        "intent": "AUTHORIZE",
+        "payer": {
+          "emailAddress": "[redacted]",
+          "payerId": "[redacted]",
+          "name": "[redacted]",
+          "address": "[redacted]"
+        },
+        "purchaseUnits": [
+          {
+            "referenceId": "default",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "200.00"
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "description": "Setti probe save PayPal with paypal",
+            "customId": "probe-p11-paypal",
+            "payments": {
+              "authorizations": [
+                {
+                  "status": "CREATED",
+                  "id": "13U74394L45711002",
+                  "amount": {
+                    "currencyCode": "USD",
+                    "value": "200.00"
+                  },
+                  "customId": "probe-p11-paypal",
+                  "sellerProtection": {
+                    "status": "ELIGIBLE",
+                    "disputeCategories": [
+                      "ITEM_NOT_RECEIVED",
+                      "UNAUTHORIZED_TRANSACTION"
+                    ]
+                  },
+                  "expirationTime": "2026-11-20T23:33:31Z",
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/13U74394L45711002",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/13U74394L45711002/capture",
+                      "rel": "capture",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/13U74394L45711002/void",
+                      "rel": "void",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/13U74394L45711002/reauthorize",
+                      "rel": "reauthorize",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/5FH723302W515512L",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "createTime": "2026-10-22T23:33:31Z",
+                  "updateTime": "2026-10-22T23:33:31Z"
+                }
+              ]
+            }
+          }
+        ],
+        "status": "COMPLETED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/5FH723302W515512L",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      }
+    },
+    {
+      "step": "create follow-up hold from the saved token (paypal), no buyer",
+      "request": {
+        "intent": "AUTHORIZE",
+        "purchaseUnits": [
+          {
+            "amount": {
+              "currencyCode": "USD",
+              "value": "50.00"
+            },
+            "description": "Setti probe follow-up hold from the paypal token",
+            "customId": "probe-p11-paypal-follow"
+          }
+        ],
+        "paymentSource": {
+          "paypal": {
+            "vaultId": "[redacted]",
+            "storedCredential": {
+              "paymentInitiator": "MERCHANT",
+              "usage": "SUBSEQUENT",
+              "usagePattern": "UNSCHEDULED_POSTPAID"
+            }
+          }
+        }
+      },
+      "ok": true,
+      "startedAt": "2026-10-22T23:33:32.760Z",
+      "durationMs": 2081,
+      "statusCode": 201,
+      "debugId": "f904436183f51",
+      "response": {
+        "createTime": "2026-10-22T23:33:33Z",
+        "updateTime": "2026-10-22T23:33:34Z",
+        "id": "2LL607436K744004A",
+        "paymentSource": {
+          "paypal": {
+            "emailAddress": "[redacted]",
+            "accountId": "[redacted]",
+            "accountStatus": "VERIFIED",
+            "name": "[redacted]",
+            "address": "[redacted]",
+            "storedCredential": {
+              "paymentInitiator": "MERCHANT",
+              "usagePattern": "UNSCHEDULED_POSTPAID",
+              "usage": "SUBSEQUENT"
+            }
+          }
+        },
+        "intent": "AUTHORIZE",
+        "payer": {
+          "emailAddress": "[redacted]",
+          "payerId": "[redacted]",
+          "name": "[redacted]",
+          "address": "[redacted]"
+        },
+        "purchaseUnits": [
+          {
+            "referenceId": "default",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "50.00"
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "description": "Setti probe follow-up hold from the paypal token",
+            "customId": "probe-p11-paypal-follow",
+            "payments": {
+              "authorizations": [
+                {
+                  "status": "CREATED",
+                  "id": "2089720316644660V",
+                  "amount": {
+                    "currencyCode": "USD",
+                    "value": "50.00"
+                  },
+                  "customId": "probe-p11-paypal-follow",
+                  "sellerProtection": {
+                    "status": "ELIGIBLE",
+                    "disputeCategories": [
+                      "ITEM_NOT_RECEIVED",
+                      "UNAUTHORIZED_TRANSACTION"
+                    ]
+                  },
+                  "expirationTime": "2026-11-20T23:33:34Z",
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/2089720316644660V",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/2089720316644660V/capture",
+                      "rel": "capture",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/2089720316644660V/void",
+                      "rel": "void",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/2089720316644660V/reauthorize",
+                      "rel": "reauthorize",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/2LL607436K744004A",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "createTime": "2026-10-22T23:33:34Z",
+                  "updateTime": "2026-10-22T23:33:34Z"
+                }
+              ]
+            }
+          }
+        ],
+        "status": "COMPLETED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/2LL607436K744004A",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      }
+    },
+    {
+      "step": "void hold 1 (cleanup)",
+      "request": {
+        "authorizationId": "8EN44158R18749940"
+      },
+      "ok": true,
+      "startedAt": "2026-10-22T23:33:34.843Z",
+      "durationMs": 669,
+      "statusCode": 200,
+      "debugId": "f29233047ec83",
+      "response": {
+        "status": "VOIDED",
+        "id": "8EN44158R18749940",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "200.00"
+        },
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "expirationTime": "2026-11-20T15:27:05-08:00",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/8EN44158R18749940",
+            "rel": "self",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-22T16:27:05-07:00",
+        "updateTime": "2026-10-22T16:33:35-07:00"
+      }
+    },
+    {
+      "step": "void hold 2 (cleanup)",
+      "request": {
+        "authorizationId": "05C634205J8851312"
+      },
+      "ok": true,
+      "startedAt": "2026-10-22T23:33:35.512Z",
+      "durationMs": 897,
+      "statusCode": 200,
+      "debugId": "f7891207a95ac",
+      "response": {
+        "status": "VOIDED",
+        "id": "05C634205J8851312",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "50.00"
+        },
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "expirationTime": "2026-11-20T15:27:08-08:00",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/05C634205J8851312",
+            "rel": "self",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-22T16:27:08-07:00",
+        "updateTime": "2026-10-22T16:33:36-07:00"
+      }
+    },
+    {
+      "step": "void hold 3 (cleanup)",
+      "request": {
+        "authorizationId": "13U74394L45711002"
+      },
+      "ok": true,
+      "startedAt": "2026-10-22T23:33:36.409Z",
+      "durationMs": 768,
+      "statusCode": 200,
+      "debugId": "f789120b87ad7",
+      "response": {
+        "status": "VOIDED",
+        "id": "13U74394L45711002",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "200.00"
+        },
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "expirationTime": "2026-11-20T15:33:31-08:00",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/13U74394L45711002",
+            "rel": "self",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-22T16:33:31-07:00",
+        "updateTime": "2026-10-22T16:33:37-07:00"
+      }
+    },
+    {
+      "step": "void hold 4 (cleanup)",
+      "request": {
+        "authorizationId": "2089720316644660V"
+      },
+      "ok": true,
+      "startedAt": "2026-10-22T23:33:37.178Z",
+      "durationMs": 895,
+      "statusCode": 200,
+      "debugId": "f197470eae075",
+      "response": {
+        "status": "VOIDED",
+        "id": "2089720316644660V",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "50.00"
+        },
+        "sellerProtection": {
+          "status": "ELIGIBLE",
+          "disputeCategories": [
+            "ITEM_NOT_RECEIVED",
+            "UNAUTHORIZED_TRANSACTION"
+          ]
+        },
+        "expirationTime": "2026-11-20T15:33:34-08:00",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/2089720316644660V",
+            "rel": "self",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-22T16:33:34-07:00",
+        "updateTime": "2026-10-22T16:33:37-07:00"
+      }
+    }
+  ]
+}
