@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, ne } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { approvals, paymentOperations, paypalAuthorizations, paypalCaptures, paypalRefunds, revisionLines, revisions } from "../db/schema";
+import { approvals, paymentOperations, paypalAuthorizations, paypalCaptures, paypalRefunds, revisionLines, revisions, supplierEvents } from "../db/schema";
 import { chatCases, chatMessages } from "../chat/schema";
 import { createChatStore } from "../chat/store";
 import { changeOrders, pricingCases } from "../pricing/schema";
@@ -24,6 +24,7 @@ export interface ProjectLedger {
   captures: (typeof paypalCaptures.$inferSelect)[];
   refunds: (typeof paypalRefunds.$inferSelect)[];
   operations: (typeof paymentOperations.$inferSelect)[];
+  supplierEvents: (typeof supplierEvents.$inferSelect)[];
 }
 
 /** Every money record and operation of one business project. */
@@ -33,7 +34,8 @@ export async function readLedger(db: Reader, projectId: string): Promise<Project
   const refunds = (await db.select({ refund: paypalRefunds }).from(paypalRefunds)
     .innerJoin(paypalCaptures, eq(paypalRefunds.captureId, paypalCaptures.id)).where(eq(paypalCaptures.projectId, projectId))).map(({ refund }) => refund);
   const operations = await db.select().from(paymentOperations).where(eq(paymentOperations.projectId, projectId));
-  return { authorizations, captures, refunds, operations };
+  const events = await db.select().from(supplierEvents).where(eq(supplierEvents.projectId, projectId));
+  return { authorizations, captures, refunds, operations, supplierEvents: events };
 }
 
 export interface FundingIdentity { itemId: string; side: "baseline" | "proposed" }
@@ -101,7 +103,8 @@ export function fundingFactsFrom(document: FrozenChangeOrder, itemMapping: Recor
       continue;
     }
     const key = `${identity.side}:${identity.itemId}`;
-    const fact = facts.get(key) ?? { ...identity, heldCents: 0, capturedCents: 0, refundedCents: 0 };
+    const credited = ledger.supplierEvents.some((event) => event.kind === "credit_confirmed" && event.changeOrderId === document.id && event.itemId === authorization.itemId);
+    const fact = facts.get(key) ?? { ...identity, heldCents: 0, capturedCents: 0, refundedCents: 0, ...(credited ? { vendorCreditConfirmed: true } : {}) };
     fact.heldCents += heldCents; fact.capturedCents += capturedCents; fact.refundedCents += refundedCents;
     if (authorization.reauthorizedFromId && authorizations.some((old) => old.id === authorization.reauthorizedFromId && ["created", "partially_captured"].includes(old.status))) {
       fact.uncertainReason = "A reauthorization chain still has an open original hold. Reconcile the provider state before using it.";

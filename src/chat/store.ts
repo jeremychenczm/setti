@@ -3,6 +3,7 @@ import { and, asc, eq, gt, ne } from "drizzle-orm";
 import { isAiInvocation } from "../ai/intent";
 import { currentCaseQuote } from "../approval/baseline";
 import { quoteFingerprint } from "../quotes/fingerprint";
+import { readCaseMoneyContext } from "../ai/money-context";
 import type { Db } from "../db/client";
 import { chatCases, chatMessages } from "./schema";
 import type { AppendMessageInput, BeginAiResult, CaseKey, CaseMessage, ChatStore, StoredCase } from "./types";
@@ -54,6 +55,7 @@ function publicMessage(message: MessageRow): CaseMessage {
     aiState: message.aiState,
     error: message.error,
     model: message.model,
+    moneyAnswer: message.moneyAnswer,
   };
 }
 
@@ -79,6 +81,10 @@ export function createChatStore(db: Db): ChatStore {
   }
 
   return {
+    readMoneyContext(sessionId, projectKey) {
+      validateScope(sessionId, projectKey);
+      return readCaseMoneyContext(db, sessionId, projectKey);
+    },
     getCase(sessionId, projectKey) {
       return withinCase(sessionId, projectKey, snapshot);
     },
@@ -149,7 +155,14 @@ export function createChatStore(db: Db): ChatStore {
             throw new ChatStoreError("STALE_BASELINE", "The approved quote changed. Start a new @AI request against the current approved version.");
           }
         }
-        await tx.insert(chatMessages).values({ caseId: row.id, id: randomUUID(), actor: "assistant", text: result.text, replyToMessageId: messageId, aiState: "completed", model: result.model });
+        if (result.moneyAnswer) {
+          const quote = await currentCaseQuote(tx, row.id, projectKey);
+          if (result.moneyAnswer.quoteId !== quote.id || result.moneyAnswer.version !== quote.version) {
+            throw new ChatStoreError("STALE_BASELINE", "The approved quote changed while the recorded money answer was prepared. Ask again against the latest version.");
+          }
+          if ("draft" in result) throw new ChatStoreError("INVALID_INPUT", "A recorded money answer cannot modify a draft.");
+        }
+        await tx.insert(chatMessages).values({ caseId: row.id, id: randomUUID(), actor: "assistant", text: result.text, replyToMessageId: messageId, aiState: "completed", model: result.model, moneyAnswer: result.moneyAnswer ?? null });
         await tx.update(chatMessages).set({ aiState: "completed", error: null, model: result.model })
           .where(and(eq(chatMessages.caseId, row.id), eq(chatMessages.id, messageId)));
         const [updated] = await tx.update(chatCases).set({

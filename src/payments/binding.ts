@@ -9,6 +9,8 @@
 import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { revisions } from "../db/schema";
+import { buildFundingPlan, type FundingPlan } from "../approval/funding";
+import { fundingFactsFrom, fundingIdentities, readLedger, type ProjectLedger } from "../approval/store";
 import { changeOrderDecisions } from "../approval/schema";
 import { chatCases } from "../chat/schema";
 import { changeOrderContentHash } from "../pricing/document";
@@ -78,4 +80,23 @@ export async function lockConfirmedVersion(tx: Tx, sessionId: string, orderId: s
     order, caseId: scope.caseId, projectId: bridge.projectId, itemMapping: bridge.itemMapping,
     bind: (itemId) => ({ changeOrderId: order.id, revisionId: order.revisionId, contentHash, revisionContentHash: order.revisionContentHash, itemId }),
   };
+}
+
+/** One funding line of a confirmed version: its quote item and which side of a replacement it is. */
+export interface LineRef {
+  itemId: string;
+  side: "baseline" | "proposed";
+}
+
+/** The business item behind a line of the confirmed version. */
+export function businessItem(version: ConfirmedVersion, line: LineRef): string {
+  const id = fundingIdentities(version.order, version.itemMapping).byGroup.get(`${line.side}:${line.itemId}`);
+  if (!id) throw new PaymentActionError("NOT_FOUND", "This line has no business item in the confirmed version.");
+  return id;
+}
+
+/** The project's recorded money and the funding plan it gives for the confirmed version. */
+export async function confirmedPlan(tx: Tx, version: ConfirmedVersion): Promise<{ ledger: ProjectLedger; plan: FundingPlan }> {
+  const ledger = await readLedger(tx, version.projectId);
+  return { ledger, plan: buildFundingPlan(version.order, fundingFactsFrom(version.order, version.itemMapping, ledger)) };
 }

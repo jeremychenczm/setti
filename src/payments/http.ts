@@ -2,17 +2,29 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { SandboxGuardError } from "@/config/paypalEnv";
 import { createDb } from "@/db/client";
-import { cancelPayment, checkPayment, operationChangeOrder, returnFromPayPal, startAuthorization, type LinkBuilder } from "./actions";
+import { cancelPayment, checkPayment, operationChangeOrder, returnFromPayPal, startAuthorization, startCapture, startRefund, startRelease, type LinkBuilder } from "./actions";
 import { PaymentActionError } from "./binding";
 import { PaymentOperationError } from "./operations";
 import { sandboxPayPal } from "./server";
+import { callbackState, validCallbackState } from "./callback-state";
+import { recordSupplierCredit, recordSupplierOrder } from "./supplier";
 import { paymentsWorkspace } from "./workspace";
 
 const uuid = z.uuid();
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
+const line = { itemId: z.string().min(1).max(300), side: z.enum(["baseline", "proposed"]), contentHash: hash, revisionContentHash: hash };
+const cents = z.number().int().min(0).max(2_000_000_000);
 const actionSchema = z.discriminatedUnion("action", [
-  z.strictObject({ action: z.literal("authorize"), itemId: z.string().min(1).max(300), side: z.enum(["baseline", "proposed"]), contentHash: hash, revisionContentHash: hash }),
+  z.strictObject({ action: z.literal("authorize"), ...line }),
+  z.strictObject({ action: z.literal("capture"), ...line }),
+  z.strictObject({ action: z.literal("release"), ...line }),
+  z.strictObject({ action: z.literal("refund"), ...line }),
+  z.strictObject({
+    action: z.literal("supplier_order"), ...line, quantity: z.number().int().min(1).max(10_000), unitPriceCents: cents, taxCents: cents, freightCents: cents,
+    inStock: z.boolean(), leadTimeDays: z.number().int().min(0).max(3_650).nullable(), reference: z.string().trim().min(1).max(200), note: z.string().trim().max(1_000),
+  }),
+  z.strictObject({ action: z.literal("supplier_credit"), ...line, creditCents: cents, reference: z.string().trim().min(1).max(200), note: z.string().trim().max(1_000) }),
   z.strictObject({ action: z.literal("check"), operationId: uuid }),
   z.strictObject({ action: z.literal("cancel"), operationId: uuid }),
 ]);
@@ -33,8 +45,8 @@ function session(req: NextRequest): string | null {
 function links(req: NextRequest): LinkBuilder {
   const base = (process.env.SETTI_PUBLIC_URL?.trim() || req.nextUrl.origin).replace(/\/$/, "");
   return (operationId) => ({
-    returnUrl: `${base}/api/payments/paypal/return?op=${operationId}`,
-    cancelUrl: `${base}/api/payments/paypal/cancel?op=${operationId}`,
+    returnUrl: `${base}/api/payments/paypal/return?op=${operationId}&state=${callbackState(operationId, "return")}`,
+    cancelUrl: `${base}/api/payments/paypal/cancel?op=${operationId}&state=${callbackState(operationId, "cancel")}`,
   });
 }
 
@@ -84,14 +96,37 @@ export async function postPaymentsResponse(req: NextRequest, id: string) {
   if (!sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "This share link is read-only. Payment steps run only from the browser that owns the demo case." }, { status: 403, headers });
   try {
     const input = actionSchema.parse(await boundedJson(req));
-    const paypal = sandboxPayPal();
-    const operation = input.action === "authorize"
-      ? await startAuthorization(db(), paypal, sessionId, id, input, links(req))
-      : input.action === "check"
-        ? await checkPayment(db(), paypal, sessionId, id, input.operationId, links(req))
-        : await cancelPayment(db(), paypal, sessionId, id, input.operationId);
-    const redirectUrl = input.action === "authorize" && operation.status === "pending" && !operation.paypalResourceId ? operation.approvalUrl : null;
-    return NextResponse.json({ workspace: await paymentsWorkspace(db(), sessionId, id), operationId: operation.id, redirectUrl }, { headers });
+    let operationId: string | null = null, redirectUrl: string | null = null;
+    switch (input.action) {
+      case "authorize": {
+        const operation = await startAuthorization(db(), sandboxPayPal(), sessionId, id, input, links(req));
+        operationId = operation.id;
+        redirectUrl = operation.status === "pending" && !operation.paypalResourceId ? operation.approvalUrl : null;
+        break;
+      }
+      case "capture":
+        operationId = (await startCapture(db(), sandboxPayPal(), sessionId, id, input))[0]?.id ?? null;
+        break;
+      case "release":
+        operationId = (await startRelease(db(), sandboxPayPal(), sessionId, id, input))[0]?.id ?? null;
+        break;
+      case "refund":
+        operationId = (await startRefund(db(), sandboxPayPal(), sessionId, id, input))[0]?.id ?? null;
+        break;
+      case "supplier_order":
+        await recordSupplierOrder(db(), sessionId, id, input);
+        break;
+      case "supplier_credit":
+        await recordSupplierCredit(db(), sessionId, id, input);
+        break;
+      case "check":
+        operationId = (await checkPayment(db(), sandboxPayPal(), sessionId, id, input.operationId, links(req))).id;
+        break;
+      case "cancel":
+        operationId = (await cancelPayment(db(), sandboxPayPal(), sessionId, id, input.operationId)).id;
+        break;
+    }
+    return NextResponse.json({ workspace: await paymentsWorkspace(db(), sessionId, id), operationId, redirectUrl }, { headers });
   } catch (error) { return fail(error); }
 }
 
@@ -108,6 +143,7 @@ export async function paypalRedirectResponse(req: NextRequest, outcome: "return"
   };
   let orderId: string | null = null;
   try {
+    if (!validCallbackState(operationId.data, outcome, req.nextUrl.searchParams.get("state"))) return NextResponse.redirect(home, 303);
     orderId = await operationChangeOrder(db(), operationId.data);
     const result = await returnFromPayPal(db(), sandboxPayPal(), operationId.data, req.nextUrl.searchParams.get("token"), outcome);
     if (!result) return orderId ? page(orderId, "unmatched") : NextResponse.redirect(home, 303);

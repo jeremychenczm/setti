@@ -9,6 +9,7 @@ import type { ApprovedQuoteReport } from "@/quotes/types";
 import type { Person } from "../demo-data";
 import { Avatar } from "../workspace/primitives";
 import { DraftCard } from "./DraftCard";
+import { MoneyAnswerCard } from "./MoneyAnswerCard";
 import { useCaseChat } from "./useCaseChat";
 
 interface CaseChatProps {
@@ -51,6 +52,9 @@ export function CaseChat({ projectKey, quote, onOpenQuote, onSelectCase, onOpenL
   const client: Person = { id: `${projectKey}-client`, name: displayName(currentQuote.clientName), role: "client", avatar: "/avatars/client.webp" };
   const selectedPerson = actor === "designer" ? designer : client;
   const sendDisabled = loading || running || !snapshot || hasUnsent;
+  const mixedExampleAvailable = projectKey === "maple" && !draft
+    && currentQuote.lines.some((line) => line.itemId === "chair")
+    && currentQuote.lines.some((line) => line.itemId === "rug");
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
@@ -81,6 +85,16 @@ export function CaseChat({ projectKey, quote, onOpenQuote, onSelectCase, onOpenL
 
   function mentionAi() {
     setText((previous) => isAiInvocation(previous) ? previous : `@AI ${previous}`);
+    input.current?.focus();
+  }
+
+  function tryMixedChange() {
+    setText("@AI Replace the Lounge chair with one light oak writing desk and return the Wool rug. Keep all other items unchanged.");
+    input.current?.focus();
+  }
+
+  function askAboutFunds() {
+    setText("@AI Explain this project's recorded payments and anything still pending. Show the evidence.");
     input.current?.focus();
   }
 
@@ -125,10 +139,11 @@ export function CaseChat({ projectKey, quote, onOpenQuote, onSelectCase, onOpenL
           </div>
 
           <div className="border-t border-[var(--line)] bg-white px-4 py-3 sm:px-5">
+            {mixedExampleAvailable && !text.trim() && <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-blue-50/60 px-3 py-2 text-[11px] leading-relaxed text-slate-600"><span className="flex-1">One request can change several items. Each keeps its own payment progress.</span><button disabled={sendDisabled} onClick={tryMixedChange} className="font-medium text-[var(--primary)] hover:underline disabled:opacity-50">Try chair + rug example</button></div>}
             <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-[var(--muted)]"><Avatar person={selectedPerson} size="sm" /><label htmlFor={`case-role-${projectKey}`}>Speaking as</label><select id={`case-role-${projectKey}`} value={actor} onChange={(event) => setActor(event.target.value as HumanActor)} className="min-w-0 max-w-[240px] rounded-md border border-[var(--line)] bg-white px-2 py-1 text-[11px] text-slate-700"><option value="client">Demo client · {client.name}</option><option value="designer">Demo designer · {designer.name}</option></select></div>
             <div className="rounded-2xl border border-[var(--line)] bg-[var(--canvas)] px-3 py-2.5 focus-within:border-blue-200">
               <textarea ref={input} aria-label="Project message" value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); } }} disabled={sendDisabled} placeholder="Discuss this case, paste a product link, or ask @AI…" maxLength={8000} rows={2} className="max-h-40 min-h-[44px] w-full resize-y bg-transparent text-[13px] leading-relaxed outline-none placeholder:text-[var(--muted)] disabled:opacity-60" />
-              <div className="mt-1 flex items-center gap-2"><button disabled={sendDisabled} onClick={mentionAi} title="Mention AI" className="flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-blue-50 disabled:opacity-50"><AtSign className="h-3 w-3" />AI</button><span className="hidden items-center gap-1 text-[10px] text-[var(--muted)] sm:flex"><Link2 className="h-3 w-3" />Paste product links in the message</span>{text.length > 7600 && <span className={`text-[10px] ${text.length > 8000 ? "text-red-600" : "text-[var(--muted)]"}`}>{text.length}/8000</span>}<button onClick={submit} disabled={!text.trim() || text.trim().length > 8000 || sendDisabled} aria-label="Send project message" className="ml-auto rounded-full bg-[var(--primary)] p-2 text-white hover:bg-blue-600 disabled:bg-slate-200 disabled:text-slate-400"><SendHorizontal className="h-4 w-4" /></button></div>
+              <div className="mt-1 flex flex-wrap items-center gap-2"><button disabled={sendDisabled} onClick={mentionAi} title="Mention AI" className="flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-blue-50 disabled:opacity-50"><AtSign className="h-3 w-3" />AI</button>{!text.trim() && <button disabled={sendDisabled} onClick={askAboutFunds} className="rounded-full bg-white px-2.5 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-blue-50 disabled:opacity-50">Ask about payments</button>}<span className="hidden items-center gap-1 text-[10px] text-[var(--muted)] sm:flex"><Link2 className="h-3 w-3" />Paste product links in the message</span>{text.length > 7600 && <span className={`text-[10px] ${text.length > 8000 ? "text-red-600" : "text-[var(--muted)]"}`}>{text.length}/8000</span>}<button onClick={submit} disabled={!text.trim() || text.trim().length > 8000 || sendDisabled} aria-label="Send project message" className="ml-auto rounded-full bg-[var(--primary)] p-2 text-white hover:bg-blue-600 disabled:bg-slate-200 disabled:text-slate-400"><SendHorizontal className="h-4 w-4" /></button></div>
             </div>
           </div>
         </div>
@@ -147,8 +162,9 @@ function MessageBubble({ message, person, highlighted, unsaved, running, canRetr
       <div className={`flex items-start gap-2.5 ${designer ? "justify-end" : ""}`}>
         {!designer && (assistant ? <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800"><Bot className="h-4 w-4" /></span> : <Avatar person={person} size="sm" />)}
         <div className={`max-w-[88%] rounded-xl px-3.5 py-2.5 sm:max-w-[82%] ${assistant ? "bg-[var(--agent)]" : designer ? "bg-[var(--primary-soft)]" : "bg-[var(--canvas)]"}`}>
-          <div className={`mb-1 text-[11px] font-semibold ${assistant ? "text-amber-800" : "text-slate-600"}`}>{assistant ? "Change Agent" : person.name}</div>
+          <div className={`mb-1 text-[11px] font-semibold ${assistant ? "text-amber-800" : "text-slate-600"}`}>{assistant ? message.moneyAnswer ? "Money Agent" : "Change Agent" : person.name}</div>
           <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed">{linkedText(message.text)}</p>
+          {assistant && message.moneyAnswer && <MoneyAnswerCard answer={message.moneyAnswer} chinese={/[\u3400-\u9fff]/u.test(message.text)} />}
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] text-[var(--muted)]"><time dateTime={message.createdAt}>{timeLabel(message.createdAt)}</time>{unsaved && <span>{running ? "Sending…" : "Not saved yet"}</span>}{assistant && <span>{message.model === "system" ? "Guidance" : message.model ? `AI · ${message.model}` : "AI response"}</span>}{message.aiState === "failed" && <span className="text-red-600">AI request failed</span>}</div>
           {message.aiState === "failed" && <div className="mt-2 border-t border-red-100 pt-2 text-[11px] text-red-700"><p>{message.error ?? "The AI did not complete this request."}</p>{canRetryAi ? <button onClick={onRetry} disabled={running} className="mt-1 flex items-center gap-1 font-medium hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Retry AI request</button> : <p className="mt-1">后续已有新讨论，请发一条新的 @AI 指令</p>}</div>}
         </div>

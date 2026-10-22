@@ -7,6 +7,7 @@ import { createChatStore } from "./store";
 import { caseQuote } from "./cases";
 import { quoteFingerprint } from "../quotes/fingerprint";
 import type { AppendMessageInput, ChangeDraft, ChatStore } from "./types";
+import { buildMoneyAnswer } from "../ai/money-answer";
 
 describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -66,6 +67,40 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     // The orchestration layer can recover this failure through its normal run-bound failure path.
     await store.failAi(sessionId, "willow", input.id, run.runId, "The approved baseline changed.");
     expect((await store.getCase(sessionId, "willow")).activeMessageId).toBeNull();
+  });
+
+  it("persists a recorded money snapshot across reloads and retries without changing an existing draft", async () => {
+    const first = human();
+    await store.appendMessage(sessionId, "willow", first);
+    const firstRun = await start(first.id);
+    const existing = draft(first.id);
+    await store.completeAi(sessionId, "willow", first.id, firstRun.runId, { text: "Review draft", draft: existing, model: "test-model" });
+    const question = human("@AI Explain this project's recorded payments.");
+    await store.appendMessage(sessionId, "willow", question);
+    const run = await start(question.id);
+    const context = await store.readMoneyContext!(sessionId, "willow");
+    const answer = buildMoneyAnswer(context, ["quote"], question.text);
+    const expected = structuredClone(answer.moneyAnswer);
+    const result = { ...answer, model: "test-model" };
+    await store.completeAi(sessionId, "willow", question.id, run.runId, result);
+    answer.moneyAnswer.facts[0].text.en = "Later records must not rewrite the stored answer";
+    await store.completeAi(sessionId, "willow", question.id, run.runId, result);
+    const reloaded = await createChatStore(handle.db).getCase(sessionId, "willow");
+    expect(reloaded.draft).toEqual(existing);
+    expect(reloaded.messages.filter((m) => m.replyToMessageId === question.id)).toHaveLength(1);
+    expect(reloaded.messages.find((m) => m.replyToMessageId === question.id)?.moneyAnswer).toEqual(expected);
+    expect((await store.getCase(randomUUID(), "willow")).messages).toEqual([]);
+  });
+
+  it("rejects money answers for a stale approved version and never couples them to draft writes", async () => {
+    const question = human("@AI Explain my payments.");
+    await store.appendMessage(sessionId, "willow", question);
+    const run = await start(question.id);
+    const context = await store.readMoneyContext!(sessionId, "willow");
+    const answer = buildMoneyAnswer(context, ["quote"], question.text);
+    await expect(store.completeAi(sessionId, "willow", question.id, run.runId, { ...answer, moneyAnswer: { ...answer.moneyAnswer, quoteId: randomUUID(), version: 9 }, model: "test-model" })).rejects.toMatchObject({ code: "STALE_BASELINE" });
+    await expect(store.completeAi(sessionId, "willow", question.id, run.runId, { ...answer, draft: null, model: "test-model" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect((await store.getCase(sessionId, "willow")).messages).toHaveLength(1);
   });
 
   it("requires the full baseline fingerprint on newly completed AI drafts", async () => {

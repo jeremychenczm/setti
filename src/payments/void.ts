@@ -13,7 +13,8 @@ import {
   type OperationBinding, type PaymentOperation, type PaypalAuthorization,
 } from "./operations";
 import type { AuthorizationReceipt, PayPalPayments, PayPalResult } from "./paypal";
-import { holdStatus } from "./receipts";
+import { noteInCase } from "./notes";
+import { formatCents, holdStatus } from "./receipts";
 
 /** Writes down a void, once per business event. The amount recorded is what is still held right now. */
 export async function requestVoid(
@@ -54,6 +55,7 @@ export async function executeVoid(db: Db, paypal: PayPalPayments, operationId: s
 async function recordVoid(db: Db, operation: PaymentOperation, authorization: PaypalAuthorization): Promise<PaymentOperation> {
   return db.transaction(async (tx) => {
     await tx.update(paypalAuthorizations).set({ status: "voided" }).where(eq(paypalAuthorizations.id, authorization.id));
+    await noteInCase(tx, operation, ({ version, itemName }) => `PayPal Sandbox released the hold for V${version} · ${itemName}: authorization ${authorization.paypalAuthorizationId} is voided and ${formatCents(operation.amountCents)} USD is no longer held. This is a release, not a refund; nothing was charged.`);
     const [done] = await tx
       .update(paymentOperations)
       .set({ status: "succeeded", paypalResourceId: authorization.paypalAuthorizationId, failureCode: null, failureMessage: null, updatedAt: new Date() })

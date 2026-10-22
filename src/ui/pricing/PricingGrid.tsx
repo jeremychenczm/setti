@@ -4,6 +4,7 @@ import { AllCommunityModule, type ColDef } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { useMemo } from "react";
 import type { PricingChangeInput } from "@/pricing/types";
+import type { ApprovedQuoteLine } from "@/quotes/types";
 import { centsText, pricingTheme } from "./common";
 
 export type EditableGridField = "name" | "vendor" | "sku" | "quantity" | "unitLabel" | "unitPriceCents" | "taxCents" | "freightCents";
@@ -30,18 +31,21 @@ const modules = [AllCommunityModule];
 const editableFields: EditableGridField[] = ["name", "vendor", "sku", "quantity", "unitLabel", "unitPriceCents", "taxCents", "freightCents"];
 const quantityIdentityFields = new Set(["name", "vendor", "sku", "unitLabel"]);
 
-export function PricingGrid({ changes, raw, disabled, selectedKey, onSelect, onEdit }: { changes: PricingChangeInput[]; raw: RawFields; disabled: boolean; selectedKey: string | null; onSelect: (key: string) => void; onEdit: (key: string, field: EditableGridField, value: string) => void }) {
-  const rows = useMemo<PricingRow[]>(() => changes.map((change) => ({
-    key: change.key, action: change.action, name: change.after?.name ?? "Remove original item", vendor: change.after?.vendor ?? "", sku: change.after?.sku ?? "",
-    quantity: raw[fieldKey(change.key, "quantity")] ?? (change.after ? String(change.after.quantity) : ""), unitLabel: change.after?.unitLabel ?? "", currency: change.after?.currency ?? "Unconfirmed",
-    unitPriceCents: raw[fieldKey(change.key, "unitPriceCents")] ?? centsText(change.after?.unitPriceCents ?? null),
-    taxCents: raw[fieldKey(change.key, "taxCents")] ?? centsText(change.after?.taxCents ?? null),
-    freightCents: raw[fieldKey(change.key, "freightCents")] ?? centsText(change.after?.freightCents ?? null),
-    hasAfter: change.after !== null, confirmed: change.confirmed ? "Reviewed" : "Needs review",
-  })), [changes, raw]);
+export function PricingGrid({ changes, baselineLines, raw, disabled, selectedKey, onSelect, onEdit }: { changes: PricingChangeInput[]; baselineLines: readonly Pick<ApprovedQuoteLine, "itemId" | "name" | "vendor" | "sku">[]; raw: RawFields; disabled: boolean; selectedKey: string | null; onSelect: (key: string) => void; onEdit: (key: string, field: EditableGridField, value: string) => void }) {
+  const rows = useMemo<PricingRow[]>(() => changes.map((change) => {
+    const before = baselineLines.find((line) => line.itemId === change.itemId);
+    return {
+      key: change.key, action: change.action, name: change.after?.name ?? before?.name ?? "Original item", vendor: change.after?.vendor ?? before?.vendor ?? "", sku: change.after?.sku ?? before?.sku ?? "",
+      quantity: raw[fieldKey(change.key, "quantity")] ?? (change.after ? String(change.after.quantity) : ""), unitLabel: change.after?.unitLabel ?? "", currency: change.after?.currency ?? "Unconfirmed",
+      unitPriceCents: raw[fieldKey(change.key, "unitPriceCents")] ?? centsText(change.after?.unitPriceCents ?? null),
+      taxCents: raw[fieldKey(change.key, "taxCents")] ?? centsText(change.after?.taxCents ?? null),
+      freightCents: raw[fieldKey(change.key, "freightCents")] ?? centsText(change.after?.freightCents ?? null),
+      hasAfter: change.after !== null, confirmed: change.confirmed ? "Reviewed" : "Needs review",
+    };
+  }), [changes, baselineLines, raw]);
   const columns = useMemo<ColDef<PricingRow>[]>(() => [
     { field: "action", headerName: "Change", width: 105, editable: false },
-    { field: "name", headerName: "Proposed item", minWidth: 190, flex: 2, pinned: "left" },
+    { field: "name", headerName: "Item / replacement", minWidth: 190, flex: 2, pinned: "left" },
     { field: "vendor", headerName: "Seller", minWidth: 135 },
     { field: "sku", headerName: "SKU / reference", minWidth: 130 },
     { field: "quantity", headerName: "Qty", width: 85 },

@@ -5,6 +5,7 @@ import { aiTask, isAiInvocation } from "@/ai/intent";
 import { aiConfigured, callChangeModel } from "@/ai/model";
 import { buildDraft } from "@/ai/draft";
 import { readProductPage } from "@/ai/product-page";
+import { buildMoneyAnswer, hasUnsupportedMoneyClaim, isMoneyQuestion } from "@/ai/money-answer";
 
 export function messageUrls(text: string): string[] {
   const matches = text.match(/https?:\/\/[^\s<>"'，。！？；、）》）\u3000]+/gu) ?? [];
@@ -39,14 +40,27 @@ export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKe
     if (!deps.configured()) throw new Error("尚未配置模型 API。请配置服务端密钥并重启，随后可重试这条消息；当前没有生成 AI 草稿。");
     const messages = state.messages.slice(0, triggerIndex + 1);
     const urls = [...new Set(messages.filter((message) => message.actor !== "assistant").flatMap((message) => messageUrls(message.text)))];
-    if (urls.length > 4) throw new Error("本轮测试每个项目最多读取 4 个不同商品链接。消息已保存；系统没有省略其他链接或聊天。");
-    const pages = await Promise.all(urls.map(async (url) => {
+    const moneyQuestion = isMoneyQuestion(trigger.text);
+    const moneyContext = store.readMoneyContext ? await store.readMoneyContext(sessionId, key) : null;
+    const quote = state.quote ?? caseQuote(key);
+    if (moneyContext && (moneyContext.quoteId !== quote.id || moneyContext.version !== quote.version || moneyContext.projectKey !== key)) throw new Error("当前项目的批准版本已变化，请发送新的 @AI 提问。");
+    // A read-only money question must not fetch stale product links or be blocked by their count.
+    const deferPages = moneyQuestion || urls.length > 4;
+    const pages = deferPages ? [] : await Promise.all(urls.map(async (url) => {
       try { return await deps.readPage(url); }
       catch (error) { return failedPage(url, error instanceof Error ? error.message : "商品页面读取失败"); }
     }));
-    const quote = state.quote ?? caseQuote(key);
-    const result = await deps.callModel({ quote, messages, pages, current: state.draft, triggerId: messageId });
-    const generated = buildDraft({ output: result.output, quote, messages, pages, current: state.draft, triggerId: messageId, model: result.model });
+    const result = await deps.callModel({ quote, messages, pages, current: state.draft, triggerId: messageId, moneyContext });
+    if (result.output.intent === "money") {
+      if (!moneyContext || result.output.changes.length || !result.output.money) throw new Error("Missing money evidence");
+      const generated = buildMoneyAnswer(moneyContext, result.output.money.factIds, trigger.text);
+      return await store.completeAi(sessionId, key, messageId, runId, { ...generated, model: result.model });
+    }
+    if (result.output.money != null || (moneyQuestion && result.output.intent !== "clarify") || (["answer", "clarify"].includes(result.output.intent) && hasUnsupportedMoneyClaim(result.output.message))) throw new Error("Ungrounded financial answer");
+    if (deferPages && urls.length > 4 && result.output.intent === "draft") throw new Error("本轮测试每个项目最多读取 4 个不同商品链接。消息已保存；系统没有省略其他链接或聊天。");
+    const output = { ...result.output };
+    delete output.money;
+    const generated = buildDraft({ output, quote, messages, pages, current: state.draft, triggerId: messageId, model: result.model });
     return await store.completeAi(sessionId, key, messageId, runId, { ...generated, model: result.model });
   } catch (error) {
     // Never persist API error bodies, secrets, SQL, or upstream request headers.

@@ -7,35 +7,21 @@
  */
 import { eq } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { items, paymentOperations } from "../db/schema";
-import { buildFundingPlan } from "../approval/funding";
-import { fundingFactsFrom, fundingIdentities, readLedger } from "../approval/store";
+import { items, paymentOperations, paypalCaptures, paypalRefunds } from "../db/schema";
+import type { ProjectLedger } from "../approval/store";
 import { changeOrders } from "../pricing/schema";
 import { cancelCheckout, completeAuthorization, createCheckout, type CheckoutLinks } from "./authorize";
-import { lockConfirmedVersion, PaymentActionError, type ConfirmedVersion, type ShownVersion, type Tx } from "./binding";
-import { executeCapture } from "./capture";
+import { businessItem, confirmedPlan, lockConfirmedVersion, PaymentActionError, type LineRef, type ShownVersion } from "./binding";
+import { executeCapture, refreshCapture } from "./capture";
 import { insertOperation, type PaymentOperation } from "./operations";
 import type { PayPalPayments } from "./paypal";
+import { executeRefund, refreshRefund } from "./refund";
 import { executeVoid } from "./void";
 
-export interface LineRef {
-  itemId: string;
-  side: "baseline" | "proposed";
-}
+export type { LineRef } from "./binding";
 
 /** Builds the PayPal return and cancel links for an operation. */
 export type LinkBuilder = (operationId: string) => CheckoutLinks;
-
-function businessItem(version: ConfirmedVersion, line: LineRef): string {
-  const id = fundingIdentities(version.order, version.itemMapping).byGroup.get(`${line.side}:${line.itemId}`);
-  if (!id) throw new PaymentActionError("NOT_FOUND", "This line has no business item in the confirmed version.");
-  return id;
-}
-
-async function plan(tx: Tx, version: ConfirmedVersion) {
-  const ledger = await readLedger(tx, version.projectId);
-  return { ledger, plan: buildFundingPlan(version.order, fundingFactsFrom(version.order, version.itemMapping, ledger)) };
-}
 
 /** What the buyer sees on PayPal for an authorization. */
 async function checkoutDescription(db: Pick<Db, "select">, operation: PaymentOperation): Promise<string> {
@@ -52,7 +38,7 @@ export async function startAuthorization(db: Db, paypal: PayPalPayments, session
   const operation = await db.transaction(async (tx) => {
     const version = await lockConfirmedVersion(tx, sessionId, orderId, input);
     const itemId = businessItem(version, input);
-    const { ledger, plan: funding } = await plan(tx, version);
+    const { ledger, plan: funding } = await confirmedPlan(tx, version);
     const open = ledger.operations.find((entry) => entry.kind === "authorize" && entry.itemId === itemId && (entry.status === "pending" || entry.status === "unknown"));
     if (open) {
       if (open.changeOrderId === version.order.id) return open;
@@ -62,10 +48,149 @@ export async function startAuthorization(db: Db, paypal: PayPalPayments, session
     const action = funding.actions.find((entry) => entry.kind === "new_authorization" && entry.itemId === input.itemId && entry.side === input.side);
     const line = funding.lines.find((entry) => entry.itemId === input.itemId && entry.side === input.side);
     if (!action || line?.category !== "furniture") throw new PaymentActionError("NOT_AVAILABLE", `This line needs no new authorization under V${version.order.version}.`);
-    const attempt = 1 + ledger.operations.filter((entry) => entry.kind === "authorize" && entry.changeOrderId === version.order.id && entry.itemId === itemId).length;
-    return insertOperation(tx, { businessKey: `authorize:${version.order.id}:${itemId}:${attempt}`, projectId: version.projectId, kind: "authorize", amountCents: action.amountCents, binding: version.bind(itemId) });
+    const prefix = `authorize:${version.order.id}:${itemId}:`;
+    return insertOperation(tx, { businessKey: `${prefix}${attempt(ledger, "authorize", prefix)}`, projectId: version.projectId, kind: "authorize", amountCents: action.amountCents, binding: version.bind(itemId) });
   });
   return createCheckout(db, paypal, operation, links(operation.id), { description: await checkoutDescription(db, operation) });
+}
+
+/** Holds of one business item that can still be captured or voided, oldest first, with what each still holds. */
+function openHolds(ledger: ProjectLedger, itemId: string, now = new Date()) {
+  return ledger.authorizations
+    .filter((hold) => hold.itemId === itemId && (hold.status === "created" || hold.status === "partially_captured") && !(hold.expiresAt && hold.expiresAt.getTime() <= now.getTime()))
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+    .flatMap((hold) => {
+      const taken = ledger.captures.filter((capture) => capture.authorizationId === hold.id && capture.status !== "declined");
+      const heldCents = hold.amountCents - taken.reduce((total, capture) => total + capture.amountCents, 0);
+      return taken.some((capture) => capture.finalCapture) || heldCents <= 0 ? [] : [{ hold, heldCents }];
+    });
+}
+
+/** Completed captures of one business item that still have money to refund, newest first. */
+function refundableCaptures(ledger: ProjectLedger, itemId: string) {
+  const holds = new Set(ledger.authorizations.filter((hold) => hold.itemId === itemId).map((hold) => hold.id));
+  return ledger.captures
+    .filter((capture) => capture.status === "completed" && capture.authorizationId && holds.has(capture.authorizationId))
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .flatMap((capture) => {
+      const returned = ledger.refunds.filter((refund) => refund.captureId === capture.id && refund.status !== "failed").reduce((total, refund) => total + refund.amountCents, 0);
+      const refundableCents = capture.amountCents - returned;
+      return refundableCents > 0 ? [{ capture, refundableCents }] : [];
+    });
+}
+
+/** Runs each operation that is not finished yet, one after another; finished ones are returned as they are. */
+async function runEach(operations: PaymentOperation[], run: (id: string) => Promise<PaymentOperation>): Promise<PaymentOperation[]> {
+  const results: PaymentOperation[] = [];
+  for (const operation of operations) results.push(operation.status === "succeeded" || operation.status === "failed" ? operation : await run(operation.id));
+  return results;
+}
+
+/** The next attempt number for a money move on one record, so a failed attempt is never reused. */
+function attempt(ledger: ProjectLedger, kind: PaymentOperation["kind"], prefix: string): number {
+  return 1 + ledger.operations.filter((operation) => operation.kind === kind && operation.businessKey.startsWith(prefix)).length;
+}
+
+/**
+ * Designer step after the supplier confirmed the order: capture the confirmed
+ * amount, one capture per hold (oldest first), each closing its hold. Repeating
+ * the step resumes the same operations; a capture that already succeeded is never sent again.
+ */
+export async function startCapture(db: Db, paypal: PayPalPayments, sessionId: string, orderId: string, input: LineRef & ShownVersion): Promise<PaymentOperation[]> {
+  const operations = await db.transaction(async (tx) => {
+    const version = await lockConfirmedVersion(tx, sessionId, orderId, input);
+    const itemId = businessItem(version, input);
+    const { ledger, plan } = await confirmedPlan(tx, version);
+    const event = ledger.supplierEvents.find((entry) => entry.kind === "order_confirmed" && entry.changeOrderId === version.order.id && entry.itemId === itemId);
+    const started = event ? ledger.operations.filter((operation) => operation.kind === "capture" && operation.supplierEventId === event.id) : [];
+    const open = started.filter((operation) => operation.status === "pending" || operation.status === "unknown");
+    if (open.length) return open;
+    if (plan.status === "blocked") throw new PaymentActionError("PLAN_BLOCKED", "Resolve the funding blockers before capturing.", plan.blockers);
+    const action = plan.actions.find((entry) => entry.kind === "capture" && entry.timing === "after_vendor_confirmation" && entry.itemId === input.itemId && entry.side === input.side);
+    if (!action) {
+      if (started.length) return started;
+      throw new PaymentActionError("NOT_AVAILABLE", "Nothing on this line is waiting to be captured.");
+    }
+    if (!event) throw new PaymentActionError("NOT_AVAILABLE", "Record the supplier's order confirmation before capturing; nothing is captured without it.");
+    let remaining = action.amountCents;
+    const created: PaymentOperation[] = [];
+    for (const { hold, heldCents } of openHolds(ledger, itemId)) {
+      if (remaining <= 0) break;
+      const amountCents = Math.min(heldCents, remaining);
+      const prefix = `capture:${event.id}:${hold.id}:`;
+      created.push(await insertOperation(tx, { businessKey: `${prefix}${attempt(ledger, "capture", prefix)}`, projectId: version.projectId, kind: "capture", authorizationId: hold.id, amountCents, finalCapture: true, binding: version.bind(itemId), supplierEventId: event.id }));
+      remaining -= amountCents;
+    }
+    if (remaining > 0) throw new PaymentActionError("PLAN_BLOCKED", "The open holds on this line no longer cover the confirmed amount. Check the authorizations before capturing.");
+    return created;
+  });
+  return runEach(operations, (id) => executeCapture(db, paypal, id));
+}
+
+/**
+ * Designer step after the client confirmed a version that no longer needs a
+ * line's holds: void each open hold (PayPal cannot void part of a hold). This is
+ * a release of held money, not a refund.
+ */
+export async function startRelease(db: Db, paypal: PayPalPayments, sessionId: string, orderId: string, input: LineRef & ShownVersion): Promise<PaymentOperation[]> {
+  const operations = await db.transaction(async (tx) => {
+    const version = await lockConfirmedVersion(tx, sessionId, orderId, input);
+    const itemId = businessItem(version, input);
+    const { ledger, plan } = await confirmedPlan(tx, version);
+    const started = ledger.operations.filter((operation) => operation.kind === "void" && operation.changeOrderId === version.order.id && operation.itemId === itemId);
+    const open = started.filter((operation) => operation.status === "pending" || operation.status === "unknown");
+    if (open.length) return open;
+    if (plan.status === "blocked") throw new PaymentActionError("PLAN_BLOCKED", "Resolve the funding blockers before releasing a hold.", plan.blockers);
+    const action = plan.actions.find((entry) => entry.kind === "release_authorization" && entry.timing === "on_payment_execution" && entry.itemId === input.itemId && entry.side === input.side);
+    if (!action) {
+      if (started.length) return started;
+      throw new PaymentActionError("NOT_AVAILABLE", "No unused hold on this line needs to be released.");
+    }
+    const created: PaymentOperation[] = [];
+    for (const { hold, heldCents } of openHolds(ledger, itemId)) {
+      const prefix = `void:${version.order.id}:${hold.id}:`;
+      created.push(await insertOperation(tx, { businessKey: `${prefix}${attempt(ledger, "void", prefix)}`, projectId: version.projectId, kind: "void", authorizationId: hold.id, amountCents: heldCents, binding: version.bind(itemId) }));
+    }
+    return created;
+  });
+  return runEach(operations, (id) => executeVoid(db, paypal, id));
+}
+
+/**
+ * Designer step: refund what the confirmed version returns to the client, from
+ * the newest completed captures first. A refund that waits on a supplier credit
+ * is refused until the matching credit is recorded.
+ */
+export async function startRefund(db: Db, paypal: PayPalPayments, sessionId: string, orderId: string, input: LineRef & ShownVersion): Promise<PaymentOperation[]> {
+  const operations = await db.transaction(async (tx) => {
+    const version = await lockConfirmedVersion(tx, sessionId, orderId, input);
+    const itemId = businessItem(version, input);
+    const { ledger, plan } = await confirmedPlan(tx, version);
+    const started = ledger.operations.filter((operation) => operation.kind === "refund" && operation.changeOrderId === version.order.id && operation.itemId === itemId);
+    const open = started.filter((operation) => operation.status === "pending" || operation.status === "unknown");
+    if (open.length) return open;
+    if (plan.status === "blocked") throw new PaymentActionError("PLAN_BLOCKED", "Resolve the funding blockers before refunding.", plan.blockers);
+    const lineActions = plan.actions.filter((entry) => entry.kind === "refund" && entry.itemId === input.itemId && entry.side === input.side);
+    const action = lineActions.find((entry) => entry.timing === "on_payment_execution");
+    if (!action) {
+      if (lineActions.some((entry) => entry.timing === "after_vendor_credit")) throw new PaymentActionError("NOT_AVAILABLE", "This refund waits for the supplier's credit. Record the credit first.");
+      if (started.length) return started;
+      throw new PaymentActionError("NOT_AVAILABLE", "Nothing on this line is waiting to be refunded.");
+    }
+    const credit = ledger.supplierEvents.find((entry) => entry.kind === "credit_confirmed" && entry.changeOrderId === version.order.id && entry.itemId === itemId);
+    let remaining = action.amountCents;
+    const created: PaymentOperation[] = [];
+    for (const { capture, refundableCents } of refundableCaptures(ledger, itemId)) {
+      if (remaining <= 0) break;
+      const amountCents = Math.min(refundableCents, remaining);
+      const prefix = `refund:${credit?.id ?? version.order.id}:${capture.id}:`;
+      created.push(await insertOperation(tx, { businessKey: `${prefix}${attempt(ledger, "refund", prefix)}`, projectId: version.projectId, kind: "refund", captureId: capture.id, amountCents, binding: version.bind(itemId), supplierEventId: credit?.id ?? null }));
+      remaining -= amountCents;
+    }
+    if (remaining > 0) throw new PaymentActionError("PLAN_BLOCKED", "The completed captures on this line do not cover the confirmed refund. Reconcile the captures before refunding.");
+    return created;
+  });
+  return runEach(operations, (id) => executeRefund(db, paypal, id));
 }
 
 /** Loads an operation of the caller's project, for any version of it (its result stays bound to that version). */
@@ -90,12 +215,23 @@ export async function checkPayment(db: Db, paypal: PayPalPayments, sessionId: st
         return createCheckout(db, paypal, operation, links(operation.id), { description: await checkoutDescription(db, operation) });
       }
       return (await completeAuthorization(db, paypal, operation.id)).operation;
-    case "capture":
-      return executeCapture(db, paypal, operation.id);
+    case "capture": {
+      const done = await executeCapture(db, paypal, operation.id);
+      // PayPal accepted the capture earlier but reported it pending: read where its money stands now.
+      const [capture] = await db.select().from(paypalCaptures).where(eq(paypalCaptures.operationId, done.id));
+      if (capture?.status === "pending") await refreshCapture(db, paypal, capture.id);
+      return done;
+    }
     case "void":
       return executeVoid(db, paypal, operation.id);
+    case "refund": {
+      const done = await executeRefund(db, paypal, operation.id);
+      const [refund] = await db.select().from(paypalRefunds).where(eq(paypalRefunds.operationId, done.id));
+      if (refund?.status === "pending") await refreshRefund(db, paypal, refund.id);
+      return done;
+    }
     default:
-      throw new PaymentActionError("NOT_AVAILABLE", "This payment step cannot be checked here yet.");
+      throw new PaymentActionError("NOT_AVAILABLE", "This payment step cannot be checked here.");
   }
 }
 

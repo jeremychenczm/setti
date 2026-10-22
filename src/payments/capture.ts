@@ -17,7 +17,8 @@ import {
   type OperationBinding, type PaymentOperation, type PaypalAuthorization, type PaypalCapture,
 } from "./operations";
 import type { CaptureReceipt, PayPalFailure, PayPalPayments, PayPalResult } from "./paypal";
-import { captureMoneyStatus, verifyCapture } from "./receipts";
+import { noteInCase } from "./notes";
+import { captureMoneyStatus, formatCents, verifyCapture } from "./receipts";
 
 export type { PaymentOperation } from "./operations";
 
@@ -65,6 +66,8 @@ export async function refreshCapture(db: Db, paypal: PayPalPayments, captureId: 
   return db.transaction(async (tx) => {
     const [updated] = await tx.update(paypalCaptures).set({ status: verified.value.status }).where(eq(paypalCaptures.id, capture.id)).returning();
     if (verified.value.status === "completed") await closeHold(tx, capture.authorizationId, capture.finalCapture);
+    const [operation] = await tx.select().from(paymentOperations).where(eq(paymentOperations.id, capture.operationId!));
+    await noteInCase(tx, operation, ({ version, itemName }) => `PayPal Sandbox now reports the pending capture ${capture.paypalCaptureId} for V${version} · ${itemName} as ${verified.value.status} (${formatCents(capture.amountCents)} USD).`);
     return updated;
   });
 }
@@ -104,6 +107,11 @@ async function settle(db: Db, paypal: PayPalPayments, operation: PaymentOperatio
         });
       }
       if (status === "completed") await closeHold(tx, authorization.id, operation.finalCapture);
+      if (!existing && status !== "declined") {
+        await noteInCase(tx, operation, ({ version, itemName }) => status === "completed"
+          ? `PayPal Sandbox capture completed for V${version} · ${itemName}: ${formatCents(operation.amountCents)} USD taken from authorization ${authorization.paypalAuthorizationId} (capture ${paypalCaptureId}).`
+          : `PayPal Sandbox reports the capture of ${formatCents(operation.amountCents)} USD for V${version} · ${itemName} as pending (capture ${paypalCaptureId}); it is not counted as paid until PayPal completes it.`);
+      }
       const [done] = await tx
         .update(paymentOperations)
         .set(status === "declined"

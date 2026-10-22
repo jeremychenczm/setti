@@ -34,20 +34,30 @@ export const bergmund = (quantity = 4, taxCents = 4_375): Partial<PricingItem> =
 });
 
 /** Issues one reviewed change for the session's case and, unless `confirm` is false, confirms it as the demo client. */
-export async function confirmChange(db: Db, session: string, key: CaseKey, change: TestChange, confirm = true): Promise<FrozenChangeOrder> {
+export function confirmChange(db: Db, session: string, key: CaseKey, change: TestChange, confirm = true): Promise<FrozenChangeOrder> {
+  return confirmChanges(db, session, key, [change], confirm);
+}
+
+/** Several changes share one draft, frozen document, approval and set of version hashes. */
+export async function confirmChanges(db: Db, session: string, key: CaseKey, changes: TestChange[], confirm = true): Promise<FrozenChangeOrder> {
+  if (!changes.length) throw new Error("Expected at least one test change");
   const chat = createChatStore(db), pricing = createPricingStore(db);
   const state = await chat.getCase(session, key);
   const quote = state.quote!;
-  const line = quote.lines.find((entry) => entry.itemId === change.itemId)!;
+  const lines = changes.map((change) => {
+    const line = quote.lines.find((entry) => entry.itemId === change.itemId);
+    if (!line) throw new Error(`Unknown test item: ${change.itemId}`);
+    return line;
+  });
   const id = randomUUID();
-  await chat.appendMessage(session, key, { id, actor: "client", text: `@AI ${change.action} ${line.name}` });
+  await chat.appendMessage(session, key, { id, actor: "client", text: `@AI ${changes.map((change, index) => `${change.action} ${lines[index].name}`).join("; ")}` });
   const run = await chat.beginAi(session, key, id);
   if (run.status !== "started") throw new Error("Expected an AI run");
   const result = buildDraft({
     quote, messages: run.state.messages, pages: [], current: state.draft, triggerId: id, model: "test-model",
     output: {
-      intent: "draft", message: "Test draft", title: `Test ${change.action}: ${line.name}`, unresolved: [], constraints: [],
-      changes: [{ action: change.action, itemId: change.itemId, quantity: change.action === "remove" ? null : change.quantity ?? change.after?.quantity ?? line.quantity, productOptionId: null, description: change.action === "replace" ? "Replacement product" : "", sourceMessageIds: [id] }],
+      intent: "draft", message: "Test draft", title: `Test change: ${lines.map((line) => line.name).join("; ")}`, unresolved: [], constraints: [],
+      changes: changes.map((change, index) => ({ action: change.action, itemId: change.itemId, quantity: change.action === "remove" ? null : change.quantity ?? change.after?.quantity ?? lines[index].quantity, productOptionId: null, description: change.action === "replace" ? "Replacement product" : "", sourceMessageIds: [id] })),
     },
   });
   await chat.completeAi(session, key, id, run.runId, { ...result, model: "test-model" });
@@ -56,14 +66,17 @@ export async function confirmChange(db: Db, session: string, key: CaseKey, chang
   const input = createPricingInput(quote, draft);
   input.terms = "Demo client confirms this complete quote; payment steps are separate.";
   input.reviewNotes = "Checked test amounts and terms.";
-  const reducing = change.action !== "quantity" || (change.quantity ?? line.quantity) < line.quantity;
-  input.changes = input.changes.map((entry) => ({
-    ...entry, confirmed: true, priceEvidence: "Demonstration price reviewed for testing.",
-    after: entry.after ? { ...entry.after, taxCents: 0, freightCents: 0, currency: "USD", sku: entry.after.sku || "DEMO", returnable: true, returnPolicy: entry.after.returnPolicy || "Demo test return terms checked.", ...change.after } : null,
-    oldItemHandling: reducing ? change.oldItemHandling ?? "not_ordered" : "not_applicable",
-    oldItemCostCents: reducing ? change.oldItemCostCents ?? 0 : 0,
-    oldItemNote: reducing ? "Checked old-item handling for this test." : "",
-  }));
+  input.changes = input.changes.map((entry, index) => {
+    const change = changes[index], line = lines[index];
+    const reducing = change.action !== "quantity" || (change.quantity ?? line.quantity) < line.quantity;
+    return {
+      ...entry, confirmed: true, priceEvidence: "Demonstration price reviewed for testing.",
+      after: entry.after ? { ...entry.after, taxCents: 0, freightCents: 0, currency: "USD", sku: entry.after.sku || "DEMO", returnable: true, returnPolicy: entry.after.returnPolicy || "Demo test return terms checked.", ...change.after } : null,
+      oldItemHandling: reducing ? change.oldItemHandling ?? "not_ordered" : "not_applicable",
+      oldItemCostCents: reducing ? change.oldItemCostCents ?? 0 : 0,
+      oldItemNote: reducing ? "Checked old-item handling for this test." : "",
+    };
+  });
   input.issues = input.issues.map((issue) => ({ ...issue, resolved: true, note: "Checked in this test fixture." }));
   const saved = await pricing.saveReview(session, key, { sourceDraftId: draft.id, sourceDraftRevision: draft.revision, expectedVersion: workspace.review?.version || null, input });
   const issued = await pricing.issueReview(session, key, { reviewId: saved.review!.id, expectedVersion: saved.review!.version });

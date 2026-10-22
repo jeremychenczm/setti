@@ -1,17 +1,24 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createChatStore } from "../chat/store";
 import { paymentOperations, paypalAuthorizations, paypalCalls } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import type { FrozenChangeOrder } from "../pricing/types";
 import { cancelPayment, checkPayment, returnFromPayPal, startAuthorization } from "./actions";
+import { cancelCheckout, completeAuthorization } from "./authorize";
+import type { OrderReceipt } from "./paypal";
 import { bergmund, confirmChange, shown } from "./testing/cases";
 import { FakePayPal } from "./testing/fake-paypal";
 import { paymentsWorkspace } from "./workspace";
 
 const CHAIR = "willow-lisabo-dining-chair";
 const links = (operationId: string) => ({ returnUrl: `http://localhost:3002/api/payments/paypal/return?op=${operationId}`, cancelUrl: `http://localhost:3002/api/payments/paypal/cancel?op=${operationId}` });
+const gate = () => {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
+};
 
 describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -47,7 +54,7 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     const workspace = (await paymentsWorkspace(handle.db, session, v2.id))!;
     const chair = workspace.lines.find((line) => line.itemId === CHAIR && line.side === "proposed")!;
     expect(chair).toMatchObject({ targetCents: 54_375, heldCents: 54_375, capturedCents: 0, refundedCents: 0, holds: [{ paypalAuthorizationId: hold.paypalAuthorizationId, version: v2.version, status: "created" }] });
-    expect(chair.steps).toEqual([expect.objectContaining({ kind: "capture", amountCents: 54_375, available: false })]);
+    expect(chair.steps.map((step) => [step.kind, step.amountCents, step.available])).toEqual([["supplier_confirmation", 54_375, true], ["capture", 54_375, false]]);
     expect(workspace.plan?.money.newAuthorizationCents).toBeGreaterThan(0); // the other, unchanged furniture lines are not funded
     expect(workspace.others.lineCount).toBe(v2.lines.length - 1);
     expect(workspace.operations[0]).toMatchObject({ status: "succeeded", paypalResourceId: hold.paypalAuthorizationId, approvalUrl: null });
@@ -75,15 +82,120 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     expect(await holds()).toHaveLength(1);
   });
 
-  it("records no authorization when the client cancels on PayPal, and a new attempt is a new operation", async () => {
+  it("keeps a cancelled checkout recoverable until PayPal reports its final outcome", async () => {
     const checkout = await start();
-    expect(await back(checkout.id, checkout.paypalOrderId, "cancel")).toEqual({ orderId: v2.id, state: "failed" });
+    expect(await back(checkout.id, checkout.paypalOrderId, "cancel")).toEqual({ orderId: v2.id, state: "cancelled" });
     const [cancelled] = await handle.db.select().from(paymentOperations).where(eq(paymentOperations.id, checkout.id));
-    expect(cancelled).toMatchObject({ status: "failed", failureCode: "BUYER_CANCELLED" });
+    expect(cancelled).toMatchObject({ status: "pending", failureCode: "CHECKOUT_CANCEL_REQUESTED", approvalUrl: checkout.approvalUrl });
     expect(await holds()).toHaveLength(0);
     const retry = await start();
-    expect(retry.id).not.toBe(checkout.id);
-    expect(retry.businessKey).toMatch(/:2$/);
+    expect(retry.id).toBe(checkout.id);
+    await checkPayment(handle.db, paypal, session, v2.id, checkout.id, links);
+    expect((await handle.db.select().from(paymentOperations))[0].failureCode).toBe("CHECKOUT_CANCEL_REQUESTED");
+    paypal.approve(checkout.paypalOrderId!);
+    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, state: "authorized" });
+    expect(await holds()).toHaveLength(1);
+  });
+
+  it("allows a replacement only after PayPal reports that the checkout is voided", async () => {
+    const checkout = await start();
+    const found = await paypal.getOrder(checkout.paypalOrderId!);
+    if (found.kind !== "ok") throw new Error("Expected an existing fake checkout");
+    vi.spyOn(paypal, "getOrder").mockResolvedValueOnce({ ...found, value: { ...found.value, status: "VOIDED" } });
+    expect(await back(checkout.id, checkout.paypalOrderId, "cancel")).toEqual({ orderId: v2.id, state: "failed" });
+    expect((await handle.db.select().from(paymentOperations))[0]).toMatchObject({ status: "failed", failureCode: "ORDER_VOIDED" });
+    expect((await start()).id).not.toBe(checkout.id);
+    expect(await holds()).toHaveLength(0);
+  });
+
+  it("does not close a checkout while its create response is still in flight", async () => {
+    const created = gate(), release = gate();
+    const createOrder = paypal.createOrder.bind(paypal);
+    vi.spyOn(paypal, "createOrder").mockImplementationOnce(async (command) => {
+      const result = await createOrder(command);
+      created.resolve();
+      await release.promise;
+      return result;
+    });
+    const starting = start();
+    await created.promise;
+    const [operation] = await handle.db.select().from(paymentOperations);
+    const cancelled = await cancelCheckout(handle.db, paypal, operation.id);
+    expect(cancelled).toMatchObject({ state: "cancelled", operation: { status: "unknown", failureCode: "CHECKOUT_CANCEL_REQUESTED" } });
+    release.resolve();
+    const checkout = await starting;
+    expect(checkout).toMatchObject({ id: operation.id, status: "pending", failureCode: "CHECKOUT_CANCEL_REQUESTED", paypalOrderId: expect.any(String) });
+    paypal.approve(checkout.paypalOrderId!);
+    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, state: "authorized" });
+    expect(await holds()).toHaveLength(1);
+  });
+
+  it.each(["cancel_first", "authorization_first"] as const)("records an authorization despite a stale cancellation response (%s)", async (order) => {
+    const checkout = await start();
+    const cancelledRead = gate(), releaseCancel = gate(), authorizedAtProvider = gate(), releaseAuthorization = gate();
+    const getOrder = paypal.getOrder.bind(paypal), authorizeOrder = paypal.authorizeOrder.bind(paypal);
+    vi.spyOn(paypal, "getOrder").mockImplementationOnce(async (id) => {
+      const snapshot = structuredClone(await getOrder(id));
+      cancelledRead.resolve();
+      await releaseCancel.promise;
+      return snapshot;
+    });
+    vi.spyOn(paypal, "authorizeOrder").mockImplementationOnce(async (command) => {
+      const result = await authorizeOrder(command);
+      authorizedAtProvider.resolve();
+      await releaseAuthorization.promise;
+      return result;
+    });
+    const cancelling = cancelCheckout(handle.db, paypal, checkout.id);
+    await cancelledRead.promise;
+    paypal.approve(checkout.paypalOrderId!);
+    const authorizing = completeAuthorization(handle.db, paypal, checkout.id);
+    await authorizedAtProvider.promise;
+    if (order === "cancel_first") {
+      releaseCancel.resolve();
+      expect((await cancelling).operation.status).toBe("pending");
+      releaseAuthorization.resolve();
+    } else {
+      releaseAuthorization.resolve();
+      expect((await authorizing).state).toBe("authorized");
+      releaseCancel.resolve();
+      expect((await cancelling).state).toBe("authorized");
+    }
+    expect((await authorizing).state).toBe("authorized");
+    expect((await checkPayment(handle.db, paypal, session, v2.id, checkout.id, links)).status).toBe("succeeded");
+    expect(await holds()).toHaveLength(1);
+    expect((await holds())[0]).toMatchObject({ operationId: checkout.id, amountCents: 54_375 });
+    await expect(start()).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
+    expect(await handle.db.select().from(paymentOperations)).toHaveLength(1);
+  });
+
+  it("restores the approval link from a verified order after a minimal create response", async () => {
+    paypal.then("answer-minimal");
+    const checkout = await start();
+    expect(checkout).toMatchObject({ status: "unknown", paypalOrderId: expect.any(String), approvalUrl: null });
+    const checked = await checkPayment(handle.db, paypal, session, v2.id, checkout.id, links);
+    expect(checked).toMatchObject({ id: checkout.id, status: "pending", failureCode: null, approvalUrl: `https://www.sandbox.paypal.com/checkoutnow?token=${checkout.paypalOrderId}` });
+    expect((await start()).approvalUrl).toBe(checked.approvalUrl);
+    expect(paypal.calls.filter((call) => "invoiceId" in call)).toHaveLength(1);
+    paypal.approve(checkout.paypalOrderId!);
+    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, state: "authorized" });
+  });
+
+  it.each<Partial<OrderReceipt>>([
+    { orderId: "ANOTHER-ORDER" },
+    { customId: "another-operation" },
+    { amountCents: 54_376 },
+    { currency: "EUR" },
+  ])("does not restore a checkout link from a mismatched order: %j", async (difference) => {
+    paypal.then("answer-minimal");
+    const checkout = await start();
+    const read = await paypal.getOrder(checkout.paypalOrderId!);
+    if (read.kind !== "ok") throw new Error("Expected a fake checkout");
+    vi.spyOn(paypal, "getOrder").mockResolvedValueOnce({ ...read, value: { ...read.value, ...difference } });
+    const checked = await checkPayment(handle.db, paypal, session, v2.id, checkout.id, links);
+    expect(checked).toMatchObject({ status: "unknown", failureCode: "RECEIPT_MISMATCH", approvalUrl: null });
+    expect(await holds()).toHaveLength(0);
+    expect(paypal.calls.filter((call) => "orderId" in call)).toHaveLength(0);
   });
 
   it("keeps an approval that arrives with a cancel: PayPal is asked before anything is dropped", async () => {

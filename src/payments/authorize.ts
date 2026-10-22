@@ -8,13 +8,11 @@
  * verified receipt: the operation's order, its custom id, the exact amount in
  * USD and a usable status.
  */
-import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { chatMessages } from "../chat/schema";
-import { changeOrders } from "../pricing/schema";
-import { items, paymentOperations, paypalAuthorizations } from "../db/schema";
+import { paymentOperations, paypalAuthorizations } from "../db/schema";
 import { HONOR_PERIOD_DAYS } from "../money/authorization";
+import { noteInCase } from "./notes";
 import { claimOperation, recordCall, recordFailure, updateOperation, type PaymentOperation } from "./operations";
 import type { AuthorizationReceipt, OrderReceipt, PayPalPayments, PayPalResult } from "./paypal";
 import { formatCents, verifyAuthorization, type VerifiedAuthorization } from "./receipts";
@@ -47,15 +45,38 @@ export async function createCheckout(db: Db, paypal: PayPalPayments, operation: 
   }
   const order = result.value;
   if (!order.orderId || !order.approvalUrl) {
-    return updateOperation(db, operation.id, { status: "unknown", failureCode: "RECEIPT_INCOMPLETE", failureMessage: "PayPal created the order without returning its id and approval link.", ...(order.orderId ? { paypalOrderId: order.orderId } : {}) });
+    return updateUnsettledCheckout(db, operation.id, { status: "unknown", failureCode: "RECEIPT_INCOMPLETE", failureMessage: "PayPal created the order without returning its id and approval link.", ...(order.orderId ? { paypalOrderId: order.orderId } : {}) });
   }
   if (order.amountCents !== undefined && (order.amountCents !== operation.amountCents || order.currency !== "USD")) {
-    return updateOperation(db, operation.id, { status: "unknown", paypalOrderId: order.orderId, failureCode: "RECEIPT_MISMATCH", failureMessage: `PayPal created the order for ${formatCents(order.amountCents)} ${order.currency}; Setti asked for ${formatCents(operation.amountCents)} USD.` });
+    return updateUnsettledCheckout(db, operation.id, { status: "unknown", paypalOrderId: order.orderId, failureCode: "RECEIPT_MISMATCH", failureMessage: `PayPal created the order for ${formatCents(order.amountCents)} ${order.currency}; Setti asked for ${formatCents(operation.amountCents)} USD.` });
   }
-  return updateOperation(db, operation.id, { status: "pending", paypalOrderId: order.orderId, approvalUrl: order.approvalUrl, failureCode: null, failureMessage: null });
+  return updateUnsettledCheckout(db, operation.id, { status: "pending", paypalOrderId: order.orderId, approvalUrl: order.approvalUrl, failureCode: null, failureMessage: null });
 }
 
-export type CheckoutState = "awaiting_buyer" | "authorized" | "failed" | "unknown";
+export type CheckoutState = "awaiting_buyer" | "authorized" | "failed" | "unknown" | "cancelled";
+
+function checkoutResult(operation: PaymentOperation, state: CheckoutState): { operation: PaymentOperation; state: CheckoutState } {
+  return { operation, state: operation.status === "succeeded" ? "authorized" : operation.status === "failed" ? "failed" : state };
+}
+
+/** A delayed checkout read or cancel cannot overwrite an authorization already recorded by another request. */
+async function updateUnsettledCheckout(db: Db, id: string, fields: Partial<typeof paymentOperations.$inferInsert>): Promise<PaymentOperation> {
+  return db.transaction(async (tx) => {
+    const [current] = await tx.select().from(paymentOperations).where(eq(paymentOperations.id, id)).for("update");
+    if (current.status === "succeeded" || current.status === "failed" || current.paypalResourceId) return current;
+    const update = fields.failureCode === null && current.failureCode === "CHECKOUT_CANCEL_REQUESTED"
+      ? { ...fields, failureCode: current.failureCode, failureMessage: current.failureMessage }
+      : fields;
+    return updateOperation(tx, id, update);
+  });
+}
+
+function checkoutReceiptError(order: OrderReceipt, operation: PaymentOperation): { code: "RECEIPT_INCOMPLETE" | "RECEIPT_MISMATCH"; message: string } | null {
+  if (!order.orderId || order.amountCents === undefined || !order.currency) return { code: "RECEIPT_INCOMPLETE", message: "PayPal did not return the checkout id, amount and currency. Check this checkout again before continuing." };
+  if (order.orderId !== operation.paypalOrderId || (order.customId !== undefined && order.customId !== operation.id)) return { code: "RECEIPT_MISMATCH", message: "PayPal returned a checkout for a different Setti operation. Nothing will be authorized until its identity is reconciled." };
+  if (order.amountCents !== operation.amountCents || order.currency !== "USD") return { code: "RECEIPT_MISMATCH", message: "The PayPal checkout amount or currency differs from the confirmed amount. Nothing will be authorized until it is reconciled." };
+  return null;
+}
 
 /**
  * Advances an authorization from what PayPal reports now: approved orders are
@@ -82,11 +103,17 @@ export async function completeAuthorization(db: Db, paypal: PayPalPayments, oper
     return { operation: await updateOperation(db, operation.id, { failureMessage: `PayPal could not be reached to check the checkout: ${found.message}` }), state: "unknown" };
   }
   const order = found.value;
+  const receiptError = checkoutReceiptError(order, operation);
+  if (receiptError) return checkoutResult(await updateUnsettledCheckout(db, operation.id, { status: "unknown", failureCode: receiptError.code, failureMessage: receiptError.message }), "unknown");
   switch (order.status) {
     case "CREATED":
     case "PAYER_ACTION_REQUIRED":
     case "SAVED":
-      return { operation: await updateOperation(db, operation.id, { status: "pending", failureMessage: null }), state: "awaiting_buyer" };
+      return checkoutResult(await updateUnsettledCheckout(db, operation.id, {
+        status: "pending", ...(!operation.approvalUrl && order.approvalUrl ? { approvalUrl: order.approvalUrl } : {}),
+        failureCode: operation.failureCode === "CHECKOUT_CANCEL_REQUESTED" ? operation.failureCode : null,
+        failureMessage: operation.failureCode === "CHECKOUT_CANCEL_REQUESTED" ? operation.failureMessage : null,
+      }), "awaiting_buyer");
     case "VOIDED":
       return fail(db, operation, "ORDER_VOIDED", "PayPal voided this checkout before it was authorized; nothing is held.");
     case "COMPLETED":
@@ -116,24 +143,29 @@ export async function completeAuthorization(db: Db, paypal: PayPalPayments, oper
 }
 
 /**
- * The buyer left PayPal without approving (or the studio abandons the checkout).
- * PayPal is asked first: an approved order is authorized instead of dropped.
+ * Leaving checkout is not proof that an approval cannot arrive from another
+ * window. Keep the same operation open until PayPal reports a terminal result.
  */
 export async function cancelCheckout(db: Db, paypal: PayPalPayments, operationId: string): Promise<{ operation: PaymentOperation; state: CheckoutState }> {
   const [current] = await db.select().from(paymentOperations).where(eq(paymentOperations.id, operationId));
   if (!current || current.kind !== "authorize") throw new Error(`Authorization operation ${operationId} does not exist`);
   if (current.status === "succeeded" || current.status === "failed") return { operation: current, state: current.status === "succeeded" ? "authorized" : "failed" };
+  if (current.paypalResourceId) return completeAuthorization(db, paypal, operationId);
   if (!current.paypalOrderId) {
-    // No order was confirmed created, so no buyer could have approved anything.
-    return fail(db, current, "CHECKOUT_ABANDONED", "The checkout was abandoned before PayPal returned an order; nothing was authorized.");
+    return checkoutResult(await updateUnsettledCheckout(db, current.id, { status: "unknown", failureCode: "CHECKOUT_CANCEL_REQUESTED", failureMessage: "You left checkout while PayPal may still be preparing it. Check this same checkout before starting another authorization." }), "cancelled");
   }
   const found = await paypal.getOrder(current.paypalOrderId);
   await logOrder(db, current, "get_order", null, found);
   if (found.kind === "ok" && (found.value.status === "APPROVED" || found.value.status === "COMPLETED")) return completeAuthorization(db, paypal, operationId);
-  if (found.kind !== "ok" && !(found.kind === "rejected" && found.code === "RESOURCE_NOT_FOUND")) {
-    return { operation: await updateOperation(db, current.id, { failureMessage: `PayPal could not confirm that the checkout was not approved: ${found.message}` }), state: "unknown" };
+  if (found.kind === "rejected" && found.code === "RESOURCE_NOT_FOUND") return checkoutResult(await updateUnsettledCheckout(db, current.id, { status: "failed", failureCode: "ORDER_EXPIRED", failureMessage: "PayPal no longer has this checkout. Start a new authorization if it is still needed." }), "failed");
+  if (found.kind !== "ok") {
+    return checkoutResult(await updateUnsettledCheckout(db, current.id, { failureMessage: `PayPal could not confirm that the checkout was not approved: ${found.message}` }), "unknown");
   }
-  return fail(db, current, "BUYER_CANCELLED", "The client left PayPal without approving; no authorization was created.");
+  const receiptError = checkoutReceiptError(found.value, current);
+  if (receiptError) return checkoutResult(await updateUnsettledCheckout(db, current.id, { status: "unknown", failureCode: receiptError.code, failureMessage: receiptError.message }), "unknown");
+  if (found.value.status === "VOIDED") return checkoutResult(await updateUnsettledCheckout(db, current.id, { status: "failed", failureCode: "ORDER_VOIDED", failureMessage: "PayPal voided this checkout before it was authorized." }), "failed");
+  if (!["CREATED", "PAYER_ACTION_REQUIRED", "SAVED"].includes(found.value.status ?? "")) return checkoutResult(await updateUnsettledCheckout(db, current.id, { status: "unknown", failureCode: "RECEIPT_INCOMPLETE", failureMessage: "PayPal did not report a recognised checkout status. Check the same checkout before starting another authorization." }), "unknown");
+  return checkoutResult(await updateUnsettledCheckout(db, current.id, { status: "pending", failureCode: "CHECKOUT_CANCEL_REQUESTED", failureMessage: "You left PayPal. This checkout remains available to continue or check; an approval from another window will still be recorded. Start no replacement while this checkout is open." }), "cancelled");
 }
 
 async function settle(db: Db, operation: PaymentOperation, receipt: AuthorizationReceipt): Promise<{ operation: PaymentOperation; state: CheckoutState }> {
@@ -169,12 +201,7 @@ async function recordHold(db: Db, operation: PaymentOperation, hold: VerifiedAut
         honorExpiresAt: hold.createdAt ? new Date(hold.createdAt.getTime() + HONOR_PERIOD_DAYS * DAY_MS) : null, expiresAt: hold.expiresAt,
         changeOrderId: operation.changeOrderId, operationId: operation.id,
       });
-      const [order] = await tx.select({ caseId: changeOrders.caseId, document: changeOrders.document }).from(changeOrders).where(eq(changeOrders.id, operation.changeOrderId!));
-      const [item] = await tx.select({ name: items.name }).from(items).where(eq(items.id, operation.itemId!));
-      await tx.insert(chatMessages).values({
-        caseId: order.caseId, id: randomUUID(), actor: "assistant", model: "system", aiState: "completed",
-        text: `PayPal Sandbox authorization recorded for V${order.document.version} · ${item.name}: ${formatCents(operation.amountCents)} USD is held (authorization ${hold.paypalAuthorizationId}, order ${operation.paypalOrderId}). Nothing has been charged; capture waits for the supplier confirmation.`,
-      });
+      await noteInCase(tx, operation, ({ version, itemName }) => `PayPal Sandbox authorization recorded for V${version} · ${itemName}: ${formatCents(operation.amountCents)} USD is held (authorization ${hold.paypalAuthorizationId}, order ${operation.paypalOrderId}). Nothing has been charged; capture waits for the supplier confirmation.`);
     }
     const [done] = await tx.update(paymentOperations)
       .set({ status: "succeeded", paypalResourceId: hold.paypalAuthorizationId, failureCode: null, failureMessage: null, updatedAt: new Date() })

@@ -45,6 +45,8 @@ export interface OperationRequest {
   captureId?: string | null;
   finalCapture?: boolean;
   binding?: OperationBinding | null;
+  /** The supplier confirmation a capture relies on, or the supplier credit a refund waits for. */
+  supplierEventId?: string | null;
 }
 
 /** A new operation id and the request id every attempt of it sends to PayPal. */
@@ -65,7 +67,7 @@ function sameRequest(operation: PaymentOperation, request: OperationRequest): Pa
     && operation.finalCapture === (request.finalCapture ?? false)
     && operation.changeOrderId === (binding?.changeOrderId ?? null) && operation.revisionId === (binding?.revisionId ?? null)
     && operation.contentHash === (binding?.contentHash ?? null) && operation.revisionContentHash === (binding?.revisionContentHash ?? null)
-    && operation.itemId === (binding?.itemId ?? null);
+    && operation.itemId === (binding?.itemId ?? null) && operation.supplierEventId === (request.supplierEventId ?? null);
   if (!same) throw new PaymentOperationError("IDEMPOTENCY_CONFLICT", "This business event already has a payment operation with different details.");
   return operation;
 }
@@ -96,6 +98,7 @@ export async function insertOperation(db: Writer, request: OperationRequest): Pr
       contentHash: binding?.contentHash ?? null,
       revisionContentHash: binding?.revisionContentHash ?? null,
       itemId: binding?.itemId ?? null,
+      supplierEventId: request.supplierEventId ?? null,
     }).onConflictDoNothing({ target: paymentOperations.businessKey }).returning();
   } catch (error) {
     throw new PaymentOperationError("OPERATION_REFUSED", databaseMessage(error));

@@ -1,4 +1,5 @@
 import type { ApprovedQuoteReport } from "@/quotes/types";
+import type { MoneyAnswer, MoneyContext } from "../ai/money-types";
 
 export type CaseKey = "willow" | "maple";
 export type HumanActor = "designer" | "client";
@@ -13,6 +14,7 @@ export interface CaseMessage {
   aiState: AiState;
   error: string | null;
   model: string | null;
+  moneyAnswer?: MoneyAnswer | null;
 }
 
 export interface ProductOption {
@@ -116,9 +118,10 @@ export type BeginAiResult =
   | { status: "busy" | "completed"; state: StoredCase };
 
 export interface ChatStore {
+  readMoneyContext?(sessionId: string, projectKey: CaseKey): Promise<MoneyContext>;
   getCase(sessionId: string, projectKey: CaseKey): Promise<StoredCase>;
   appendMessage(sessionId: string, projectKey: CaseKey, input: AppendMessageInput): Promise<StoredCase>;
   beginAi(sessionId: string, projectKey: CaseKey, messageId: string): Promise<BeginAiResult>;
-  completeAi(sessionId: string, projectKey: CaseKey, messageId: string, runId: string, result: { text: string; draft?: ChangeDraft | null; model: string }): Promise<StoredCase>;
+  completeAi(sessionId: string, projectKey: CaseKey, messageId: string, runId: string, result: { text: string; draft?: ChangeDraft | null; moneyAnswer?: MoneyAnswer; model: string }): Promise<StoredCase>;
   failAi(sessionId: string, projectKey: CaseKey, messageId: string, runId: string, error: string): Promise<StoredCase>;
 }

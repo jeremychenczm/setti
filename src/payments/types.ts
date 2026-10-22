@@ -36,6 +36,8 @@ export interface CaptureView {
   finalCapture: boolean;
   refundedCents: number;
   pendingRefundCents: number;
+  /** The operation that recorded it, to reconcile a pending result. */
+  operationId: string | null;
   createdAt: string;
 }
 
@@ -45,12 +47,32 @@ export interface RefundView {
   captureId: string;
   amountCents: number;
   status: "pending" | "completed" | "failed";
+  operationId: string | null;
+  createdAt: string;
+}
+
+/** A supplier event the designer recorded for this version (demo). */
+export interface SupplierEventView {
+  id: string;
+  kind: "order_confirmed" | "credit_confirmed";
+  quantity: number | null;
+  unitPriceCents: number | null;
+  taxCents: number | null;
+  freightCents: number | null;
+  totalCents: number;
+  inStock: boolean | null;
+  leadTimeDays: number | null;
+  reference: string;
+  note: string;
+  isDemo: true;
   createdAt: string;
 }
 
 export interface PaymentLineView {
   itemId: string;
   side: "baseline" | "proposed";
+  /** Stable ledger identity; old and replacement products may share a quote itemId. */
+  businessItemId?: string | null;
   label: string;
   category: "furniture" | "service";
   changed: boolean;
@@ -63,6 +85,11 @@ export interface PaymentLineView {
   holds: HoldView[];
   captures: CaptureView[];
   refunds: RefundView[];
+  /** Frozen purchase terms or retained fees that the supplier confirmation must match. */
+  confirmedTerms: { quantity: number; unitPriceCents: number; taxCents: number; freightCents: number; purpose: "order" | "retained_cost" } | null;
+  supplierEvents: SupplierEventView[];
+  /** Frozen return condition, retained even when another item's unresolved operation blocks actions. */
+  refundRequiresSupplierCredit?: boolean;
   steps: PaymentStep[];
 }
 
@@ -81,6 +108,8 @@ export interface CallView {
 
 export interface OperationView {
   id: string;
+  /** Stable ledger identity for matching an operation to exactly one displayed product. */
+  businessItemId?: string | null;
   kind: "authorize" | "capture" | "void" | "refund" | "reauthorize";
   status: "pending" | "succeeded" | "failed" | "unknown";
   amountCents: number;
@@ -105,6 +134,8 @@ export interface PaymentsWorkspace {
   /** True only for the latest client-confirmed version, the one new payment steps start from. */
   current: boolean;
   canAct: boolean;
+  /** The owning session may reconcile existing operations even after this version is superseded. */
+  canReconcile: boolean;
   reason: string | null;
   environment: "sandbox";
   plan: FundingPlan | null;

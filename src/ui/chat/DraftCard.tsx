@@ -32,6 +32,7 @@ export function DraftCard({ draft, messages, onSourceMessage, pricingHref, canPr
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px]">
           <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-800">待设计师核价</span>
           <span className="text-[var(--muted)]">Draft {draft.revision} · based on V{draft.basedOnVersion}</span>
+          {draft.changes.length > 1 && <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">{draft.changes.length} changes · one draft</span>}
         </div>
         <h2 className="text-[16px] font-semibold leading-snug">{draft.title}</h2>
         <p className="mt-2 whitespace-pre-wrap text-[12px] leading-relaxed text-slate-600">{draft.summary}</p>
@@ -73,7 +74,7 @@ export function DraftCard({ draft, messages, onSourceMessage, pricingHref, canPr
         </div></details>;
       })}</div></div>}
 
-      <div className="flex items-start gap-2 rounded-xl bg-blue-50 p-3 text-[11px] leading-relaxed text-blue-800"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" /><span>Draft only. A designer must verify prices and terms. Approved V{draft.basedOnVersion} stays unchanged.</span></div>
+      <div className="flex items-start gap-2 rounded-xl bg-blue-50 p-3 text-[11px] leading-relaxed text-blue-800"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" /><span>Draft only. A designer must verify the prices and terms of every change before issuing one client version. Approved V{draft.basedOnVersion} stays unchanged.</span></div>
       {pricingHref && <div>{canPrice ? <a href={pricingHref} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-[12px] font-medium text-white hover:bg-blue-600"><ClipboardCheck className="h-4 w-4" />Review pricing</a> : <button disabled className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 text-[12px] font-medium text-slate-400"><ClipboardCheck className="h-4 w-4" />Review pricing</button>}<p className="mt-2 text-[10px] leading-relaxed text-slate-400">{canPrice ? "Opens the demo designer’s pricing workspace. Saving and generating a client version are separate steps." : "Available when Speaking as is Demo designer and the AI is not running."}</p></div>}
     </article>
   );

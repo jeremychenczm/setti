@@ -13,7 +13,9 @@ import { fundingFactsFrom, fundingIdentities, readLedger, type ProjectLedger } f
 import { chatCases } from "../chat/schema";
 import { changeOrders, pricingCases } from "../pricing/schema";
 import { paypalCalls } from "./schema";
-import type { CaptureView, HoldView, OperationView, PaymentLineView, PaymentStep, PaymentsWorkspace, RefundView } from "./types";
+import { summarizeHold } from "./holds";
+import { confirmedSupplierTerms } from "./supplier-terms";
+import type { CaptureView, HoldView, OperationView, PaymentLineView, PaymentStep, PaymentsWorkspace, RefundView, SupplierEventView } from "./types";
 
 type Reader = Pick<Db, "select">;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -30,11 +32,11 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
     .where(and(eq(changeOrderDecisions.orderId, orderId), eq(changeOrderDecisions.decision, "approved")));
   const [bridge] = await db.select().from(pricingCases).where(eq(pricingCases.caseId, found.caseId));
   const current = !!decision && found.status === "approved";
-  const reason = !owner ? "This share link is read-only. Payment steps run only from the browser that owns the demo case."
+  const reason = !owner ? "This share link is read-only: this browser does not own the demo case, so it cannot start payment steps. Open the case from the browser that created it."
     : !decision ? "Payment steps start only after the client confirms this exact version."
       : !current ? `A newer client-confirmed version replaced V${order.version}. Start payment steps from the current version; results of steps already started stay recorded here.`
         : null;
-  const base = { orderId, version: order.version, current, canAct: owner && current, reason, environment: "sandbox" as const };
+  const base = { orderId, version: order.version, current, canAct: owner && current, canReconcile: owner && !!decision, reason, environment: "sandbox" as const };
   if (!bridge || !decision) return { ...base, plan: null, lines: [], others: { lineCount: order.lines.length, targetCents: order.totals.totalCents }, operations: [] };
 
   const ledger = await readLedger(db, bridge.projectId);
@@ -51,9 +53,14 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
     const money = businessId ? itemMoney(ledger, businessId, versions, now) : { holds: [], captures: [], refunds: [] };
     const inScope = line.changed || line.heldCents > 0 || line.capturedCents > 0 || line.refundedCents > 0 || money.holds.length > 0 || money.captures.length > 0;
     if (!inScope) { others.lineCount += 1; others.targetCents += line.targetCents; continue; }
+    const events: SupplierEventView[] = ledger.supplierEvents.filter((event) => event.changeOrderId === orderId && event.itemId === businessId)
+      .map((event) => ({ id: event.id, kind: event.kind, quantity: event.quantity, unitPriceCents: event.unitPriceCents, taxCents: event.taxCents, freightCents: event.freightCents, totalCents: event.totalCents, inStock: event.inStock, leadTimeDays: event.leadTimeDays, reference: event.reference, note: event.note, isDemo: true, createdAt: event.createdAt.toISOString() }));
+    const terms = confirmedSupplierTerms(order, line);
     lines.push({
-      ...line, releasedCents: money.holds.reduce((total, hold) => total + hold.releasedCents, 0),
-      ...money, steps: steps(plan, line, owner && current),
+      ...line, businessItemId: businessId ?? null, releasedCents: money.holds.reduce((total, hold) => total + hold.releasedCents, 0), ...money,
+      confirmedTerms: terms,
+      refundRequiresSupplierCredit: line.side === "baseline" && order.changes.some((change) => change.itemId === line.itemId && ["returned", "cancelled"].includes(change.oldItemHandling)),
+      supplierEvents: events, steps: steps(plan, line, owner && current, events, terms?.purpose === "retained_cost"),
     });
   }
   return { ...base, plan, lines, others, operations: await operationViews(db, ledger, versions, names, owner) };
@@ -68,11 +75,12 @@ function itemMoney(ledger: ProjectLedger, businessId: string, versions: Map<stri
     holds: holds.map((hold) => {
       const onHold = captures.filter((capture) => capture.authorizationId === hold.id && capture.status !== "declined");
       const completed = onHold.filter((capture) => capture.status === "completed").reduce((total, capture) => total + capture.amountCents, 0);
-      const taken = onHold.reduce((total, capture) => total + capture.amountCents, 0);
-      const closed = ["voided", "expired", "captured"].includes(hold.status) || onHold.some((capture) => capture.finalCapture) || !!(hold.expiresAt && hold.expiresAt.getTime() <= now.getTime());
+      const pending = onHold.filter((capture) => capture.status === "pending").reduce((total, capture) => total + capture.amountCents, 0);
+      const closed = ["voided", "expired", "captured"].includes(hold.status) || onHold.some((capture) => capture.status === "completed" && capture.finalCapture) || !!(hold.expiresAt && hold.expiresAt.getTime() <= now.getTime());
+      const summary = summarizeHold({ authorizedCents: hold.amountCents, capturedCents: completed, pendingCaptureCents: pending, closed });
       return {
         id: hold.id, paypalOrderId: hold.paypalOrderId, paypalAuthorizationId: hold.paypalAuthorizationId, amountCents: hold.amountCents, status: hold.status,
-        capturedCents: completed, heldCents: closed ? 0 : Math.max(hold.amountCents - taken, 0), releasedCents: closed ? Math.max(hold.amountCents - completed, 0) : 0,
+        capturedCents: summary.capturedCents, heldCents: summary.heldCents, releasedCents: summary.releasedCents,
         version: hold.changeOrderId ? versions.get(hold.changeOrderId) ?? null : null,
         createdAt: hold.createdAt.toISOString(), honorExpiresAt: hold.honorExpiresAt?.toISOString() ?? null, expiresAt: hold.expiresAt?.toISOString() ?? null,
       };
@@ -81,28 +89,47 @@ function itemMoney(ledger: ProjectLedger, businessId: string, versions: Map<stri
       const of = refunds.filter((refund) => refund.captureId === capture.id);
       return {
         id: capture.id, paypalCaptureId: capture.paypalCaptureId, authorizationId: capture.authorizationId, amountCents: capture.amountCents, status: capture.status,
-        finalCapture: capture.finalCapture, createdAt: capture.createdAt.toISOString(),
+        finalCapture: capture.finalCapture, operationId: capture.operationId, createdAt: capture.createdAt.toISOString(),
         refundedCents: of.filter((refund) => refund.status === "completed").reduce((total, refund) => total + refund.amountCents, 0),
         pendingRefundCents: of.filter((refund) => refund.status === "pending").reduce((total, refund) => total + refund.amountCents, 0),
       };
     }),
-    refunds: refunds.map((refund) => ({ id: refund.id, paypalRefundId: refund.paypalRefundId, captureId: refund.captureId, amountCents: refund.amountCents, status: refund.status, createdAt: refund.createdAt.toISOString() })),
+    refunds: refunds.map((refund) => ({ id: refund.id, paypalRefundId: refund.paypalRefundId, captureId: refund.captureId, amountCents: refund.amountCents, status: refund.status, operationId: refund.operationId, createdAt: refund.createdAt.toISOString() })),
   };
 }
 
 /** The steps the plan calls for on this line, and whether each can start now. */
-function steps(plan: FundingPlan, line: FundingLine, canAct: boolean): PaymentStep[] {
+function steps(plan: FundingPlan, line: FundingLine, canAct: boolean, events: SupplierEventView[], retainedCost: boolean): PaymentStep[] {
   const ready = canAct && plan.status !== "blocked";
-  return plan.actions.filter((action) => action.itemId === line.itemId && action.side === line.side).map((action): PaymentStep => {
+  const ordered = events.some((event) => event.kind === "order_confirmed");
+  const step = (kind: PaymentStep["kind"], amountCents: number, available: boolean, note: string, actor: PaymentStep["actor"] = "designer"): PaymentStep => ({ kind, actor, amountCents, available, note });
+  return plan.actions.filter((action) => action.itemId === line.itemId && action.side === line.side).flatMap((action): PaymentStep[] => {
     switch (action.kind) {
       case "new_authorization":
-        return { kind: "authorize", actor: "client", amountCents: action.amountCents, available: ready && line.category === "furniture", note: "The client approves this hold on PayPal (Sandbox). Nothing is charged until the supplier confirms the order." };
+        return [step("authorize", action.amountCents, ready && line.category === "furniture", "The client approves this hold on PayPal (Sandbox). Nothing is charged until the supplier confirms the order.", "client")];
       case "capture":
-        return { kind: "capture", actor: "designer", amountCents: action.amountCents, available: false, note: action.timing === "after_vendor_confirmation" ? "Capture runs after the supplier confirms the order." : "This charge needs a separate payment step that is not part of this demo." };
+        if (action.timing !== "after_vendor_confirmation") return [step("capture", action.amountCents, false, "This charge needs a separate payment step that is not part of this demo.")];
+        return ordered
+          ? [step("capture", action.amountCents, ready, retainedCost
+            ? "The supplier confirmed this version's retained cost. Capture only that cost; closing the hold releases its unused balance."
+            : "The supplier confirmation recorded for this version matches the confirmed line. Each PayPal hold is captured separately and closed.")]
+          : [
+            step("supplier_confirmation", action.amountCents, ready, retainedCost
+              ? "Record the supplier's confirmation of the retained cost (demo, entered by the designer). It must match the total cost the client confirmed."
+              : "Record the supplier's order confirmation (demo, entered by the designer). Capture becomes available only if the supplier's terms match this version."),
+            step("capture", action.amountCents, false, retainedCost ? "Capture runs after the supplier confirms the retained cost." : "Capture runs after the supplier confirms the order."),
+          ];
       case "release_authorization":
-        return { kind: "void", actor: "designer", amountCents: action.amountCents, available: false, note: action.timing === "on_payment_execution" ? "Release the unused hold (a void, not a refund)." : "The excess is released when the remaining amount is captured." };
+        return [action.timing === "on_payment_execution"
+          ? step("void", action.amountCents, ready, "Release the unused hold. PayPal voids the whole remaining hold; this is a release, not a refund, and nothing is charged.")
+          : step("void", action.amountCents, false, "The excess is released when the remaining amount is captured and the hold closes.")];
       case "refund":
-        return { kind: "refund", actor: "designer", amountCents: action.amountCents, available: false, note: action.timing === "after_vendor_credit" ? "The refund waits for the supplier's credit." : "Refund completed captures above the confirmed amount." };
+        return action.timing === "after_vendor_credit"
+          ? [
+            step("supplier_credit", action.amountCents, ready, "Record the supplier's credit for the return (demo, entered by the designer). The refund becomes available only if the credit equals the confirmed refund."),
+            step("refund", action.amountCents, false, "The refund waits for the supplier's credit."),
+          ]
+          : [step("refund", action.amountCents, ready, "Refund completed captures above the confirmed amount, newest capture first. Retained costs stay with the studio.")];
     }
   });
 }
@@ -111,7 +138,7 @@ async function operationViews(db: Reader, ledger: ProjectLedger, versions: Map<s
   const ids = ledger.operations.map((operation) => operation.id);
   const calls = ids.length ? await db.select().from(paypalCalls).where(inArray(paypalCalls.operationId, ids)).orderBy(desc(paypalCalls.createdAt)) : [];
   return [...ledger.operations].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).map((operation) => ({
-    id: operation.id, kind: operation.kind, status: operation.status, amountCents: operation.amountCents,
+    id: operation.id, businessItemId: operation.itemId, kind: operation.kind, status: operation.status, amountCents: operation.amountCents,
     itemLabel: operation.itemId ? names.get(operation.itemId) ?? null : null,
     version: operation.changeOrderId ? versions.get(operation.changeOrderId) ?? null : null,
     requestId: operation.requestId, attempts: operation.attempts, paypalOrderId: operation.paypalOrderId,

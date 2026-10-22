@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { check, integer, jsonb, pgTable, primaryKey, serial, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import type { AiState, CaseKey, ChangeDraft, HumanActor } from "./types";
+import type { MoneyAnswer } from "../ai/money-types";
 
 /** Demo conversations are independent of real projects, quotes and payments. */
 export const chatCases = pgTable("chat_cases", {
@@ -31,6 +32,7 @@ export const chatMessages = pgTable("chat_messages", {
   aiState: text("ai_state").$type<AiState>().notNull().default("none"),
   error: text("error"),
   model: text("model"),
+  moneyAnswer: jsonb("money_answer").$type<MoneyAnswer>(),
   lastRunId: uuid("last_run_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
