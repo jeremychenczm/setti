@@ -1,6 +1,6 @@
-import type { OrdersController, PaymentsController } from "@paypal/paypal-server-sdk";
+import { ApiError, type OrdersController, type PaymentsController } from "@paypal/paypal-server-sdk";
 import { describe, expect, it } from "vitest";
-import { createSdkPayPal } from "./paypal-sdk";
+import { createSdkPayPal, createSdkTestCardApproval } from "./paypal-sdk";
 import { readSettlement, settlementDetails } from "./fees";
 
 const response = <T>(result: T, statusCode = 201) => ({ result, statusCode, headers: { "Paypal-Debug-Id": "debug-1" } });
@@ -123,5 +123,21 @@ describe("PayPal SDK adapter", () => {
     expect(result).toMatchObject({ kind: "ok", value: { status: "COMPLETED", amountCents: 10_000, settlement: { malformed: true } } });
     if (result.kind !== "ok") throw new Error("Expected capture receipt");
     expect(readSettlement("capture", 10_000, "USD", settlementDetails(result.value)).state).toBe("invalid");
+  });
+
+  it("confirms the app's order with the Sandbox test card and reads the approval back", async () => {
+    let sent: unknown;
+    const approve = createSdkTestCardApproval({ confirmOrder: async (request: unknown) => { sent = request; return response({ id: "ORDER-1", status: "APPROVED", purchaseUnits: [{ amount: { currencyCode: "USD", value: "800.00" }, customId: "op-1" }] }, 200); } } as never);
+    const result = await approve("ORDER-1");
+    expect(sent).toMatchObject({ id: "ORDER-1", body: { paymentSource: { card: { number: "4012000033330026", expiry: "2030-12" } } } });
+    expect(result).toMatchObject({ kind: "ok", value: { orderId: "ORDER-1", status: "APPROVED", amountCents: 80_000, customId: "op-1" } });
+  });
+
+  it("reports a test card PayPal refuses as rejected, with its debug id", async () => {
+    const refused = Object.assign(new ApiError({ request: {}, response: { statusCode: 422, headers: {}, body: "" } } as never, "Unprocessable"), {
+      result: { name: "UNPROCESSABLE_ENTITY", message: "The requested action could not be performed.", debug_id: "debug-422", details: [{ issue: "UNPROCESSABLE_ENTITY" }] },
+    });
+    const approve = createSdkTestCardApproval({ confirmOrder: async () => { throw refused; } } as never);
+    expect(await approve("ORDER-1")).toMatchObject({ kind: "rejected", code: "UNPROCESSABLE_ENTITY", debugId: "debug-422", trace: { httpStatus: 422 } });
   });
 });

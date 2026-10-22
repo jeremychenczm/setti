@@ -32,6 +32,7 @@ pick which one a probe uses.
 | P7 `p7-vault-authorization.ts` | Merchant-initiated AUTHORIZE orders with the vault id (no buyer step): one hold is partially then fully captured, a second `<label>-aged` hold is kept for P4/P5 later | `--label <name> [--amount 100]` | no | - |
 | P8 `p8-pay-later-authorize.ts` | Whether an AUTHORIZE order works when the buyer chooses Pay Later | `[--amount 200]` | yes | - |
 | P9 `p9-void-after-partial.ts` | Partial capture, void the rest, read the authorization back to see which amount PayPal reports | `--auth <label>` | no | - |
+| P10 `p10-test-card-approval.ts` | Approves an order from the server with a Sandbox test card: confirms the app's own order with the card and authorizes it, and creates an order with the card as its payment source. Voids both holds | `[--card 4012000033330026]` | no | - |
 
 ### Suggested order
 

@@ -19,12 +19,23 @@ import {
   type SellerPayableBreakdown,
   type SellerReceivableBreakdown,
 } from "@paypal/paypal-server-sdk";
-import { classifyFailure, type AuthorizationReceipt, type CallTrace, type CaptureReceipt, type OrderReceipt, type PayPalFailure, type PayPalPayments, type PayPalResult, type RefundReceipt, type ReportedSettlement } from "./paypal";
+import { classifyFailure, type AuthorizationReceipt, type CallTrace, type CaptureReceipt, type OrderReceipt, type PayPalFailure, type PayPalPayments, type PayPalResult, type RefundReceipt, type ReportedSettlement, type TestCardApproval } from "./paypal";
 import { formatCents, parseCents } from "./receipts";
 
 /** Ask PayPal for the full resource; the default minimal body leaves out the amount. */
 const FULL = "return=representation";
 const BRAND = "Setti (sandbox demo)";
+
+/** PayPal's documented Sandbox Visa. Probe P10: the Sandbox refused 4111… and 5555… on 2026-10-22. */
+export const SANDBOX_TEST_CARD = { number: "4012000033330026", expiry: "2030-12", securityCode: "123", name: "Setti Sandbox Test" } as const;
+
+/** Confirms the app's own order with the test card, so the usual authorize step follows unchanged. */
+export function createSdkTestCardApproval(orders: OrdersController): TestCardApproval {
+  return (orderId) => call(async () => {
+    const res = await orders.confirmOrder({ id: orderId, prefer: FULL, body: { paymentSource: { card: { ...SANDBOX_TEST_CARD } } } });
+    return [orderReceipt(res.result), res];
+  });
+}
 
 export function createSdkPayPal(controllers: { orders: OrdersController; payments: PaymentsController }): PayPalPayments {
   const { orders, payments } = controllers;

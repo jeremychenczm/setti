@@ -144,6 +144,12 @@ export interface PayPalPayments {
   getRefund(paypalRefundId: string): Promise<PayPalResult<RefundReceipt>>;
 }
 
+/**
+ * Approves an order with PayPal's Sandbox test card instead of a buyer on PayPal.
+ * Only /try uses it, to seed real holds; the money executors never receive it.
+ */
+export type TestCardApproval = (paypalOrderId: string) => Promise<PayPalResult<OrderReceipt>>;
+
 /** Network error codes that mean the request never reached PayPal. */
 const NOT_SENT = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN"]);
 

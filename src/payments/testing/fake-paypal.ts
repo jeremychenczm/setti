@@ -98,6 +98,13 @@ export class FakePayPal implements PayPalPayments {
     order.receipt = { ...order.receipt, status: "APPROVED" };
   }
 
+  /** The server confirms the order with the Sandbox test card, as /try does. */
+  readonly confirmWithTestCard = async (orderId: string): Promise<PayPalResult<OrderReceipt>> => {
+    if (!this.orders.has(orderId)) return refuse("RESOURCE_NOT_FOUND", "The specified resource does not exist.");
+    this.approve(orderId);
+    return { kind: "ok", value: this.orders.get(orderId)!.receipt, trace: { httpStatus: 200 } };
+  };
+
   /** The hold PayPal keeps for an authorization id, if this fake created it. */
   hold(paypalAuthorizationId: string): AuthorizationReceipt | undefined {
     return this.holds.get(paypalAuthorizationId)?.receipt;
