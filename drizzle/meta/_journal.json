@@ -113,6 +113,13 @@
       "when": 1792627330920,
       "tag": "0015_chat_money_answers",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1792654918516,
+      "tag": "0016_try_seeds",
+      "breakpoints": true
     }
   ]
 }

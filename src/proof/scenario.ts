@@ -1,26 +1,23 @@
 /**
  * The Sandbox proof scenario: one confirmed change moves three items that are in
- * different money states. It drives the app's own chat, pricing, approval and
- * payment code. Only the AI draft is a fixed draft, and supplier events are
- * designer-entered demo records, exactly as in the app.
+ * different money states. It starts from the same Maple state /try seeds, then
+ * drives the app's own chat, pricing, approval and payment code. Only the AI
+ * draft is a fixed draft, and supplier events are designer-entered demo records,
+ * exactly as in the app.
  */
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import type { Db } from "../db/client";
 import { paymentOperations } from "../db/schema";
-import { checkPayment, returnFromPayPal, startAuthorization, startCapture, startRefund, startRelease, type LinkBuilder } from "../payments/actions";
-import type { PaymentOperation } from "../payments/operations";
+import { checkPayment, startCapture, startRefund, startRelease } from "../payments/actions";
 import type { PayPalPayments, PayPalResult, RefundCommand, RefundReceipt } from "../payments/paypal";
-import { recordSupplierCredit, recordSupplierOrder } from "../payments/supplier";
+import { recordSupplierCredit } from "../payments/supplier";
 import { confirmChanges, shown } from "../payments/testing/cases";
-import type { FrozenChangeOrder, PricingItem } from "../pricing/types";
+import type { FrozenChangeOrder } from "../pricing/types";
+import { authorizeItem, confirmSupplierOrder, MAPLE, mapleRun, product, ref, startMaple, type MapleOptions, type PaymentStep } from "../try/maple";
 
-export const PROOF_CASE = "maple" as const;
+export const PROOF_CASE = MAPLE;
 
-export interface ProofStep {
-  label: string;
-  operations: Pick<PaymentOperation, "id" | "kind" | "status" | "amountCents" | "attempts" | "paypalOrderId" | "paypalResourceId">[];
-}
+export type ProofStep = PaymentStep;
 
 export interface ProofRun {
   session: string;
@@ -32,25 +29,9 @@ export interface ProofRun {
   droppedRefundOperationId: string | null;
 }
 
-export interface ProofOptions {
-  db: Db;
-  paypal: PayPalPayments;
-  links: LinkBuilder;
-  /** The buyer approves this PayPal order; resolves once PayPal reports it approved. */
-  approve: (approvalUrl: string, paypalOrderId: string, label: string) => Promise<void>;
+export interface ProofOptions extends MapleOptions {
   /** Discard the first refund answer after PayPal has processed it, then recover it. */
   dropRefundResponse?: boolean;
-  log?: (message: string) => void;
-}
-
-/** Fixed supplier terms are proof inputs, not claims about a real seller. */
-function product(name: string, sku: string, unitPriceCents: number): Partial<PricingItem> {
-  return {
-    name, vendor: "Demo supplier", sku, specification: name,
-    quantity: 1, unitLabel: "each", currency: "USD", unitPriceCents,
-    taxCents: 0, freightCents: 0, returnable: true,
-    returnPolicy: "Demo terms reviewed by the designer.",
-  };
 }
 
 /** A PayPal client that loses the first refund answer after PayPal has processed it. */
@@ -74,42 +55,9 @@ export function losingFirstRefundAnswer(paypal: PayPalPayments, onDrop: (command
 
 export async function runMixedChangeProof(options: ProofOptions): Promise<ProofRun> {
   const { db, paypal, links } = options;
-  const log = options.log ?? (() => {});
-  const session = randomUUID();
-  const steps: ProofStep[] = [];
-  const ref = (itemId: string, side: "baseline" | "proposed" = "baseline") => ({ itemId, side });
-  const record = (label: string, operations: PaymentOperation[]) => {
-    steps.push({ label, operations: operations.map(({ id, kind, status, amountCents, attempts, paypalOrderId, paypalResourceId }) => ({ id, kind, status, amountCents, attempts, paypalOrderId, paypalResourceId })) });
-    log(`${label}: ${operations.map((operation) => `${operation.kind} ${operation.status}`).join(", ")}`);
-    return operations;
-  };
-  const supplier = (order: FrozenChangeOrder, itemId: string) => {
-    const line = order.lines.find((entry) => entry.itemId === itemId)!;
-    return recordSupplierOrder(db, session, order.id, {
-      ...ref(itemId, "proposed"), ...shown(order), quantity: line.quantity,
-      unitPriceCents: line.unitPriceCents, taxCents: line.taxCents, freightCents: line.freightCents,
-      inStock: true, leadTimeDays: 14, reference: `DEMO-ORDER-${itemId}`, note: "Demo supplier confirmation entered by the designer.",
-    });
-  };
-  async function authorize(order: FrozenChangeOrder, itemId: string, label: string) {
-    const checkout = await startAuthorization(db, paypal, session, order.id, { ...ref(itemId, "proposed"), ...shown(order) }, links);
-    if (!checkout.paypalOrderId || !checkout.approvalUrl) throw new Error(`${label}: PayPal did not return an approval link (${checkout.status}).`);
-    await options.approve(checkout.approvalUrl, checkout.paypalOrderId, label);
-    const back = await returnFromPayPal(db, paypal, checkout.id, checkout.paypalOrderId, "return");
-    if (back?.state !== "authorized") throw new Error(`${label}: authorization did not complete (${back?.state ?? "no result"}).`);
-    const [authorized] = await db.select().from(paymentOperations).where(eq(paymentOperations.id, checkout.id));
-    record(label, [authorized]);
-  }
-
-  log("Confirming the first version: a lounge chair and a wool rug.");
-  const initial = await confirmChanges(db, session, PROOF_CASE, [
-    { action: "replace", itemId: "chair", after: product("Lounge chair", "DEMO-CHAIR-2", 80_000) },
-    { action: "replace", itemId: "rug", after: product("Wool rug", "DEMO-RUG-2", 30_000) },
-  ]);
-  await authorize(initial, "chair", "Authorize the lounge chair ($800.00)");
-  await authorize(initial, "rug", "Authorize the wool rug ($300.00)");
-  await supplier(initial, "rug");
-  record("Capture the rug after supplier confirmation", await startCapture(db, paypal, session, initial.id, { ...ref("rug", "proposed"), ...shown(initial) }));
+  const run = mapleRun(randomUUID(), options.log);
+  const { session, steps, record, log } = run;
+  const initial = await startMaple(options, run);
 
   log("Confirming one change: the chair becomes a writing desk and the rug is returned with a $60 restocking fee.");
   const mixed = await confirmChanges(db, session, PROOF_CASE, [
@@ -117,8 +65,8 @@ export async function runMixedChangeProof(options: ProofOptions): Promise<ProofR
     { action: "remove", itemId: "rug", oldItemHandling: "returned", oldItemCostCents: 6_000 },
   ]);
   record("Release the lounge chair hold", await startRelease(db, paypal, session, mixed.id, { ...ref("chair"), ...shown(mixed) }));
-  await authorize(mixed, "chair", "Authorize the writing desk ($1,100.00)");
-  await supplier(mixed, "chair");
+  await authorizeItem(options, run, mixed, "chair", "Authorize the writing desk ($1,100.00)");
+  await confirmSupplierOrder(db, run, mixed, "chair");
   record("Capture the desk after supplier confirmation", await startCapture(db, paypal, session, mixed.id, { ...ref("chair", "proposed"), ...shown(mixed) }));
   await recordSupplierCredit(db, session, mixed.id, { ...ref("rug"), ...shown(mixed), creditCents: 24_000, reference: "DEMO-RUG-CREDIT", note: "Demo return credit, net of the confirmed $60 restocking fee." });
 

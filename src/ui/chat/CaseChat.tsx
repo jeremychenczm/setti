@@ -7,6 +7,7 @@ import { isAiInvocation } from "@/ai/intent";
 import type { CaseKey, CaseMessage, HumanActor } from "@/chat/types";
 import type { ApprovedQuoteReport } from "@/quotes/types";
 import type { Person } from "../demo-data";
+import { TrySeedNotice } from "../try/TrySeedNotice";
 import { Avatar } from "../workspace/primitives";
 import { DraftCard } from "./DraftCard";
 import { MoneyAnswerCard } from "./MoneyAnswerCard";
@@ -120,6 +121,7 @@ export function CaseChat({ projectKey, quote, onOpenQuote, onSelectCase, onOpenL
 
       <div className="relative flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
+          {projectKey === "maple" && <TrySeedNotice />}
           {snapshot?.aiConfigured === false && <div role="status" className="border-b border-amber-100 bg-amber-50 px-4 py-2.5 text-[11px] leading-relaxed text-amber-800">AI is not configured on this server yet. You can still discuss this case; an @AI request will show a configuration error.</div>}
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">

@@ -44,7 +44,7 @@ function session(req: NextRequest): string | null {
 }
 
 /** PayPal sends the buyer back here; SETTI_PUBLIC_URL overrides the request origin when the app runs behind a proxy. */
-function links(req: NextRequest): LinkBuilder {
+export function paypalLinks(req: NextRequest): LinkBuilder {
   const base = (process.env.SETTI_PUBLIC_URL?.trim() || req.nextUrl.origin).replace(/\/$/, "");
   return (operationId) => ({
     returnUrl: `${base}/api/payments/paypal/return?op=${operationId}&state=${callbackState(operationId, "return")}`,
@@ -101,7 +101,7 @@ export async function postPaymentsResponse(req: NextRequest, id: string) {
     let operationId: string | null = null, redirectUrl: string | null = null;
     switch (input.action) {
       case "authorize": {
-        const operation = await startAuthorization(db(), sandboxPayPal(), sessionId, id, input, links(req));
+        const operation = await startAuthorization(db(), sandboxPayPal(), sessionId, id, input, paypalLinks(req));
         operationId = operation.id;
         redirectUrl = operation.status === "pending" && !operation.paypalResourceId ? operation.approvalUrl : null;
         break;
@@ -122,7 +122,7 @@ export async function postPaymentsResponse(req: NextRequest, id: string) {
         await recordSupplierCredit(db(), sessionId, id, input);
         break;
       case "check":
-        operationId = (await checkPayment(db(), sandboxPayPal(), sessionId, id, input.operationId, links(req))).id;
+        operationId = (await checkPayment(db(), sandboxPayPal(), sessionId, id, input.operationId, paypalLinks(req))).id;
         break;
       case "cancel":
         operationId = (await cancelPayment(db(), sandboxPayPal(), sessionId, id, input.operationId)).id;
