@@ -63,6 +63,17 @@ npx tsx probes/p5-reauthorize-after-partial.ts --auth wallet-e
 npx tsx probes/p5-reauthorize-after-partial.ts --auth vault-a-aged
 ```
 
+## App-level proof
+
+`npm run sandbox:proof` runs one complete change through the app's own chat, pricing, approval and payment code against the Sandbox, then reads every PayPal resource back with GET and writes `evidence/<date>-mixed-change/` (`README.md`, `provider-verification.json`, `ledger.json`).
+
+The scenario: a lounge chair and a wool rug are authorized and the rug is captured; one confirmed change then replaces the chair with a writing desk and returns the rug with a $60 restocking fee. Setti releases the chair hold, authorizes and captures the desk, and refunds the rug minus the fee.
+
+- The sandbox buyer approves three authorizations; the runner prints each link and waits.
+- It uses its own database (`SETTI_PROOF_DATABASE_URL`, default `setti_proof` on the `DATABASE_URL` server) and empties it first; any name not ending in `_proof` is refused.
+- `--drop-refund-response` discards the first refund answer after PayPal processes it, then checks that the step is recovered by its custom_id without a second refund.
+- The run fails (exit code 1) if any PayPal read disagrees with the local ledger.
+
 ## Reading the results
 
 - `ok: true` with a `response` means PayPal accepted the call; check `status`, amounts and `expirationTime` in the response.

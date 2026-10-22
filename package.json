@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "probe": "tsx",
+    "sandbox:proof": "tsx probes/app-proof.ts",
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "db:generate": "drizzle-kit generate",
