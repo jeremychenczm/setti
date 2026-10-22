@@ -17,6 +17,7 @@ import {
 } from "./operations";
 import type { PayPalPayments, PayPalResult, RefundReceipt } from "./paypal";
 import { formatCents, refundMoneyStatus, verifyRefund } from "./receipts";
+import { settlementDetails } from "./fees";
 
 export type PaypalRefund = typeof paypalRefunds.$inferSelect;
 
@@ -109,6 +110,6 @@ function logRefund(db: Db, operation: Pick<PaymentOperation, "id">, step: "refun
   const receipt = result.kind === "ok" ? result.value : undefined;
   return recordCall(db, operation.id, step, requestId, result, receipt && {
     resourceId: receipt.paypalRefundId, status: receipt.status, amountCents: receipt.amountCents, currency: receipt.currency,
-    details: { createTime: receipt.createTime, money: refundMoneyStatus(receipt.status) ?? null },
+    details: { createTime: receipt.createTime, money: refundMoneyStatus(receipt.status) ?? null, ...settlementDetails(receipt) },
   });
 }

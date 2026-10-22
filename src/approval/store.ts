@@ -138,7 +138,8 @@ export function createApprovalStore(db: Db) {
         : decision ? "The client's decision has been recorded for this exact version."
           : found.status === "superseded" ? "A newer client version has replaced this document."
             : found.activeRunId ? "Wait for the current AI reply before confirming this version." : null,
-      fundingPlan: owner && decision?.decision === "approved" && found.status === "approved" ? buildFundingPlan(found.document, await fundingFacts(reader, found.document, found.caseId)) : null,
+      fundingPlan: owner && ((found.status === "sent" && !decision) || (decision?.decision === "approved" && found.status === "approved"))
+        ? buildFundingPlan(found.document, await fundingFacts(reader, found.document, found.caseId)) : null,
     };
   }
 

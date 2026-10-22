@@ -19,6 +19,7 @@ import {
 import type { CaptureReceipt, PayPalFailure, PayPalPayments, PayPalResult } from "./paypal";
 import { noteInCase } from "./notes";
 import { captureMoneyStatus, formatCents, verifyCapture } from "./receipts";
+import { settlementDetails } from "./fees";
 
 export type { PaymentOperation } from "./operations";
 
@@ -160,6 +161,6 @@ function logCapture(db: Db, operation: Pick<PaymentOperation, "id">, step: "capt
   const receipt = result.kind === "ok" ? result.value : undefined;
   return recordCall(db, operation.id, step, requestId, result, receipt && {
     resourceId: receipt.paypalCaptureId, status: receipt.status, amountCents: receipt.amountCents, currency: receipt.currency,
-    details: { finalCapture: receipt.finalCapture, createTime: receipt.createTime, money: captureMoneyStatus(receipt.status) ?? null },
+    details: { finalCapture: receipt.finalCapture, createTime: receipt.createTime, money: captureMoneyStatus(receipt.status) ?? null, ...settlementDetails(receipt) },
   });
 }

@@ -16,8 +16,10 @@ import {
   type PaymentAuthorization,
   type PaymentsController,
   type Refund,
+  type SellerPayableBreakdown,
+  type SellerReceivableBreakdown,
 } from "@paypal/paypal-server-sdk";
-import { classifyFailure, type AuthorizationReceipt, type CallTrace, type CaptureReceipt, type OrderReceipt, type PayPalFailure, type PayPalPayments, type PayPalResult, type RefundReceipt } from "./paypal";
+import { classifyFailure, type AuthorizationReceipt, type CallTrace, type CaptureReceipt, type OrderReceipt, type PayPalFailure, type PayPalPayments, type PayPalResult, type RefundReceipt, type ReportedSettlement } from "./paypal";
 import { formatCents, parseCents } from "./receipts";
 
 /** Ask PayPal for the full resource; the default minimal body leaves out the amount. */
@@ -153,11 +155,34 @@ function orderReceipt(order: Order | OrderAuthorizeResponse): OrderReceipt {
 }
 
 function captureReceipt(capture: CapturedPayment): CaptureReceipt {
-  return { paypalCaptureId: capture.id, status: capture.status, ...money(capture.amount), finalCapture: capture.finalCapture, createTime: capture.createTime };
+  const breakdown = capture.sellerReceivableBreakdown;
+  return { paypalCaptureId: capture.id, status: capture.status, ...money(capture.amount), finalCapture: capture.finalCapture, createTime: capture.createTime,
+    ...(breakdown ? { settlement: settlement(breakdown) } : {}) };
 }
 
 function refundReceipt(refund: Refund): RefundReceipt {
-  return { paypalRefundId: refund.id, status: refund.status, ...money(refund.amount), createTime: refund.createTime };
+  const breakdown = refund.sellerPayableBreakdown;
+  return { paypalRefundId: refund.id, status: refund.status, ...money(refund.amount), createTime: refund.createTime,
+    ...(breakdown ? { settlement: settlement(breakdown) } : {}) };
+}
+
+function settlement(breakdown: SellerReceivableBreakdown | SellerPayableBreakdown): ReportedSettlement {
+  const amounts = [breakdown.grossAmount, breakdown.paypalFee, breakdown.netAmount];
+  const settlementMoney = (amount: typeof breakdown.paypalFee) => ({
+    amountCents: typeof amount?.value === "string" ? parseCents(amount.value) : undefined,
+    currency: typeof amount?.currencyCode === "string" ? amount.currencyCode : undefined,
+  });
+  return {
+    gross: settlementMoney(breakdown.grossAmount), fee: settlementMoney(breakdown.paypalFee), net: settlementMoney(breakdown.netAmount),
+    platformFeesPresent: !!breakdown.platformFees?.length,
+    conversionPresent: !!breakdown.paypalFeeInReceivableCurrency
+      || ("exchangeRate" in breakdown && !!breakdown.exchangeRate)
+      || ("receivableAmount" in breakdown && !!breakdown.receivableAmount)
+      || ("netAmountInReceivableCurrency" in breakdown && !!breakdown.netAmountInReceivableCurrency)
+      || ("netAmountBreakdown" in breakdown && !!breakdown.netAmountBreakdown?.length),
+    malformed: amounts.some((amount) => amount !== undefined &&
+      (amount === null || typeof amount.currencyCode !== "string" || !amount.currencyCode || typeof amount.value !== "string" || parseCents(amount.value) === undefined)),
+  };
 }
 
 function fromError(error: unknown): PayPalFailure {

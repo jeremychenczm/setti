@@ -7,13 +7,15 @@ import type { OperationView, PaymentLineView, PaymentStep, PaymentsWorkspace } f
 import { centsText, dateTime, Field, inputClass, money, parseDollars, signedMoney } from "../pricing/common";
 import { emptyPaymentFeedback, feedbackMessage, paymentFeedback, paymentReturnNotice } from "./feedback";
 import { lineProgress, paymentScopeTotals } from "./progress";
+import { PaymentFees } from "./PaymentFees";
 
 type LineRef = { itemId: string; side: PaymentLineView["side"] };
 type Action =
   | ({ action: "authorize" | "capture" | "release" | "refund" } & LineRef)
   | ({ action: "supplier_order"; quantity: number; unitPriceCents: number; taxCents: number; freightCents: number; inStock: boolean; leadTimeDays: number | null; reference: string; note: string } & LineRef)
   | ({ action: "supplier_credit"; creditCents: number; reference: string; note: string } & LineRef)
-  | { action: "check" | "cancel"; operationId: string };
+  | { action: "check" | "cancel"; operationId: string }
+  | { action: "fees" };
 
 const kindLabels: Record<OperationView["kind"], string> = { authorize: "Authorization", capture: "Capture", void: "Release hold (void)", refund: "Refund", reauthorize: "Reauthorization" };
 const statusLabels: Record<OperationView["status"], string> = { pending: "In progress", succeeded: "PayPal confirmed", failed: "Not done", unknown: "Outcome unknown · check PayPal" };
@@ -136,7 +138,8 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
       </div> : null}
     </div>)}</div>}
 
-    {workspace.lines.length > 0 && <><ExecutionOverview workspace={workspace} /><div className="mt-4 space-y-4">{workspace.lines.map((line) => <LineCard key={`${line.side}:${line.itemId}`} line={line} operations={workspace.operations} version={workspace.version} busy={busy} disabled={disabled} canAct={workspace.canAct} canReconcile={workspace.canReconcile} onAction={(action, key) => run({ ...action, itemId: line.itemId, side: line.side } as Action, key)} onCheck={(operationId) => void run({ action: "check", operationId }, `check:${operationId}`)} />)}</div></>}
+    {workspace.lines.length > 0 && <><ExecutionOverview workspace={workspace} /><div className="mt-4 space-y-4">{workspace.lines.map((line) => <LineCard key={`${line.side}:${line.itemId}`} line={line} operations={workspace.operations} version={workspace.version} busy={busy} disabled={disabled} canAct={workspace.canAct} canReconcile={workspace.canReconcile} onAction={(action, key) => run({ ...action, itemId: line.itemId, side: line.side } as Action, key)} onCheck={(operationId) => void run({ action: "check", operationId }, `check:${operationId}`)} />)}</div>
+      <PaymentFees lines={workspace.lines} {...(workspace.canReconcile ? { onRefresh: () => void run({ action: "fees" }, "fees"), refreshing: busy === "fees", disabled } : {})} /></>}
 
     {plan && <>
       {workspace.others.lineCount > 0 && <p className="mt-4 rounded-lg bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600">{workspace.others.lineCount} other quote lines ({money(workspace.others.targetCents)}) are outside this change. Setti shows their amounts but runs no payment step for them in this demo; they are not authorized or paid.</p>}

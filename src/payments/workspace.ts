@@ -15,6 +15,7 @@ import { changeOrders, pricingCases } from "../pricing/schema";
 import { paypalCalls } from "./schema";
 import { summarizeHold } from "./holds";
 import { confirmedSupplierTerms } from "./supplier-terms";
+import { recordedSettlement } from "./fee-evidence";
 import type { CaptureView, HoldView, OperationView, PaymentLineView, PaymentStep, PaymentsWorkspace, RefundView, SupplierEventView } from "./types";
 
 type Reader = Pick<Db, "select">;
@@ -40,6 +41,8 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
   if (!bridge || !decision) return { ...base, plan: null, lines: [], others: { lineCount: order.lines.length, targetCents: order.totals.totalCents }, operations: [] };
 
   const ledger = await readLedger(db, bridge.projectId);
+  const operationIds = ledger.operations.map((operation) => operation.id);
+  const calls = operationIds.length ? await db.select().from(paypalCalls).where(inArray(paypalCalls.operationId, operationIds)).orderBy(desc(paypalCalls.createdAt)) : [];
   const plan = buildFundingPlan(order, fundingFactsFrom(order, bridge.itemMapping, ledger, now));
   const { byGroup } = fundingIdentities(order, bridge.itemMapping);
   const versions = new Map((await db.select({ id: changeOrders.id, document: changeOrders.document }).from(changeOrders).where(eq(changeOrders.caseId, found.caseId)))
@@ -50,7 +53,7 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
   const others = { lineCount: 0, targetCents: 0 };
   for (const line of plan.lines) {
     const businessId = byGroup.get(`${line.side}:${line.itemId}`);
-    const money = businessId ? itemMoney(ledger, businessId, versions, now) : { holds: [], captures: [], refunds: [] };
+    const money = businessId ? itemMoney(ledger, businessId, versions, now, calls) : { holds: [], captures: [], refunds: [] };
     const inScope = line.changed || line.heldCents > 0 || line.capturedCents > 0 || line.refundedCents > 0 || money.holds.length > 0 || money.captures.length > 0;
     if (!inScope) { others.lineCount += 1; others.targetCents += line.targetCents; continue; }
     const events: SupplierEventView[] = ledger.supplierEvents.filter((event) => event.changeOrderId === orderId && event.itemId === businessId)
@@ -66,7 +69,7 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
   return { ...base, plan, lines, others, operations: await operationViews(db, ledger, versions, names, owner) };
 }
 
-function itemMoney(ledger: ProjectLedger, businessId: string, versions: Map<string, number>, now: Date): { holds: HoldView[]; captures: CaptureView[]; refunds: RefundView[] } {
+function itemMoney(ledger: ProjectLedger, businessId: string, versions: Map<string, number>, now: Date, calls: (typeof paypalCalls.$inferSelect)[]): { holds: HoldView[]; captures: CaptureView[]; refunds: RefundView[] } {
   const holds = ledger.authorizations.filter((auth) => auth.itemId === businessId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   const holdIds = new Set(holds.map((hold) => hold.id));
   const captures = ledger.captures.filter((capture) => capture.authorizationId && holdIds.has(capture.authorizationId)).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
@@ -92,9 +95,10 @@ function itemMoney(ledger: ProjectLedger, businessId: string, versions: Map<stri
         finalCapture: capture.finalCapture, operationId: capture.operationId, createdAt: capture.createdAt.toISOString(),
         refundedCents: of.filter((refund) => refund.status === "completed").reduce((total, refund) => total + refund.amountCents, 0),
         pendingRefundCents: of.filter((refund) => refund.status === "pending").reduce((total, refund) => total + refund.amountCents, 0),
+        settlement: recordedSettlement("capture", capture.paypalCaptureId, capture.amountCents, calls),
       };
     }),
-    refunds: refunds.map((refund) => ({ id: refund.id, paypalRefundId: refund.paypalRefundId, captureId: refund.captureId, amountCents: refund.amountCents, status: refund.status, operationId: refund.operationId, createdAt: refund.createdAt.toISOString() })),
+    refunds: refunds.map((refund) => ({ id: refund.id, paypalRefundId: refund.paypalRefundId, captureId: refund.captureId, amountCents: refund.amountCents, status: refund.status, operationId: refund.operationId, createdAt: refund.createdAt.toISOString(), settlement: recordedSettlement("refund", refund.paypalRefundId, refund.amountCents, calls) })),
   };
 }
 

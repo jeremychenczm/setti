@@ -85,6 +85,18 @@ describe.skipIf(!testDatabaseUrl)("whole-document client decisions", () => {
     expect(chat.messages.at(-1)?.text).toContain("No payment has been executed");
   });
 
+  it("shows an owning client's funding preview before approval without creating a decision or payment", async () => {
+    const order = await issue(await draftAndReview()), store = createApprovalStore(handle.db);
+    const before = await store.getWorkspace(session, order.id);
+    expect(before).toMatchObject({ canDecide: true, view: { status: "awaiting_client_confirmation", decision: null } });
+    expect(before?.fundingPlan).toMatchObject({ executable: false, status: "not_authorized", orderId: order.id });
+    expect(before!.fundingPlan!.money.newAuthorizationCents! + before!.fundingPlan!.money.chargeCents!).toBe(order.totals.totalCents);
+    expect(await handle.db.select().from(changeOrderDecisions)).toHaveLength(0);
+    expect(await handle.db.select().from(paymentOperations)).toHaveLength(0);
+    expect((await store.getWorkspace(randomUUID(), order.id))?.fundingPlan).toBeNull();
+    expect((await store.getWorkspace(null, order.id))?.fundingPlan).toBeNull();
+  });
+
   it("checks both hashes, signed name and acknowledgement before recording a decision", async () => {
     const order = await issue(await draftAndReview()), store = createApprovalStore(handle.db), body = command(order);
     for (const input of [{ ...body, contentHash: "0".repeat(64) }, { ...body, revisionContentHash: "0".repeat(64) }]) await expect(store.decide(session, order.id, input)).rejects.toMatchObject({ code: "CONTENT_CHANGED" });
@@ -98,6 +110,7 @@ describe.skipIf(!testDatabaseUrl)("whole-document client decisions", () => {
     const review = workspace.review!;
     const updated = await pricing.saveReview(session, "maple", { sourceDraftId: review.sourceDraftId, sourceDraftRevision: review.sourceDraftRevision, expectedVersion: review.version, input: { ...review.input, title: "Updated chair review" } });
     const latest = await issue(updated);
+    expect((await store.getWorkspace(session, old.id))?.fundingPlan).toBeNull();
     await expect(store.decide(session, old.id, command(old))).rejects.toMatchObject({ code: "STALE_VERSION" });
     await expect(store.decide(session, latest.id, { ...command(latest, true), note: "" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
     const result = await store.decide(session, latest.id, command(latest, true));

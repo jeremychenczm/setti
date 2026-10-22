@@ -9,6 +9,7 @@ import { sandboxPayPal } from "./server";
 import { callbackState, validCallbackState } from "./callback-state";
 import { recordSupplierCredit, recordSupplierOrder } from "./supplier";
 import { paymentsWorkspace } from "./workspace";
+import { refreshRecordedFees } from "./fee-refresh";
 
 const uuid = z.uuid();
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
@@ -27,6 +28,7 @@ const actionSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("supplier_credit"), ...line, creditCents: cents, reference: z.string().trim().min(1).max(200), note: z.string().trim().max(1_000) }),
   z.strictObject({ action: z.literal("check"), operationId: uuid }),
   z.strictObject({ action: z.literal("cancel"), operationId: uuid }),
+  z.strictObject({ action: z.literal("fees") }),
 ]);
 class HttpError extends Error { constructor(message: string, readonly status: number) { super(message); } }
 
@@ -124,6 +126,9 @@ export async function postPaymentsResponse(req: NextRequest, id: string) {
         break;
       case "cancel":
         operationId = (await cancelPayment(db(), sandboxPayPal(), sessionId, id, input.operationId)).id;
+        break;
+      case "fees":
+        await refreshRecordedFees(db(), sandboxPayPal(), sessionId, id);
         break;
     }
     return NextResponse.json({ workspace: await paymentsWorkspace(db(), sessionId, id), operationId, redirectUrl }, { headers });

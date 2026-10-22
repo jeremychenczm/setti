@@ -14,6 +14,19 @@ export interface ReportedMoney {
   currency?: string;
 }
 
+/** Provider-reported seller amounts; missing fields never imply zero. */
+export interface ReportedSettlement {
+  gross: ReportedMoney;
+  /** PayPal's fee component, not an additional customer charge. */
+  fee: ReportedMoney;
+  /** Capture: seller receipt. Refund: seller debit for that refund. */
+  net: ReportedMoney;
+  platformFeesPresent: boolean;
+  conversionPresent: boolean;
+  /** A supplied monetary field could not be read as an exact non-negative amount. */
+  malformed?: boolean;
+}
+
 export interface CreateOrderCommand {
   /** Sent as PayPal-Request-Id; the same for every attempt to create this operation's order. */
   requestId: string;
@@ -68,6 +81,7 @@ export interface CaptureReceipt extends ReportedMoney {
   status?: string;
   finalCapture?: boolean;
   createTime?: string;
+  settlement?: ReportedSettlement;
 }
 
 export interface VoidCommand {
@@ -88,6 +102,7 @@ export interface RefundReceipt extends ReportedMoney {
   /** CANCELLED, FAILED, PENDING or COMPLETED. */
   status?: string;
   createTime?: string;
+  settlement?: ReportedSettlement;
 }
 
 /** HTTP status and PayPal debug id of a call, kept as evidence. */

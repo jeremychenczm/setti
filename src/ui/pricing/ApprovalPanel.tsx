@@ -4,6 +4,7 @@ import { Check, ClipboardCheck, LoaderCircle, LockKeyhole, RefreshCw } from "luc
 import { useEffect, useRef, useState } from "react";
 import type { ApprovalWorkspace, DecideChangeOrderInput } from "@/approval/types";
 import { dateTime, Field, inputClass } from "./common";
+import { FundingImpactPreview } from "./FundingImpactPreview";
 
 export function isApprovalWorkspace(value: unknown, orderId: string): value is ApprovalWorkspace {
   if (!value || typeof value !== "object") return false;
@@ -123,6 +124,7 @@ export function ApprovalPanel({ workspace, loading, onChange, onBusyChange }: Ap
   }
 
   return <>
+    <FundingImpactPreview order={order} plan={workspace.fundingPlan} status={view.status} canView={clientName !== null} />
     <section className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="client-decision-title">
       <h2 id="client-decision-title" className="flex items-center gap-2 text-[16px] font-semibold"><ClipboardCheck className="h-4.5 w-4.5 text-[var(--primary)]" />Client review · V{order.version}</h2>
       {decision && <div role="status" className={`mt-4 rounded-xl border p-4 text-[12px] leading-relaxed ${decision.decision === "approved" ? "border-emerald-100 bg-emerald-50 text-emerald-900" : "border-amber-100 bg-amber-50 text-amber-900"}`}>

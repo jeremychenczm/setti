@@ -1,4 +1,7 @@
 import type { FundingPlan } from "@/approval/funding";
+import type { SettlementView } from "./fees";
+
+export type RecordedSettlement = SettlementView & { observedAt: string | null };
 
 export type PaymentStepKind = "authorize" | "supplier_confirmation" | "capture" | "void" | "supplier_credit" | "refund";
 
@@ -28,6 +31,7 @@ export interface HoldView {
 }
 
 export interface CaptureView {
+  settlement?: RecordedSettlement;
   id: string;
   paypalCaptureId: string;
   authorizationId: string | null;
@@ -42,6 +46,7 @@ export interface CaptureView {
 }
 
 export interface RefundView {
+  settlement?: RecordedSettlement;
   id: string;
   paypalRefundId: string;
   captureId: string;
