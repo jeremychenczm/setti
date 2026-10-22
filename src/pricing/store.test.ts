@@ -28,14 +28,14 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
 
   async function seed(key: CaseKey = "maple", action: "quantity" | "replace" = "quantity") {
     const quote = caseQuote(key);
-    const old = quote.lines.find((line) => line.itemId === (key === "maple" ? "chair" : "willow-lisabo-dining-chair"))!;
+    const old = quote.lines.find((line) => line.itemId === (key === "maple" ? "chair" : "willow-dining-chair"))!;
     const before = { name: old.name, vendor: old.vendor, brand: null, sku: old.sku, specification: old.specification, quantity: old.quantity, unitLabel: old.unitLabel ?? "each", unitPriceCents: old.unitPriceCents, currency: "USD" };
     const after = action === "quantity" ? { ...before, quantity: old.quantity + 1 } : {
       ...before, name: "BERGMUND Chair", vendor: "IKEA US (test reference)", sku: "TEST-BERGMUND", specification: "Test-only replacement option", quantity: 1, unitPriceCents: 9_500,
     };
     const chat = createChatStore(handle.db);
     const messageId = randomUUID();
-    await chat.appendMessage(sessionId, key, { id: messageId, actor: "client", text: `@AI ${action === "quantity" ? "Increase the chair quantity." : "Replace LISABO with BERGMUND for review."}` });
+    await chat.appendMessage(sessionId, key, { id: messageId, actor: "client", text: `@AI ${action === "quantity" ? "Increase the chair quantity." : "Replace the dining chairs with BERGMUND for review."}` });
     const now = new Date().toISOString();
     const draft: ChangeDraft = {
       id: randomUUID(), projectKey: key, basedOnQuoteId: quote.id, basedOnVersion: quote.version, basedOnQuoteFingerprint: quoteFingerprint(quote), revision: 1,
@@ -279,14 +279,14 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
       .innerJoin(items, eq(items.id, revisionLines.itemId)).where(eq(revisionLines.revisionId, bridge.baselineRevisionId));
     const changed = await handle.db.select({ itemId: items.id, name: items.name }).from(revisionLines)
       .innerJoin(items, eq(items.id, revisionLines.itemId)).where(eq(revisionLines.revisionId, issued.order.revisionId));
-    const oldChair = baseline.find((line) => line.name === "LISABO Chair")!;
+    const oldChair = baseline.find((line) => line.name === "Dining chair")!;
     const newChair = changed.find((line) => line.name === "BERGMUND Chair")!;
     expect(oldChair.returnable).toBeNull();
     expect(newChair).toBeDefined();
     expect(newChair.itemId).not.toBe(oldChair.itemId);
-    expect(changed.find((line) => line.name === "MICKE Desk")?.itemId).toBe(baseline.find((line) => line.name === "MICKE Desk")?.itemId);
+    expect(changed.find((line) => line.name === "Writing desk")?.itemId).toBe(baseline.find((line) => line.name === "Writing desk")?.itemId);
     expect(issued.order.lines).toHaveLength(28);
-    expect(issued.order.baselineLines.find((line) => line.itemId === "willow-lisabo-dining-chair")?.name).toBe("LISABO Chair");
+    expect(issued.order.baselineLines.find((line) => line.itemId === "willow-dining-chair")?.name).toBe("Dining chair");
   });
 
   it("rolls back baseline import, revision creation and approvals if the final order insert fails", async () => {

@@ -20,7 +20,7 @@ vi.mock("@/db/client", () => ({ createDb: () => ({ db: {}, pool: {} }) }));
 
 const orderId = randomUUID(), sessionId = randomUUID(), operationId = randomUUID();
 const origin = "http://localhost:3002";
-const authorize = { action: "authorize", itemId: "willow-lisabo-dining-chair", side: "proposed", contentHash: "a".repeat(64), revisionContentHash: "b".repeat(64) };
+const authorize = { action: "authorize", itemId: "willow-dining-chair", side: "proposed", contentHash: "a".repeat(64), revisionContentHash: "b".repeat(64) };
 
 function post(body: unknown, options: { cookie?: string | null; origin?: string } = {}) {
   return new NextRequest(`${origin}/api/change-orders/${orderId}/payments`, {
@@ -60,13 +60,13 @@ describe("payment HTTP boundaries", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ operationId, redirectUrl: "https://www.sandbox.paypal.com/checkoutnow?token=ORDER-1" });
     const [, , session, id, input, links] = mock.startAuthorization.mock.calls[0];
-    expect([session, id, input.itemId]).toEqual([sessionId, orderId, "willow-lisabo-dining-chair"]);
+    expect([session, id, input.itemId]).toEqual([sessionId, orderId, "willow-dining-chair"]);
     expect(links(operationId)).toEqual({ returnUrl: `${origin}/api/payments/paypal/return?op=${operationId}&state=${callbackState(operationId, "return")}`, cancelUrl: `${origin}/api/payments/paypal/cancel?op=${operationId}&state=${callbackState(operationId, "cancel")}` });
   });
 
   it("routes designer steps without accepting any client-supplied amount", async () => {
     mock.startCapture.mockResolvedValue([{ id: operationId }]);
-    const lineRef = { itemId: "willow-lisabo-dining-chair", side: "baseline", contentHash: "a".repeat(64), revisionContentHash: "b".repeat(64) };
+    const lineRef = { itemId: "willow-dining-chair", side: "baseline", contentHash: "a".repeat(64), revisionContentHash: "b".repeat(64) };
     expect(await (await postPaymentsResponse(post({ action: "capture", ...lineRef }), orderId)).json()).toMatchObject({ operationId, redirectUrl: null });
     expect((await postPaymentsResponse(post({ action: "capture", ...lineRef, amountCents: 81_563 }), orderId)).status).toBe(400);
     expect((await postPaymentsResponse(post({ action: "refund", ...lineRef, amountCents: 79_063 }), orderId)).status).toBe(400);

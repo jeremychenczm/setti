@@ -12,7 +12,7 @@ import { bergmund, confirmChange, shown } from "./testing/cases";
 import { FakePayPal } from "./testing/fake-paypal";
 import { paymentsWorkspace } from "./workspace";
 
-const CHAIR = "willow-lisabo-dining-chair";
+const CHAIR = "willow-dining-chair";
 const links = (operationId: string) => ({ returnUrl: `http://localhost:3002/api/payments/paypal/return?op=${operationId}`, cancelUrl: `http://localhost:3002/api/payments/paypal/cancel?op=${operationId}` });
 const gate = () => {
   let resolve!: () => void;

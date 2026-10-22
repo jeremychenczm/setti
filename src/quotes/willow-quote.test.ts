@@ -3,49 +3,49 @@ import { mapleApprovedQuote } from "./demo-quote";
 import { calculateLineTotals, calculateQuoteTotals } from "./totals";
 import { willowApprovedQuote } from "./willow-quote";
 
-describe("Willow reference quote integrity", () => {
+describe("Willow supplier quote integrity", () => {
   const lines = willowApprovedQuote.lines;
-  const products = lines.filter((line) => line.source.kind === "public_reference");
-  const services = lines.filter((line) => line.source.kind === "estimate");
+  const products = lines.filter((line) => line.category === "furniture");
+  const services = lines.filter((line) => line.category === "service");
 
-  it("contains 22 distinct referenced products and 6 simulated services", () => {
+  it("contains 22 distinct supplier products and 6 simulated services", () => {
     expect(lines).toHaveLength(28);
     expect(products).toHaveLength(22);
     expect(services).toHaveLength(6);
     expect(new Set(lines.map((line) => line.itemId)).size).toBe(28);
     expect(new Set(products.map((line) => line.sku)).size).toBe(22);
-    expect(new Set(products.map((line) => line.source.url)).size).toBe(22);
   });
 
-  it("keeps a dated official US source and unconfirmed fulfillment terms for every product", () => {
+  it("names four fictional suppliers and traces every product to one of their quotes", () => {
+    expect([...new Set(products.map((line) => line.vendor))].sort()).toEqual([
+      "Alder Row Furniture (demo)", "Larkspur Lighting (demo)", "Quillmark Office (demo)", "Saltmarsh Textiles (demo)",
+    ]);
     for (const line of products) {
-      const sourceUrl = new URL(line.source.url ?? "");
-      expect(sourceUrl.hostname).toBe("www.ikea.com");
-      expect(sourceUrl.pathname.startsWith("/us/en/p/")).toBe(true);
-      expect(line.source.checkedAt).toBe("2026-10-17");
+      expect(line.source.kind).toBe("demo");
+      expect(line.source.url).toBeUndefined();
+      expect(line.source.reference).toMatch(/^[A-Z]{3}-Q-\d{4} · /);
       expect(line.source.reference).toContain(line.sku);
-      expect(line.source.name.length).toBeGreaterThan(0);
-      expect(line.source.note.length).toBeGreaterThan(0);
+      expect(line.source.note).toContain("Fictional supplier quote");
+      expect(line.source.checkedAt).toBe("2026-10-17");
       expect(line.source.priceNote?.length).toBeGreaterThan(0);
-      expect(line.source.returnPolicyUrl).toBe("https://www.ikea.com/us/en/customer-service/returns-claims/return-policy/");
-      expect(line.returnPolicy).toContain("365 days");
-      expect(line.returnPolicy).toContain("180 days");
+      expect(line.returnPolicy).toContain("Demo supplier terms");
       expect(line.restockingFeeBps).toBeNull();
       expect(line.nonReturnable).toBeNull();
       expect(line.leadTimeDays).toBeNull();
       expect(line.specification.length).toBeGreaterThan(0);
     }
+    expect(JSON.stringify(willowApprovedQuote)).not.toMatch(/ikea/i);
   });
 
-  it("uses hourly estimates for services without implying that IKEA supplied them", () => {
+  it("uses hourly estimates for services without implying that a supplier quoted them", () => {
     expect(services.map((line) => [line.quantity, line.unitPriceCents])).toEqual([
       [2, 15_000], [8, 15_000], [10, 12_500], [6, 10_000], [8, 8_500], [4, 12_500],
     ]);
     for (const line of services) {
-      expect(line.category).toBe("service");
       expect(line.unitLabel).toBe("hour");
       expect(line.vendor).toContain("simulated estimate");
-      expect(line.source.note).toContain("not an IKEA service quote");
+      expect(line.source.kind).toBe("estimate");
+      expect(line.source.note).toContain("not a supplier quote");
       expect(line.taxCents).toBe(0);
       expect(line.freightCents).toBe(0);
       expect(line.restockingFeeBps).toBeNull();
@@ -53,7 +53,7 @@ describe("Willow reference quote integrity", () => {
     }
   });
 
-  it("preserves the full reference budget, including separately stated tax and one delivery allowance", () => {
+  it("preserves the full budget, including separately stated tax and one delivery allowance", () => {
     const productTotals = calculateQuoteTotals(products);
     const serviceTotals = calculateQuoteTotals(services);
     const allTotals = calculateQuoteTotals(lines);
@@ -63,28 +63,28 @@ describe("Willow reference quote integrity", () => {
     expect(lines.filter((line) => line.freightCents !== 0)).toEqual([lines[0]]);
     // $799 × 8.75% is $69.9125: the first line rounds to $69.91.
     expect(lines[0].taxCents).toBe(6_991);
-    const diningChairs = products.find((line) => line.sku === "004.572.35")!;
+    const diningChairs = products.find((line) => line.itemId === "willow-dining-chair")!;
     expect(diningChairs.quantity).toBe(4);
     expect(calculateLineTotals(diningChairs)).toMatchObject({ subtotalCents: 32_000, taxCents: 2_800 });
     expect(willowApprovedQuote.assumptions.join(" ")).toContain("8.75%");
-    expect(willowApprovedQuote.assumptions.join(" ")).toContain("not an IKEA delivery quote");
+    expect(willowApprovedQuote.assumptions.join(" ")).toContain("not a supplier delivery quote");
   });
 
   it("counts bulb packs separately from bulbs, covers and cushion inserts", () => {
-    const e26 = products.find((line) => line.sku === "205.839.35")!;
-    const e12 = products.find((line) => line.sku === "005.504.98")!;
+    const e26 = products.find((line) => line.itemId === "willow-bulbs-e26")!;
+    const e12 = products.find((line) => line.itemId === "willow-bulbs-e12")!;
     expect([e26.unitLabel, e26.quantity, e26.unitPriceCents]).toEqual(["2-pack", 2, 499]);
     expect([e12.unitLabel, e12.quantity, e12.unitPriceCents]).toEqual(["2-pack", 1, 799]);
     expect(calculateLineTotals(e26).subtotalCents).toBe(998);
     expect(calculateLineTotals(e12).subtotalCents).toBe(799);
-    expect(products.find((line) => line.sku === "405.909.30")?.quantity).toBe(4);
-    expect(products.find((line) => line.sku === "602.621.88")?.quantity).toBe(4);
+    expect(products.find((line) => line.itemId === "willow-cushion-cover")?.quantity).toBe(4);
+    expect(products.find((line) => line.itemId === "willow-inner-cushion")?.quantity).toBe(4);
     expect(e12.specification).toContain("compatibility not yet verified");
   });
 
-  it("labels clearance references and keeps every approval explicitly simulated", () => {
-    for (const sku of ["204.268.08", "405.909.30"]) {
-      expect(products.find((line) => line.sku === sku)?.source.priceNote).toContain("Clearance");
+  it("labels clearance prices and keeps every approval explicitly simulated", () => {
+    for (const itemId of ["willow-area-rug", "willow-cushion-cover"]) {
+      expect(products.find((line) => line.itemId === itemId)?.source.priceNote).toContain("Clearance");
     }
     expect(willowApprovedQuote.isDemo).toBe(true);
     expect(willowApprovedQuote.signature).toContain("demo signature");

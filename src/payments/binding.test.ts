@@ -9,7 +9,7 @@ import { lockConfirmedVersion } from "./binding";
 import { insertOperation } from "./operations";
 import { bergmund, confirmChange, shown } from "./testing/cases";
 
-const CHAIR = "willow-lisabo-dining-chair";
+const CHAIR = "willow-dining-chair";
 
 describe.skipIf(!testDatabaseUrl)("payment entry: confirmed version binding", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;

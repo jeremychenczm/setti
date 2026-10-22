@@ -16,7 +16,7 @@ const page: ProductPage = {
 };
 const output = {
   intent: "draft" as const, message: "已整理为待设计师核价的餐椅替换草稿。", title: "餐椅换款",
-  changes: [{ action: "replace" as const, itemId: "willow-lisabo-dining-chair", quantity: 4, productOptionId: "page-test:0", description: "New dining chair", sourceMessageIds: ["discussion", "request"] }],
+  changes: [{ action: "replace" as const, itemId: "willow-dining-chair", quantity: 4, productOptionId: "page-test:0", description: "New dining chair", sourceMessageIds: ["discussion", "request"] }],
   unresolved: [], constraints: ["其他不动"],
 };
 
@@ -98,7 +98,7 @@ describe("server-validated change drafts", () => {
     expect(draft.deltaSubtotalCents).toBeNull();
   });
   it("preserves purchase-unit counts for pack and hourly quote lines", () => {
-    for (const itemId of ["willow-solhetta-e26-bulbs", "willow-consultation"]) {
+    for (const itemId of ["willow-bulbs-e26", "willow-consultation"]) {
       const data = input();
       Object.assign(data.output.changes[0], { action: "quantity", itemId, quantity: 3, productOptionId: null });
       const change = buildDraft(data).draft!.changes[0];

@@ -15,7 +15,7 @@ const draft = buildDraft({
   quote: willowApprovedQuote,
   messages: [{ id: messageId, actor: "designer", text: "@AI 餐椅改成6把", createdAt: new Date().toISOString(), replyToMessageId: null, aiState: "completed", error: null, model: null }],
   pages: [], current: null, triggerId: messageId, model: "test-only",
-  output: { intent: "draft", message: "餐椅数量变更", title: "餐椅6把", changes: [{ action: "quantity", itemId: "willow-lisabo-dining-chair", quantity: 6, productOptionId: null, description: "", sourceMessageIds: [messageId] }], unresolved: [], constraints: ["其他不动"] },
+  output: { intent: "draft", message: "餐椅数量变更", title: "餐椅6把", changes: [{ action: "quantity", itemId: "willow-dining-chair", quantity: 6, productOptionId: null, description: "", sourceMessageIds: [messageId] }], unresolved: [], constraints: ["其他不动"] },
 }).draft!;
 
 function saveBody() {

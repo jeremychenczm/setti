@@ -38,7 +38,7 @@ const confirmation = { clientName: "Demo customer", signature: "Demo customer", 
 describe("customer-confirmed quote baseline", () => {
   it("uses the confirmed order identity and complete content for subsequent changes", () => {
     const order = frozenOrder();
-    const chair = order.lines.find((line) => line.itemId === "willow-lisabo-dining-chair")!;
+    const chair = order.lines.find((line) => line.itemId === "willow-dining-chair")!;
     Object.assign(chair, { name: "BERGMUND Chair", quantity: 6, unitPriceCents: 12_500, sku: "NEW-SKU", origin: "changed", sourceUrl: "https://shop.example/new-chair", brand: "IKEA" });
     const quote = approvedQuoteFromOrder(order, confirmation);
     expect(quote).toMatchObject({ id: order.id, version: 3, projectId: "willow", approvedAt: confirmation.decidedAt.toISOString(), signature: confirmation.signature, status: "approved", isDemo: true });

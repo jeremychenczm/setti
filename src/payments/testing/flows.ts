@@ -10,7 +10,7 @@ import { recordSupplierOrder } from "../supplier";
 import { bergmund, confirmChange, shown } from "./cases";
 import type { FakePayPal } from "./fake-paypal";
 
-export const CHAIR = "willow-lisabo-dining-chair";
+export const CHAIR = "willow-dining-chair";
 export const links = (operationId: string) => ({ returnUrl: `http://localhost:3002/api/payments/paypal/return?op=${operationId}`, cancelUrl: `http://localhost:3002/api/payments/paypal/cancel?op=${operationId}` });
 
 /** The client authorizes what the line still needs and approves it on (fake) PayPal. */

@@ -14,7 +14,7 @@ function scenario(text = "@AI，餐椅从四把改成六把。") {
     beginAi: vi.fn().mockResolvedValue({ status: "started", runId: "run", state }),
     completeAi: vi.fn().mockResolvedValue(state), failAi: vi.fn().mockResolvedValue(state),
   };
-  const modelOutput = { intent: "draft" as const, message: "待核价数量草稿。", title: "餐椅数量", changes: [{ action: "quantity" as const, itemId: "willow-lisabo-dining-chair", quantity: 6, productOptionId: null, description: "", sourceMessageIds: ["request"] }], unresolved: [], constraints: [] };
+  const modelOutput = { intent: "draft" as const, message: "待核价数量草稿。", title: "餐椅数量", changes: [{ action: "quantity" as const, itemId: "willow-dining-chair", quantity: 6, productOptionId: null, description: "", sourceMessageIds: ["request"] }], unresolved: [], constraints: [] };
   const deps = { configured: () => true, readPage: vi.fn(), callModel: vi.fn().mockResolvedValue({ model: "test-model", output: modelOutput }) };
   return { state, store, deps, modelOutput };
 }
@@ -45,7 +45,7 @@ describe("AI orchestration", () => {
     const approved = structuredClone(caseQuote("willow"));
     approved.id = "confirmed-willow-v3";
     approved.version = 3;
-    const chair = approved.lines.find((line) => line.itemId === "willow-lisabo-dining-chair")!;
+    const chair = approved.lines.find((line) => line.itemId === "willow-dining-chair")!;
     chair.quantity = 6;
     chair.unitPriceCents = 12_500;
     s.state.quote = approved;

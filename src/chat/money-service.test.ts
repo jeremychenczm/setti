@@ -15,7 +15,7 @@ function scenario(text = "@AI，为什么预算和付款金额不同？") {
   const original = human("original", "@AI，餐椅改成六把。");
   const quantity: ChangeModelOutput = {
     intent: "draft", message: "数量草稿，待设计师核价。", title: "餐椅数量",
-    changes: [{ action: "quantity", itemId: "willow-lisabo-dining-chair", quantity: 6, productOptionId: null, description: "", sourceMessageIds: [original.id] }],
+    changes: [{ action: "quantity", itemId: "willow-dining-chair", quantity: 6, productOptionId: null, description: "", sourceMessageIds: [original.id] }],
     unresolved: [], constraints: [],
   };
   const draft = buildDraft({ output: quantity, quote, messages: [original], pages: [], current: null, triggerId: original.id, model: "original-model" }).draft!;
@@ -180,7 +180,7 @@ describe("grounded money chat orchestration", () => {
     const s = scenario("@AI Can you replace the chair with this one and show the cost? https://shop.example/chair");
     Object.assign(s.output, {
       intent: "draft", message: "Replacement draft for designer review.", money: null,
-      changes: [{ action: "replace", itemId: "willow-lisabo-dining-chair", quantity: 4, productOptionId: "new-chair", description: "New chair", sourceMessageIds: ["request"] }],
+      changes: [{ action: "replace", itemId: "willow-dining-chair", quantity: 4, productOptionId: "new-chair", description: "New chair", sourceMessageIds: ["request"] }],
     });
     s.deps.readPage.mockResolvedValue({ id: "chair-page", url: "https://shop.example/chair", fetchedAt: "2026-10-21T12:00:00Z", title: "New chair", text: "New oak chair", error: null, products: [{ id: "new-chair", name: "New oak chair", sku: "NEW-CHAIR", brand: "Example", seller: "Example shop", specification: "Oak", currency: "USD", unitPriceCents: 12_500, unitLabel: "each", priceEvidence: "USD 125", availability: "In stock" }] });
     await runCaseAi(s.store, "session", "willow", "request", s.deps);
