@@ -5,6 +5,7 @@ import { AgGridReact } from "ag-grid-react";
 import { Armchair, ArrowLeft, ArrowUpRight, Check, ChevronRight, Download, FileText, LockKeyhole, Palette, Search, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { calculateLineTotals, calculateQuoteTotals, type QuoteLineTotals } from "@/quotes/totals";
+import type { CaseKey } from "@/chat/types";
 import type { ApprovedQuoteLine, ApprovedQuoteReport } from "@/quotes/types";
 import { usd } from "../demo-data";
 
@@ -47,7 +48,9 @@ function ApprovedBadge() {
   return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-medium leading-none text-emerald-700"><Check className="h-3 w-3" />Approved</span>;
 }
 
-export function ApprovedQuoteView({ quote, onBack, onSelectQuote }: { quote: ApprovedQuoteReport; onBack: () => void; onSelectQuote: (id: "maple" | "willow") => void }) {
+const QUOTE_LABELS: Record<CaseKey, string> = { willow: "Willow Residence · 28-line test quote", maple: "Maple Ave · 3-line payment example" };
+
+export function ApprovedQuoteView({ quote, options, onBack, onSelectQuote }: { quote: ApprovedQuoteReport; options: CaseKey[]; onBack: () => void; onSelectQuote: (id: CaseKey) => void }) {
   const totals = useMemo(() => calculateQuoteTotals(quote.lines), [quote]);
   const allRows = useMemo<QuoteRow[]>(() => quote.lines.map((line) => ({ ...line, ...calculateLineTotals(line) })), [quote]);
   const [query, setQuery] = useState("");
@@ -118,10 +121,9 @@ export function ApprovedQuoteView({ quote, onBack, onSelectQuote }: { quote: App
       <header className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] px-6 py-3.5">
         <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-[var(--muted)] hover:text-[var(--ink)]"><ArrowLeft className="h-3.5 w-3.5" />Back to chats</button>
         <span className="text-[var(--line)]">/</span>
-        <select aria-label="Select quote example" value={quote.projectId} onChange={(event) => onSelectQuote(event.target.value as "maple" | "willow")} className="max-w-full rounded-md border border-[var(--line)] bg-white px-2 py-1.5 text-[12px] font-medium">
-          <option value="willow">Willow Residence · 28-line test quote</option>
-          <option value="maple">Maple Ave · 3-line payment example</option>
-        </select>
+        {options.length > 1 ? <select aria-label="Select quote example" value={quote.projectId} onChange={(event) => onSelectQuote(event.target.value as CaseKey)} className="max-w-full rounded-md border border-[var(--line)] bg-white px-2 py-1.5 text-[12px] font-medium">
+          {options.map((key) => <option key={key} value={key}>{QUOTE_LABELS[key]}</option>)}
+        </select> : <span className="text-[12px] font-medium">{quote.projectName}</span>}
         <span className="ml-auto rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700">Demo quote</span>
       </header>
 

@@ -32,10 +32,10 @@ A three-minute walkthrough of one change that moves money three different ways. 
 
 1. Open `/try` and wait until the **Maple Ave** chat opens.
 2. Select **See them in Quote V2**. Under **Payments · V2**, check the $800 hold for the lounge chair and the $300 capture for the wool rug, with their PayPal IDs and the PayPal fee. Then select **Return to the project conversation**.
-3. Speaking as **Emma Park** (the client), select **Try chair + rug example**, then send the message. The AI drafts the change: the chair becomes a light oak writing desk and the rug goes back.
-4. Switch **Speaking as** to **Jordan Lee** (the designer). Open the current draft and select **Review pricing**.
+3. Select the account at the bottom left of the sidebar and switch to **Emma Park** (the client). Select **Try chair + rug example**, then send the message. The AI drafts the change: the chair becomes a light oak writing desk and the rug goes back.
+4. Switch the account back to **Jordan Lee** (the designer). Open the current draft and select **Review pricing**.
 5. Enter the desk's price (for example $1,100), set the rug's handling to *returned* with its restocking fee (for example $60), and confirm each line and open item. Select **Save pricing review**, then **Generate client change order**.
-6. Open the new change order. As Emma, type her name as the signature, tick the acknowledgement and select **Confirm V3 · scope, prices and terms**.
+6. Open the new change order. Type `Emma Park` as the signature, tick the acknowledgement and select **Confirm V3 · scope, prices and terms**.
 7. Under **Payments · V3**, run the three money steps. Each step asks you to confirm it first:
    - **Lounge chair → desk.** Select **Release $800.00 hold**, then **Confirm release**. Nothing was charged, so nothing is refunded.
    - **Desk.** Select **Authorize $1,100.00 with PayPal**. On the PayPal Sandbox page, choose to pay with a debit or credit card: use `4012 0000 3333 0026`, any future expiry date, any security code and any US address. Back in Setti, select **Record supplier confirmation (demo)**, **Save supplier confirmation**, then **Capture $1,100.00** and **Confirm capture**.

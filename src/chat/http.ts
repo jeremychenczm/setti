@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { ACCOUNT_COOKIE, canOpenProject, findAccount } from "@/accounts/demo";
 import { aiConfigured } from "@/ai/model";
 import { isAiInvocation } from "@/ai/intent";
 import { caseQuote, isCaseKey } from "./cases";
 import { chatStore } from "./server";
 import { CaseAiError, runCaseAi } from "./service";
-import type { CaseKey, CaseSnapshot, StoredCase } from "./types";
+import type { CaseKey, CaseSnapshot, HumanActor, StoredCase } from "./types";
 
 const cookieName = "setti-demo-chat";
 const uuid = z.uuid();
@@ -54,9 +55,24 @@ class HttpError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
 }
 
+/**
+ * Once a demo account is chosen, it may open only its own projects and speak only
+ * in its own role. A browser that never switched accounts, and API tests, are not
+ * limited: the demo account is who is acting, not a login.
+ */
+function accountRefusal(req: NextRequest, key: CaseKey, actor?: HumanActor): string | null {
+  const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
+  if (!account) return null;
+  if (!canOpenProject(account, key)) return `${account.name} is not part of this project.`;
+  if (actor && actor !== account.role) return `This browser is signed in as ${account.name}. Reload the chat to send as ${account.name}.`;
+  return null;
+}
+
 export async function getCaseResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404 });
   const sessionId = session(req);
+  const refusal = accountRefusal(req, rawKey);
+  if (refusal) return respond(req, sessionId, { code: "FORBIDDEN", error: refusal }, 403);
   try { return respond(req, sessionId, snapshot(await chatStore().getCase(sessionId, rawKey))); }
   catch { return respond(req, sessionId, { code: "STORAGE_UNAVAILABLE", error: "Chat storage is unavailable. Make sure the database is running and migrated." }, 503); }
 }
@@ -71,9 +87,13 @@ export async function postCaseResponse(req: NextRequest, rawKey: string, retry =
     let messageId: string;
     if (retry) {
       messageId = retrySchema.parse(body).messageId;
+      const refusal = accountRefusal(req, rawKey);
+      if (refusal) return respond(req, sessionId, { code: "FORBIDDEN", error: refusal }, 403);
       persisted = true;
     } else {
       const input = messageSchema.parse(body);
+      const refusal = accountRefusal(req, rawKey, input.actor);
+      if (refusal) return respond(req, sessionId, { code: "FORBIDDEN", error: refusal }, 403);
       const state = await store.appendMessage(sessionId, rawKey, input);
       persisted = true;
       if (!isAiInvocation(input.text)) return respond(req, sessionId, snapshot(state));

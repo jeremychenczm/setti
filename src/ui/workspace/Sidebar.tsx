@@ -1,7 +1,7 @@
 import { FileSpreadsheet, MessageCircle } from "lucide-react";
 import type { ComponentType } from "react";
-import { me } from "../demo-data";
-import { Avatar } from "./primitives";
+import type { AccountId, DemoAccount } from "@/accounts/demo";
+import { AccountMenu } from "./AccountMenu";
 
 export type View = "chats" | "quotes";
 
@@ -11,12 +11,15 @@ interface NavItem {
   icon: ComponentType<{ className?: string }>;
 }
 
-const sections: { title?: string; items: NavItem[] }[] = [
-  { items: [{ view: "chats", label: "Chats", icon: MessageCircle }] },
-  { title: "Boards", items: [{ view: "quotes", label: "Quotes", icon: FileSpreadsheet }] },
-];
+/** The designer sends quotes; a client receives them as proposals. */
+function sectionsFor(account: DemoAccount): { title?: string; items: NavItem[] }[] {
+  return [
+    { items: [{ view: "chats", label: "Chats", icon: MessageCircle }] },
+    { title: "Boards", items: [{ view: "quotes", label: account.role === "designer" ? "Quotes" : "Proposals", icon: FileSpreadsheet }] },
+  ];
+}
 
-export function Sidebar({ view, onView }: { view: View; onView: (v: View) => void }) {
+export function Sidebar({ view, onView, account, onSwitchAccount }: { view: View; onView: (v: View) => void; account: DemoAccount; onSwitchAccount: (id: AccountId) => void }) {
   return (
     <aside className="flex w-[220px] shrink-0 flex-col px-2 py-3">
       <div className="flex items-center gap-2 px-2">
@@ -28,7 +31,7 @@ export function Sidebar({ view, onView }: { view: View; onView: (v: View) => voi
       </div>
 
       <nav className="mt-4 flex-1 space-y-4 overflow-y-auto">
-        {sections.map((section, i) => (
+        {sectionsFor(account).map((section, i) => (
           <div key={section.title ?? i}>
             {section.title && <div className="px-2 pb-1 text-[11px] font-medium text-[var(--muted)]">{section.title}</div>}
             {section.items.map(({ view: v, label, icon: Icon }) => (
@@ -47,12 +50,8 @@ export function Sidebar({ view, onView }: { view: View; onView: (v: View) => voi
         ))}
       </nav>
 
-      <div className="flex items-center gap-2 border-t border-[var(--line)] px-1 pt-3">
-        <Avatar person={me} size="sm" />
-        <div className="leading-tight">
-          <div className="text-[12px] font-medium">{me.name}</div>
-          <div className="text-[11px] text-[var(--muted)]">Designer · demo account</div>
-        </div>
+      <div className="border-t border-[var(--line)] pt-2">
+        <AccountMenu account={account} onSwitch={onSwitchAccount} />
       </div>
     </aside>
   );

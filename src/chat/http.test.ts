@@ -74,6 +74,17 @@ describe("case chat HTTP boundary", () => {
     expect((await postCaseResponse(post({ ...input, actor: "assistant" }), "willow")).status).toBe(400);
     expect(mocks.store.appendMessage).not.toHaveBeenCalled();
   });
+  it("limits a chosen demo account to its own projects and role", async () => {
+    const asSofia = { cookie: "setti-demo-account=sofia" };
+    expect((await getCaseResponse(new NextRequest("http://localhost:3002/api/chat/maple", { headers: asSofia }), "maple")).status).toBe(403);
+    expect((await getCaseResponse(new NextRequest("http://localhost:3002/api/chat/willow", { headers: asSofia }), "willow")).status).toBe(200);
+    const asDesigner = await postCaseResponse(post({ id: randomUUID(), actor: "designer", text: "Hello" }, asSofia), "willow");
+    expect(asDesigner.status).toBe(403);
+    expect((await asDesigner.json()).error).toContain("Sofia Martinez");
+    expect(mocks.store.appendMessage).not.toHaveBeenCalled();
+    expect((await postCaseResponse(post({ id: randomUUID(), actor: "client", text: "Hello" }, asSofia), "willow")).status).toBe(200);
+    expect((await postCaseResponse(post({ id: randomUUID(), actor: "client", text: "Hello" }, { cookie: "setti-demo-account=jordan" }), "willow")).status).toBe(403);
+  });
   it("bounds request bodies before touching storage", async () => {
     expect((await postCaseResponse(post({ id: randomUUID(), actor: "client", text: "x".repeat(33000) }), "willow")).status).toBe(413);
     expect(mocks.store.appendMessage).not.toHaveBeenCalled();

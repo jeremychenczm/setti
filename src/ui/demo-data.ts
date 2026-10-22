@@ -1,4 +1,4 @@
-/** The demo studio's designer, who is signed in to the workspace, and money formatting. */
+/** People shown in the workspace, and money formatting. */
 
 export type PersonRole = "designer" | "client";
 
@@ -9,8 +9,6 @@ export interface Person {
   /** Path under public/; people without one get a default from the avatar set. */
   avatar?: string;
 }
-
-export const me: Person = { id: "jordan", name: "Jordan Lee", role: "designer", avatar: "/avatars/designer.webp" };
 
 export function usd(cents: number): string {
   const whole = cents % 100 === 0;

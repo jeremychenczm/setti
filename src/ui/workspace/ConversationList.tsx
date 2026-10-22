@@ -6,7 +6,8 @@ export interface ProjectChat {
   key: CaseKey;
   title: string;
   subtitle: string;
-  client: Person;
+  /** The other person in the chat: the client for the designer, the designer for a client. */
+  counterpart: Person;
 }
 
 export function ConversationList({ projects, activeId, onOpen }: { projects: ProjectChat[]; activeId: CaseKey; onOpen: (key: CaseKey) => void }) {
@@ -20,13 +21,13 @@ export function ConversationList({ projects, activeId, onOpen }: { projects: Pro
             onClick={() => onOpen(project.key)}
             className={`flex w-full gap-3 rounded-lg px-2 py-2.5 text-left ${project.key === activeId ? "bg-[var(--primary-soft)]" : "hover:bg-[var(--canvas)]"}`}
           >
-            <Avatar person={project.client} />
+            <Avatar person={project.counterpart} />
             <span className="min-w-0 flex-1">
               <span className="flex items-center gap-1.5">
                 <span className="truncate text-[13px] font-semibold">{project.title}</span>
                 <span className="truncate text-[11px] text-[var(--muted)]">{project.subtitle}</span>
               </span>
-              <span className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-[var(--muted)]">Project chat with {project.client.name} · AI drafts on request</span>
+              <span className="mt-0.5 line-clamp-2 text-[12px] leading-snug text-[var(--muted)]">Project chat with {project.counterpart.name} · AI drafts on request</span>
             </span>
           </button>
         ))}
