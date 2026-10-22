@@ -1,6 +1,6 @@
 "use client";
 
-import { AtSign, Bot, ChevronDown, FileText, History, Link2, LoaderCircle, MessageSquare, PanelRight, RefreshCw, SendHorizontal, X } from "lucide-react";
+import { AtSign, Bot, ChevronDown, FileText, Link2, LoaderCircle, MessageSquare, PanelRight, RefreshCw, SendHorizontal, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { isAiInvocation } from "@/ai/intent";
@@ -18,7 +18,6 @@ interface CaseChatProps {
   quote: ApprovedQuoteReport;
   onOpenQuote: () => void;
   onSelectCase: (projectKey: CaseKey) => void;
-  onOpenLegacy?: () => void;
 }
 
 function displayName(name: string): string {
@@ -36,7 +35,7 @@ function linkedText(value: string): ReactNode[] {
     : <span key={index}>{part}</span>);
 }
 
-export function CaseChat({ projectKey, quote, onOpenQuote, onSelectCase, onOpenLegacy }: CaseChatProps) {
+export function CaseChat({ projectKey, quote, onOpenQuote, onSelectCase }: CaseChatProps) {
   const { snapshot, messages, loading, running, error, canRetry, unsavedMessageId, hasUnsent, send, retry, editUnsent, reload } = useCaseChat(projectKey);
   const [actor, setActor] = useState<HumanActor>("client");
   const [text, setText] = useState("");
@@ -117,7 +116,7 @@ export function CaseChat({ projectKey, quote, onOpenQuote, onSelectCase, onOpenL
         <button onClick={() => setDraftOpen((open) => !open)} aria-label={draftOpen ? "Close current draft" : "Open current draft"} aria-pressed={draftOpen} className={`rounded-lg p-2 ${draftOpen ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "text-[var(--muted)] hover:bg-[var(--canvas)]"}`}><PanelRight className="h-4 w-4" /></button>
       </header>
 
-      <div className="flex items-center gap-2 border-b border-[var(--line)] bg-slate-50/60 px-4 py-2 text-[10px] leading-relaxed text-slate-500 sm:px-5"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" /><span className="flex-1">Demo case · saved to this browser session · {confirmedQuoteHref ? "Client-confirmed baseline" : "Initial approved baseline"} V{currentQuote.version} · read-only</span>{onOpenLegacy && <button onClick={onOpenLegacy} className="flex shrink-0 items-center gap-1 text-[var(--primary)] hover:underline"><History className="h-3 w-3" />Legacy demo</button>}</div>
+      <div className="flex items-center gap-2 border-b border-[var(--line)] bg-slate-50/60 px-4 py-2 text-[10px] leading-relaxed text-slate-500 sm:px-5"><span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" /><span className="flex-1">Demo case · saved to this browser session · {confirmedQuoteHref ? "Client-confirmed baseline" : "Initial approved baseline"} V{currentQuote.version} · read-only</span></div>
 
       <div className="relative flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
