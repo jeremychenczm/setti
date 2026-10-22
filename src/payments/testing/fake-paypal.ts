@@ -77,7 +77,9 @@ export class FakePayPal implements PayPalPayments {
   private readonly orders = new Map<string, FakeOrder>();
   private readonly holds = new Map<string, FakeHold>();
   private readonly captures = new Map<string, CaptureReceipt>();
-  private readonly refunds = new Map<string, RefundReceipt>();
+  private readonly refunds = new Map<string, RefundReceipt & { captureId: string }>();
+  /** Which authorization each capture came from, so an order can list its refunds. */
+  private readonly captureAuthorizations = new Map<string, string>();
   private nextId = 1;
   /** When set, reads fail as if PayPal could not be reached. */
   readsUnavailable = false;
@@ -114,7 +116,12 @@ export class FakePayPal implements PayPalPayments {
   }
 
   async getOrder(orderId: string): Promise<PayPalResult<OrderReceipt>> {
-    return this.read(orderId, () => this.orders.get(orderId)?.receipt);
+    return this.read(orderId, () => {
+      const order = this.orders.get(orderId);
+      if (!order) return undefined;
+      const refunds = [...this.refunds.values()].filter((refund) => order.authorizationId && this.captureAuthorizations.get(refund.captureId) === order.authorizationId);
+      return refunds.length ? { ...order.receipt, refunds } : order.receipt;
+    });
   }
 
   async authorizeOrder(command: AuthorizeOrderCommand): Promise<PayPalResult<OrderReceipt>> {
@@ -153,6 +160,7 @@ export class FakePayPal implements PayPalPayments {
       };
       // What PayPal keeps: a minimal answer leaves out fields it still has; a different amount is really different.
       this.captures.set(receipt.paypalCaptureId!, { ...receipt, status: behaviour === "answer-minimal" ? recordedCapture.response!.status : status });
+      this.captureAuthorizations.set(receipt.paypalCaptureId!, command.paypalAuthorizationId);
       const hold = this.holds.get(command.paypalAuthorizationId);
       if (hold && status !== "DECLINED") {
         hold.capturedCents += command.amountCents;
@@ -190,7 +198,7 @@ export class FakePayPal implements PayPalPayments {
 
   async refundCapture(command: RefundCommand): Promise<PayPalResult<RefundReceipt>> {
     return this.write(command, `refund:${command.requestId}`, (behaviour) => {
-      const refunded = [...this.refunds.values()].filter((refund) => refund.status !== "FAILED" && refund.status !== "CANCELLED" && (refund as RefundReceipt & { captureId?: string }).captureId === command.paypalCaptureId)
+      const refunded = [...this.refunds.values()].filter((refund) => refund.status !== "FAILED" && refund.status !== "CANCELLED" && refund.captureId === command.paypalCaptureId)
         .reduce((total, refund) => total + (refund.amountCents ?? 0), 0);
       const capture = this.captures.get(command.paypalCaptureId);
       if (capture && refunded + command.amountCents > capture.amountCents!) {
@@ -199,8 +207,9 @@ export class FakePayPal implements PayPalPayments {
       const receipt: RefundReceipt = {
         paypalRefundId: `REFUND-${this.nextId++}`, status: behaviour === "answer-pending" ? "PENDING" : "COMPLETED",
         ...usd(behaviour === "answer-other-amount" ? command.amountCents + 1 : command.amountCents), createTime: new Date().toISOString(),
+        customId: command.customId,
       };
-      this.refunds.set(receipt.paypalRefundId!, { ...receipt, captureId: command.paypalCaptureId } as RefundReceipt);
+      this.refunds.set(receipt.paypalRefundId!, { ...receipt, captureId: command.paypalCaptureId });
       return behaviour === "answer-minimal" ? { paypalRefundId: receipt.paypalRefundId } : receipt;
     });
   }
@@ -214,6 +223,13 @@ export class FakePayPal implements PayPalPayments {
     const refund = this.refunds.get(id);
     if (!refund) throw new Error(`Unknown fake refund ${id}`);
     this.refunds.set(id, { ...refund, status });
+  }
+
+  /** A refund made outside this app's calls, e.g. in the PayPal dashboard, carrying the given custom_id. */
+  refundElsewhere(paypalCaptureId: string, amountCents: number, customId: string): string {
+    const paypalRefundId = `REFUND-${this.nextId++}`;
+    this.refunds.set(paypalRefundId, { paypalRefundId, status: "COMPLETED", ...usd(amountCents), createTime: new Date().toISOString(), customId, captureId: paypalCaptureId });
+    return paypalRefundId;
   }
 
   /**

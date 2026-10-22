@@ -41,6 +41,27 @@ describe("PayPal SDK adapter", () => {
     expect(await paypal.voidAuthorization({ paypalAuthorizationId: "AUTH-1", requestId: "r1" })).toMatchObject({ kind: "unknown", message: "socket hang up" });
   });
 
+  it("lists the order's refunds with their custom_id so a lost refund answer can be found", async () => {
+    const paypal = adapter({}, { getOrder: async () => response({
+      id: "ORDER-1", status: "COMPLETED", purchaseUnits: [{ payments: { refunds: [
+        { id: "REFUND-1", status: "COMPLETED", amount: { currencyCode: "USD", value: "271.88" }, customId: "operation-1" },
+        { id: "REFUND-2", status: "COMPLETED", amount: { currencyCode: "USD", value: "10.00" } },
+      ] } }],
+    }, 200) } as never);
+    const result = await paypal.getOrder("ORDER-1");
+    expect(result).toMatchObject({ kind: "ok", value: { orderId: "ORDER-1", refunds: [
+      { paypalRefundId: "REFUND-1", status: "COMPLETED", amountCents: 27_188, currency: "USD", customId: "operation-1" },
+      { paypalRefundId: "REFUND-2", customId: undefined },
+    ] } });
+  });
+
+  it("leaves refunds out of an order PayPal reports without any", async () => {
+    const paypal = adapter({}, { getOrder: async () => response({ id: "ORDER-1", status: "COMPLETED", purchaseUnits: [{ payments: {} }] }, 200) } as never);
+    const result = await paypal.getOrder("ORDER-1");
+    if (result.kind !== "ok") throw new Error("Expected order receipt");
+    expect(result.value).not.toHaveProperty("refunds");
+  });
+
   it("reads the actual capture fee and merchant receipt from the SDK's seller breakdown", async () => {
     const paypal = adapter({ getCapturedPayment: async () => response({
       id: "CAP-1", status: "COMPLETED", amount: { currencyCode: "USD", value: "100.00" },

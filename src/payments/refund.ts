@@ -9,7 +9,7 @@
  */
 import { eq } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { paymentOperations, paypalRefunds } from "../db/schema";
+import { paymentOperations, paypalAuthorizations, paypalRefunds } from "../db/schema";
 import { noteInCase } from "./notes";
 import {
   claimOperation, databaseMessage, insertOperation, recordCall, recordFailure, updateOperation,
@@ -41,9 +41,41 @@ export async function executeRefund(db: Db, paypal: PayPalPayments, operationId:
     if (read.kind !== "ok") return updateOperation(db, operation.id, { failureMessage: `PayPal refund ${operation.paypalResourceId} could not be read back: ${read.message}` });
     return settle(db, paypal, operation, capture, read.value, false);
   }
+  if (operation.attempts > 1) {
+    // An earlier attempt may have reached PayPal although its answer was lost.
+    const earlier = await earlierRefund(db, paypal, operation, capture);
+    if (earlier.kind === "found") return settle(db, paypal, operation, capture, earlier.receipt, true);
+    if (earlier.kind === "stop") return updateOperation(db, operation.id, { status: "unknown", failureCode: earlier.code, failureMessage: earlier.message });
+  }
   const result = await paypal.refundCapture({ paypalCaptureId: capture.paypalCaptureId, amountCents: operation.amountCents, requestId: operation.requestId, customId: operation.id });
   await logRefund(db, operation, "refund", operation.requestId, result);
   return result.kind === "ok" ? settle(db, paypal, operation, capture, result.value, true) : recordFailure(db, operation.id, result);
+}
+
+type EarlierRefund =
+  | { kind: "found"; receipt: RefundReceipt }
+  | { kind: "none" }
+  | { kind: "stop"; code: "REFUND_LOOKUP_FAILED" | "DUPLICATE_REFUNDS"; message: string };
+
+/**
+ * Looks on the capture's PayPal order for a refund carrying this operation's
+ * custom_id. The same PayPal-Request-Id only protects a retry while PayPal
+ * still remembers it; this lookup does not depend on that window.
+ */
+async function earlierRefund(db: Db, paypal: PayPalPayments, operation: PaymentOperation, capture: PaypalCapture): Promise<EarlierRefund> {
+  const [authorization] = capture.authorizationId
+    ? await db.select({ paypalOrderId: paypalAuthorizations.paypalOrderId }).from(paypalAuthorizations).where(eq(paypalAuthorizations.id, capture.authorizationId))
+    : [];
+  if (!authorization) return { kind: "none" };
+  const read = await paypal.getOrder(authorization.paypalOrderId);
+  const matches = read.kind === "ok" ? (read.value.refunds ?? []).filter((refund) => refund.customId === operation.id) : [];
+  await recordCall(db, operation.id, "get_order", null, read, {
+    resourceId: authorization.paypalOrderId, status: read.kind === "ok" ? read.value.status : undefined,
+    details: { refundLookup: true, matchingRefunds: matches.length },
+  });
+  if (read.kind !== "ok") return { kind: "stop", code: "REFUND_LOOKUP_FAILED", message: `PayPal order ${authorization.paypalOrderId} could not be read to look for an earlier refund, so no refund was sent again: ${read.message}` };
+  if (matches.length > 1) return { kind: "stop", code: "DUPLICATE_REFUNDS", message: `PayPal lists ${matches.length} refunds for this step on order ${authorization.paypalOrderId}. Check them in PayPal before continuing; no refund was sent again.` };
+  return matches.length === 1 && matches[0].paypalRefundId ? { kind: "found", receipt: matches[0] } : { kind: "none" };
 }
 
 /** Reads a pending refund back from PayPal and records where its money now stands. */

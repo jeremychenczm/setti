@@ -147,10 +147,12 @@ function authorizationReceipt(auth: PaymentAuthorization | AuthorizationWithAddi
 function orderReceipt(order: Order | OrderAuthorizeResponse): OrderReceipt {
   const unit = order.purchaseUnits?.[0];
   const authorization = unit?.payments?.authorizations?.[0];
+  const refunds = unit?.payments?.refunds;
   return {
     orderId: order.id, status: order.status, ...money(unit?.amount), customId: unit?.customId,
     approvalUrl: order.links?.find((link) => link.rel === "payer-action" || link.rel === "approve")?.href,
     authorization: authorization ? authorizationReceipt(authorization, order.id) : undefined,
+    ...(refunds?.length ? { refunds: refunds.map(refundReceipt) } : {}),
   };
 }
 
@@ -162,7 +164,7 @@ function captureReceipt(capture: CapturedPayment): CaptureReceipt {
 
 function refundReceipt(refund: Refund): RefundReceipt {
   const breakdown = refund.sellerPayableBreakdown;
-  return { paypalRefundId: refund.id, status: refund.status, ...money(refund.amount), createTime: refund.createTime,
+  return { paypalRefundId: refund.id, status: refund.status, ...money(refund.amount), createTime: refund.createTime, customId: refund.customId,
     ...(breakdown ? { settlement: settlement(breakdown) } : {}) };
 }
 

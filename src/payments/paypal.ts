@@ -65,6 +65,8 @@ export interface OrderReceipt extends ReportedMoney {
   customId?: string;
   /** The order's authorization, once it has been authorized. */
   authorization?: AuthorizationReceipt;
+  /** Refunds PayPal lists on the order; used to find a refund whose answer was lost. */
+  refunds?: RefundReceipt[];
 }
 
 export interface CaptureCommand {
@@ -103,6 +105,8 @@ export interface RefundReceipt extends ReportedMoney {
   status?: string;
   createTime?: string;
   settlement?: ReportedSettlement;
+  /** The custom_id sent with the refund: the Setti operation id. */
+  customId?: string;
 }
 
 /** HTTP status and PayPal debug id of a call, kept as evidence. */
