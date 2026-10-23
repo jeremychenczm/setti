@@ -148,6 +148,13 @@
       "when": 1792731605724,
       "tag": "0020_change_order_message",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1792734348432,
+      "tag": "0021_signed_client_name",
+      "breakpoints": true
     }
   ]
 }

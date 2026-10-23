@@ -13,6 +13,7 @@ import type { Db } from "../db/client";
 import { createPricingInput } from "../pricing/calculation";
 import { createPricingStore } from "../pricing/store";
 import type { FrozenChangeOrder, OldItemHandling, PricingItem } from "../pricing/types";
+import { clientSignatureName } from "../opening/types";
 
 export interface ScriptedChange {
   action: "quantity" | "replace" | "remove";
@@ -102,7 +103,7 @@ export async function confirmScriptedChanges(
   const issued = await pricing.issueReview(session, key, { reviewId: saved.review!.id, expectedVersion: saved.review!.version });
   const order = issued.order;
   if (confirm) {
-    await createApprovalStore(db).decide(session, order.id, { decision: "approved", contentHash: order.contentHash, revisionContentHash: order.revisionContentHash, acknowledged: true, signature: order.clientName, note: "" });
+    await createApprovalStore(db).decide(session, order.id, { decision: "approved", contentHash: order.contentHash, revisionContentHash: order.revisionContentHash, acknowledged: true, signature: clientSignatureName(order), note: "" });
   }
   return order;
 }

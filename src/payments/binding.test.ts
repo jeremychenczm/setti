@@ -46,7 +46,11 @@ describe.skipIf(!testDatabaseUrl)("payment entry: confirmed version binding", ()
   it("starts nothing from a version the client has not confirmed or that a newer confirmation replaced", async () => {
     const waiting = await confirmChange(handle.db, session, "willow", { action: "replace", itemId: CHAIR, after: bergmund() }, false);
     await expect(lock(session, waiting.id, shown(waiting))).rejects.toMatchObject({ code: "NOT_CONFIRMED" });
-    await createApprovalStore(handle.db).decide(session, waiting.id, { decision: "approved", contentHash: waiting.contentHash, revisionContentHash: waiting.revisionContentHash, acknowledged: true, signature: waiting.clientName, note: "" });
+    const confirm = (signature: string) => createApprovalStore(handle.db).decide(session, waiting.id, { decision: "approved", contentHash: waiting.contentHash, revisionContentHash: waiting.revisionContentHash, acknowledged: true, signature, note: "" });
+    // The client signs with her name alone, as on V1; the demo label is not part of it.
+    expect(waiting.clientName).toBe("Sofia Martinez (demo client)");
+    await expect(confirm("Sofia Martinez (demo client)")).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await confirm("Sofia Martinez");
     const newer = await confirmChange(handle.db, session, "willow", { action: "quantity", itemId: CHAIR, quantity: 6, after: { taxCents: 6_563 } });
     expect(newer.basedOnQuoteId).toBe(waiting.id);
     await expect(lock(session, waiting.id, shown(waiting))).rejects.toMatchObject({ code: "STALE_VERSION" });

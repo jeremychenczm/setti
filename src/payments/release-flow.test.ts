@@ -11,6 +11,7 @@ import { bergmund, confirmChange, shown } from "./testing/cases";
 import { FakePayPal } from "./testing/fake-paypal";
 import { authorizeLine, CHAIR } from "./testing/flows";
 import { paymentsWorkspace } from "./workspace";
+import { clientSignatureName } from "../opening/types";
 
 describe.skipIf(!testDatabaseUrl)("cancelling an uncaptured line releases its hold", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -52,7 +53,7 @@ describe.skipIf(!testDatabaseUrl)("cancelling an uncaptured line releases its ho
   it("does not cancel anything when the client only requests changes to the cancelling version", async () => {
     const proposal = await confirmChange(handle.db, session, "willow", { action: "remove", itemId: CHAIR, oldItemHandling: "not_ordered", oldItemCostCents: 0 }, false);
     const { createApprovalStore } = await import("../approval/store");
-    await createApprovalStore(handle.db).decide(session, proposal.id, { decision: "changes_requested", contentHash: proposal.contentHash, revisionContentHash: proposal.revisionContentHash, acknowledged: true, signature: proposal.clientName, note: "Keep the chairs after all." });
+    await createApprovalStore(handle.db).decide(session, proposal.id, { decision: "changes_requested", contentHash: proposal.contentHash, revisionContentHash: proposal.revisionContentHash, acknowledged: true, signature: clientSignatureName(proposal), note: "Keep the chairs after all." });
     await expect(release(proposal)).rejects.toMatchObject({ code: "NOT_CONFIRMED" });
     expect((await chairIn(v2, "proposed")).heldCents).toBe(54_375);
   });

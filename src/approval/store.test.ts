@@ -15,6 +15,7 @@ import { quoteFingerprint } from "../quotes/fingerprint";
 import { changeOrderDecisions } from "./schema";
 import { createApprovalStore } from "./store";
 import type { DecideChangeOrderInput } from "./types";
+import { clientSignatureName } from "../opening/types";
 
 describe.skipIf(!testDatabaseUrl)("whole-document client decisions", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -51,7 +52,7 @@ describe.skipIf(!testDatabaseUrl)("whole-document client decisions", () => {
     return (await createPricingStore(handle.db).issueReview(session, "maple", { reviewId: workspace.review!.id, expectedVersion: workspace.review!.version })).order;
   }
   function command(order: FrozenChangeOrder, changes = false): DecideChangeOrderInput {
-    return { decision: changes ? "changes_requested" : "approved", contentHash: order.contentHash, revisionContentHash: order.revisionContentHash, acknowledged: true, signature: order.clientName, note: changes ? "Please review the proposed chair count." : "" };
+    return { decision: changes ? "changes_requested" : "approved", contentHash: order.contentHash, revisionContentHash: order.revisionContentHash, acknowledged: true, signature: clientSignatureName(order), note: changes ? "Please review the proposed chair count." : "" };
   }
 
   it("keeps shared links read-only and rejects another session", async () => {

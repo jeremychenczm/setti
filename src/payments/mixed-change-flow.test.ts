@@ -11,6 +11,7 @@ import { confirmChanges, shown } from "./testing/cases";
 import { FakePayPal } from "./testing/fake-paypal";
 import { links } from "./testing/flows";
 import { paymentsWorkspace } from "./workspace";
+import { clientSignatureName } from "../opening/types";
 
 /** Fixed supplier terms are test inputs, not claims about a real seller. */
 function product(name: string, sku: string, unitPriceCents: number): Partial<PricingItem> {
@@ -153,7 +154,7 @@ describe.skipIf(!testDatabaseUrl)("one confirmed change coordinates items in dif
       { action: "quantity", itemId: "chair", quantity: 2, after: { unitPriceCents: 110_000 } },
     ], false);
     await expect(startCapture(handle.db, paypal, session, unapproved.id, { ...ref("chair"), ...shown(unapproved) })).rejects.toMatchObject({ code: "NOT_CONFIRMED" });
-    await createApprovalStore(handle.db).decide(session, unapproved.id, { decision: "approved", ...shown(unapproved), acknowledged: true, signature: unapproved.clientName, note: "" });
+    await createApprovalStore(handle.db).decide(session, unapproved.id, { decision: "approved", ...shown(unapproved), acknowledged: true, signature: clientSignatureName(unapproved), note: "" });
     await expect(releaseChair()).rejects.toMatchObject({ code: "STALE_VERSION" });
     expect(await line("chair")).toMatchObject({ heldCents: 80_000, releasedCents: 0 });
   });

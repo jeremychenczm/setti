@@ -4,6 +4,7 @@ import type { Db } from "../db/client";
 import { approvals, paymentOperations, paypalAuthorizations, paypalCaptures, paypalRefunds, revisionLines, revisions, supplierEvents } from "../db/schema";
 import { chatCases, chatMessages } from "../chat/schema";
 import { createChatStore } from "../chat/store";
+import { clientSignatureName } from "../opening/types";
 import { changeOrders, pricingCases } from "../pricing/schema";
 import { changeOrderContentHash, itemMappingKey } from "../pricing/document";
 import type { FrozenChangeOrder } from "../pricing/types";
@@ -133,7 +134,7 @@ export function createApprovalStore(db: Db) {
     const canDecide = owner && found.status === "sent" && !decision && !found.activeRunId;
     return {
       view: changeOrderView(found.document, found.status, decision), canDecide,
-      clientName: owner ? found.document.clientName : null,
+      clientName: owner ? clientSignatureName(found.document) : null,
       reason: !owner ? "This share link is read-only. Open it from the browser that owns the demo case to act as its demo client."
         : decision ? "The client's decision has been recorded for this exact version."
           : found.status === "superseded" ? "A newer client version has replaced this document."
@@ -164,7 +165,9 @@ export function createApprovalStore(db: Db) {
         const { contentHash, ...withoutHash } = order;
         if (input.contentHash !== contentHash || orderRow.contentHash !== contentHash || changeOrderContentHash(withoutHash) !== contentHash || input.revisionContentHash !== order.revisionContentHash || revision.contentHash !== order.revisionContentHash) throw new ApprovalStoreError("CONTENT_CHANGED", "The displayed content no longer matches this frozen version. Reload before deciding.");
         const signature = input.signature.trim(), note = input.note.trim();
-        if (signature !== order.clientName || !signature) throw new ApprovalStoreError("INVALID_INPUT", "Type the exact demo client name shown on this document.");
+        // The client signs with her name alone, as on V1; the record keeps that signed name.
+        const clientName = clientSignatureName(order);
+        if (signature !== clientName || !signature) throw new ApprovalStoreError("INVALID_INPUT", "Type the exact demo client name shown on this document.");
         if (input.decision === "changes_requested" && !note) throw new ApprovalStoreError("INVALID_INPUT", "Describe the changes you want the designer to review.");
         const [existing] = await tx.select().from(changeOrderDecisions).where(eq(changeOrderDecisions.orderId, id));
         if (existing) {
@@ -175,18 +178,18 @@ export function createApprovalStore(db: Db) {
         const [latest] = await tx.select({ id: revisions.id }).from(revisions).where(eq(revisions.projectId, revision.projectId)).orderBy(desc(revisions.number)).limit(1);
         if (revision.status !== "sent" || latest?.id !== revision.id) throw new ApprovalStoreError("STALE_VERSION", "This version is no longer the latest version awaiting a client decision.");
         const decidedAt = new Date();
-        await tx.insert(changeOrderDecisions).values({ orderId: id, revisionId: revision.id, sessionId, decision: input.decision, clientName: order.clientName, signature, note, contentHash, revisionContentHash: order.revisionContentHash, decidedAt });
+        await tx.insert(changeOrderDecisions).values({ orderId: id, revisionId: revision.id, sessionId, decision: input.decision, clientName, signature, note, contentHash, revisionContentHash: order.revisionContentHash, decidedAt });
         const lines = await tx.select().from(revisionLines).where(eq(revisionLines.revisionId, revision.id));
         const decision = input.decision === "approved" ? "approved" : "declined";
-        for (const line of lines) await tx.insert(approvals).values({ revisionId: revision.id, revisionLineId: line.id, decision, approverName: order.clientName, signature, contentHash: order.revisionContentHash, decidedAt });
+        for (const line of lines) await tx.insert(approvals).values({ revisionId: revision.id, revisionLineId: line.id, decision, approverName: clientName, signature, contentHash: order.revisionContentHash, decidedAt });
         await tx.update(revisions).set({ status: decision }).where(eq(revisions.id, revision.id));
         if (input.decision === "approved") {
           await tx.update(revisions).set({ status: "superseded" }).where(and(eq(revisions.projectId, revision.projectId), eq(revisions.status, "approved"), ne(revisions.id, revision.id)));
           await tx.update(chatCases).set({ draft: null, updatedAt: decidedAt }).where(eq(chatCases.id, caseRow.id));
         }
         await tx.insert(chatMessages).values({ caseId: caseRow.id, id: randomUUID(), actor: "assistant", model: "system", aiState: "completed", text: input.decision === "approved"
-          ? `Demo client ${order.clientName} confirmed V${order.version}: ${order.title}. This is now the baseline for future changes. No payment has been executed.${note ? ` Note: ${note}` : ""}`
-          : `Demo client ${order.clientName} requested changes to V${order.version}: ${note}. The previously approved quote remains the baseline. No payment has been executed.` });
+          ? `Demo client ${clientName} confirmed V${order.version}: ${order.title}. This is now the baseline for future changes. No payment has been executed.${note ? ` Note: ${note}` : ""}`
+          : `Demo client ${clientName} requested changes to V${order.version}: ${note}. The previously approved quote remains the baseline. No payment has been executed.` });
         return (await workspace(tx, sessionId, id))!;
       });
     },

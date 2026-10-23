@@ -9,6 +9,7 @@ import { changeOrderView } from "../approval/view";
 import { createChatStore } from "../chat/store";
 import type { CaseKey, CaseMessage, ChangeDraft } from "../chat/types";
 import { readOpening } from "../opening/read";
+import { clientSignatureName } from "../opening/types";
 import { openingQuotes } from "../opening/schema";
 import { quoteFingerprint } from "../quotes/fingerprint";
 import type { ApprovedQuoteReport } from "../quotes/types";
@@ -35,7 +36,7 @@ const usd = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency
 
 /** The designer's chat message that carries a new version to the client. */
 function versionMessage(order: FrozenChangeOrder): string {
-  const firstName = order.clientName.replace(/\s*\(demo client\)$/, "").split(/\s+/)[0];
+  const firstName = clientSignatureName(order).split(/\s+/)[0];
   const count = order.changes.length;
   const delta = order.deltaTotalCents === 0 ? "no change" : `${order.deltaTotalCents > 0 ? "+" : "−"}${usd(Math.abs(order.deltaTotalCents))}`;
   return `Hi ${firstName}, here is quote V${order.version}: ${order.title}. It changes ${count} line${count === 1 ? "" : "s"}, and the new total is ${usd(order.totals.totalCents)} (${delta} against the approved V${order.basedOnVersion}). Please review it and confirm.`;
