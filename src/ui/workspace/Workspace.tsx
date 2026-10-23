@@ -5,7 +5,8 @@ import { useState } from "react";
 import { accountOrDefault, canOpenProject, clientOf, DEMO_ACCOUNTS, rememberAccount, type AccountId, type DemoAccount } from "@/accounts/demo";
 import type { CaseKey } from "@/chat/types";
 import { mapleApprovedQuote } from "@/quotes/demo-quote";
-import { willowApprovedQuote } from "@/quotes/willow-quote";
+import type { QuoteDocument } from "@/quotes/types";
+import { willowQuote } from "@/quotes/willow-quote";
 import { CaseChat } from "../chat/CaseChat";
 import { ConversationList, type ProjectChat } from "./ConversationList";
 import { Sidebar, type View } from "./Sidebar";
@@ -14,7 +15,8 @@ const QuoteBoard = dynamic(() => import("../quotes/QuoteBoard").then((m) => m.Qu
   loading: () => <div className="flex flex-1 items-center justify-center rounded-xl bg-white text-sm text-[var(--muted)]">Loading quote…</div>,
 });
 
-const quotes = { willow: willowApprovedQuote, maple: mapleApprovedQuote };
+/** Each project's prepared V1, shown until the server's snapshot arrives. */
+const quotes: Record<CaseKey, QuoteDocument> = { willow: willowQuote, maple: mapleApprovedQuote };
 
 const projects: Omit<ProjectChat, "counterpart">[] = [
   { key: "willow", title: "Willow Residence", subtitle: "Whole home" },
@@ -32,6 +34,9 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
   const [view, setView] = useState<View>(initialView);
   const [quoteId, setQuoteId] = useState<CaseKey>(() => reachable(account, initialQuote));
   const [activeId, setActiveId] = useState<CaseKey>(() => reachable(account, initialCase ?? (initialView === "quotes" ? initialQuote : "willow")));
+  /** The quote line to open, when the report is opened from a message about it. */
+  const [focusItemId, setFocusItemId] = useState<string | null>(null);
+
   const visibleProjects: ProjectChat[] = projects.filter((project) => canOpenProject(account, project.key))
     .map((project) => ({ ...project, counterpart: account.role === "designer" ? clientOf(project.key) : designer }));
 
@@ -40,9 +45,15 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
     setView("chats");
   };
 
-  const openCaseQuote = () => {
+  const openCaseQuote = (itemId?: string) => {
     setQuoteId(activeId);
+    setFocusItemId(itemId ?? null);
     setView("quotes");
+  };
+
+  const openQuoteChat = () => {
+    setActiveId(quoteId);
+    setView("chats");
   };
 
   const switchAccount = (id: AccountId) => {
@@ -64,7 +75,8 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
         </>
       )}
 
-      {view === "quotes" && <QuoteBoard key={`${account.id}:${quoteId}`} projectKey={quoteId} viewer={account} options={visibleProjects.map((project) => project.key)} onSelectQuote={(id) => { setQuoteId(id); setActiveId(id); }} onBack={() => setView("chats")} />}
+      {view === "quotes" && <QuoteBoard key={`${account.id}:${quoteId}:${focusItemId ?? ""}`} projectKey={quoteId} viewer={account} options={visibleProjects.map((project) => project.key)} focusItemId={focusItemId}
+        onSelectQuote={(id) => { setQuoteId(id); setActiveId(id); setFocusItemId(null); }} onBack={openQuoteChat} onOpenChat={openQuoteChat} />}
     </div>
   );
 }

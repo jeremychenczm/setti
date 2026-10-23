@@ -7,6 +7,7 @@ import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import { paypalCalls } from "../payments/schema";
 import { returnFromPayPal, startAuthorization, startCapture, startRefund, startRelease } from "../payments/actions";
 import { recordSupplierCredit, recordSupplierOrder } from "../payments/supplier";
+import { signOpeningForTest } from "../opening/testing";
 import { confirmChanges, shown } from "../payments/testing/cases";
 import { FakePayPal } from "../payments/testing/fake-paypal";
 import { links } from "../payments/testing/flows";
@@ -113,6 +114,8 @@ describe.skipIf(!testDatabaseUrl)("read-only case money evidence", () => {
     expect(JSON.stringify(other)).not.toContain("Oak writing desk");
     expect(other.sources.every((source) => !source.href.includes(mixed.id))).toBe(true);
     await createChatStore(handle.db).getCase(session, "willow");
+    await expect(readCaseMoneyContext(handle.db, session, "willow")).rejects.toMatchObject({ code: "MONEY_EVIDENCE_UNAVAILABLE" });
+    await signOpeningForTest(handle.db, session, "willow");
     expect((await readCaseMoneyContext(handle.db, session, "willow")).version).toBe(1);
     expectSources(context);
   });

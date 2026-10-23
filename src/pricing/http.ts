@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { ACCOUNT_COOKIE, findAccount } from "@/accounts/demo";
 import { isCaseKey } from "@/chat/cases";
 import { pricingInputSchema, PricingValidationError } from "./calculation";
 import { pricingStore } from "./server";
@@ -15,6 +16,12 @@ const saveSchema = z.strictObject({
 });
 const issueSchema = z.strictObject({ reviewId: uuid, expectedVersion: z.number().int().positive() });
 const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
+
+/** Pricing is the designer's work in progress; a client account sees the change order once it is issued. */
+function clientRefusal(req: NextRequest, session: string) {
+  return findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value)?.role === "client"
+    ? respond(req, session, { code: "FORBIDDEN", error: "Only the designer can open the pricing review." }, 403) : null;
+}
 
 function sessionId(req: NextRequest): string {
   const parsed = uuid.safeParse(req.cookies.get("setti-demo-chat")?.value);
@@ -67,6 +74,8 @@ function failure(req: NextRequest, session: string, error: unknown) {
 export async function getPricingResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
   const session = sessionId(req);
+  const refusal = clientRefusal(req, session);
+  if (refusal) return refusal;
   try { return respond(req, session, await pricingStore().getWorkspace(session, rawKey)); }
   catch (error) { return failure(req, session, error); }
 }
@@ -74,6 +83,8 @@ export async function getPricingResponse(req: NextRequest, rawKey: string) {
 export async function savePricingResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
   const session = sessionId(req);
+  const refusal = clientRefusal(req, session);
+  if (refusal) return refusal;
   try {
     const input = saveSchema.parse(await boundedJson(req));
     return respond(req, session, await pricingStore().saveReview(session, rawKey, input));
@@ -83,6 +94,8 @@ export async function savePricingResponse(req: NextRequest, rawKey: string) {
 export async function issuePricingResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
   const session = sessionId(req);
+  const refusal = clientRefusal(req, session);
+  if (refusal) return refusal;
   try {
     const input = issueSchema.parse(await boundedJson(req));
     return respond(req, session, await pricingStore().issueReview(session, rawKey, input));

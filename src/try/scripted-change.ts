@@ -78,13 +78,15 @@ export async function confirmScriptedChanges(
       changes: changes.map((change, index) => ({ action: change.action, itemId: change.itemId, quantity: change.action === "remove" ? null : change.quantity ?? change.after?.quantity ?? lines[index].quantity, productOptionId: null, description: change.action === "replace" ? "Replacement product" : "", sourceMessageIds: [id] })),
     },
   });
-  await chat.completeAi(session, key, id, run.runId, { ...result, model: words.model });
-  const draft = result.draft!;
+  // The saved draft also carries any V1 lines the server brings along, so price that one.
+  const draft = (await chat.completeAi(session, key, id, run.runId, { ...result, model: words.model })).draft!;
   const workspace = await pricing.getWorkspace(session, key);
   const input = createPricingInput(quote, draft);
   input.terms = words.terms;
   input.reviewNotes = words.reviewNotes;
   input.changes = input.changes.map((entry, index) => {
+    // A line coming back from V1 is already filled in from V1; the scripted designer confirms it as it is.
+    if (entry.fromV1) return { ...entry, confirmed: true };
     const change = changes[index], line = lines[index];
     const reducing = change.action !== "quantity" || (change.quantity ?? line.quantity) < line.quantity;
     return {

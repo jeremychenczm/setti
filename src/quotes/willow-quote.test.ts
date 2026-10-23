@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { mapleApprovedQuote } from "./demo-quote";
 import { calculateLineTotals, calculateQuoteTotals } from "./totals";
-import { willowApprovedQuote } from "./willow-quote";
+import { willowQuote } from "./willow-quote";
 
 describe("Willow supplier quote integrity", () => {
-  const lines = willowApprovedQuote.lines;
+  const lines = willowQuote.lines;
   const products = lines.filter((line) => line.category === "furniture");
   const services = lines.filter((line) => line.category === "service");
 
@@ -34,7 +34,7 @@ describe("Willow supplier quote integrity", () => {
       expect(line.leadTimeDays).toBeNull();
       expect(line.specification.length).toBeGreaterThan(0);
     }
-    expect(JSON.stringify(willowApprovedQuote)).not.toMatch(/ikea/i);
+    expect(JSON.stringify(willowQuote)).not.toMatch(/ikea/i);
   });
 
   it("uses hourly estimates for services without implying that a supplier quoted them", () => {
@@ -66,8 +66,8 @@ describe("Willow supplier quote integrity", () => {
     const diningChairs = products.find((line) => line.itemId === "willow-dining-chair")!;
     expect(diningChairs.quantity).toBe(4);
     expect(calculateLineTotals(diningChairs)).toMatchObject({ subtotalCents: 32_000, taxCents: 2_800 });
-    expect(willowApprovedQuote.assumptions.join(" ")).toContain("8.75%");
-    expect(willowApprovedQuote.assumptions.join(" ")).toContain("not a supplier delivery quote");
+    expect(willowQuote.assumptions.join(" ")).toContain("8.75%");
+    expect(willowQuote.assumptions.join(" ")).toContain("not a supplier delivery quote");
   });
 
   it("counts bulb packs separately from bulbs, covers and cushion inserts", () => {
@@ -82,18 +82,14 @@ describe("Willow supplier quote integrity", () => {
     expect(e12.specification).toContain("compatibility not yet verified");
   });
 
-  it("labels clearance prices and keeps every approval explicitly simulated", () => {
+  it("labels clearance prices and carries no approval: the client's signature approves V1", () => {
     for (const itemId of ["willow-area-rug", "willow-cushion-cover"]) {
       expect(products.find((line) => line.itemId === itemId)?.source.priceNote).toContain("Clearance");
     }
-    expect(willowApprovedQuote.isDemo).toBe(true);
-    expect(willowApprovedQuote.signature).toContain("demo signature");
-    expect(willowApprovedQuote.paymentNote).toContain("No PayPal authorization, charge or refund");
-    for (const line of lines) {
-      expect(line.approval.status).toBe("approved");
-      expect(line.approval.isDemo).toBe(true);
-      expect(line.approval.signature).toContain("demo signature");
-    }
+    expect(willowQuote.isDemo).toBe(true);
+    expect(willowQuote.paymentNote).toContain("No PayPal authorization, charge or refund");
+    for (const field of ["status", "approvedAt", "approvedBy", "signature"]) expect(willowQuote).not.toHaveProperty(field);
+    for (const line of lines) expect(line).not.toHaveProperty("approval");
   });
 
   it("leaves the three-line Maple V1 example at its original $1,500", () => {

@@ -2,7 +2,9 @@ import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildDraft } from "@/ai/draft";
-import { willowApprovedQuote } from "@/quotes/willow-quote";
+import { approvedForTest } from "@/opening/testing";
+
+const willowApprovedQuote = approvedForTest("willow");
 import { createPricingInput } from "./calculation";
 import { PricingStoreError } from "./store";
 import { getChangeOrderResponse, getPricingResponse, issuePricingResponse, savePricingResponse } from "./http";
@@ -38,6 +40,18 @@ describe("pricing HTTP boundaries", () => {
     mock.issueReview.mockResolvedValue({ order: { id: randomUUID(), version: 2 }, status: "awaiting_client_confirmation" });
   });
 
+  it("keeps the pricing review to the designer: a client account gets the change order once it is issued", async () => {
+    const asClient = (path: string, method = "GET", body?: unknown) => new NextRequest(`http://localhost:3002${path}`, {
+      method, headers: { cookie: "setti-demo-account=sofia", ...(method !== "GET" ? { "Content-Type": "application/json", Origin: "http://localhost:3002" } : {}) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    expect((await getPricingResponse(asClient("/api/pricing/willow"), "willow")).status).toBe(403);
+    expect((await savePricingResponse(asClient("/api/pricing/willow", "PUT", saveBody()), "willow")).status).toBe(403);
+    expect((await issuePricingResponse(asClient("/api/pricing/willow/issue", "POST", { reviewId: randomUUID(), expectedVersion: 1 }), "willow")).status).toBe(403);
+    expect(mock.getWorkspace).not.toHaveBeenCalled();
+    expect(mock.saveReview).not.toHaveBeenCalled();
+    expect(mock.issueReview).not.toHaveBeenCalled();
+  });
   it("reuses the scoped chat cookie and sets an opaque HttpOnly cookie for a new browser", async () => {
     const response = await getPricingResponse(request("/api/pricing/willow"), "willow");
     expect(response.status).toBe(200);

@@ -1,7 +1,8 @@
-import type { CaseKey, CaseMessage, ChangeDraft, DraftChange, ProductPage } from "@/chat/types";
+import type { CaseKey, CaseMessage, ChangeDraft, DraftChange, FromV1, ProductPage } from "@/chat/types";
 import type { ApprovedQuoteLine, ApprovedQuoteReport, QuoteCategory } from "@/quotes/types";
 import type { QuoteTotals } from "@/quotes/totals";
 import type { ClientDecision } from "@/approval/types";
+import type { FieldChange } from "./review-diff";
 
 export type OldItemHandling = "pending" | "not_ordered" | "cancelled" | "returned" | "retained" | "not_applicable";
 
@@ -39,6 +40,8 @@ export interface PricingChangeInput {
   /** Total retained old-item cost / handling charge including its applicable fees. */
   oldItemCostCents: number | null;
   oldItemNote: string;
+  /** Fixed by the draft: the V1 line this change brings back. */
+  fromV1?: FromV1;
 }
 
 export interface PricingIssue {
@@ -94,6 +97,10 @@ export interface ReviewedChange {
   oldItemCostCents: number;
   oldItemNote: string;
   priceEvidence: string;
+  /** The V1 line this change brings back, shown to the client with the change. */
+  fromV1?: FromV1;
+  /** For a line that comes back from V1: the fields that differ from V1 as it was sent. */
+  changesFromV1?: FieldChange[];
 }
 
 /** Everything a client reads is frozen here, including names, terms and sources. */

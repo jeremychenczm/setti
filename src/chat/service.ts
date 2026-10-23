@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { ChatStore, CaseKey, StoredCase, ProductPage } from "./types";
-import { caseQuote } from "./cases";
+import { preapprovedQuote } from "./cases";
 import { aiTask, isAiInvocation } from "@/ai/intent";
 import { aiConfigured, callChangeModel } from "@/ai/model";
 import { buildDraft } from "@/ai/draft";
@@ -19,7 +19,7 @@ export function failedPage(url: string, error: string): ProductPage {
 /** Changes are drafted against a V1 the client approved; before that the AI says so instead of drafting. */
 const OPENING_GUIDANCE = {
   draft: "Quote V1 has not been sent to the client yet. The designer sends it from the + menu in this chat; changes can be drafted once the client confirms it.",
-  sent: "Quote V1 is with the client for review. Changes can be drafted once the client confirms V1.",
+  sent: "Quote V1 is with the client for review. Changes can be drafted once the client approves at least one line.",
 } as const;
 
 export interface DraftDependencies {
@@ -51,7 +51,8 @@ export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKe
     const urls = [...new Set(messages.filter((message) => message.actor !== "assistant").flatMap((message) => messageUrls(message.text)))];
     const moneyQuestion = isMoneyQuestion(trigger.text);
     const moneyContext = store.readMoneyContext ? await store.readMoneyContext(sessionId, key) : null;
-    const quote = state.quote ?? caseQuote(key);
+    const quote = state.quote ?? preapprovedQuote(key);
+    if (!quote) throw new Error("This project's context has no approved quote yet. The client approves quote V1 first.");
     if (moneyContext && (moneyContext.quoteId !== quote.id || moneyContext.version !== quote.version || moneyContext.projectKey !== key)) throw new Error("The approved version for this project has changed. Send a new @AI request.");
     // A read-only money question must not fetch stale product links or be blocked by their count.
     const deferPages = moneyQuestion || urls.length > 4;

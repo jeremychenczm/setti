@@ -2,6 +2,7 @@
 
 import { ArrowDown, ArrowUpRight, ClipboardCheck, Link2, MessageSquare, ShieldCheck } from "lucide-react";
 import type { CaseMessage, ChangeDraft, DraftChange, DraftItem } from "@/chat/types";
+import { FromV1Note } from "../pricing/common";
 
 function money(cents: number | null, currency: string | null): string {
   if (cents === null) return "Price to review";
@@ -32,6 +33,7 @@ export function DraftCard({ draft, messages, onSourceMessage, pricingHref, canPr
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px]">
           <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-800">Awaiting designer pricing</span>
           <span className="text-[var(--muted)]">Draft {draft.revision} · based on V{draft.basedOnVersion}</span>
+          {draft.model === "designer" && <span className="rounded-full bg-slate-100 px-2.5 py-1 font-medium text-slate-700">Designer draft</span>}
           {draft.changes.length > 1 && <span className="rounded-full bg-blue-50 px-2.5 py-1 font-medium text-blue-700">{draft.changes.length} changes · one draft</span>}
         </div>
         <h2 className="text-[16px] font-semibold leading-snug">{draft.title}</h2>
@@ -45,6 +47,7 @@ export function DraftCard({ draft, messages, onSourceMessage, pricingHref, canPr
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-50">{index + 1}</span>
               {actionLabel[change.action]}
             </div>
+            <FromV1Note fromV1={change.fromV1} changes={[]} className="mb-2" />
             {change.before && <ItemSummary label={`Approved V${draft.basedOnVersion}`} item={change.before} subtotal={change.beforeSubtotalCents} />}
             {change.before && change.after && <ArrowDown className="my-2 h-3.5 w-3.5 text-[var(--muted)]" />}
             {change.after ? <ItemSummary label="Proposed" item={change.after} subtotal={change.afterSubtotalCents} /> : <p className="mt-2 text-[12px] text-slate-600">Remove this item from the proposed scope.</p>}

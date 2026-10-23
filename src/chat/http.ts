@@ -5,20 +5,32 @@ import { ACCOUNT_COOKIE, accountOrDefault, canOpenProject, findAccount } from "@
 import { aiConfigured } from "@/ai/model";
 import { isAiInvocation } from "@/ai/intent";
 import { defaultOpening } from "@/opening/document";
-import { QUOTE_MESSAGE_MAX } from "@/opening/types";
-import { caseQuote, isCaseKey } from "./cases";
+import { openingStore } from "@/opening/server";
+import { OpeningStoreError } from "@/opening/store";
+import { DECLINE_REASON_MAX, QUOTE_MESSAGE_MAX } from "@/opening/types";
+import { isCaseKey, preapprovedQuote } from "./cases";
 import { chatStore } from "./server";
 import { CaseAiError, runCaseAi } from "./service";
 import type { CaseKey, CaseSnapshot, HumanActor, StoredCase } from "./types";
 
 const cookieName = "setti-demo-chat";
 const uuid = z.uuid();
-const messageSchema = z.strictObject({ id: uuid, actor: z.enum(["designer", "client"]), text: z.string().trim().min(1).max(8000) });
+const messageSchema = z.strictObject({ id: uuid, actor: z.enum(["designer", "client"]), text: z.string().trim().min(1).max(8000), aboutItemId: z.string().min(1).max(100).optional() });
 const retrySchema = z.strictObject({ messageId: uuid });
 const quoteSchema = z.strictObject({ id: uuid, text: z.string().trim().min(1).max(QUOTE_MESSAGE_MAX) });
+const signSchema = z.strictObject({
+  signingId: uuid,
+  contentHash: z.string().regex(/^[0-9a-f]{64}$/),
+  signature: z.string().max(160),
+  acknowledged: z.literal(true),
+  decisions: z.array(z.strictObject({ itemId: z.string().min(1).max(100), decision: z.enum(["approved", "declined"]), note: z.string().max(DECLINE_REASON_MAX).optional() })).min(1).max(200),
+});
+const dropSchema = z.strictObject({ itemId: z.string().min(1).max(100) });
 
-function snapshot(state: StoredCase): CaseSnapshot {
-  return { ...state, quote: state.quote ?? caseQuote(state.projectKey), opening: state.opening ?? defaultOpening(state.projectKey), aiConfigured: aiConfigured() };
+/** A client account sees that a draft is being prepared, never the designer's draft itself. */
+function snapshot(state: StoredCase, req: NextRequest): CaseSnapshot {
+  const base = { ...state, quote: state.quote ?? preapprovedQuote(state.projectKey), opening: state.opening ?? defaultOpening(state.projectKey), aiConfigured: aiConfigured() };
+  return findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value)?.role === "client" ? { ...base, draft: null, draftPreparing: !!state.draft } : base;
 }
 
 function session(req: NextRequest): string {
@@ -76,7 +88,7 @@ export async function getCaseResponse(req: NextRequest, rawKey: string) {
   const sessionId = session(req);
   const refusal = accountRefusal(req, rawKey);
   if (refusal) return respond(req, sessionId, { code: "FORBIDDEN", error: refusal }, 403);
-  try { return respond(req, sessionId, snapshot(await chatStore().getCase(sessionId, rawKey))); }
+  try { return respond(req, sessionId, snapshot(await chatStore().getCase(sessionId, rawKey), req)); }
   catch { return respond(req, sessionId, { code: "STORAGE_UNAVAILABLE", error: "Chat storage is unavailable. Make sure the database is running and migrated." }, 503); }
 }
 
@@ -99,15 +111,15 @@ export async function postCaseResponse(req: NextRequest, rawKey: string, retry =
       if (refusal) return respond(req, sessionId, { code: "FORBIDDEN", error: refusal }, 403);
       const state = await store.appendMessage(sessionId, rawKey, input);
       persisted = true;
-      if (!isAiInvocation(input.text)) return respond(req, sessionId, snapshot(state));
+      if (!isAiInvocation(input.text)) return respond(req, sessionId, snapshot(state, req));
       messageId = input.id;
     }
     const state = await runCaseAi(store, sessionId, rawKey, messageId);
-    return respond(req, sessionId, snapshot(state));
+    return respond(req, sessionId, snapshot(state, req));
   } catch (error) {
     let state: CaseSnapshot | undefined;
     if (persisted) {
-      try { state = snapshot(await chatStore().getCase(sessionId, rawKey as CaseKey)); } catch { /* Original error remains authoritative. */ }
+      try { state = snapshot(await chatStore().getCase(sessionId, rawKey as CaseKey), req); } catch { /* Original error remains authoritative. */ }
     }
     if (error instanceof HttpError) return respond(req, sessionId, { code: "INVALID_REQUEST", error: error.message, state }, error.status);
     if (error instanceof z.ZodError) return respond(req, sessionId, { code: "INVALID_REQUEST", error: "Invalid message: it needs a valid ID, a speaker and text of no more than 8,000 characters.", state }, 400);
@@ -133,7 +145,7 @@ export async function postQuoteResponse(req: NextRequest, rawKey: string) {
     const account = accountOrDefault(req.cookies.get(ACCOUNT_COOKIE)?.value);
     if (account.role !== "designer") return respond(req, sessionId, { code: "FORBIDDEN", error: "Only the designer can send a quote." }, 403);
     const sentBy = account.name;
-    return respond(req, sessionId, snapshot(await chatStore().sendQuote(sessionId, rawKey, { ...input, sentBy })));
+    return respond(req, sessionId, snapshot(await chatStore().sendQuote(sessionId, rawKey, { ...input, sentBy }), req));
   } catch (error) {
     if (error instanceof HttpError) return respond(req, sessionId, { code: "INVALID_REQUEST", error: error.message }, error.status);
     if (error instanceof z.ZodError) return respond(req, sessionId, { code: "INVALID_REQUEST", error: `Send the quote with a message of at most ${QUOTE_MESSAGE_MAX.toLocaleString("en-US")} characters.` }, 400);
@@ -163,5 +175,60 @@ export async function getQuoteResponse(req: NextRequest, rawKey: string) {
     return respond(req, sessionId, view);
   } catch {
     return respond(req, sessionId, { code: "STORAGE_UNAVAILABLE", error: "Quote storage is unavailable. Make sure the database is running and migrated." }, 503);
+  }
+}
+
+const openingStatuses: Record<string, number> = { INVALID_INPUT: 400, FORBIDDEN: 403, NOT_AVAILABLE: 409, NOT_SENT: 409, CONTENT_CHANGED: 409, CLOSED: 409, CASE_BUSY: 409, ALREADY_DECIDED: 409 };
+
+function openingFailure(req: NextRequest, sessionId: string, error: unknown, invalid: string) {
+  if (error instanceof HttpError) return respond(req, sessionId, { code: "INVALID_REQUEST", error: error.message }, error.status);
+  if (error instanceof z.ZodError) return respond(req, sessionId, { code: "INVALID_REQUEST", error: invalid }, 400);
+  if (error instanceof OpeningStoreError && openingStatuses[error.code]) return respond(req, sessionId, { code: error.code, error: error.message }, openingStatuses[error.code]);
+  return respond(req, sessionId, { code: "STORAGE_UNAVAILABLE", error: "Quote storage is unavailable. Make sure the database is running and migrated." }, 503);
+}
+
+/** The client signs the lines they decide now. Only the project's own client account may sign. */
+export async function postQuoteSignResponse(req: NextRequest, rawKey: string) {
+  if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404 });
+  const sessionId = session(req);
+  try {
+    const input = signSchema.parse(await boundedJson(req));
+    const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
+    if (account?.role !== "client" || !canOpenProject(account, rawKey)) return respond(req, sessionId, { code: "FORBIDDEN", error: "Only the client can sign quote V1. Switch to the client's account first." }, 403);
+    return respond(req, sessionId, await openingStore().sign(sessionId, rawKey, input));
+  } catch (error) {
+    return openingFailure(req, sessionId, error, "Choose at least one line, confirm you reviewed the quote and type your name.");
+  }
+}
+
+/** The designer drops a V1 line the client declined or left undecided. */
+export async function postQuoteDropResponse(req: NextRequest, rawKey: string) {
+  if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404 });
+  const sessionId = session(req);
+  try {
+    const { itemId } = dropSchema.parse(await boundedJson(req));
+    const refusal = accountRefusal(req, rawKey);
+    if (refusal) return respond(req, sessionId, { code: "FORBIDDEN", error: refusal }, 403);
+    const account = accountOrDefault(req.cookies.get(ACCOUNT_COOKIE)?.value);
+    if (account.role !== "designer") return respond(req, sessionId, { code: "FORBIDDEN", error: "Only the designer can drop a line from quote V1." }, 403);
+    return respond(req, sessionId, await openingStore().drop(sessionId, rawKey, { itemId, by: account.name }));
+  } catch (error) {
+    return openingFailure(req, sessionId, error, "Choose the quote line to drop.");
+  }
+}
+
+/** The designer revises a declined V1 line by hand; the pricing page opens on the draft that now carries it. */
+export async function postQuoteReviseResponse(req: NextRequest, rawKey: string) {
+  if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404 });
+  const sessionId = session(req);
+  try {
+    const { itemId } = dropSchema.parse(await boundedJson(req));
+    const refusal = accountRefusal(req, rawKey);
+    if (refusal) return respond(req, sessionId, { code: "FORBIDDEN", error: refusal }, 403);
+    if (accountOrDefault(req.cookies.get(ACCOUNT_COOKIE)?.value).role !== "designer") return respond(req, sessionId, { code: "FORBIDDEN", error: "Only the designer can revise a quote line." }, 403);
+    const { draft } = await openingStore().revise(sessionId, rawKey, { itemId });
+    return respond(req, sessionId, { href: `/pricing/${rawKey}`, draftId: draft.id, revision: draft.revision });
+  } catch (error) {
+    return openingFailure(req, sessionId, error, "Choose the declined quote line to revise.");
   }
 }

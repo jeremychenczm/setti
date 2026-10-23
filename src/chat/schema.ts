@@ -33,6 +33,8 @@ export const chatMessages = pgTable("chat_messages", {
   error: text("error"),
   model: text("model"),
   moneyAnswer: jsonb("money_answer").$type<MoneyAnswer>(),
+  /** The V1 line a message asks about, shown as a tag that opens that line. */
+  aboutItemId: text("about_item_id"),
   lastRunId: uuid("last_run_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [

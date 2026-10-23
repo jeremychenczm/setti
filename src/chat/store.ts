@@ -5,10 +5,12 @@ import { currentCaseQuote } from "../approval/baseline";
 import { quoteFingerprint } from "../quotes/fingerprint";
 import { readCaseMoneyContext } from "../ai/money-context";
 import type { Db } from "../db/client";
-import { documentHash, openingDocument, openingSummary, withoutApproval } from "../opening/document";
+import { withRevisedLine, withV1Lines } from "../opening/carry";
+import { documentHash, openingDocument } from "../opening/document";
+import { readOpening } from "../opening/read";
 import { openingQuotes } from "../opening/schema";
-import { QUOTE_MESSAGE_MAX, sentFromChat, type QuoteView } from "../opening/types";
-import { caseQuote } from "./cases";
+import { QUOTE_MESSAGE_MAX, sentFromChat } from "../opening/types";
+import { insertBaseline } from "../pricing/bridge";
 import { chatCases, chatMessages } from "./schema";
 import type { AppendMessageInput, BeginAiResult, CaseKey, CaseMessage, ChatStore, SendQuoteInput, StoredCase } from "./types";
 
@@ -60,27 +62,13 @@ function publicMessage(message: MessageRow): CaseMessage {
     error: message.error,
     model: message.model,
     moneyAnswer: message.moneyAnswer,
+    aboutItemId: message.aboutItemId,
   };
-}
-
-/** The case's V1: a draft until the designer sends it, then the frozen document as sent. */
-async function readOpening(tx: Transaction, row: CaseRow): Promise<Omit<QuoteView, "projectKey">> {
-  if (!sentFromChat(row.projectKey)) {
-    const quote = caseQuote(row.projectKey);
-    const document = withoutApproval(quote);
-    return { document, approval: { approvedBy: quote.approvedBy, approvedAt: quote.approvedAt }, opening: openingSummary(document, { status: "approved", messageId: null, sentAt: null, sentBy: null, contentHash: null }) };
-  }
-  const [sent] = await tx.select().from(openingQuotes).where(eq(openingQuotes.caseId, row.id));
-  if (!sent) {
-    const document = openingDocument(row.projectKey);
-    return { document, approval: null, opening: openingSummary(document, { status: "draft", messageId: null, sentAt: null, sentBy: null, contentHash: null }) };
-  }
-  return { document: sent.document, approval: null, opening: openingSummary(sent.document, { status: "sent", messageId: sent.messageId, sentAt: sent.sentAt.toISOString(), sentBy: sent.sentBy, contentHash: sent.contentHash }) };
 }
 
 async function snapshot(tx: Transaction, row: CaseRow): Promise<StoredCase> {
   const messages = await tx.select().from(chatMessages).where(eq(chatMessages.caseId, row.id)).orderBy(asc(chatMessages.sequence));
-  return { id: row.id, projectKey: row.projectKey, messages: messages.map(publicMessage), draft: row.draft, activeMessageId: row.activeMessageId, quote: await currentCaseQuote(tx, row.id, row.projectKey), opening: (await readOpening(tx, row)).opening };
+  return { id: row.id, projectKey: row.projectKey, messages: messages.map(publicMessage), draft: row.draft, activeMessageId: row.activeMessageId, quote: (await currentCaseQuote(tx, row.id, row.projectKey)) ?? undefined, opening: (await readOpening(tx, row)).opening };
 }
 
 async function expireRun(tx: Transaction, row: CaseRow): Promise<CaseRow> {
@@ -113,16 +101,23 @@ export function createChatStore(db: Db): ChatStore {
       if (!["client", "designer"].includes(input.actor) || !input.text.trim() || input.text.length > 8_000) {
         throw new ChatStoreError("INVALID_INPUT", "Send a non-empty client or designer message of at most 8,000 characters.");
       }
+      const aboutItemId = input.aboutItemId ?? null;
       return withinCase(sessionId, projectKey, async (tx, row) => {
         const [existing] = await tx.select().from(chatMessages).where(and(eq(chatMessages.caseId, row.id), eq(chatMessages.id, input.id)));
         if (existing) {
-          if (existing.actor !== input.actor || existing.text !== input.text) {
+          if (existing.actor !== input.actor || existing.text !== input.text || existing.aboutItemId !== aboutItemId) {
             throw new ChatStoreError("IDEMPOTENCY_CONFLICT", "This message id has already been used for different content.");
           }
           return snapshot(tx, row);
         }
         if (row.activeRunId) throw new ChatStoreError("CASE_BUSY", "Wait for the current AI reply before sending another message.");
-        await tx.insert(chatMessages).values({ caseId: row.id, id: input.id, actor: input.actor, text: input.text });
+        if (aboutItemId) {
+          const { opening, document } = await readOpening(tx, row);
+          if (!opening.sentAt || !document.lines.some((line) => line.itemId === aboutItemId)) {
+            throw new ChatStoreError("INVALID_INPUT", "A question can only be about a line of the quote V1 that was sent.");
+          }
+        }
+        await tx.insert(chatMessages).values({ caseId: row.id, id: input.id, actor: input.actor, text: input.text, aboutItemId });
         await tx.update(chatCases).set({ updatedAt: new Date() }).where(eq(chatCases.id, row.id));
         return snapshot(tx, row);
       });
@@ -145,13 +140,17 @@ export function createChatStore(db: Db): ChatStore {
         const document = openingDocument(projectKey);
         await tx.insert(chatMessages).values({ caseId: row.id, id: input.id, actor: "designer", text });
         await tx.insert(openingQuotes).values({ caseId: row.id, messageId: input.id, document, contentHash: documentHash(document), sentBy: input.sentBy.trim() });
+        await insertBaseline(tx, row.id, document);
         await tx.update(chatCases).set({ updatedAt: new Date() }).where(eq(chatCases.id, row.id));
         return snapshot(tx, row);
       });
     },
 
     getQuote(sessionId, projectKey) {
-      return withinCase(sessionId, projectKey, async (tx, row) => ({ projectKey, ...(await readOpening(tx, row)) }));
+      return withinCase(sessionId, projectKey, async (tx, row) => {
+        const { document, opening, approval, lines } = await readOpening(tx, row);
+        return { projectKey, document, opening, approval, lines };
+      });
     },
 
     beginAi(sessionId, projectKey, messageId): Promise<BeginAiResult> {
@@ -196,22 +195,31 @@ export function createChatStore(db: Db): ChatStore {
         }
         if (result.draft) {
           const quote = await currentCaseQuote(tx, row.id, projectKey);
-          if (result.draft.basedOnQuoteId !== quote.id || result.draft.basedOnVersion !== quote.version || result.draft.basedOnQuoteFingerprint !== quoteFingerprint(quote)) {
+          if (!quote || result.draft.basedOnQuoteId !== quote.id || result.draft.basedOnVersion !== quote.version || result.draft.basedOnQuoteFingerprint !== quoteFingerprint(quote)) {
             throw new ChatStoreError("STALE_BASELINE", "The approved quote changed. Start a new @AI request against the current approved version.");
           }
         }
         if (result.moneyAnswer) {
           const quote = await currentCaseQuote(tx, row.id, projectKey);
-          if (result.moneyAnswer.quoteId !== quote.id || result.moneyAnswer.version !== quote.version) {
+          if (!quote || result.moneyAnswer.quoteId !== quote.id || result.moneyAnswer.version !== quote.version) {
             throw new ChatStoreError("STALE_BASELINE", "The approved quote changed while the recorded money answer was prepared. Ask again against the latest version.");
           }
           if ("draft" in result) throw new ChatStoreError("INVALID_INPUT", "A recorded money answer cannot modify a draft.");
+        }
+        let draft = result.draft ?? null;
+        if (draft && sentFromChat(projectKey)) {
+          // An AI draft keeps the designer's own revisions of declined V1 lines and carries every undecided V1 line.
+          const read = await readOpening(tx, row);
+          for (const change of row.draft?.changes ?? []) {
+            if (change.fromV1?.kind === "revised" && read.lines[change.fromV1.itemId]?.state === "declined") draft = withRevisedLine(draft, change.fromV1.line, change.fromV1.reason);
+          }
+          draft = withV1Lines(draft, read);
         }
         await tx.insert(chatMessages).values({ caseId: row.id, id: randomUUID(), actor: "assistant", text: result.text, replyToMessageId: messageId, aiState: "completed", model: result.model, moneyAnswer: result.moneyAnswer ?? null });
         await tx.update(chatMessages).set({ aiState: "completed", error: null, model: result.model })
           .where(and(eq(chatMessages.caseId, row.id), eq(chatMessages.id, messageId)));
         const [updated] = await tx.update(chatCases).set({
-          ...("draft" in result ? { draft: result.draft ?? null } : {}),
+          ...("draft" in result ? { draft } : {}),
           activeMessageId: null, activeRunId: null, activeRunStartedAt: null,
           latestCompletedSequence: message.sequence, updatedAt: new Date(),
         }).where(eq(chatCases.id, row.id)).returning();

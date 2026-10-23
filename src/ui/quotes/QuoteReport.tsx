@@ -1,14 +1,18 @@
 "use client";
 
-import { AllCommunityModule, themeQuartz, type ColDef, type GridApi, type ICellRendererParams } from "ag-grid-community";
+import { AllCommunityModule, themeQuartz, type ColDef, type GridApi, type ICellRendererParams, type RowSelectionOptions } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { Armchair, ArrowLeft, ArrowUpRight, Check, ChevronRight, Clock, Download, FileText, LockKeyhole, Palette, PencilLine, Search, X } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
-import { calculateLineTotals, calculateQuoteTotals, type QuoteLineTotals } from "@/quotes/totals";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { DemoAccount } from "@/accounts/demo";
 import type { CaseKey } from "@/chat/types";
-import type { OpeningStatus, QuoteView } from "@/opening/types";
+import { clientSignatureName, type OpeningLine, type OpeningQuote, type OpeningStatus, type QuoteView, type SignOpeningInput } from "@/opening/types";
+import { calculateLineTotals, calculateQuoteTotals, type QuoteLineTotals } from "@/quotes/totals";
 import type { QuoteLine } from "@/quotes/types";
 import { usd } from "../demo-data";
+import { LineReview, LineStateBadge, type LineChoice } from "./LineReview";
+import { ResolvePanel, type ResolveItem } from "./ResolvePanel";
+import { SignBar } from "./SignBar";
 
 type QuoteRow = QuoteLine & QuoteLineTotals;
 type CategoryFilter = "all" | "furniture" | "service";
@@ -45,12 +49,30 @@ function ItemCell({ data }: ICellRendererParams<QuoteRow>) {
   );
 }
 
-const STATUS_LABELS: Record<OpeningStatus, string> = { draft: "Draft", sent: "Awaiting client", approved: "Approved (demo)" };
+const LINE_LABELS = { approved: "Approved", declined: "Declined", withdrawn: "Dropped", pending: "Awaiting client" } as const;
 
-function StatusBadge({ status }: { status: OpeningStatus }) {
-  if (status === "approved") return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-medium leading-none text-emerald-700"><Check className="h-3 w-3" />Approved</span>;
-  if (status === "sent") return <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[11px] font-medium leading-none text-amber-800"><Clock className="h-3 w-3" />Awaiting client</span>;
-  return <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium leading-none text-slate-600"><PencilLine className="h-3 w-3" />Draft</span>;
+/** The whole V1 in a few words: draft, awaiting, partly or fully approved. */
+function progressLabel(opening: OpeningQuote): string {
+  const { approved, pending } = opening.progress;
+  if (opening.status === "draft") return "Draft";
+  if (approved === opening.lineCount) return "Approved";
+  if (approved) return `Partially approved · ${approved} of ${opening.lineCount}`;
+  return pending ? "Awaiting client" : "Declined";
+}
+
+function StatusBadge({ status, label }: { status: OpeningStatus; label?: string }) {
+  if (status === "approved") return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-medium leading-none text-emerald-700"><Check className="h-3 w-3" />{label ?? "Approved"}</span>;
+  if (status === "sent") return <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[11px] font-medium leading-none text-amber-800"><Clock className="h-3 w-3" />{label ?? "Awaiting client"}</span>;
+  return <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium leading-none text-slate-600"><PencilLine className="h-3 w-3" />{label ?? "Draft"}</span>;
+}
+
+/** What the page can ask the server to do; each returns an error to show, or null. */
+export interface QuoteActions {
+  sign: (input: SignOpeningInput) => Promise<string | null>;
+  drop: (itemId: string) => Promise<string | null>;
+  /** Puts a declined line in a designer draft and opens the pricing page. */
+  revise: (itemId: string) => Promise<string | null>;
+  ask: (itemId: string, text: string) => Promise<string | null>;
 }
 
 function dateLabel(value: string): string {
@@ -59,17 +81,36 @@ function dateLabel(value: string): string {
 
 const QUOTE_LABELS: Record<CaseKey, string> = { willow: "Willow Residence · 28-line test quote", maple: "Maple Ave · 3-line payment example" };
 
-/** One project's V1 as the signed-in account may see it: a designer's draft, a sent version, or an approved one. */
-export function QuoteReport({ view, options, onBack, onSelectQuote }: { view: QuoteView; options: CaseKey[]; onBack: () => void; onSelectQuote: (id: CaseKey) => void }) {
-  const { document: quote, opening, approval } = view;
+/**
+ * One project's V1 as the signed-in account may see it: a designer's draft, a
+ * sent version, or an approved one. On an open V1 the client decides line by
+ * line and signs; the designer resolves the lines that are not agreed.
+ */
+export function QuoteReport({ view, viewer, options, focusItemId, actions, onBack, onSelectQuote, onOpenChat }: {
+  view: QuoteView; viewer: DemoAccount; options: CaseKey[]; focusItemId?: string | null; actions: QuoteActions;
+  onBack: () => void; onSelectQuote: (id: CaseKey) => void; onOpenChat: () => void;
+}) {
+  const { document: quote, opening, approval, lines: lineStates } = view;
   const status = opening.status;
+  const signedV1 = !approval && !!opening.sentAt;
+  const open = signedV1 && !opening.closed;
+  const reviewing = viewer.role === "client" && open && opening.progress.pending > 0;
+  const lineOf = useCallback((itemId: string): OpeningLine => lineStates[itemId] ?? { state: approval ? "approved" : "pending", note: null, decidedAt: null, by: null, questions: 0 }, [lineStates, approval]);
+  const [choices, setChoices] = useState<Record<string, LineChoice>>({});
+  // One id per signature, kept across retries, so a lost response never records the decisions twice.
+  const [signingId, setSigningId] = useState(() => crypto.randomUUID());
+  const [notice, setNotice] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  /** Lines ticked in the table, for setting several choices at once. */
+  const [ticked, setTicked] = useState<string[]>([]);
+  const clientName = clientSignatureName(quote);
   const totals = useMemo(() => calculateQuoteTotals(quote.lines), [quote]);
   const allRows = useMemo<QuoteRow[]>(() => quote.lines.map((line) => ({ ...line, ...calculateLineTotals(line) })), [quote]);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<CategoryFilter>("all");
   const [room, setRoom] = useState("all");
   const [visibleCount, setVisibleCount] = useState(allRows.length);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(focusItemId ?? null);
   const grid = useRef<GridApi<QuoteRow> | null>(null);
   const selected = allRows.find((line) => line.itemId === selectedId);
   const rooms = useMemo(() => [...new Set(quote.lines.map((line) => line.room))], [quote]);
@@ -81,6 +122,64 @@ export function QuoteReport({ view, options, onBack, onSelectQuote }: { view: Qu
   const approvedDate = approval ? dateLabel(approval.approvedAt) : null;
   const sentDate = opening.sentAt ? dateLabel(opening.sentAt) : null;
   const totalLabel = approval ? "Approved quote total" : "Quote total";
+  const resolveItems: ResolveItem[] = viewer.role === "designer" && open
+    ? quote.lines.filter((line) => ["declined", "pending"].includes(lineOf(line.itemId).state)).map((line) => ({ itemId: line.itemId, name: line.name, line: lineOf(line.itemId) }))
+    : [];
+  const pendingLines = quote.lines.filter((line) => lineOf(line.itemId).state === "pending");
+  const chosen = pendingLines.filter((line) => choices[line.itemId]);
+  const toApprove = chosen.filter((line) => choices[line.itemId].decision === "approved");
+  const missingReasons = chosen.filter((line) => choices[line.itemId].decision === "declined" && !choices[line.itemId].note.trim()).map((line) => line.name);
+
+  useEffect(() => {
+    if (focusItemId) window.requestAnimationFrame(() => document.getElementById("quote-line-details")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }, [focusItemId]);
+
+  function choose(itemId: string, choice: LineChoice | null) {
+    setNotice(null);
+    setChoices((previous) => {
+      const next = { ...previous };
+      if (choice) next[itemId] = choice; else delete next[itemId];
+      return next;
+    });
+  }
+
+  function setTickedChoices(choice: LineChoice | null) {
+    setNotice(null);
+    setChoices((previous) => {
+      const next = { ...previous };
+      for (const itemId of ticked) {
+        if (choice) next[itemId] = choice; else delete next[itemId];
+      }
+      return next;
+    });
+    grid.current?.deselectAll();
+  }
+
+  function approveRest() {
+    setChoices((previous) => ({ ...Object.fromEntries(pendingLines.map((line) => [line.itemId, { decision: "approved" as const, note: "" }])), ...previous }));
+  }
+
+  async function sign(signature: string) {
+    const decisions = chosen.map((line) => {
+      const choice = choices[line.itemId];
+      return choice.decision === "declined" ? { itemId: line.itemId, decision: choice.decision, note: choice.note.trim() } : { itemId: line.itemId, decision: choice.decision };
+    });
+    const failure = await actions.sign({ signingId, contentHash: opening.contentHash!, signature, acknowledged: true, decisions });
+    if (!failure) {
+      setChoices({});
+      grid.current?.deselectAll();
+      setSigningId(crypto.randomUUID());
+      setNotice("Signed. The studio sees your decisions in the project chat.");
+    }
+    return failure;
+  }
+
+  async function revise(itemId: string) {
+    setActionError(null);
+    const failure = await actions.revise(itemId);
+    if (failure) setActionError(failure);
+    return failure;
+  }
 
   const columnDefs = useMemo<ColDef<QuoteRow>[]>(() => [
     { field: "name", headerName: "Item / supplier", pinned: "left", minWidth: 240, flex: 2, cellRenderer: ItemCell, getQuickFilterText: ({ data }) => data ? `${data.name} ${data.vendor} ${data.sku} ${data.specification} ${data.returnPolicy} ${data.source.name}` : "" },
@@ -89,7 +188,7 @@ export function QuoteReport({ view, options, onBack, onSelectQuote }: { view: Qu
     { field: "taxCents", headerName: "Tax", width: 85, minWidth: 75, type: "numericColumn", valueFormatter: ({ value }) => usd(value ?? 0) },
     { field: "freightCents", headerName: "Delivery", width: 95, minWidth: 85, type: "numericColumn", valueFormatter: ({ value }) => usd(value ?? 0) },
     { field: "totalCents", headerName: "Line total", width: 115, minWidth: 105, type: "numericColumn", valueFormatter: ({ value }) => usd(value ?? 0), cellStyle: { fontWeight: 600 } },
-    { colId: "approval", headerName: "Status", width: 135, minWidth: 120, valueGetter: () => STATUS_LABELS[status], cellRenderer: () => <StatusBadge status={status} /> },
+    { colId: "approval", headerName: "Status", width: 175, minWidth: 160, valueGetter: ({ data }) => data ? status === "draft" ? "Draft" : LINE_LABELS[lineOf(data.itemId).state] : "", cellRenderer: ({ data }: ICellRendererParams<QuoteRow>) => data && <LineStateBadge state={lineOf(data.itemId).state} choice={choices[data.itemId]} draft={status === "draft"} forClient={viewer.role === "client"} /> },
     { colId: "details", headerName: "", width: 95, minWidth: 90, sortable: false, cellRenderer: ({ data }: ICellRendererParams<QuoteRow>) => data && <button aria-label={`View details for ${data.name}`} onClick={() => setSelectedId(data.itemId)} className="inline-flex items-center gap-0.5 text-[12px] font-medium text-[var(--primary)] hover:underline">Details<ChevronRight className="h-3.5 w-3.5" /></button> },
     { field: "vendor", headerName: "Supplier", hide: true },
     { field: "category", hide: true, filter: "agTextColumnFilter" },
@@ -103,8 +202,14 @@ export function QuoteReport({ view, options, onBack, onSelectQuote }: { view: Qu
     { field: "source.kind", headerName: "Source type", hide: true },
     { field: "source.checkedAt", headerName: "Price checked", hide: true },
     { field: "source.priceNote", headerName: "Price note", hide: true },
-  ], [status]);
+  ], [status, lineOf, choices, viewer.role]);
   const defaultColDef = useMemo<ColDef<QuoteRow>>(() => ({ sortable: true, resizable: true, editable: false, suppressMovable: true }), []);
+  // While the client reviews, undecided lines can be ticked and set together; the header box ticks the undecided lines on the page shown.
+  const rowSelection = useMemo<RowSelectionOptions<QuoteRow> | undefined>(() => reviewing ? {
+    mode: "multiRow", checkboxes: true, headerCheckbox: true, selectAll: "currentPage", enableClickSelection: false, hideDisabledCheckboxes: true,
+    isRowSelectable: (node) => !!node.data && lineOf(node.data.itemId).state === "pending",
+  } : undefined, [reviewing, lineOf]);
+  const selectionColumn = useMemo<ColDef<QuoteRow>>(() => ({ pinned: "left", width: 48, minWidth: 48, maxWidth: 48, resizable: false, suppressHeaderMenuButton: true }), []);
 
   function downloadCsv() {
     grid.current?.exportDataAsCsv({
@@ -114,7 +219,7 @@ export function QuoteReport({ view, options, onBack, onSelectQuote }: { view: Qu
       processCellCallback: (params) => params.column.getColId() === "quantity" ? String(params.value) : params.formatValue(params.value) ?? String(params.value ?? ""),
       prependContent: [
         [{ data: { value: `Setti | ${quote.projectName} | Quote V${quote.version} | DEMO` } }],
-        [{ data: { value: status === "approved" ? "Sample approval. This quote does not confirm payment." : status === "sent" ? `Sent ${sentDate}, awaiting the client's review. This quote does not confirm payment.` : "Draft, not sent to the client." } }],
+        [{ data: { value: approval ? "Sample approval. This quote does not confirm payment." : status === "draft" ? "Draft, not sent to the client." : `Sent ${sentDate} · ${progressLabel(opening)}. This quote does not confirm payment.` } }],
         [{ data: { value: `Full quote total: ${usd(totals.totalCents)} USD` } }],
         ...quote.assumptions.map((assumption) => [{ data: { value: assumption } }]),
       ],
@@ -146,17 +251,17 @@ export function QuoteReport({ view, options, onBack, onSelectQuote }: { view: Qu
           <div className="flex flex-wrap items-start justify-between gap-5">
             <div>
               <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--muted)]"><FileText className="h-3.5 w-3.5" />{quote.projectName} / Quote 001</div>
-              <div className="flex items-center gap-3"><h1 className="text-[28px] font-semibold tracking-tight">{approval ? "Approved quote" : "Quote"}</h1><span className="rounded-md bg-[var(--canvas)] px-2 py-1 text-[12px] font-medium">V{quote.version}</span>{!approval && <StatusBadge status={status} />}</div>
+              <div className="flex items-center gap-3"><h1 className="text-[28px] font-semibold tracking-tight">{approval ? "Approved quote" : "Quote"}</h1><span className="rounded-md bg-[var(--canvas)] px-2 py-1 text-[12px] font-medium">V{quote.version}</span>{!approval && <StatusBadge status={status} label={progressLabel(opening)} />}</div>
               <p className="mt-1.5 text-[13px] text-[var(--muted)]">{quote.room} · {approval ? "Agreed scope and itemized prices." : "Proposed scope and itemized prices."}</p>
             </div>
-            <div className="text-right"><div className="text-[11px] text-[var(--muted)]">{totalLabel} · USD</div><div className="mt-1 text-[32px] font-semibold tracking-tight tabular-nums">{usd(totals.totalCents)}</div><div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-[var(--muted)]">{status === "draft" ? <><PencilLine className="h-3 w-3" />Not sent yet</> : <><LockKeyhole className="h-3 w-3" />V{quote.version} is read-only</>}</div></div>
+            <div className="text-right"><div className="text-[11px] text-[var(--muted)]">{totalLabel} · USD</div><div className="mt-1 text-[32px] font-semibold tracking-tight tabular-nums">{usd(totals.totalCents)}</div><div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-[var(--muted)]">{status === "draft" ? <><PencilLine className="h-3 w-3" />Not sent yet</> : <><LockKeyhole className="h-3 w-3" />V{quote.version} is read-only</>}</div>{signedV1 && opening.progress.approved > 0 && <div className="mt-1 text-[12px] font-medium text-emerald-700">Approved {usd(opening.progress.approvedTotalCents)}{opening.progress.pending ? ` · ${opening.progress.pending} undecided` : ""}</div>}</div>
           </div>
 
           <div className="my-6 grid grid-cols-2 gap-5 border-y border-[var(--line)] py-5 xl:grid-cols-4">
             <Meta label="Project" value={quote.projectName} note={quote.room} />
             <Meta label="Prepared for" value={quote.clientName} note="Client" />
             <Meta label="Prepared by" value={quote.designerName} note="Lee Studio" />
-            {approval ? <Meta label="Sample approval" value={approvedDate ?? ""} note={`By ${approval.approvedBy}`} /> : sentDate ? <Meta label="Sent" value={sentDate} note={`By ${opening.sentBy ?? quote.designerName}`} /> : <Meta label="Status" value="Draft" note="Not sent to the client" />}
+            {approval ? <Meta label="Sample approval" value={approvedDate ?? ""} note={`By ${approval.approvedBy}`} /> : opening.signedAt ? <Meta label="Signed" value={dateLabel(opening.signedAt)} note={`By ${clientName}`} /> : sentDate ? <Meta label="Sent" value={sentDate} note={`By ${opening.sentBy ?? quote.designerName}`} /> : <Meta label="Status" value="Draft" note="Not sent to the client" />}
           </div>
 
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -164,6 +269,10 @@ export function QuoteReport({ view, options, onBack, onSelectQuote }: { view: Qu
             <button onClick={downloadCsv} title="Download all items in the quote, including filtered items" className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-3 py-2 text-[12px] font-medium hover:bg-[var(--canvas)]"><Download className="h-3.5 w-3.5" />Download CSV</button>
           </div>
           {supplierCount > 1 && <p className="mb-3 rounded-lg bg-blue-50 px-3 py-2.5 text-[11px] leading-relaxed text-blue-800">{supplierLines.length} items from {supplierCount} fictional supplier quotes + {estimateCount} simulated service estimates. Tax and delivery are test assumptions; select Details for the supplier quote, price note and return terms of each line.</p>}
+          {resolveItems.length > 0 && <ResolvePanel items={resolveItems} onSelect={setSelectedId} onOpenChat={onOpenChat} onRevise={(item) => void revise(item.itemId)} />}
+          {actionError && <p role="alert" className="mb-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2.5 text-[12px] text-red-800">{actionError}</p>}
+          {reviewing && <p className="mb-3 rounded-lg border border-blue-100 bg-white px-3 py-2.5 text-[12px] leading-relaxed text-slate-600"><strong className="font-medium text-[var(--ink)]">Review each line.</strong> Select a line to approve or decline it, or to ask about it. Tick several lines to approve or decline them together. Lines you leave undecided can be signed later.</p>}
+          {notice && <p role="status" className="mb-3 rounded-lg bg-emerald-50 px-3 py-2.5 text-[12px] text-emerald-800">{notice}</p>}
           <div className="overflow-hidden rounded-xl border border-[var(--line)]">
             <div className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] px-4 py-3">
               <div className="flex gap-1 rounded-lg bg-[var(--canvas)] p-0.5" role="group" aria-label="Filter quote category">
@@ -182,6 +291,9 @@ export function QuoteReport({ view, options, onBack, onSelectQuote }: { view: Qu
                 rowData={allRows}
                 columnDefs={columnDefs}
                 defaultColDef={defaultColDef}
+                rowSelection={rowSelection}
+                selectionColumnDef={selectionColumn}
+                onSelectionChanged={({ api }) => setTicked(api.getSelectedRows().map((row) => row.itemId))}
                 getRowId={({ data }) => data.itemId}
                 quickFilterText={query}
                 rowHeight={70}
@@ -202,7 +314,16 @@ export function QuoteReport({ view, options, onBack, onSelectQuote }: { view: Qu
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] bg-slate-50/60 px-4 py-3 text-[11px] text-[var(--muted)]"><span aria-live="polite">Showing {visibleCount} of {totals.lineCount} items · Filters do not change the quote total</span><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />AG Grid Community</span></div>
           </div>
 
-          {selected && <LineDetails key={selected.itemId} line={selected} onClose={() => setSelectedId(null)} />}
+          {selected && <LineDetails key={selected.itemId} line={selected} onClose={() => setSelectedId(null)}>
+            {signedV1 && <LineReview
+              name={selected.name} line={lineOf(selected.itemId)} role={viewer.role}
+              canDecide={reviewing && lineOf(selected.itemId).state === "pending"}
+              canResolve={resolveItems.some((item) => item.itemId === selected.itemId)}
+              choice={choices[selected.itemId]} onChoose={(choice) => choose(selected.itemId, choice)}
+              onAsk={(text) => actions.ask(selected.itemId, text)} onOpenChat={onOpenChat}
+              onDrop={() => actions.drop(selected.itemId)} onRevise={() => revise(selected.itemId)}
+            />}
+          </LineDetails>}
 
           <div className="mt-6 grid items-start gap-6 lg:grid-cols-[1fr_300px]">
             {approval ? <div className="rounded-xl border border-[var(--line)] p-5">
@@ -210,8 +331,8 @@ export function QuoteReport({ view, options, onBack, onSelectQuote }: { view: Qu
               <div className="mt-4 border-t border-[var(--line)] pt-3"><div className="font-serif text-xl italic text-slate-600">{approval.approvedBy}</div><p className="mt-1 text-[10px] text-[var(--muted)]">Demo typed signature · not an actual client signature</p></div>
               <p className="mt-3 text-[12px] leading-relaxed text-[var(--muted)]">This approved version is read-only. Any change to items, prices or terms belongs in a new version.</p>
             </div> : <div className="rounded-xl border border-[var(--line)] p-5">
-              <div className="flex items-center gap-2">{status === "sent" ? <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-50 text-amber-700"><Clock className="h-4 w-4" /></span> : <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600"><PencilLine className="h-4 w-4" /></span>}<div><h2 className="text-[13px] font-semibold">{status === "sent" ? `Awaiting review by ${quote.clientName.replace(" (demo client)", "")}` : "Draft · only the studio can see it"}</h2><p className="text-[11px] text-[var(--muted)]">{status === "sent" ? `Sent ${sentDate} by ${opening.sentBy ?? quote.designerName}` : "Prepared from the supplier quotes"}</p></div></div>
-              <p className="mt-4 border-t border-[var(--line)] pt-3 text-[12px] leading-relaxed text-[var(--muted)]">{status === "sent" ? "This version was locked when it was sent: the client reviews exactly these lines and prices, and any change needs a new version. No one has approved it yet, and nothing has been charged." : "Send it from the project chat. Sending locks this version for the client's review."}</p>
+              <div className="flex items-center gap-2">{status === "approved" ? <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-700"><Check className="h-4 w-4" /></span> : status === "sent" ? <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-50 text-amber-700"><Clock className="h-4 w-4" /></span> : <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600"><PencilLine className="h-4 w-4" /></span>}<div><h2 className="text-[13px] font-semibold">{opening.signedAt ? `Signed by ${clientName}` : status === "sent" ? `Awaiting review by ${clientName}` : "Draft · only the studio can see it"}</h2><p className="text-[11px] text-[var(--muted)]">{opening.signedAt ? `${opening.progress.approved} approved · ${opening.progress.declined} declined · ${opening.progress.withdrawn} dropped · ${opening.progress.pending} undecided` : status === "sent" ? `Sent ${sentDate} by ${opening.sentBy ?? quote.designerName}` : "Prepared from the supplier quotes"}</p></div></div>
+              <p className="mt-4 border-t border-[var(--line)] pt-3 text-[12px] leading-relaxed text-[var(--muted)]">{opening.closed ? "A newer version replaced V1. Its approved lines carried over as the baseline of that version." : opening.signedAt ? "The approved lines are the agreement, signed against this locked version. Declined lines can only return in a new version. Nothing has been charged." : status === "sent" ? "This version was locked when it was sent: the client reviews exactly these lines and prices, and any change needs a new version. No one has approved it yet, and nothing has been charged." : "Send it from the project chat. Sending locks this version for the client's review."}</p>
               {opening.contentHash && <details className="mt-3 text-[11px] text-[var(--muted)]"><summary className="cursor-pointer select-none font-medium hover:text-[var(--ink)]">Verification code</summary><p className="mt-1.5 leading-relaxed">Setti recorded this fingerprint of the sent version. If any line, price or term were changed later, it would no longer match.</p><p className="mt-1 break-all font-mono text-[10px]">SHA-256 {opening.contentHash}</p></details>}
             </div>}
             <div className="space-y-2.5 rounded-xl bg-[var(--canvas)] p-5 text-[12px]">
@@ -227,6 +348,8 @@ export function QuoteReport({ view, options, onBack, onSelectQuote }: { view: Qu
           <div className="mt-6 rounded-xl border border-dashed border-slate-200 px-4 py-3 text-[11px] leading-relaxed text-[var(--muted)]"><span className="font-medium text-slate-600">About this example. </span>{quote.demoNotice}<ul className="mt-2 list-disc space-y-1 pl-4">{quote.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul><p className="mt-2 font-medium">{quote.paymentNote}</p></div>
         </div>
       </div>
+      {reviewing && <SignBar clientName={clientName} approveCount={toApprove.length} approveCents={calculateQuoteTotals(toApprove).totalCents} declineCount={chosen.length - toApprove.length} undecided={pendingLines.length - chosen.length} missingReasons={missingReasons}
+        selectedCount={ticked.length} onApproveRest={approveRest} onApproveSelected={() => setTickedChoices({ decision: "approved", note: "" })} onDeclineSelected={(reason) => setTickedChoices({ decision: "declined", note: reason })} onUndecideSelected={() => setTickedChoices(null)} onClearSelection={() => grid.current?.deselectAll()} onSign={sign} />}
     </section>
   );
 }
@@ -239,15 +362,16 @@ function Amount({ label, value, strong }: { label: string; value: number; strong
   return <div className={`flex items-center justify-between gap-4 ${strong ? "text-[14px] font-semibold" : "text-slate-500"}`}><span>{label}</span><span className="tabular-nums">{usd(value)}</span></div>;
 }
 
-function LineDetails({ line, onClose }: { line: QuoteRow; onClose: () => void }) {
+function LineDetails({ line, onClose, children }: { line: QuoteRow; onClose: () => void; children?: ReactNode }) {
   return (
-    <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/30 p-5">
+    <div id="quote-line-details" className="mt-4 scroll-mt-6 rounded-xl border border-blue-100 bg-blue-50/30 p-5">
       <div className="mb-4 flex items-center gap-2"><ArrowUpRight className="h-4 w-4 text-[var(--primary)]" /><h2 className="text-[13px] font-semibold">{line.name}</h2><span className="text-[10px] text-[var(--muted)]">Item details</span><button onClick={onClose} aria-label="Close item details" className="ml-auto rounded-md p-1 hover:bg-blue-100"><X className="h-3.5 w-3.5" /></button></div>
       <div className="grid gap-5 text-[12px] lg:grid-cols-3">
         <div><div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Specification</div><p className="leading-relaxed">{line.specification}</p><p className="mt-2 text-[11px] text-[var(--muted)]">{line.sku} · {line.room} · Priced per {line.unitLabel ?? "each"}</p><p className="mt-1 text-[11px] text-[var(--muted)]">{line.leadTimeDays === null ? line.category === "service" ? "Service · no product delivery" : "Stock and lead time to be confirmed" : `Estimated lead time: ${line.leadTimeDays / 7} weeks (sample)`}</p></div>
         <div><div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Return & cancellation terms</div><p className="leading-relaxed">{line.returnPolicy}</p><p className="mt-2 text-[11px] text-[var(--muted)]">{line.customMade ? "Custom-made" : "Not custom-made"} · {line.nonReturnable === null ? "Return eligibility to be confirmed" : line.nonReturnable ? "Non-returnable" : "See the agreed terms"}</p>{line.source.returnPolicyUrl && <a href={line.source.returnPolicyUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[11px] text-[var(--primary)] hover:underline">Supplier return policy<ArrowUpRight className="h-3 w-3" /></a>}</div>
         <div><div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Source · {line.source.kind === "public_reference" ? "public retail price" : line.source.kind === "estimate" ? "test estimate" : line.category === "furniture" ? "supplier quote" : "example"}</div><div className="flex items-start gap-1.5"><FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--primary)]" /><span>{line.source.name}</span></div><p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">{line.source.note}</p>{line.source.priceNote && <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">{line.source.priceNote}</p>}{line.source.checkedAt && <p className="mt-1 text-[10px] text-[var(--muted)]">Price checked: {line.source.checkedAt}</p>}<p className="mt-1 break-all font-mono text-[10px] text-[var(--muted)]">{line.source.reference}</p>{line.source.url && <a href={line.source.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[11px] text-[var(--primary)] hover:underline">View product & price<ArrowUpRight className="h-3 w-3" /></a>}</div>
       </div>
+      {children}
     </div>
   );
 }

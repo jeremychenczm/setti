@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { buildDraft } from "../ai/draft";
 import { modelContext, type ChangeModelOutput } from "../ai/model";
 import type { MoneyAnswer, MoneyContext } from "../ai/money-types";
-import { caseQuote } from "./cases";
+import { approvedForTest } from "../opening/testing";
 import { runCaseAi, type DraftDependencies } from "./service";
 import type { CaseMessage, ChatStore, StoredCase } from "./types";
 
@@ -11,7 +11,7 @@ function human(id: string, text: string): CaseMessage {
 }
 
 function scenario(text = "@AI，为什么预算和付款金额不同？") {
-  const quote = structuredClone(caseQuote("willow"));
+  const quote = structuredClone(approvedForTest("willow"));
   const original = human("original", "@AI，餐椅改成六把。");
   const quantity: ChangeModelOutput = {
     intent: "draft", message: "数量草稿，待设计师核价。", title: "餐椅数量",

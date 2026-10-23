@@ -1,12 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ChatStore, StoredCase } from "./types";
 import { messageUrls, runCaseAi } from "./service";
-import { caseQuote } from "./cases";
+import { defaultOpening } from "../opening/document";
+import { approvedForTest } from "../opening/testing";
 import { quoteFingerprint } from "../quotes/fingerprint";
 
 function scenario(text = "@AI，餐椅从四把改成六把。") {
   const state: StoredCase = {
-    id: "case-test", projectKey: "willow", draft: null, activeMessageId: "request",
+    id: "case-test", projectKey: "willow", draft: null, activeMessageId: "request", quote: approvedForTest("willow"),
     messages: [{ id: "request", actor: "client", text, createdAt: "2026-10-18T12:00:00Z", replyToMessageId: null, aiState: "running", error: null, model: null }],
   };
   const store: ChatStore = {
@@ -23,7 +24,7 @@ describe("AI orchestration", () => {
   it("answers without a model or draft until the client has an approved V1", async () => {
     for (const status of ["draft", "sent"] as const) {
       const s = scenario();
-      s.state.opening = { status, version: 1, messageId: null, sentAt: null, sentBy: null, contentHash: null, lineCount: 28, totalCents: 869_278 };
+      s.state.opening = { ...defaultOpening("willow"), status };
       await runCaseAi(s.store, "session", "willow", "request", s.deps);
       expect(s.deps.callModel).not.toHaveBeenCalled();
       expect(s.store.completeAi).toHaveBeenCalledWith("session", "willow", "request", "run", { text: expect.stringContaining("Quote V1"), model: "system" });
@@ -51,7 +52,7 @@ describe("AI orchestration", () => {
   });
   it("uses the latest customer-confirmed snapshot for the next round instead of returning to V1", async () => {
     const s = scenario("@AI Increase the approved six chairs to eight.");
-    const approved = structuredClone(caseQuote("willow"));
+    const approved = structuredClone(approvedForTest("willow"));
     approved.id = "confirmed-willow-v3";
     approved.version = 3;
     const chair = approved.lines.find((line) => line.itemId === "willow-dining-chair")!;

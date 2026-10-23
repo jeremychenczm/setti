@@ -1,7 +1,6 @@
-import type { ApprovedQuoteLine, ApprovedQuoteReport, QuoteLineApproval } from "./types";
+import type { QuoteDocument, QuoteLine } from "./types";
 
 const checkedAt = "2026-10-17";
-const approvedAt = "2026-10-17T10:30:00-07:00";
 
 /** Four fictional suppliers, each with the quote document the designer received from them. */
 interface Supplier {
@@ -31,16 +30,6 @@ const saltmarsh: Supplier = {
   returnPolicy: "Demo supplier terms: unused rugs and textiles may be returned within 30 days. Clearance items are final sale unless the supplier agrees otherwise. No restocking fee has been confirmed.",
 };
 
-function demoApproval(): QuoteLineApproval {
-  return {
-    status: "approved",
-    approvedBy: "Sofia Martinez (demo client)",
-    approvedAt,
-    signature: "Sofia Martinez (demo signature)",
-    isDemo: true,
-  };
-}
-
 interface ProductInput {
   itemId: string;
   name: string;
@@ -54,7 +43,7 @@ interface ProductInput {
   freightCents?: number;
 }
 
-function product(supplier: Supplier, input: ProductInput): ApprovedQuoteLine {
+function product(supplier: Supplier, input: ProductInput): QuoteLine {
   const subtotalCents = input.quantity * input.unitPriceCents;
   return {
     itemId: input.itemId,
@@ -83,7 +72,6 @@ function product(supplier: Supplier, input: ProductInput): ApprovedQuoteLine {
     restockingFeeBps: null,
     customMade: false,
     nonReturnable: null,
-    approval: demoApproval(),
   };
 }
 
@@ -96,7 +84,7 @@ interface ServiceInput {
   hourlyRateCents: number;
 }
 
-function service(input: ServiceInput): ApprovedQuoteLine {
+function service(input: ServiceInput): QuoteLine {
   return {
     itemId: input.itemId,
     name: input.name,
@@ -122,11 +110,10 @@ function service(input: ServiceInput): ApprovedQuoteLine {
     restockingFeeBps: null,
     customMade: false,
     nonReturnable: null,
-    approval: demoApproval(),
   };
 }
 
-const merchandise: ApprovedQuoteLine[] = [
+const merchandise: QuoteLine[] = [
   product(alderRow, {
     itemId: "willow-sofa", name: "Three-seat sofa", room: "Living room", sku: "ARF-SOFA-3S-BG",
     specification: "Beige-gray woven fabric · 89 3/4 W × 37 3/8 D × 32 5/8 H in",
@@ -243,7 +230,7 @@ const merchandise: ApprovedQuoteLine[] = [
   }),
 ];
 
-const services: ApprovedQuoteLine[] = [
+const services: QuoteLine[] = [
   service({ itemId: "willow-consultation", name: "Design consultation", sku: "EST-WILLOW-CONSULT", specification: "Simulated estimate · 2 hours × $150/hour", hours: 2, hourlyRateCents: 15_000 }),
   service({ itemId: "willow-space-planning", name: "Space planning", sku: "EST-WILLOW-PLAN", specification: "Simulated estimate · 8 hours × $150/hour", hours: 8, hourlyRateCents: 15_000 }),
   service({ itemId: "willow-product-selection", name: "Furniture and lighting selection", sku: "EST-WILLOW-SELECT", specification: "Simulated estimate · 10 hours × $125/hour", hours: 10, hourlyRateCents: 12_500 }),
@@ -252,8 +239,11 @@ const services: ApprovedQuoteLine[] = [
   service({ itemId: "willow-styling", name: "Room styling", sku: "EST-WILLOW-STYLE", specification: "Simulated estimate · 4 hours × $125/hour", hours: 4, hourlyRateCents: 12_500 }),
 ];
 
-/** Fictional supplier quotes and simulated studio services; the household and approval are demo data. */
-export const willowApprovedQuote: ApprovedQuoteReport = {
+/**
+ * Willow's prepared V1: fictional supplier quotes and simulated studio services.
+ * It carries no approval; the client's signed line decisions approve it.
+ */
+export const willowQuote: QuoteDocument = {
   id: "demo-willow-v1",
   version: 1,
   projectId: "willow",
@@ -262,10 +252,6 @@ export const willowApprovedQuote: ApprovedQuoteReport = {
   clientName: "Sofia Martinez (demo client)",
   designerName: "Jordan Lee (demo designer)",
   currency: "USD",
-  status: "approved",
-  approvedAt,
-  approvedBy: "Sofia Martinez (demo client)",
-  signature: "Sofia Martinez (demo signature)",
   isDemo: true,
   demoNotice: "Demo quote with 22 items from four fictional supplier quotes and 6 simulated studio services. The household, suppliers, products, prices and quantities are demonstration data, not real offers.",
   paymentNote: "This quote confirms no payment. No PayPal authorization, charge or refund is represented.",

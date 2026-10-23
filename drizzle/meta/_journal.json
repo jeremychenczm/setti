@@ -127,6 +127,13 @@
       "when": 1792704337135,
       "tag": "0017_opening_quotes",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1792713646570,
+      "tag": "0018_opening_decisions",
+      "breakpoints": true
     }
   ]
 }

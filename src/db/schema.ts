@@ -270,8 +270,15 @@ export const approvals = pgTable(
     /** Must equal the revision's content hash at the time of the decision. */
     contentHash: text("content_hash").notNull(),
     decidedAt: timestamp("decided_at", { withTimezone: true }).notNull().defaultNow(),
+    /** The client's reason for declining a line of a V1 signed line by line. */
+    note: text("note"),
+    /** Decisions the client signed together on a V1 signed line by line. */
+    signingId: uuid("signing_id"),
   },
-  (t) => [unique("approvals_one_per_line").on(t.revisionLineId)],
+  (t) => [
+    unique("approvals_one_per_line").on(t.revisionLineId),
+    check("approvals_signed_decline_has_reason", sql`${t.signingId} IS NULL OR ${t.decision} <> 'declined' OR length(btrim(coalesce(${t.note}, ''))) > 0`),
+  ],
 );
 
 export { chatCases, chatMessages } from "../chat/schema";
@@ -279,4 +286,4 @@ export { pricingCases, pricingReviews, changeOrders } from "../pricing/schema";
 export { changeOrderDecisions } from "../approval/schema";
 export { paypalCalls, supplierEvents } from "../payments/schema";
 export { trySeeds } from "../try/schema";
-export { openingQuotes } from "../opening/schema";
+export { openingQuotes, openingWithdrawals } from "../opening/schema";

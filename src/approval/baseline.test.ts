@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { caseQuote } from "../chat/cases";
+import { caseDocument } from "../chat/cases";
+import { approvedForTest } from "../opening/testing";
 import { quoteFingerprint } from "../quotes/fingerprint";
 import { calculateQuoteTotals } from "../quotes/totals";
 import type { FinalQuoteLine, FrozenChangeOrder } from "../pricing/types";
 import { approvedQuoteFromOrder } from "./baseline";
 
 function frozenOrder(): FrozenChangeOrder {
-  const quote = caseQuote("willow");
+  const quote = approvedForTest("willow");
   const lines: FinalQuoteLine[] = quote.lines.map((line) => ({
     itemId: line.itemId, name: line.name, vendor: line.vendor, brand: null, sku: line.sku,
     specification: line.specification, category: line.category, room: line.room,
@@ -51,7 +52,7 @@ describe("customer-confirmed quote baseline", () => {
     expect(calculateQuoteTotals(quote.lines)).toEqual(calculateQuoteTotals(order.lines));
     expect(quote.assumptions).toContain(order.terms);
     expect(quote.assumptions).toContain(order.constraints[0]);
-    expect(quoteFingerprint(quote)).not.toBe(quoteFingerprint(caseQuote("willow")));
+    expect(quoteFingerprint(quote)).not.toBe(quoteFingerprint(approvedForTest("willow")));
     expect(quoteFingerprint(approvedQuoteFromOrder(order, confirmation))).toBe(quoteFingerprint(quote));
   });
 
@@ -79,13 +80,13 @@ describe("customer-confirmed quote baseline", () => {
   it("preserves unchanged source evidence without mutating the signed order or fixture", () => {
     const order = frozenOrder();
     const before = structuredClone(order);
-    const original = structuredClone(caseQuote("willow"));
+    const original = structuredClone(caseDocument("willow"));
     const quote = approvedQuoteFromOrder(order, confirmation);
     expect(quote.lines[0].source).toEqual(order.baselineLines[0].source);
     quote.lines[0].source.note = "An unsaved local edit";
     quote.lines[0].approval.signature = "An unsaved signature";
     expect(order).toEqual(before);
-    expect(caseQuote("willow")).toEqual(original);
+    expect(caseDocument("willow")).toEqual(original);
   });
 });
 

@@ -1,7 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
-import { approvedQuoteFromOrder } from "../approval/baseline";
+import { approvedQuoteFromOrder, currentCaseQuote } from "../approval/baseline";
 import { changeOrderDecisions } from "../approval/schema";
-import { caseQuote } from "../chat/cases";
 import { chatCases } from "../chat/schema";
 import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
@@ -41,7 +40,8 @@ export async function readCaseMoneyContext(db: Db, sessionId: string, key: CaseK
       .orderBy(desc(revisions.number)).limit(1);
     const now = new Date();
     if (!approved) {
-      const quote = caseQuote(key);
+      const quote = await currentCaseQuote(tx, owned.id, key);
+      if (!quote) throw new MoneyContextError("MONEY_EVIDENCE_UNAVAILABLE", "The client has not approved any line of quote V1 yet.");
       const source: MoneySource = { id: "quote", kind: "quote", label: `${quote.projectName} · V${quote.version} demo quote`, href: `/quotes/${key}`, recordedAt: quote.approvedAt };
       return bounded({
         projectKey: key, quoteId: quote.id, version: quote.version, checkedAt: now.toISOString(), providerRecordedAt: null, mode: "recorded_sandbox",

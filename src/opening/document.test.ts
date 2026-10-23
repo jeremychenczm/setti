@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { willowApprovedQuote } from "@/quotes/willow-quote";
+import { willowQuote } from "@/quotes/willow-quote";
 import { defaultOpening, documentHash, openingDocument, withoutApproval } from "./document";
 
 describe("opening quote document", () => {
@@ -14,7 +14,7 @@ describe("opening quote document", () => {
   it("hashes the canonical document, so the same content always gives the same hash", () => {
     const hash = documentHash(openingDocument("willow"));
     expect(hash).toMatch(/^[0-9a-f]{64}$/);
-    expect(documentHash(withoutApproval(structuredClone(willowApprovedQuote)))).toBe(hash);
+    expect(documentHash(withoutApproval(structuredClone(willowQuote)))).toBe(hash);
     const changed = openingDocument("willow");
     changed.lines = changed.lines.map((line, index) => index === 0 ? { ...line, unitPriceCents: line.unitPriceCents + 1 } : line);
     expect(documentHash(changed)).not.toBe(hash);

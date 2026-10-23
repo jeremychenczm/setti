@@ -1,33 +1,30 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, ne } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { approvals, items, projects, revisionLines, revisions } from "../db/schema";
+import { approvals, items, revisionLines, revisions } from "../db/schema";
 import { chatCases, chatMessages } from "../chat/schema";
 import { currentCaseQuote } from "../approval/baseline";
 import { changeOrderDecisions } from "../approval/schema";
 import { changeOrderView } from "../approval/view";
 import { createChatStore } from "../chat/store";
 import type { CaseKey, CaseMessage, ChangeDraft } from "../chat/types";
-import { hashRevision } from "../quotes/hash";
+import { readOpening } from "../opening/read";
+import { openingQuotes } from "../opening/schema";
 import { quoteFingerprint } from "../quotes/fingerprint";
 import type { ApprovedQuoteReport } from "../quotes/types";
 import { createPricingInput, prepareChangeOrder, previewPricing, validatePricingInput, PricingValidationError } from "./calculation";
 import { changeOrders, pricingCases, pricingReviews } from "./schema";
 import type { FrozenChangeOrder, PricingReview, PricingStore, PricingWorkspace } from "./types";
+import { freezeRevision, insertBaseline } from "./bridge";
 import { changeOrderContentHash, itemMappingKey } from "./document";
+import { PricingStoreError } from "./errors";
 export { changeOrderContentHash } from "./document";
+export { PricingStoreError } from "./errors";
 
 type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
 type CaseRow = typeof chatCases.$inferSelect;
 type ReviewRow = typeof pricingReviews.$inferSelect;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export class PricingStoreError extends Error {
-  constructor(readonly code: string, message: string, readonly problems?: string[]) {
-    super(message);
-    this.name = "PricingStoreError";
-  }
-}
 
 function sameSource(review: Pick<PricingReview, "sourceDraftId" | "sourceDraftRevision">, draft: ChangeDraft | null): boolean {
   return !!draft && review.sourceDraftId === draft.id && review.sourceDraftRevision === draft.revision;
@@ -56,6 +53,23 @@ function requireDraft(row: CaseRow, quote: ApprovedQuoteReport): ChangeDraft {
   return draft;
 }
 
+/**
+ * A new version closes V1, so every V1 line the client has not decided on comes
+ * along in its draft. The draft is kept in step with V1; this guards an older draft.
+ */
+async function v1LinesLeftBehind(tx: Transaction, row: CaseRow): Promise<string | null> {
+  const read = await readOpening(tx, row);
+  if (!read.opening.sentAt || read.opening.closed) return null;
+  const carried = new Set(row.draft?.changes.flatMap((change) => change.fromV1?.kind === "carried" ? [change.fromV1.itemId] : []) ?? []);
+  const names = read.document.lines.filter((line) => read.lines[line.itemId].state === "pending" && !carried.has(line.itemId)).map((line) => line.name);
+  if (!names.length) return null;
+  return `${names.length === 1 ? "An undecided quote V1 line is" : `${names.length} undecided quote V1 lines are`} not in this draft (${names.join(", ")}). Re-price from the latest draft so ${names.length === 1 ? "it comes" : "they come"} along for the client's decision.`;
+}
+
+function withOpenV1<T extends { ready: boolean; problems: string[] }>(preview: T, undecided: string | null): T {
+  return undecided ? { ...preview, ready: false, problems: [...preview.problems, undecided] } : preview;
+}
+
 async function workspace(tx: Transaction, row: CaseRow, quote: ApprovedQuoteReport): Promise<PricingWorkspace> {
   const stored = await currentReview(tx, row.id);
   const sourceDraft = row.draft;
@@ -74,21 +88,10 @@ async function workspace(tx: Transaction, row: CaseRow, quote: ApprovedQuoteRepo
     .innerJoin(revisions, eq(changeOrders.revisionId, revisions.id)).where(eq(changeOrders.caseId, row.id)).orderBy(desc(revisions.number));
   return {
     caseId: row.id, projectKey: row.projectKey, quote, sourceDraft, review,
-    preview: review && sourceDraft && !stale ? previewPricing(quote, sourceDraft, review.input) : null,
+    preview: review && sourceDraft && !stale ? withOpenV1(previewPricing(quote, sourceDraft, review.input), await v1LinesLeftBehind(tx, row)) : null,
     stale,
     orders: orders.map(({ document, status }) => ({ id: document.id, version: document.version, issuedAt: document.issuedAt, totalCents: document.totals.totalCents, deltaTotalCents: document.deltaTotalCents, status: changeOrderView(document, status).status })),
   };
-}
-
-/** Same freeze sequence as sendRevision, inside the issue transaction rather than a nested transaction. */
-async function freezeRevision(tx: Transaction, revisionId: string): Promise<string> {
-  const [revision] = await tx.select().from(revisions).where(eq(revisions.id, revisionId)).for("update");
-  if (!revision || revision.status !== "draft") throw new PricingStoreError("PRICING_CONFLICT", "The business revision is no longer a draft.");
-  const lines = await tx.select().from(revisionLines).where(eq(revisionLines.revisionId, revisionId));
-  if (lines.length === 0) throw new PricingStoreError("PRICING_NOT_READY", "A change order must retain at least one quoted line.");
-  const hash = hashRevision(lines);
-  await tx.update(revisions).set({ status: "sent", contentHash: hash, sentAt: new Date() }).where(eq(revisions.id, revisionId));
-  return hash;
 }
 
 async function businessBridge(tx: Transaction, caseId: string, quote: ApprovedQuoteReport) {
@@ -102,32 +105,20 @@ async function businessBridge(tx: Transaction, caseId: string, quote: ApprovedQu
       return { ...existing, baselineRevisionId: accepted.revisionId };
     }
     const [firstOrder] = await tx.select({ document: changeOrders.document }).from(changeOrders).where(eq(changeOrders.caseId, caseId)).orderBy(asc(changeOrders.issuedAt)).limit(1);
+    // A V1 sent from the chat created the project when it was sent; the client's approved lines are its baseline.
+    if (!firstOrder && (await tx.select({ caseId: openingQuotes.caseId }).from(openingQuotes).where(eq(openingQuotes.caseId, caseId))).length) return existing;
     if (!firstOrder || firstOrder.document.baselineFingerprint !== quoteFingerprint(quote)) {
       throw new PricingStoreError("PRICING_STALE_SOURCE", "This case already has a frozen V1 with different or unverified contents. Start a fresh demo case instead of reusing that baseline.");
     }
     return existing;
   }
-  const [project] = await tx.insert(projects).values({ name: `${quote.projectName} (demo pricing)`, space: quote.room, clientName: quote.clientName, currency: "USD" }).returning();
-  const [baseline] = await tx.insert(revisions).values({ projectId: project.id, number: quote.version }).returning();
-  const itemMapping: Record<string, string> = {};
-  const baselineApprovals: { lineId: string; approval: ApprovedQuoteReport["lines"][number]["approval"] }[] = [];
+  const { bridge, revisionHash, lineIds } = await insertBaseline(tx, caseId, quote);
   for (const line of quote.lines) {
-    const [item] = await tx.insert(items).values({ projectId: project.id, name: line.name, vendor: line.vendor, kind: line.category, sourceUrl: line.source.url ?? null }).returning();
-    itemMapping[itemMappingKey({ ...line, sourceUrl: line.source.url ?? null })] = item.id;
-    const [savedLine] = await tx.insert(revisionLines).values({
-      revisionId: baseline.id, itemId: item.id, quantity: line.quantity, unitPriceCents: line.unitPriceCents,
-      taxCents: line.taxCents, freightCents: line.freightCents, restockingFeeBps: line.restockingFeeBps,
-      returnable: line.nonReturnable === null ? null : !line.nonReturnable, customMade: line.customMade, leadTimeDays: line.leadTimeDays,
-    }).returning();
-    baselineApprovals.push({ lineId: savedLine.id, approval: line.approval });
-  }
-  const baselineHash = await freezeRevision(tx, baseline.id);
-  for (const { lineId, approval } of baselineApprovals) {
-    await tx.insert(approvals).values({ revisionId: baseline.id, revisionLineId: lineId, decision: "approved", approverName: approval.approvedBy, signature: approval.signature, contentHash: baselineHash, decidedAt: new Date(approval.approvedAt) });
+    const { approval } = line;
+    await tx.insert(approvals).values({ revisionId: bridge.baselineRevisionId, revisionLineId: lineIds.get(line.itemId)!, decision: "approved", approverName: approval.approvedBy, signature: approval.signature, contentHash: revisionHash, decidedAt: new Date(approval.approvedAt) });
   }
   // Import only the fixture's explicitly labelled demo approvals; never create a payment.
-  await tx.update(revisions).set({ status: "approved" }).where(eq(revisions.id, baseline.id));
-  const [bridge] = await tx.insert(pricingCases).values({ caseId, projectId: project.id, baselineRevisionId: baseline.id, baselineQuoteId: quote.id, itemMapping }).returning();
+  await tx.update(revisions).set({ status: "approved" }).where(eq(revisions.id, bridge.baselineRevisionId));
   return bridge;
 }
 
@@ -138,7 +129,9 @@ export function createPricingStore(db: Db): PricingStore {
     await chat.getCase(sessionId, key); // Also recovers expired AI leases before taking the pricing lock.
     return db.transaction(async (tx) => {
       const [row] = await tx.select().from(chatCases).where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, key))).for("update");
-      return work(tx, row, await currentCaseQuote(tx, row.id, key));
+      const quote = await currentCaseQuote(tx, row.id, key);
+      if (!quote) throw new PricingStoreError("PRICING_NOT_FOUND", "The client has not approved any line of quote V1 yet, so there is nothing to change.");
+      return work(tx, row, quote);
     });
   }
 
@@ -190,6 +183,8 @@ export function createPricingStore(db: Db): PricingStore {
         if (review.version !== command.expectedVersion) throw new PricingStoreError("PRICING_CONFLICT", "This pricing review was changed elsewhere. Reload it before issuing.");
         const preview = previewPricing(quote, draft, review.input);
         if (!preview.ready) throw new PricingStoreError("PRICING_NOT_READY", "Resolve the pricing checks before issuing.", preview.problems);
+        const leftBehind = await v1LinesLeftBehind(tx, row);
+        if (leftBehind) throw new PricingStoreError("PRICING_STALE_SOURCE", "Undecided quote V1 lines are missing from this draft.", [leftBehind]);
         const messageRows = await tx.select().from(chatMessages).where(eq(chatMessages.caseId, row.id)).orderBy(asc(chatMessages.sequence));
         const messages: CaseMessage[] = messageRows.map((message) => ({ id: message.id, actor: message.actor, text: message.text, createdAt: message.createdAt.toISOString(), replyToMessageId: message.replyToMessageId, aiState: message.aiState, error: message.error, model: message.model }));
         let body;

@@ -5,7 +5,8 @@ import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import { approvals, items, paymentOperations, paypalAuthorizations, paypalCaptures, paypalRefunds, projects, revisionLines, revisions } from "../db/schema";
 import { chatCases } from "../chat/schema";
 import { createChatStore } from "../chat/store";
-import { caseQuote } from "../chat/cases";
+import { preapprovedQuote } from "../chat/cases";
+import { signOpeningForTest } from "../opening/testing";
 import { quoteFingerprint } from "../quotes/fingerprint";
 import type { CaseKey, ChangeDraft } from "../chat/types";
 import { createPricingInput } from "./calculation";
@@ -27,7 +28,8 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
   afterAll(() => handle?.pool.end());
 
   async function seed(key: CaseKey = "maple", action: "quantity" | "replace" = "quantity") {
-    const quote = caseQuote(key);
+    if (key === "willow") await signOpeningForTest(handle.db, sessionId, key);
+    const quote = (await createChatStore(handle.db).getCase(sessionId, key)).quote!;
     const old = quote.lines.find((line) => line.itemId === (key === "maple" ? "chair" : "willow-dining-chair"))!;
     const before = { name: old.name, vendor: old.vendor, brand: null, sku: old.sku, specification: old.specification, quantity: old.quantity, unitLabel: old.unitLabel ?? "each", unitPriceCents: old.unitPriceCents, currency: "USD" };
     const after = action === "quantity" ? { ...before, quantity: old.quantity + 1 } : {
@@ -122,7 +124,7 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
     expect(stale.review?.input).toEqual(saved.review?.input);
     await expect(issue(saved)).rejects.toMatchObject({ code: "PRICING_STALE_SOURCE" });
     await expect(store.saveReview(sessionId, "maple", { sourceDraftId: draft.id, sourceDraftRevision: 1, expectedVersion: 1, input: saved.review!.input })).rejects.toMatchObject({ code: "PRICING_STALE_SOURCE" });
-    const reset = await store.saveReview(sessionId, "maple", { sourceDraftId: newDraft.id, sourceDraftRevision: 2, expectedVersion: 1, input: createPricingInput(caseQuote("maple"), newDraft) });
+    const reset = await store.saveReview(sessionId, "maple", { sourceDraftId: newDraft.id, sourceDraftRevision: 2, expectedVersion: 1, input: createPricingInput(preapprovedQuote("maple")!, newDraft) });
     expect(reset.stale).toBe(false);
     expect(reset.review?.id).toBe(saved.review?.id);
     expect(reset.review?.version).toBe(2);
@@ -138,7 +140,7 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
       sourceDraftId: draft.id, sourceDraftRevision: draft.revision, expectedVersion: 1,
       input: { ...saved.review!.input, title: "Another review not yet issued" },
     });
-    const quote = caseQuote("maple");
+    const quote = preapprovedQuote("maple")!;
     // Change an untouched baseline line while keeping the quote id and version.
     const changedLine = quote.lines[0];
     const originalPrice = changedLine.unitPriceCents;
@@ -190,7 +192,7 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
     })).rejects.toMatchObject({ code: "PRICING_STALE_SOURCE" });
     const reset = await store.saveReview(sessionId, "maple", {
       sourceDraftId: draft.id, sourceDraftRevision: draft.revision, expectedVersion: 1,
-      input: readyInput(createPricingInput(caseQuote("maple"), draft)),
+      input: readyInput(createPricingInput(preapprovedQuote("maple")!, draft)),
     });
     expect(reset.stale).toBe(false);
     expect(reset.review?.version).toBe(2);
@@ -238,7 +240,7 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
     const saved = await saveReady(workspace);
     const issued = await issue(saved);
     expect((await store.getWorkspace(randomUUID(), "maple")).review).toBeNull();
-    expect((await store.getWorkspace(sessionId, "willow")).orders).toEqual([]);
+    await expect(store.getWorkspace(sessionId, "willow")).rejects.toMatchObject({ code: "PRICING_NOT_FOUND" });
     await expect(store.issueReview(randomUUID(), "maple", { reviewId: saved.review!.id, expectedVersion: 1 })).rejects.toMatchObject({ code: "PRICING_NOT_FOUND" });
     const publicView = await createPricingStore(handle.db).getOrder(issued.order.id);
     expect(publicView).toEqual(issued);

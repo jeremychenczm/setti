@@ -11,7 +11,7 @@ interface RetryAction {
 function isSnapshot(value: unknown, projectKey: CaseKey): value is CaseSnapshot {
   if (!value || typeof value !== "object") return false;
   const state = value as Partial<CaseSnapshot>;
-  return state.projectKey === projectKey && Array.isArray(state.messages) && state.quote?.projectId === projectKey;
+  return state.projectKey === projectKey && Array.isArray(state.messages) && !!state.opening && (state.quote === null || state.quote?.projectId === projectKey);
 }
 
 async function readResponse(response: Response): Promise<unknown> {

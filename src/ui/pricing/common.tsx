@@ -2,6 +2,8 @@
 
 import { themeQuartz } from "ag-grid-community";
 import { useEffect, useState, type ReactNode } from "react";
+import type { FromV1 } from "@/chat/types";
+import type { FieldChange } from "@/pricing/review-diff";
 
 export const pricingTheme = themeQuartz.withParams({ accentColor: "#0877ff", backgroundColor: "#ffffff", foregroundColor: "#1f2329", borderColor: "#ebedf0", headerBackgroundColor: "#f8fafc", fontFamily: "inherit", fontSize: 12, headerFontSize: 11, wrapperBorder: false });
 export const inputClass = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] text-slate-800 outline-none focus:border-blue-400 disabled:bg-slate-50 disabled:text-slate-400";
@@ -58,4 +60,19 @@ export function LocalShareLink({ path }: { path: string }) {
     catch { setFeedback("Select and copy the complete link below."); }
   }
   return <div className="mt-3"><div className="flex gap-2"><input aria-label="Local read-only client link" readOnly value={url} onFocus={(event) => event.target.select()} className="min-w-0 flex-1 rounded-lg border border-emerald-100 bg-white px-3 py-2 font-mono text-[10px] text-emerald-900" /><button onClick={() => void copy()} className="shrink-0 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-[11px] font-medium text-emerald-900 hover:bg-emerald-50">Copy link</button></div>{feedback && <p role="status" className="mt-1 text-[10px] text-emerald-800">{feedback}</p>}</div>;
+}
+
+/**
+ * Where a line of a new version came from in quote V1. With `changes`, a carried
+ * line says whether it still matches V1, and `listChanges` spells the changes out.
+ */
+export function FromV1Note({ fromV1, changes, listChanges = false, className = "" }: { fromV1: FromV1 | undefined; changes?: FieldChange[]; listChanges?: boolean; className?: string }) {
+  if (!fromV1) return null;
+  const carried = changes === undefined ? "Carried over from quote V1" : changes.length ? "Carried over from quote V1, with changes" : "Carried over from quote V1, unchanged";
+  return <div className={`rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900 ${className}`}>
+    <p>{fromV1.kind === "revised"
+      ? <>Revised from quote V1 · the client declined it{fromV1.reason ? <>: &ldquo;{fromV1.reason}&rdquo;</> : "."}</>
+      : `${carried} · the client has not decided on it yet.`}</p>
+    {listChanges && changes && changes.length > 0 && <ul className="mt-1 space-y-0.5">{changes.map((change) => <li key={change.label}>{change.label}: <span className="line-through decoration-amber-400">{change.before}</span> → <strong className="font-medium">{change.after}</strong></li>)}</ul>}
+  </div>;
 }

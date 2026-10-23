@@ -3,6 +3,7 @@ import type { ApprovedQuoteLine, ApprovedQuoteReport } from "@/quotes/types";
 import { calculateLineTotals, calculateQuoteTotals, type QuoteTotals } from "../quotes/totals";
 import { quoteFingerprint } from "../quotes/fingerprint";
 import type { CaseMessage, ChangeDraft, DraftChange } from "@/chat/types";
+import { differences } from "./review-diff";
 import type { FinalQuoteLine, PricingChangeInput, PricingDocumentBody, PricingInput, PricingItem, PricingPreview, ReviewedChange } from "./types";
 
 const MAX_CENTS = 2_000_000_000;
@@ -34,6 +35,7 @@ export const pricingInputSchema = z.strictObject({
     priceEvidence: text(30_000), confirmed: z.boolean(),
     oldItemHandling: z.enum(["pending", "not_ordered", "cancelled", "returned", "retained", "not_applicable"]),
     oldItemCostCents: cents.nullable(), oldItemNote: text(10_000),
+    fromV1: z.strictObject({ itemId: text(300), kind: z.enum(["revised", "carried"]), reason: text(10_000).nullable() }).optional(),
   })).min(1).max(100),
   issues: z.array(z.strictObject({ id: z.string().min(1).max(100), label: text(10_000), resolved: z.boolean(), note: text(10_000) })).max(300),
   terms: text(30_000), reviewNotes: text(20_000),
@@ -79,12 +81,33 @@ function baseline(quote: ApprovedQuoteReport, draft: ChangeDraft): Map<string, A
 }
 
 /** Draft prices are suggestions. Tax, delivery and human confirmation start unknown. */
+function v1PricingChange(key: string, change: DraftChange): PricingChangeInput {
+  const { line, ...fromV1 } = change.fromV1!;
+  const after = change.after!;
+  return {
+    key, action: change.action, itemId: change.itemId,
+    after: {
+      name: after.name, vendor: after.vendor ?? line.vendor, brand: after.brand, sku: after.sku ?? line.sku, specification: after.specification,
+      category: line.category, room: line.room, quantity: after.quantity, unitLabel: after.unitLabel ?? line.unitLabel ?? "each", currency: "USD",
+      unitPriceCents: after.unitPriceCents, taxCents: line.taxCents, freightCents: line.freightCents, sourceUrl: line.source.url ?? null,
+      returnPolicy: line.returnPolicy, returnable: line.nonReturnable === null ? null : !line.nonReturnable,
+      restockingFeeBps: line.restockingFeeBps, customMade: line.customMade, leadTimeDays: line.leadTimeDays,
+    },
+    priceEvidence: fromV1.kind === "carried"
+      ? `Carried over unchanged from quote V1 as sent: ${line.source.name} (${line.source.reference}).`
+      : `Revised from a quote V1 line the client declined. As sent in V1: ${line.source.name} (${line.source.reference}), ${line.quantity} × ${line.unitPriceCents} cents.`,
+    confirmed: false, oldItemHandling: "not_applicable", oldItemCostCents: 0, oldItemNote: "", fromV1,
+  };
+}
+
 export function createPricingInput(quote: ApprovedQuoteReport, draft: ChangeDraft): PricingInput {
   const old = baseline(quote, draft);
   return {
     baselineFingerprint: quoteFingerprint(quote),
     title: draft.title,
     changes: draft.changes.map((change, index) => {
+      // A line coming back from V1 starts from that line as it was sent, so the designer edits rather than retypes it.
+      if (change.fromV1 && change.after) return v1PricingChange(`change-${index}`, change);
       const previous = change.itemId ? old.get(change.itemId) : undefined;
       const source = draft.sources.find((page) => !page.error && page.products.some((product) => product.id === change.productOptionId));
       const product = source?.products.find((option) => option.id === change.productOptionId);
@@ -137,7 +160,10 @@ export function validatePricingInput(quote: ApprovedQuoteReport, draft: ChangeDr
     if (requiresOldItemHandling(actual, actual.itemId ? old.get(actual.itemId) : undefined)) {
       if (actual.oldItemHandling === "not_applicable") throw new PricingValidationError("Replacing, removing or reducing an item requires verified old-item handling.");
     } else if (actual.oldItemHandling !== "not_applicable" || actual.oldItemCostCents !== 0) throw new PricingValidationError("Added quantities or new items cannot carry old-item handling costs.");
-    return actual;
+    const edited: PricingChangeInput = { ...actual };
+    delete edited.fromV1;
+    if (expected.fromV1) edited.fromV1 = expected.fromV1;
+    return edited;
   });
   const issues = new Map(input.issues.map((issue) => [issue.id, issue]));
   if (issues.size !== input.issues.length || issues.size !== source.issues.length) throw new PricingValidationError("Open questions cannot be added, removed or duplicated.");
@@ -165,7 +191,8 @@ function finalAfter(draft: ChangeDraft, change: PricingChangeInput): FinalQuoteL
   if (!change.after) return null;
   const item = change.after;
   if (item.currency !== "USD" || item.unitPriceCents === null || item.taxCents === null || item.freightCents === null) return null;
-  return { ...clone(item), itemId: change.itemId ?? `new-${draft.id}-${change.key}`, currency: "USD", unitPriceCents: item.unitPriceCents, taxCents: item.taxCents, freightCents: item.freightCents, origin: "changed" };
+  const itemId = change.itemId ?? (change.fromV1?.kind === "carried" ? change.fromV1.itemId : `new-${draft.id}-${change.key}`);
+  return { ...clone(item), itemId, currency: "USD", unitPriceCents: item.unitPriceCents, taxCents: item.taxCents, freightCents: item.freightCents, origin: "changed" };
 }
 
 function feeLine(draft: ChangeDraft, change: PricingChangeInput, before: ApprovedQuoteLine): FinalQuoteLine {
@@ -238,9 +265,14 @@ export function previewPricing(quote: ApprovedQuoteReport, draft: ChangeDraft, v
   const initialEvidence = new Map(createPricingInput(quote, draft).changes.map((change) => [change.key, change.priceEvidence]));
   if (!input.title.trim()) problems.push("Enter a change order title.");
   if (!input.terms.trim()) problems.push("Enter the terms for this quote and old-item handling.");
-  for (const change of input.changes) {
+  for (const [index, change] of input.changes.entries()) {
     const label = change.after?.name.trim() || quote.lines.find((line) => line.itemId === change.itemId)?.name || change.key;
     if (!change.confirmed) problems.push(`${label}: the designer has not confirmed this line's pricing.`);
+    const v1Line = draft.changes[index]?.fromV1?.line;
+    const fromV1Fields = v1Line && change.after ? differences(v1Line, change.after) : [];
+    if (change.fromV1?.kind === "carried" && fromV1Fields.length && change.priceEvidence.trim() === initialEvidence.get(change.key)?.trim()) {
+      problems.push(`${label}: this line no longer matches quote V1 (${fromV1Fields.map((field) => field.label.toLowerCase()).join(", ")}). Update the price evidence to say what changed.`);
+    }
     if (change.after) {
       const item = change.after;
       const required: [keyof PricingItem, string][] = [["name", "Name"], ["vendor", "Vendor"], ["sku", "SKU"], ["specification", "Specification"], ["room", "Room"], ["unitLabel", "Pricing unit"], ["returnPolicy", "Return or cancellation terms"]];
@@ -287,12 +319,13 @@ export function prepareChangeOrder(quote: ApprovedQuoteReport, draft: ChangeDraf
   const sources = new Set([...draft.sourceMessageIds, ...draft.changes.flatMap((change) => change.sourceMessageIds)]);
   const sourceMessages = messages.filter((message) => sources.has(message.id));
   if (new Set(sourceMessages.map((message) => message.id)).size !== sources.size || sourceMessages.length !== sources.size || sourceMessages.some((message) => message.actor === "assistant")) throw new PricingValidationError("A change cites chat messages that are missing, duplicated or not written by a person. Check the sources again.");
-  const reviewed: ReviewedChange[] = input.changes.map((change) => ({
+  const reviewed: ReviewedChange[] = input.changes.map((change, index) => ({
     key: change.key, action: change.action, itemId: change.itemId,
     before: change.itemId ? clone(quote.lines.find((line) => line.itemId === change.itemId)!) : null,
     after: finalAfter(draft, change), oldItemHandling: change.oldItemHandling,
     oldItemCostCents: change.oldItemCostCents ?? 0, oldItemNote: change.oldItemNote,
     priceEvidence: change.priceEvidence,
+    ...(change.fromV1 ? { fromV1: change.fromV1, changesFromV1: differences(draft.changes[index].fromV1!.line, change.after!) } : {}),
   }));
   return clone({
     projectKey: draft.projectKey, basedOnQuoteId: quote.id, basedOnVersion: quote.version, baselineFingerprint: input.baselineFingerprint,

@@ -1,4 +1,4 @@
-import type { ApprovedQuoteReport } from "@/quotes/types";
+import type { ApprovedQuoteReport, QuoteLine } from "@/quotes/types";
 import type { MoneyAnswer, MoneyContext } from "../ai/money-types";
 import type { OpeningQuote, QuoteView } from "../opening/types";
 
@@ -16,6 +16,8 @@ export interface CaseMessage {
   error: string | null;
   model: string | null;
   moneyAnswer?: MoneyAnswer | null;
+  /** The V1 line this message asks about. */
+  aboutItemId?: string | null;
 }
 
 export interface ProductOption {
@@ -54,6 +56,17 @@ export interface DraftItem {
   currency: string | null;
 }
 
+/**
+ * A V1 line a new version brings back: one the client declined and the designer
+ * revises, or one the client has not decided on, carried over for a decision.
+ */
+export interface FromV1 {
+  itemId: string;
+  kind: "revised" | "carried";
+  /** The client's reason for declining a revised line. */
+  reason: string | null;
+}
+
 export interface DraftChange {
   action: "quantity" | "remove" | "replace" | "add";
   itemId: string | null;
@@ -64,6 +77,8 @@ export interface DraftChange {
   beforeSubtotalCents: number | null;
   afterSubtotalCents: number | null;
   deltaSubtotalCents: number | null;
+  /** Set on a line that comes back from V1, with that line as it was sent. */
+  fromV1?: FromV1 & { line: QuoteLine };
 }
 
 export interface ChangeDraft {
@@ -99,8 +114,11 @@ export interface StoredCase {
   opening?: OpeningQuote;
 }
 
-export interface CaseSnapshot extends StoredCase {
-  quote: ApprovedQuoteReport;
+export interface CaseSnapshot extends Omit<StoredCase, "quote" | "opening"> {
+  /** Null until the client approves part of a V1 sent from the chat. */
+  quote: ApprovedQuoteReport | null;
+  /** For a client account: the designer is working on a draft the client does not see. */
+  draftPreparing?: boolean;
   opening: OpeningQuote;
   aiConfigured: boolean;
 }
@@ -115,6 +133,8 @@ export interface AppendMessageInput {
   id: string;
   actor: HumanActor;
   text: string;
+  /** Tags the message with a line of the sent V1. */
+  aboutItemId?: string;
 }
 
 /** The designer's message that carries V1; `sentBy` is the demo account's name. */

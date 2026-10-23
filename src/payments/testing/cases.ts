@@ -7,6 +7,7 @@
 import type { CaseKey } from "../../chat/types";
 import type { Db } from "../../db/client";
 import type { FrozenChangeOrder, PricingItem } from "../../pricing/types";
+import { signOpeningForTest } from "../../opening/testing";
 import { confirmScriptedChanges, type ScriptedChange } from "../../try/scripted-change";
 
 export { shown } from "../../try/scripted-change";
@@ -27,6 +28,8 @@ export function confirmChange(db: Db, session: string, key: CaseKey, change: Tes
 }
 
 /** Several changes share one draft, frozen document, approval and set of version hashes. */
-export function confirmChanges(db: Db, session: string, key: CaseKey, changes: TestChange[], confirm = true): Promise<FrozenChangeOrder> {
+export async function confirmChanges(db: Db, session: string, key: CaseKey, changes: TestChange[], confirm = true): Promise<FrozenChangeOrder> {
+  // Willow's baseline is the V1 its client signed: send and approve it first, as the app does.
+  if (key === "willow") await signOpeningForTest(db, session, key);
   return confirmScriptedChanges(db, session, key, changes, { confirm });
 }

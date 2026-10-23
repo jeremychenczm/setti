@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { willowApprovedQuote } from "@/quotes/willow-quote";
+import { approvedForTest } from "@/opening/testing";
+
+const willowApprovedQuote = approvedForTest("willow");
 import { quoteFingerprint } from "@/quotes/fingerprint";
 import type { CaseMessage, ProductPage } from "@/chat/types";
 import { buildDraft } from "./draft";
