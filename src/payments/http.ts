@@ -14,6 +14,8 @@ import { callbackState, validCallbackState } from "./callback-state";
 import { recordSupplierCredit, recordSupplierOrder } from "./supplier";
 import { paymentsWorkspace } from "./workspace";
 import { refreshRecordedFees } from "./fee-refresh";
+import { holdApprovedItems } from "./item-holds";
+import { itemHoldsView } from "./item-holds-view";
 import { chargeServices, lockPaymentBasis, startServicesCheckout } from "./services";
 import { servicesPaymentView } from "./services-view";
 
@@ -42,6 +44,7 @@ const servicesSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("cancel"), operationId: uuid }),
   z.strictObject({ action: z.literal("charge") }),
 ]);
+const holdSchema = z.strictObject({ action: z.literal("hold") });
 class HttpError extends Error { constructor(message: string, readonly status: number) { super(message); } }
 
 const database = globalThis as typeof globalThis & { settiChatDatabase?: ReturnType<typeof createDb> };
@@ -231,6 +234,33 @@ export async function postServicesPaymentResponse(req: NextRequest, rawKey: stri
         break;
     }
     return NextResponse.json({ view: await servicesView(req, rawKey, sessionId), operationId, paypalOrderId }, { headers });
+  } catch (error) { return fail(error); }
+}
+
+function holdsView(req: NextRequest, key: CaseKey, sessionId = session(req)) {
+  return itemHoldsView(db(), sessionId, key, findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value));
+}
+
+/** The approved furniture items of the project's current agreement and their PayPal holds. */
+export async function getItemHoldsResponse(req: NextRequest, rawKey: string) {
+  if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
+  const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
+  if (account && !canOpenProject(account, rawKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
+  try { return NextResponse.json(await holdsView(req, rawKey), { headers }); }
+  catch (error) { return fail(error); }
+}
+
+/** Holds each approved furniture item with the client's saved PayPal; either account of the project may run it. */
+export async function postItemHoldsResponse(req: NextRequest, rawKey: string) {
+  if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
+  const sessionId = session(req);
+  if (!sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "Payment steps run only from the browser that owns the demo case." }, { status: 403, headers });
+  try {
+    holdSchema.parse(await boundedJson(req));
+    const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
+    if (!account || !canOpenProject(account, rawKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
+    const held = await holdApprovedItems(db(), sandboxPayPal(), sessionId, rawKey);
+    return NextResponse.json({ view: await holdsView(req, rawKey, sessionId), attempted: held.length }, { headers });
   } catch (error) { return fail(error); }
 }
 

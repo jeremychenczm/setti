@@ -3,12 +3,13 @@ import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PaymentActionError } from "./binding";
 import { callbackState } from "./callback-state";
-import { getPaymentsResponse, getServicesPaymentResponse, paypalRedirectResponse, postPaymentsResponse, postServicesPaymentResponse } from "./http";
+import { getItemHoldsResponse, getPaymentsResponse, getServicesPaymentResponse, paypalRedirectResponse, postItemHoldsResponse, postPaymentsResponse, postServicesPaymentResponse } from "./http";
 
 const mock = vi.hoisted(() => ({
   startAuthorization: vi.fn(), startCapture: vi.fn(), startRelease: vi.fn(), startRefund: vi.fn(), checkPayment: vi.fn(), cancelPayment: vi.fn(),
   returnFromPayPal: vi.fn(), operationPage: vi.fn(), paymentsWorkspace: vi.fn(), recordSupplierOrder: vi.fn(), recordSupplierCredit: vi.fn(),
   startServicesCheckout: vi.fn(), chargeServices: vi.fn(), lockPaymentBasis: vi.fn(), servicesPaymentView: vi.fn(), completeAuthorization: vi.fn(), cancelCheckout: vi.fn(),
+  holdApprovedItems: vi.fn(), itemHoldsView: vi.fn(),
   db: { transaction: (work: (tx: object) => unknown) => work({}) },
 }));
 vi.mock("./actions", () => ({
@@ -19,6 +20,8 @@ vi.mock("./supplier", () => ({ recordSupplierOrder: mock.recordSupplierOrder, re
 vi.mock("./workspace", () => ({ paymentsWorkspace: mock.paymentsWorkspace }));
 vi.mock("./services", () => ({ startServicesCheckout: mock.startServicesCheckout, chargeServices: mock.chargeServices, lockPaymentBasis: mock.lockPaymentBasis }));
 vi.mock("./services-view", () => ({ servicesPaymentView: mock.servicesPaymentView }));
+vi.mock("./item-holds", () => ({ holdApprovedItems: mock.holdApprovedItems }));
+vi.mock("./item-holds-view", () => ({ itemHoldsView: mock.itemHoldsView }));
 vi.mock("./authorize", () => ({ completeAuthorization: mock.completeAuthorization, cancelCheckout: mock.cancelCheckout }));
 vi.mock("./server", () => ({ sandboxPayPal: () => ({}) }));
 vi.mock("@/db/client", () => ({ createDb: () => ({ db: mock.db, pool: {} }) }));
@@ -173,5 +176,36 @@ describe("design-services payment HTTP boundaries", () => {
     expect((await get("emma")).status).toBe(403);
     expect((await get("sofia")).status).toBe(200);
     expect(mock.servicesPaymentView).toHaveBeenCalledWith(mock.db, sessionId, "willow", expect.objectContaining({ id: "sofia" }), "http-test-client");
+  });
+});
+
+describe("item-holds HTTP boundaries", () => {
+  const holds = (body: unknown, account: string | null, withSession = true) => new NextRequest(`${origin}/api/quotes/willow/item-holds`, {
+    method: "POST", body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json", Origin: origin, Cookie: [...(withSession ? [`setti-demo-chat=${sessionId}`] : []), ...(account ? [`setti-demo-account=${account}`] : [])].join("; ") },
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.stubEnv("PAYPAL_ENV", "sandbox");
+    vi.stubEnv("PAYPAL_CLIENT_ID", "http-test-client");
+    vi.stubEnv("PAYPAL_CLIENT_SECRET", "http-test-secret");
+    mock.itemHoldsView.mockResolvedValue({ projectKey: "willow", items: [] });
+    mock.holdApprovedItems.mockResolvedValue([{ id: operationId }]);
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("lets the project's client or designer hold the approved items, and no one else", async () => {
+    expect((await postItemHoldsResponse(holds({ action: "hold" }, "emma"), "willow")).status).toBe(403);
+    expect((await postItemHoldsResponse(holds({ action: "hold" }, "sofia", false), "willow")).status).toBe(403);
+    expect((await postItemHoldsResponse(holds({ action: "hold", amountCents: 1 }, "sofia"), "willow")).status).toBe(400);
+    expect(mock.holdApprovedItems).not.toHaveBeenCalled();
+    for (const account of ["sofia", "jordan"]) {
+      const response = await postItemHoldsResponse(holds({ action: "hold" }, account), "willow");
+      expect(await response.json()).toMatchObject({ attempted: 1, view: { projectKey: "willow" } });
+    }
+    expect(mock.holdApprovedItems).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow");
+    const get = await getItemHoldsResponse(new NextRequest(`${origin}/api/quotes/willow/item-holds`, { headers: { Cookie: `setti-demo-chat=${sessionId}; setti-demo-account=emma` } }), "willow");
+    expect(get.status).toBe(403);
   });
 });
