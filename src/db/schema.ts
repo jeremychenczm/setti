@@ -19,7 +19,7 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { changeOrders } from "../pricing/schema";
-import { supplierEvents } from "../payments/schema";
+import { savedPaymentMethods, supplierEvents } from "../payments/schema";
 
 /** One design project: a space for one client, with its own chat, items and money. */
 export const projects = pgTable("projects", {
@@ -224,6 +224,10 @@ export const paymentOperations = pgTable(
     itemId: uuid("item_id").references((): AnyPgColumn => items.id),
     /** The supplier confirmation a capture relies on, or the supplier credit a refund waits for. */
     supplierEventId: uuid("supplier_event_id").references((): AnyPgColumn => supplierEvents.id),
+    /** A checkout that also asks PayPal to save the client's PayPal for this project's later holds. */
+    savePaymentMethod: boolean("save_payment_method").notNull().default(false),
+    /** A hold placed with the project's saved PayPal: no checkout, no buyer on PayPal. */
+    savedMethodId: uuid("saved_method_id").references((): AnyPgColumn => savedPaymentMethods.id),
     requestId: text("request_id").notNull().unique(),
     attempts: integer("attempts").notNull().default(0),
     /** PayPal order created for an authorization, and the buyer approval link it returned. */
@@ -242,7 +246,9 @@ export const paymentOperations = pgTable(
     check("payment_operations_hold_moves_have_authorization", sql`${t.kind} NOT IN ('capture', 'void', 'reauthorize') OR ${t.authorizationId} IS NOT NULL`),
     check("payment_operations_refund_has_capture", sql`${t.kind} <> 'refund' OR ${t.captureId} IS NOT NULL`),
     check("payment_operations_authorize_is_bound", sql`${t.kind} <> 'authorize' OR ${t.changeOrderId} IS NOT NULL`),
-    check("payment_operations_capture_after_supplier", sql`${t.kind} <> 'capture' OR ${t.changeOrderId} IS NULL OR ${t.supplierEventId} IS NOT NULL`),
+    check("payment_operations_save_on_checkout", sql`NOT ${t.savePaymentMethod} OR (${t.kind} = 'authorize' AND ${t.savedMethodId} IS NULL)`),
+    check("payment_operations_saved_method_holds", sql`${t.savedMethodId} IS NULL OR (${t.kind} = 'authorize' AND ${t.approvalUrl} IS NULL)`),
+    check("payment_operations_capture_after_supplier",sql`${t.kind} <> 'capture' OR ${t.changeOrderId} IS NULL OR ${t.supplierEventId} IS NOT NULL`),
     check(
       "payment_operations_binding_complete",
       sql`(${t.changeOrderId} IS NULL AND ${t.revisionId} IS NULL AND ${t.contentHash} IS NULL AND ${t.revisionContentHash} IS NULL) OR (${t.changeOrderId} IS NOT NULL AND ${t.revisionId} IS NOT NULL AND ${t.contentHash} IS NOT NULL AND ${t.revisionContentHash} IS NOT NULL AND ${t.itemId} IS NOT NULL)`,
@@ -284,6 +290,6 @@ export const approvals = pgTable(
 export { chatCases, chatMessages } from "../chat/schema";
 export { pricingCases, pricingReviews, changeOrders } from "../pricing/schema";
 export { changeOrderDecisions } from "../approval/schema";
-export { paypalCalls, supplierEvents } from "../payments/schema";
+export { paypalCalls, savedPaymentMethods, supplierEvents } from "../payments/schema";
 export { trySeeds } from "../try/schema";
 export { openingQuotes, openingWithdrawals } from "../opening/schema";

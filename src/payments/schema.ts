@@ -44,7 +44,26 @@ export const supplierEvents = pgTable("supplier_events", {
   ),
 ]);
 
-export type PayPalStep = "create_order" | "get_order" | "authorize_order" | "get_authorization" | "capture" | "get_capture" | "void" | "refund" | "get_refund";
+/**
+ * PayPal the client saved for this project during a checkout, so Setti can
+ * place later holds without sending the client to PayPal again. One per
+ * project, never changed or deleted. The token is a server-side secret: it is
+ * never logged, kept as call evidence or sent to a browser.
+ */
+export const savedPaymentMethods = pgTable("saved_payment_methods", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id").notNull().references(() => projects.id),
+  /** The checkout in which the client agreed to save PayPal. */
+  sourceOperationId: uuid("source_operation_id").notNull().unique().references(() => paymentOperations.id),
+  /** PayPal's vault payment token. */
+  paypalTokenId: text("paypal_token_id").notNull().unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("saved_payment_methods_one_per_project").on(t.projectId),
+  check("saved_payment_methods_token", sql`length(btrim(${t.paypalTokenId})) > 0`),
+]);
+
+export type PayPalStep ="create_order" | "get_order" | "authorize_order" | "get_authorization" | "capture" | "get_capture" | "void" | "refund" | "get_refund";
 
 /**
  * Every PayPal call made for an operation, append-only: the receipt evidence
