@@ -11,6 +11,8 @@ import { items, paymentOperations, paypalCaptures, paypalRefunds } from "../db/s
 import { openingQuotes } from "../opening/schema";
 import type { ProjectLedger } from "../approval/store";
 import { changeOrders, pricingCases } from "../pricing/schema";
+import { chatCases } from "../chat/schema";
+import type { CaseKey } from "../chat/types";
 import { cancelCheckout, completeAuthorization, createCheckout, type CheckoutDetails, type CheckoutLinks } from "./authorize";
 import { businessItem, confirmedPlan, lockConfirmedVersion, PaymentActionError, type LineRef, type ShownVersion } from "./binding";
 import { executeCapture, refreshCapture } from "./capture";
@@ -251,10 +253,16 @@ export async function cancelPayment(db: Db, paypal: PayPalPayments, sessionId: s
   return (await cancelCheckout(db, paypal, operation.id)).operation;
 }
 
-/** The change order an operation was started for, so a returning buyer lands on the right page. */
-export async function operationChangeOrder(db: Pick<Db, "select">, operationId: string): Promise<string | null> {
-  const [operation] = await db.select({ changeOrderId: paymentOperations.changeOrderId }).from(paymentOperations).where(eq(paymentOperations.id, operationId));
-  return operation?.changeOrderId ?? null;
+/** The page an operation belongs to, so a returning buyer lands on it: the change order, or the quote for V1. */
+export async function operationPage(db: Pick<Db, "select">, operationId: string): Promise<{ path: string; anchor: string; projectKey: CaseKey | null } | null> {
+  const [operation] = await db.select().from(paymentOperations).where(eq(paymentOperations.id, operationId));
+  if (!operation?.revisionId) return null;
+  const [found] = operation.changeOrderId
+    ? await db.select({ projectKey: chatCases.projectKey }).from(changeOrders).innerJoin(chatCases, eq(chatCases.id, changeOrders.caseId)).where(eq(changeOrders.id, operation.changeOrderId))
+    : await db.select({ projectKey: chatCases.projectKey }).from(pricingCases).innerJoin(chatCases, eq(chatCases.id, pricingCases.caseId)).where(eq(pricingCases.baselineRevisionId, operation.revisionId));
+  if (!found) return null;
+  const anchor = operation.servicesHold ? "design-services" : "payments";
+  return operation.changeOrderId ? { path: `/change-orders/${operation.changeOrderId}`, anchor, projectKey: found.projectKey } : { path: `/quotes/${found.projectKey}`, anchor, projectKey: found.projectKey };
 }
 
 /**
@@ -265,5 +273,5 @@ export async function returnFromPayPal(db: Db, paypal: PayPalPayments, operation
   const [operation] = await db.select().from(paymentOperations).where(eq(paymentOperations.id, operationId));
   if (!operation || operation.kind !== "authorize" || operation.savedMethodId || !operation.paypalOrderId || operation.paypalOrderId !== token) return null;
   const result = outcome === "return" ? await completeAuthorization(db, paypal, operation.id) : await cancelCheckout(db, paypal, operation.id);
-  return { orderId: operation.changeOrderId!, state: result.state };
+  return { orderId: operation.changeOrderId, servicesHold: operation.servicesHold, state: result.state };
 }

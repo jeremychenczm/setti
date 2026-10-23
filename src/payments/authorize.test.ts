@@ -45,7 +45,7 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     expect(paypal.calls[0]).toMatchObject({ amountCents: 54_375, customId: checkout.id, returnUrl: links(checkout.id).returnUrl });
 
     paypal.approve(checkout.paypalOrderId!);
-    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, state: "authorized" });
+    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, servicesHold: false, state: "authorized" });
     const [hold] = await holds();
     expect(hold).toMatchObject({ amountCents: 54_375, currency: "USD", status: "created", paypalOrderId: checkout.paypalOrderId, changeOrderId: v2.id, operationId: checkout.id, itemId: checkout.itemId });
     expect(hold.expiresAt).toBeTruthy();
@@ -72,7 +72,7 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
 
   it("treats the browser coming back as no proof: unapproved checkouts keep waiting and foreign tokens are ignored", async () => {
     const checkout = await start();
-    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, state: "awaiting_buyer" });
+    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, servicesHold: false, state: "awaiting_buyer" });
     expect(await back(checkout.id, "SOME-OTHER-ORDER")).toBeNull();
     expect(await back(checkout.id, null)).toBeNull();
     expect(await holds()).toHaveLength(0);
@@ -84,7 +84,7 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
 
   it("keeps a cancelled checkout recoverable until PayPal reports its final outcome", async () => {
     const checkout = await start();
-    expect(await back(checkout.id, checkout.paypalOrderId, "cancel")).toEqual({ orderId: v2.id, state: "cancelled" });
+    expect(await back(checkout.id, checkout.paypalOrderId, "cancel")).toEqual({ orderId: v2.id, servicesHold: false, state: "cancelled" });
     const [cancelled] = await handle.db.select().from(paymentOperations).where(eq(paymentOperations.id, checkout.id));
     expect(cancelled).toMatchObject({ status: "pending", failureCode: "CHECKOUT_CANCEL_REQUESTED", approvalUrl: checkout.approvalUrl });
     expect(await holds()).toHaveLength(0);
@@ -93,7 +93,7 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     await checkPayment(handle.db, paypal, session, v2.id, checkout.id, links);
     expect((await handle.db.select().from(paymentOperations))[0].failureCode).toBe("CHECKOUT_CANCEL_REQUESTED");
     paypal.approve(checkout.paypalOrderId!);
-    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, state: "authorized" });
+    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, servicesHold: false, state: "authorized" });
     expect(await holds()).toHaveLength(1);
   });
 
@@ -102,7 +102,7 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     const found = await paypal.getOrder(checkout.paypalOrderId!);
     if (found.kind !== "ok") throw new Error("Expected an existing fake checkout");
     vi.spyOn(paypal, "getOrder").mockResolvedValueOnce({ ...found, value: { ...found.value, status: "VOIDED" } });
-    expect(await back(checkout.id, checkout.paypalOrderId, "cancel")).toEqual({ orderId: v2.id, state: "failed" });
+    expect(await back(checkout.id, checkout.paypalOrderId, "cancel")).toEqual({ orderId: v2.id, servicesHold: false, state: "failed" });
     expect((await handle.db.select().from(paymentOperations))[0]).toMatchObject({ status: "failed", failureCode: "ORDER_VOIDED" });
     expect((await start()).id).not.toBe(checkout.id);
     expect(await holds()).toHaveLength(0);
@@ -126,7 +126,7 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     const checkout = await starting;
     expect(checkout).toMatchObject({ id: operation.id, status: "pending", failureCode: "CHECKOUT_CANCEL_REQUESTED", paypalOrderId: expect.any(String) });
     paypal.approve(checkout.paypalOrderId!);
-    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, state: "authorized" });
+    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, servicesHold: false, state: "authorized" });
     expect(await holds()).toHaveLength(1);
   });
 
@@ -178,7 +178,7 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     expect((await start()).approvalUrl).toBe(checked.approvalUrl);
     expect(paypal.calls.filter((call) => "invoiceId" in call)).toHaveLength(1);
     paypal.approve(checkout.paypalOrderId!);
-    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, state: "authorized" });
+    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, servicesHold: false, state: "authorized" });
   });
 
   it.each<Partial<OrderReceipt>>([
@@ -209,7 +209,7 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     const checkout = await start();
     paypal.approve(checkout.paypalOrderId!);
     paypal.then("lose-response");
-    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, state: "unknown" });
+    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, servicesHold: false, state: "unknown" });
     expect(await holds()).toHaveLength(0);
     expect((await paymentsWorkspace(handle.db, session, v2.id))!.plan?.status).toBe("blocked");
     expect((await checkPayment(handle.db, paypal, session, v2.id, checkout.id, links)).status).toBe("succeeded");
@@ -221,7 +221,7 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     const checkout = await start();
     paypal.approve(checkout.paypalOrderId!);
     paypal.then("answer-other-amount");
-    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, state: "unknown" });
+    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, servicesHold: false, state: "unknown" });
     const [stopped] = await handle.db.select().from(paymentOperations).where(eq(paymentOperations.id, checkout.id));
     expect(stopped).toMatchObject({ status: "unknown", failureCode: "RECEIPT_MISMATCH" });
     expect(await holds()).toHaveLength(0);
@@ -234,7 +234,7 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     const checkout = await start();
     paypal.approve(checkout.paypalOrderId!);
     paypal.then("answer-pending");
-    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, state: "awaiting_buyer" });
+    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, servicesHold: false, state: "awaiting_buyer" });
     expect(await holds()).toHaveLength(0);
     const pending = (await handle.db.select().from(paymentOperations))[0];
     expect(pending).toMatchObject({ status: "pending", failureCode: "AUTHORIZATION_PENDING" });
@@ -248,7 +248,7 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     const v3 = await confirmChange(handle.db, session, "willow", { action: "quantity", itemId: CHAIR, quantity: 6, after: { taxCents: 6_563 } });
     await expect(start(v2)).rejects.toMatchObject({ code: "STALE_VERSION" });
     paypal.approve(checkout.paypalOrderId!);
-    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, state: "authorized" });
+    expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, servicesHold: false, state: "authorized" });
     expect((await holds())[0]).toMatchObject({ changeOrderId: v2.id, amountCents: 54_375 });
     // The newer version counts the held $543.75 and asks only for the uncovered amount.
     const next = (await paymentsWorkspace(handle.db, session, v3.id))!;
