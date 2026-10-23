@@ -39,6 +39,29 @@ export interface CreateOrderCommand {
   description: string;
   returnUrl: string;
   cancelUrl: string;
+  /** Also ask PayPal to save the buyer's PayPal for later holds; the description is shown to the buyer. */
+  savePayPal?: { description: string };
+}
+
+/** An AUTHORIZE order paid with saved PayPal: no buyer approves it. */
+export interface SavedPayPalOrderCommand {
+  /** Sent as PayPal-Request-Id; the same for every attempt of one operation. */
+  requestId: string;
+  /** The saved PayPal token. A secret: never put it in a log or a receipt. */
+  paypalTokenId: string;
+  amountCents: number;
+  referenceId: string;
+  customId: string;
+  invoiceId: string;
+  description: string;
+}
+
+/** What PayPal reported about saving the buyer's PayPal on an order. */
+export interface SavedPayPalReceipt {
+  /** VAULTED once saved; APPROVED or CREATED before. */
+  status?: string;
+  /** The saved PayPal token. A secret: never put it in a log or call evidence. */
+  tokenId?: string;
 }
 
 export interface AuthorizeOrderCommand {
@@ -67,6 +90,8 @@ export interface OrderReceipt extends ReportedMoney {
   authorization?: AuthorizationReceipt;
   /** Refunds PayPal lists on the order; used to find a refund whose answer was lost. */
   refunds?: RefundReceipt[];
+  /** Present when the order asked PayPal to save the buyer's PayPal. */
+  savedPayPal?: SavedPayPalReceipt;
 }
 
 export interface CaptureCommand {
@@ -132,6 +157,8 @@ export type PayPalFailure = Exclude<PayPalResult<never>, { kind: "ok" }>;
 export interface PayPalPayments {
   /** Creates an AUTHORIZE order the buyer then approves on PayPal. */
   createOrder(command: CreateOrderCommand): Promise<PayPalResult<OrderReceipt>>;
+  /** Creates an AUTHORIZE order paid with saved PayPal; PayPal authorizes it at once, with no buyer. */
+  createSavedPayPalOrder(command: SavedPayPalOrderCommand): Promise<PayPalResult<OrderReceipt>>;
   getOrder(orderId: string): Promise<PayPalResult<OrderReceipt>>;
   /** Authorizes an approved order; the new authorization is on the returned order. */
   authorizeOrder(command: AuthorizeOrderCommand): Promise<PayPalResult<OrderReceipt>>;

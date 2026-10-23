@@ -6,8 +6,13 @@
 import {
   ApiError,
   CheckoutPaymentIntent,
+  PaymentInitiator,
   PaypalExperienceUserAction,
+  PaypalPaymentTokenUsageType,
   PaypalWalletContextShippingPreference,
+  StoredPaymentSourceUsageType,
+  StoreInVaultInstruction,
+  UsagePattern,
   type AuthorizationWithAdditionalData,
   type CapturedPayment,
   type Order,
@@ -62,6 +67,35 @@ export function createSdkPayPal(controllers: { orders: OrdersController; payment
                 userAction: PaypalExperienceUserAction.PayNow,
                 shippingPreference: PaypalWalletContextShippingPreference.NoShipping,
               },
+              // Probe P11: saving on success works for PayPal and Pay Later buyers alike.
+              ...(command.savePayPal ? { attributes: { vault: {
+                storeInVault: StoreInVaultInstruction.OnSuccess, usageType: PaypalPaymentTokenUsageType.Merchant,
+                usagePattern: UsagePattern.UnscheduledPostpaid, permitMultiplePaymentTokens: true, description: command.savePayPal.description.slice(0, 127),
+              } } } : {}),
+            },
+          },
+        },
+      });
+      return [orderReceipt(res.result), res];
+    }),
+
+    createSavedPayPalOrder: (command) => call(async () => {
+      const res = await orders.createOrder({
+        paypalRequestId: command.requestId,
+        prefer: FULL,
+        body: {
+          intent: CheckoutPaymentIntent.Authorize,
+          purchaseUnits: [{
+            referenceId: command.referenceId,
+            amount: { currencyCode: "USD", value: formatCents(command.amountCents) },
+            description: command.description.slice(0, 127),
+            customId: command.customId,
+            invoiceId: command.invoiceId,
+          }],
+          paymentSource: {
+            paypal: {
+              vaultId: command.paypalTokenId,
+              storedCredential: { paymentInitiator: PaymentInitiator.Merchant, usage: StoredPaymentSourceUsageType.Subsequent, usagePattern: UsagePattern.UnscheduledPostpaid },
             },
           },
         },
@@ -159,11 +193,13 @@ function orderReceipt(order: Order | OrderAuthorizeResponse): OrderReceipt {
   const unit = order.purchaseUnits?.[0];
   const authorization = unit?.payments?.authorizations?.[0];
   const refunds = unit?.payments?.refunds;
+  const saved = order.paymentSource?.paypal?.attributes?.vault;
   return {
     orderId: order.id, status: order.status, ...money(unit?.amount), customId: unit?.customId,
     approvalUrl: order.links?.find((link) => link.rel === "payer-action" || link.rel === "approve")?.href,
     authorization: authorization ? authorizationReceipt(authorization, order.id) : undefined,
     ...(refunds?.length ? { refunds: refunds.map(refundReceipt) } : {}),
+    ...(saved ? { savedPayPal: { status: saved.status, tokenId: saved.id } } : {}),
   };
 }
 

@@ -140,4 +140,43 @@ describe("PayPal SDK adapter", () => {
     const approve = createSdkTestCardApproval({ confirmOrder: async () => { throw refused; } } as never);
     expect(await approve("ORDER-1")).toMatchObject({ kind: "rejected", code: "UNPROCESSABLE_ENTITY", debugId: "debug-422", trace: { httpStatus: 422 } });
   });
+
+  const checkout = { requestId: "setti-op-1-order", amountCents: 54_375, referenceId: "item-1", customId: "op-1", invoiceId: "setti-op-1", description: "Willow Residence · Chair · V2", returnUrl: "https://setti.test/return", cancelUrl: "https://setti.test/cancel" };
+
+  it("asks PayPal to save the buyer's PayPal on success only when the checkout says so", async () => {
+    const sent: { body: { paymentSource: { paypal: Record<string, unknown> } } }[] = [];
+    const paypal = adapter({}, { createOrder: async (request: never) => { sent.push(request); return response({ id: "ORDER-1", status: "PAYER_ACTION_REQUIRED" }, 200); } } as never);
+    await paypal.createOrder(checkout);
+    await paypal.createOrder({ ...checkout, savePayPal: { description: "Setti · Willow Residence: holds for the items you approve" } });
+    expect(sent[0].body.paymentSource.paypal).not.toHaveProperty("attributes");
+    expect(sent[1].body.paymentSource.paypal).toMatchObject({
+      experienceContext: { returnUrl: checkout.returnUrl },
+      attributes: { vault: { storeInVault: "ON_SUCCESS", usageType: "MERCHANT", usagePattern: "UNSCHEDULED_POSTPAID", description: "Setti · Willow Residence: holds for the items you approve" } },
+    });
+  });
+
+  it("reads whether PayPal saved the buyer's PayPal, and its token, from the order", async () => {
+    const paypal = adapter({}, { authorizeOrder: async () => response({
+      id: "ORDER-1", status: "COMPLETED", paymentSource: { paypal: { attributes: { vault: { id: "TOKEN-1", status: "VAULTED", customer: { id: "CUSTOMER-1" } } } } },
+      purchaseUnits: [{ amount: { currencyCode: "USD", value: "543.75" }, payments: { authorizations: [{ id: "AUTH-1", status: "CREATED", amount: { currencyCode: "USD", value: "543.75" } }] } }],
+    }) } as never);
+    const result = await paypal.authorizeOrder({ orderId: "ORDER-1", requestId: "setti-op-1" });
+    expect(result).toMatchObject({ kind: "ok", value: { savedPayPal: { status: "VAULTED", tokenId: "TOKEN-1" }, authorization: { paypalAuthorizationId: "AUTH-1" } } });
+  });
+
+  it("pays a saved-PayPal order with the token as a merchant-initiated stored credential", async () => {
+    let sent: unknown;
+    const paypal = adapter({}, { createOrder: async (request: unknown) => { sent = request; return response({ id: "ORDER-2", status: "COMPLETED" }); } } as never);
+    const { referenceId, customId, invoiceId, description } = checkout;
+    await paypal.createSavedPayPalOrder({ referenceId, customId, invoiceId, description, requestId: "setti-op-2", paypalTokenId: "TOKEN-1", amountCents: 27_188 });
+    expect(sent).toMatchObject({
+      paypalRequestId: "setti-op-2",
+      body: {
+        intent: "AUTHORIZE",
+        purchaseUnits: [{ amount: { currencyCode: "USD", value: "271.88" }, customId: "op-1" }],
+        paymentSource: { paypal: { vaultId: "TOKEN-1", storedCredential: { paymentInitiator: "MERCHANT", usage: "SUBSEQUENT", usagePattern: "UNSCHEDULED_POSTPAID" } } },
+      },
+    });
+    expect((sent as { body: { paymentSource: { paypal: object } } }).body.paymentSource.paypal).not.toHaveProperty("experienceContext");
+  });
 });

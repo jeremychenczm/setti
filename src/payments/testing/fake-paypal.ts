@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type {
   AuthorizationReceipt, AuthorizeOrderCommand, CaptureCommand, CaptureReceipt, CreateOrderCommand, OrderReceipt,
-  PayPalPayments, PayPalResult, RefundCommand, RefundReceipt, VoidCommand,
+  PayPalPayments, PayPalResult, RefundCommand, RefundReceipt, SavedPayPalOrderCommand, VoidCommand,
 } from "../paypal";
 
 interface RecordedStep {
@@ -32,6 +32,8 @@ const recordedCapture = recorded("p2-multiple-partial-captures-vault-g-aged-2026
 const recordedAlreadyCaptured = recorded("p2-multiple-partial-captures-vault-g-aged-2026-10-18.json", (s) => !s.ok);
 const recordedOverLimit = recorded("p3-over-capture-vault-b-aged-vault-c-aged-2026-10-18.json", (s) => !s.ok);
 const recordedVoid = recorded("p9-void-after-partial-vault-d-aged-2026-10-18.json", (s) => s.step.startsWith("void"));
+const recordedSaving = recorded("p11-pay-later-vault-2026-10-22.json", (s) => s.step.startsWith("authorize order (paylater")) as RecordedStep & { response: { paymentSource: { paypal: { attributes: { vault: { status: string } } } } } };
+const recordedSavedHold = recorded("p11-pay-later-vault-2026-10-22.json", (s) => s.step.startsWith("create follow-up hold from the saved token (paylater)"));
 
 /**
  * What the next write call does:
@@ -45,10 +47,13 @@ const recordedVoid = recorded("p9-void-after-partial-vault-d-aged-2026-10-18.jso
  * - `answer-declined`: PayPal answers with a DECLINED capture.
  * - `answer-minimal`: PayPal does it but answers without status, amount or currency.
  * - `answer-other-amount`: PayPal does it but reports a different amount.
+ * - `answer-unsaved`: PayPal authorizes the order but does not save the buyer's PayPal.
+ * - `answer-payer-action`: a saved-PayPal order comes back PAYER_ACTION_REQUIRED instead of
+ *   authorized (not recorded: PayPal documents it for a saved PayPal that needs the buyer again).
  */
 export type FakeBehaviour =
   | "succeed" | "reject-over-limit" | "reject-already-captured" | "reject-expired" | "lose-response" | "time-out"
-  | "answer-pending" | "answer-declined" | "answer-minimal" | "answer-other-amount";
+  | "answer-pending" | "answer-declined" | "answer-minimal" | "answer-other-amount" | "answer-unsaved" | "answer-payer-action";
 
 const TIMEOUT = { kind: "unknown", message: "Timed out waiting for PayPal" } as const;
 const usd = (amountCents: number) => ({ amountCents, currency: "USD" });
@@ -64,12 +69,15 @@ function refuse(code: string, message: string): PayPalResult<never> {
 
 const EXPIRED = refuse("AUTHORIZATION_EXPIRED", "The requested action could not be performed, semantically incorrect, or failed business validation.");
 
-interface FakeOrder { receipt: OrderReceipt; approved: boolean; authorizationId?: string }
+interface FakeOrder { receipt: OrderReceipt; approved: boolean; authorizationId?: string; savePayPal?: boolean }
+type WriteCommand = CaptureCommand | VoidCommand | RefundCommand | CreateOrderCommand | SavedPayPalOrderCommand | AuthorizeOrderCommand;
 interface FakeHold { receipt: AuthorizationReceipt; capturedCents: number }
 
 export class FakePayPal implements PayPalPayments {
   /** Write calls, in order, with the command PayPal received. */
-  readonly calls: (CaptureCommand | VoidCommand | RefundCommand | CreateOrderCommand | AuthorizeOrderCommand)[] = [];
+  readonly calls: WriteCommand[] = [];
+  /** Saved PayPal tokens this fake handed out, in order. */
+  readonly savedTokens: string[] = [];
   /** Read calls, in order. */
   readonly reads: string[] = [];
   private readonly plan: FakeBehaviour[] = [];
@@ -117,7 +125,31 @@ export class FakePayPal implements PayPalPayments {
         orderId, status: recordedOrder.response!.status, ...usd(command.amountCents), customId: command.customId,
         approvalUrl: `https://www.sandbox.paypal.com/checkoutnow?token=${orderId}`,
       };
-      this.orders.set(orderId, { receipt, approved: false });
+      this.orders.set(orderId, { receipt, approved: false, savePayPal: !!command.savePayPal });
+      return behaviour === "answer-minimal" ? { orderId, status: receipt.status } : receipt;
+    });
+  }
+
+  async createSavedPayPalOrder(command: SavedPayPalOrderCommand): Promise<PayPalResult<OrderReceipt>> {
+    return this.write(command, `saved-order:${command.requestId}`, (behaviour) => {
+      if (!this.savedTokens.includes(command.paypalTokenId)) throw new Error("The fake never saved this PayPal token");
+      const orderId = `${recordedSavedHold.response!.id.slice(0, 10)}${String(this.nextId++).padStart(7, "0")}`;
+      if (behaviour === "answer-payer-action") {
+        const receipt: OrderReceipt = { orderId, status: "PAYER_ACTION_REQUIRED", ...usd(command.amountCents), customId: command.customId, approvalUrl: `https://www.sandbox.paypal.com/checkoutnow?token=${orderId}` };
+        this.orders.set(orderId, { receipt, approved: false });
+        return receipt;
+      }
+      const authorizationId = `${recordedAuthorization.response!.id.slice(0, 10)}${String(this.nextId++).padStart(7, "0")}`;
+      const created = new Date();
+      const auth: AuthorizationReceipt = {
+        paypalAuthorizationId: authorizationId, status: behaviour === "answer-pending" ? "PENDING" : "CREATED",
+        ...usd(behaviour === "answer-other-amount" ? command.amountCents + 1 : command.amountCents),
+        orderId, customId: command.customId, createTime: created.toISOString(), expirationTime: new Date(created.getTime() + 29 * 86_400_000).toISOString(),
+      };
+      // Probe P11: an order paid with the saved token comes back COMPLETED with a CREATED authorization.
+      const receipt: OrderReceipt = { orderId, status: recordedSavedHold.response!.status, ...usd(command.amountCents), customId: command.customId, authorization: auth };
+      this.orders.set(orderId, { receipt, approved: true, authorizationId });
+      this.holds.set(authorizationId, { receipt: auth, capturedCents: 0 });
       return behaviour === "answer-minimal" ? { orderId, status: receipt.status } : receipt;
     });
   }
@@ -146,6 +178,11 @@ export class FakePayPal implements PayPalPayments {
       order.authorizationId = authorizationId;
       this.holds.set(authorizationId, { receipt: auth, capturedCents: 0 });
       order.receipt = { ...order.receipt, status: "COMPLETED", authorization: auth };
+      if (order.savePayPal && !order.receipt.savedPayPal && behaviour !== "answer-unsaved") {
+        const tokenId = `FAKE-SAVED-PAYPAL-${this.nextId++}`;
+        this.savedTokens.push(tokenId);
+        order.receipt.savedPayPal = { status: recordedSaving.response.paymentSource.paypal.attributes.vault.status, tokenId };
+      }
       return behaviour === "answer-minimal" ? { orderId: command.orderId, status: "COMPLETED" } : order.receipt;
     });
   }
@@ -243,7 +280,7 @@ export class FakePayPal implements PayPalPayments {
    * One write call: a request id PayPal has already processed gets its original
    * answer back (unless this attempt times out before reaching PayPal).
    */
-  private async write<T>(command: CaptureCommand | VoidCommand | RefundCommand | CreateOrderCommand | AuthorizeOrderCommand, key: string, act: (behaviour: FakeBehaviour) => T | PayPalResult<never>): Promise<PayPalResult<T>> {
+  private async write<T>(command: WriteCommand, key: string, act: (behaviour: FakeBehaviour) => T | PayPalResult<never>): Promise<PayPalResult<T>> {
     this.calls.push(command);
     const behaviour = this.plan.shift() ?? "succeed";
     if (behaviour === "time-out") return TIMEOUT;
