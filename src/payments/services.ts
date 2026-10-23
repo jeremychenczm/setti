@@ -27,6 +27,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export interface PaymentBasis {
   projectId: string;
   version: number;
+  /** The confirmed change order, or null for a V1 signed line by line. */
+  orderId: string | null;
   /** Names the agreement in business keys: the change order, or the V1 revision. */
   key: string;
   ledger: ProjectLedger;
@@ -53,7 +55,7 @@ export async function lockPaymentBasis(tx: Tx, sessionId: string, key: CaseKey):
     const { ledger, plan } = await openingPlan(tx, version);
     const approved = new Map(version.approved.map((entry) => [entry.line.itemId, entry.itemId]));
     return {
-      projectId: version.projectId, version: 1, key: version.revisionId, ledger, plan,
+      projectId: version.projectId, version: 1, orderId: null, key: version.revisionId, ledger, plan,
       businessItem: (line) => line.side === "baseline" ? approved.get(line.itemId) : undefined, bind: version.bind,
     };
   }
@@ -64,7 +66,7 @@ export async function lockPaymentBasis(tx: Tx, sessionId: string, key: CaseKey):
   const { ledger, plan } = await confirmedPlan(tx, version);
   const { byGroup } = fundingIdentities(version.order, version.itemMapping);
   return {
-    projectId: version.projectId, version: version.order.version, key: version.order.id, ledger, plan,
+    projectId: version.projectId, version: version.order.version, orderId: version.order.id, key: version.order.id, ledger, plan,
     businessItem: (line) => byGroup.get(`${line.side}:${line.itemId}`), bind: version.bind,
   };
 }
