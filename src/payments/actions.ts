@@ -8,8 +8,9 @@
 import { eq } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { items, paymentOperations, paypalCaptures, paypalRefunds } from "../db/schema";
+import { openingQuotes } from "../opening/schema";
 import type { ProjectLedger } from "../approval/store";
-import { changeOrders } from "../pricing/schema";
+import { changeOrders, pricingCases } from "../pricing/schema";
 import { cancelCheckout, completeAuthorization, createCheckout, type CheckoutDetails, type CheckoutLinks } from "./authorize";
 import { businessItem, confirmedPlan, lockConfirmedVersion, PaymentActionError, type LineRef, type ShownVersion } from "./binding";
 import { executeCapture, refreshCapture } from "./capture";
@@ -25,10 +26,12 @@ export type { LineRef } from "./binding";
 export type LinkBuilder = (operationId: string) => CheckoutLinks;
 
 /** What the buyer sees on PayPal for an authorization, and what saving PayPal for the project means. */
-async function checkoutDetails(db: Pick<Db, "select">, operation: PaymentOperation): Promise<CheckoutDetails> {
-  const [order] = await db.select({ document: changeOrders.document }).from(changeOrders).where(eq(changeOrders.id, operation.changeOrderId!));
-  const [item] = await db.select({ name: items.name }).from(items).where(eq(items.id, operation.itemId!));
-  const { projectName, version } = order.document;
+export async function checkoutDetails(db: Pick<Db, "select">, operation: PaymentOperation): Promise<CheckoutDetails> {
+  const [{ projectName, version }] = operation.changeOrderId
+    ? (await db.select({ document: changeOrders.document }).from(changeOrders).where(eq(changeOrders.id, operation.changeOrderId))).map(({ document }) => document)
+    : (await db.select({ document: openingQuotes.document }).from(openingQuotes).innerJoin(pricingCases, eq(pricingCases.caseId, openingQuotes.caseId))
+      .where(eq(pricingCases.baselineRevisionId, operation.revisionId!))).map(({ document }) => ({ projectName: document.projectName, version: 1 }));
+  const [item] = operation.itemId ? await db.select({ name: items.name }).from(items).where(eq(items.id, operation.itemId)) : [{ name: "Design services" }];
   return {
     description: `${projectName} · ${item.name} · V${version} (Setti sandbox demo)`,
     ...(operation.savePaymentMethod ? { savePayPalDescription: `Setti · ${projectName}: holds for the items you approve (sandbox demo)` } : {}),
@@ -75,7 +78,7 @@ function openHolds(ledger: ProjectLedger, itemId: string, now = new Date()) {
 function refundableCaptures(ledger: ProjectLedger, itemId: string) {
   const holds = new Set(ledger.authorizations.filter((hold) => hold.itemId === itemId).map((hold) => hold.id));
   return ledger.captures
-    .filter((capture) => capture.status === "completed" && capture.authorizationId && holds.has(capture.authorizationId))
+    .filter((capture) => capture.status === "completed" && (capture.itemId === itemId || (capture.authorizationId && holds.has(capture.authorizationId))))
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     .flatMap((capture) => {
       const returned = ledger.refunds.filter((refund) => refund.captureId === capture.id && refund.status !== "failed").reduce((total, refund) => total + refund.amountCents, 0);
@@ -92,7 +95,7 @@ async function runEach(operations: PaymentOperation[], run: (id: string) => Prom
 }
 
 /** The next attempt number for a money move on one record, so a failed attempt is never reused. */
-function attempt(ledger: ProjectLedger, kind: PaymentOperation["kind"], prefix: string): number {
+export function attempt(ledger: ProjectLedger, kind: PaymentOperation["kind"], prefix: string): number {
   return 1 + ledger.operations.filter((operation) => operation.kind === kind && operation.businessKey.startsWith(prefix)).length;
 }
 

@@ -104,6 +104,8 @@ async function settle(db: Db, paypal: PayPalPayments, operation: PaymentOperatio
       if (!existing) {
         await tx.insert(paypalCaptures).values({
           projectId: operation.projectId, authorizationId: operation.authorizationId, paypalCaptureId,
+          // A capture from the design-services hold records the service it paid; an item's own hold already names it.
+          itemId: authorization.itemId ? null : operation.itemId,
           amountCents: operation.amountCents, currency: operation.currency, finalCapture: operation.finalCapture, status, operationId: operation.id,
         });
       }

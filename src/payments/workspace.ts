@@ -72,7 +72,8 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
 function itemMoney(ledger: ProjectLedger, businessId: string, versions: Map<string, number>, now: Date, calls: (typeof paypalCalls.$inferSelect)[]): { holds: HoldView[]; captures: CaptureView[]; refunds: RefundView[] } {
   const holds = ledger.authorizations.filter((auth) => auth.itemId === businessId).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   const holdIds = new Set(holds.map((hold) => hold.id));
-  const captures = ledger.captures.filter((capture) => capture.authorizationId && holdIds.has(capture.authorizationId)).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  // Captures from the item's own holds, and its share of the design-services hold.
+  const captures = ledger.captures.filter((capture) => capture.itemId === businessId || (capture.authorizationId && holdIds.has(capture.authorizationId))).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   const refunds = ledger.refunds.filter((refund) => captures.some((capture) => capture.id === refund.captureId)).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
   return {
     holds: holds.map((hold) => {
@@ -143,7 +144,7 @@ async function operationViews(db: Reader, ledger: ProjectLedger, versions: Map<s
   const calls = ids.length ? await db.select().from(paypalCalls).where(inArray(paypalCalls.operationId, ids)).orderBy(desc(paypalCalls.createdAt)) : [];
   return [...ledger.operations].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).map((operation) => ({
     id: operation.id, businessItemId: operation.itemId, kind: operation.kind, status: operation.status, amountCents: operation.amountCents,
-    itemLabel: operation.itemId ? names.get(operation.itemId) ?? null : null,
+    itemLabel: operation.itemId ? names.get(operation.itemId) ?? null : operation.servicesHold ? "Design services" : null,
     version: operation.changeOrderId ? versions.get(operation.changeOrderId) ?? null : null,
     requestId: operation.requestId, attempts: operation.attempts, paypalOrderId: operation.paypalOrderId,
     approvalUrl: owner && operation.kind === "authorize" && operation.status === "pending" && !operation.paypalResourceId ? operation.approvalUrl : null,

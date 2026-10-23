@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, ne } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { approvals, paymentOperations, paypalAuthorizations, paypalCaptures, paypalRefunds, revisionLines, revisions, supplierEvents } from "../db/schema";
+import { approvals, paymentOperations, paypalAuthorizations, paypalCaptures, paypalRefunds, revisionLines, revisions, servicesHoldLines, supplierEvents } from "../db/schema";
 import { chatCases, chatMessages } from "../chat/schema";
 import { createChatStore } from "../chat/store";
 import { clientSignatureName } from "../opening/types";
@@ -26,6 +26,8 @@ export interface ProjectLedger {
   refunds: (typeof paypalRefunds.$inferSelect)[];
   operations: (typeof paymentOperations.$inferSelect)[];
   supplierEvents: (typeof supplierEvents.$inferSelect)[];
+  /** How each design-services hold is split across the services it pays for. */
+  servicesHoldLines: (typeof servicesHoldLines.$inferSelect)[];
 }
 
 /** Every money record and operation of one business project. */
@@ -36,7 +38,9 @@ export async function readLedger(db: Reader, projectId: string): Promise<Project
     .innerJoin(paypalCaptures, eq(paypalRefunds.captureId, paypalCaptures.id)).where(eq(paypalCaptures.projectId, projectId))).map(({ refund }) => refund);
   const operations = await db.select().from(paymentOperations).where(eq(paymentOperations.projectId, projectId));
   const events = await db.select().from(supplierEvents).where(eq(supplierEvents.projectId, projectId));
-  return { authorizations, captures, refunds, operations, supplierEvents: events };
+  const split = (await db.select({ line: servicesHoldLines }).from(servicesHoldLines)
+    .innerJoin(paymentOperations, eq(servicesHoldLines.operationId, paymentOperations.id)).where(eq(paymentOperations.projectId, projectId))).map(({ line }) => line);
+  return { authorizations, captures, refunds, operations, supplierEvents: events, servicesHoldLines: split };
 }
 
 export interface FundingIdentity { itemId: string; side: "baseline" | "proposed" }
@@ -103,8 +107,32 @@ export function ledgerFacts(identities: ReadonlyMap<string, FundingIdentity>, id
     const refundedCents = refunds.filter(({ refund }) => capturedIds.has(refund.captureId) && refund.status === "completed").reduce((total, { refund }) => total + refund.amountCents, 0);
     const closed = ["voided", "expired", "captured"].includes(authorization.status) || settled.some((capture) => capture.finalCapture)
       || !!(authorization.expiresAt && authorization.expiresAt.getTime() <= now.getTime());
+    if (!authorization.itemId) {
+      // The design-services hold: each service's share counts as that service's money.
+      const split = ledger.servicesHoldLines.filter((line) => line.operationId === authorization.operationId);
+      if (!split.length) {
+        if ((closed ? 0 : authorization.amountCents - capturedCents) > 0 || capturedCents > refundedCents) blockers.push("Some project funds are not assigned to an item in this frozen quote. Allocate them before calculating payment actions.");
+        continue;
+      }
+      for (const line of split) {
+        const paid = settled.filter((capture) => capture.itemId === line.itemId);
+        const paidIds = new Set(paid.map((capture) => capture.id));
+        const share = { capturedCents: paid.reduce((total, capture) => total + capture.amountCents, 0), refundedCents: refunds.filter(({ refund }) => paidIds.has(refund.captureId) && refund.status === "completed").reduce((total, { refund }) => total + refund.amountCents, 0) };
+        const shareHeld = closed ? 0 : Math.max(0, line.amountCents - share.capturedCents);
+        const identity = identities.get(line.itemId);
+        if (!identity) {
+          if (shareHeld || share.capturedCents > share.refundedCents) blockers.push("Some project funds are not assigned to an item in this frozen quote. Allocate them before calculating payment actions.");
+          continue;
+        }
+        const key = `${identity.side}:${identity.itemId}`;
+        const fact = facts.get(key) ?? { ...identity, heldCents: 0, capturedCents: 0, refundedCents: 0 };
+        fact.heldCents += shareHeld; fact.capturedCents += share.capturedCents; fact.refundedCents += share.refundedCents;
+        facts.set(key, fact);
+      }
+      continue;
+    }
     const heldCents = closed ? 0 : Math.max(0, authorization.amountCents - capturedCents);
-    const identity = authorization.itemId ? identities.get(authorization.itemId) : undefined;
+    const identity = identities.get(authorization.itemId);
     if (!identity) {
       if (heldCents || capturedCents > refundedCents) blockers.push("Some project funds are not assigned to an item in this frozen quote. Allocate them before calculating payment actions.");
       continue;

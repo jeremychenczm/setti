@@ -38,7 +38,7 @@ export async function createCheckout(db: Db, paypal: PayPalPayments, operation: 
   if (operation.savePaymentMethod && !details.savePayPalDescription) throw new Error(`Checkout ${operation.id} saves PayPal but tells the buyer nothing about it`);
   if (operation.paypalOrderId || operation.status === "succeeded" || operation.status === "failed") return operation;
   const result = await paypal.createOrder({
-    requestId: `${operation.requestId}-order`, amountCents: operation.amountCents, referenceId: operation.itemId!,
+    requestId: `${operation.requestId}-order`, amountCents: operation.amountCents, referenceId: operation.itemId ?? "design-services",
     customId: operation.id, invoiceId: `setti-${operation.id}`, description: details.description, ...links,
     ...(operation.savePaymentMethod ? { savePayPal: { description: details.savePayPalDescription! } } : {}),
   });
@@ -226,8 +226,9 @@ async function recordHold(db: Db, operation: PaymentOperation, hold: VerifiedAut
       : [];
     if (!existing) {
       const how = operation.savedMethodId ? " with the client's saved PayPal" : "";
+      const next = operation.servicesHold ? "Each design service is charged from it next." : "Nothing has been charged; capture waits for the supplier confirmation.";
       const savedNote = stored.length ? " The client saved PayPal for this project's later holds." : "";
-      await noteInCase(tx, operation, ({ version, itemName }) => `PayPal Sandbox authorization recorded${how} for V${version} · ${itemName}: ${formatCents(operation.amountCents)} USD is held (authorization ${hold.paypalAuthorizationId}, order ${operation.paypalOrderId}). Nothing has been charged; capture waits for the supplier confirmation.${savedNote}`);
+      await noteInCase(tx, operation, ({ version, itemName }) => `PayPal Sandbox authorization recorded${how} for V${version} · ${itemName}: ${formatCents(operation.amountCents)} USD is held (authorization ${hold.paypalAuthorizationId}, order ${operation.paypalOrderId}). ${next}${savedNote}`);
     }
     return done;
   });

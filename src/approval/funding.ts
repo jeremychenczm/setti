@@ -281,6 +281,8 @@ function planFunding(header: PlanHeader, facts: FundingFacts, notices: string[],
         push(group, "release_authorization", release, remaining > 0 ? "after_vendor_confirmation" : "on_payment_execution",
           remaining > 0 ? "The excess is released only when the remaining authorized amount is captured and the hold is closed." : "Close the unused authorization; this is a release, not a refund.");
         if (remaining > 0) push(group, "capture", remaining, "after_vendor_confirmation", "Capture only the reviewed remaining amount, then close the hold to release the excess.");
+      } else if (fact.heldCents > 0 && group.category === "service" && (group.change === null || group.change === "add" || group.change === "quantity")) {
+        push(group, "capture", fact.heldCents, "on_payment_execution", "Capture the held design service; no supplier confirms a studio's own service.");
       } else if (fact.heldCents > 0) {
         push(group, "capture", fact.heldCents, "after_vendor_confirmation", "Capture the authorized amount only after the supplier confirms the reviewed order.");
       }
