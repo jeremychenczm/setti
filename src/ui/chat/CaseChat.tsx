@@ -16,6 +16,7 @@ import { Avatar } from "../workspace/primitives";
 import { usd } from "../demo-data";
 import { MoneyAnswerCard } from "./MoneyAnswerCard";
 import { QuoteCard } from "./QuoteCard";
+import { VersionCard } from "./VersionCard";
 import { ReviewPanel } from "./ReviewPanel";
 import { SendQuoteDialog } from "./SendQuoteDialog";
 import { useCaseChat } from "./useCaseChat";
@@ -66,17 +67,30 @@ export function CaseChat({ projectKey, quote, account, onSwitchAccount, onOpenQu
   const client: Person = clientOf(projectKey);
   const sendDisabled = loading || running || !snapshot || hasUnsent;
   const opening = snapshot?.opening ?? null;
+  const versions = snapshot?.versions ?? [];
+  const latestVersion = versions.at(-1) ?? null;
   /** V1 is still a draft or with the client: there is no approved baseline to change yet. */
   const openingPending = opening !== null && opening.status !== "approved";
   const canSendQuote = account.role === "designer" && opening?.status === "draft" && !sendDisabled;
   /** Where V1 is with the client, until a confirmed change order becomes the baseline. */
   const openingStatusLine = () => {
+    if (latestVersion && latestVersion.status !== "approved" && !confirmedQuoteHref) {
+      const on = new Date(latestVersion.issuedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      if (latestVersion.status === "declined") return `Quote V${latestVersion.version} · the client asked for changes · V${latestVersion.basedOnVersion} remains the baseline`;
+      return account.role === "designer" ? `Quote V${latestVersion.version} sent ${on} · awaiting client confirmation` : `Quote V${latestVersion.version} received ${on} · awaiting your confirmation`;
+    }
     if (!opening || confirmedQuoteHref || !(opening.sentAt || opening.status === "draft")) return `${confirmedQuoteHref ? "Client-confirmed baseline" : "Initial approved baseline"} V${currentQuote.version} · read-only`;
     if (opening.status === "draft") return account.role === "designer" ? "Quote V1 is a draft, not yet sent to the client" : "Waiting for quote V1 from the studio";
     const { approved, pending } = opening.progress;
     if (approved) return `Quote V1 · ${approved} of ${opening.lineCount} lines approved${pending ? ` · ${pending} undecided` : ""}${opening.closed ? " · replaced by a newer version" : ""}`;
     if (account.role === "designer") return `Quote V1 sent ${sentOn} · locked · awaiting client review`;
     return pending ? `Quote V1 received ${sentOn} · awaiting your review` : `Quote V1 received ${sentOn}`;
+  };
+  /** The quote a designer's message carries: V1, or a later version sent into the chat. */
+  const attachmentFor = (messageId: string) => {
+    if (opening && opening.messageId === messageId) return <QuoteCard opening={opening} projectName={currentQuote.projectName} viewerRole={account.role} onOpen={() => onOpenQuote()} replacedBy={versions[0]?.version ?? null} />;
+    const index = versions.findIndex((version) => version.messageId === messageId);
+    return index < 0 ? null : <VersionCard version={versions[index]} projectName={currentQuote.projectName} viewerRole={account.role} replacedBy={versions[index + 1]?.version ?? null} />;
   };
   const lineName = (itemId: string) => (currentQuote.lines.find((line) => line.itemId === itemId) ?? quote.lines.find((line) => line.itemId === itemId))?.name ?? itemId;
   const sentOn = opening?.sentAt ? new Date(opening.sentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
@@ -158,7 +172,7 @@ export function CaseChat({ projectKey, quote, account, onSwitchAccount, onOpenQu
               {!loading && snapshot && messages.length === 0 && opening?.status === "draft" && <div className="mx-auto max-w-md px-2 py-10 text-center sm:py-16"><span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-[var(--primary)]"><FileText className="h-6 w-6" strokeWidth={1.5} /></span>{account.role === "designer" ? <><h1 className="mt-4 text-[17px] font-semibold">Quote V1 is ready to send</h1><p className="mt-2 text-[13px] leading-relaxed text-slate-500">{opening.lineCount} items prepared from your supplier quotes, {usd(opening.totalCents)} in total. Send it to {client.name} to start the project conversation.</p><div className="mt-5 flex flex-wrap justify-center gap-2"><button onClick={() => setSendQuoteOpen(true)} disabled={!canSendQuote} className="flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-4 py-2 text-[12px] font-semibold text-white hover:bg-blue-600 disabled:bg-slate-200 disabled:text-slate-400"><SendHorizontal className="h-3.5 w-3.5" />Send quote V1</button><button onClick={() => onOpenQuote()} className="rounded-lg px-3 py-2 text-[12px] font-medium text-[var(--primary)] hover:bg-blue-50">Preview the quote</button></div></> : <><h1 className="mt-4 text-[17px] font-semibold">Waiting for the quote from {designer.name}</h1><p className="mt-2 text-[13px] leading-relaxed text-slate-500">The studio will send quote V1 here. You can message the studio in the meantime.</p></>}</div>}
               {!loading && snapshot && messages.length === 0 && !openingPending && <div className="mx-auto max-w-md px-2 py-10 text-center sm:py-16"><span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-[var(--primary)]"><MessageSquare className="h-6 w-6" strokeWidth={1.5} /></span><h1 className="mt-4 text-[17px] font-semibold">Start with the project conversation</h1><p className="mt-2 text-[13px] leading-relaxed text-slate-500">Discuss changes together and paste product links here. Mention <strong className="font-medium text-slate-700">@AI</strong> with what you want it to do when you are ready.</p><p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">{confirmedQuoteHref ? "New changes use the client-confirmed" : "This case starts with the initial approved"} V{currentQuote.version} demo quote. The AI drafts for designer review; it cannot approve, order or move money.</p></div>}
 
-              {messages.map((message, index) => <MessageBubble key={message.id} message={message} person={message.actor === "designer" ? designer : client} own={message.actor === actor} highlighted={highlightedId === message.id} unsaved={unsavedMessageId === message.id} running={running} canRetryAi={!messages.slice(index + 1).some((later) => later.actor !== "assistant")} onRetry={() => retry(message.id)} about={message.aboutItemId ? { name: lineName(message.aboutItemId), open: () => onOpenQuote(message.aboutItemId!) } : null} attachment={opening && opening.messageId === message.id ? <QuoteCard opening={opening} projectName={currentQuote.projectName} viewerRole={account.role} onOpen={() => onOpenQuote()} /> : null} />)}
+              {messages.map((message, index) => <MessageBubble key={message.id} message={message} person={message.actor === "designer" ? designer : client} own={message.actor === actor} highlighted={highlightedId === message.id} unsaved={unsavedMessageId === message.id} running={running} canRetryAi={!messages.slice(index + 1).some((later) => later.actor !== "assistant")} onRetry={() => retry(message.id)} about={message.aboutItemId ? { name: lineName(message.aboutItemId), open: () => onOpenQuote(message.aboutItemId!) } : null} attachment={attachmentFor(message.id)} />)}
 
               {running && <div role="status" aria-live="polite" className="flex items-start gap-2.5"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800"><Bot className="h-5 w-5" /></span><div className="rounded-xl bg-[var(--agent)] px-3.5 py-2.5 text-[12px] text-amber-900"><span className="flex items-center gap-2"><LoaderCircle className="h-3.5 w-3.5 animate-spin" />Saving the message and checking the request…</span><p className="mt-1 text-[10px] text-amber-800">AI requests may take a minute or more. Your conversation is kept in this case.</p></div></div>}
 

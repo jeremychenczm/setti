@@ -22,6 +22,8 @@ function input() {
 function request(options: {
   method?: "GET" | "POST";
   cookie?: string;
+  /** The demo account; the project's client unless a test says otherwise. */
+  account?: string | null;
   body?: unknown;
   rawBody?: string;
   headers?: Record<string, string>;
@@ -29,12 +31,14 @@ function request(options: {
   omitContentType?: boolean;
 } = {}) {
   const method = options.method ?? "GET";
+  const account = options.account === undefined ? "sofia" : options.account;
+  const cookies = [options.cookie && `setti-demo-chat=${options.cookie}`, account && `setti-demo-account=${account}`].filter(Boolean).join("; ");
   return new NextRequest(`${origin}${path}`, {
     method,
     headers: {
       ...(method === "POST" && !options.omitOrigin ? { Origin: origin } : {}),
       ...(method === "POST" && !options.omitContentType ? { "Content-Type": "application/json" } : {}),
-      ...(options.cookie ? { Cookie: `setti-demo-chat=${options.cookie}` } : {}),
+      ...(cookies ? { Cookie: cookies } : {}),
       ...options.headers,
     },
     ...(options.rawBody !== undefined ? { body: options.rawBody } : options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
@@ -45,7 +49,7 @@ describe("client approval HTTP boundaries", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mock.getWorkspace.mockResolvedValue({
-      view: { order: { id: orderId, version: 3 }, status: "awaiting_client_confirmation" },
+      view: { order: { id: orderId, version: 3, projectKey: "willow" }, status: "awaiting_client_confirmation" },
       canDecide: false, clientName: null, reason: "Read-only share link.", fundingPlan: null,
     });
     mock.decide.mockResolvedValue({
@@ -174,6 +178,22 @@ describe("client approval HTTP boundaries", () => {
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("x-robots-tag")).toContain("noindex");
     expect(await response.json()).toMatchObject({ view: { status: "approved" }, fundingPlan: { executable: false } });
+  });
+
+  it.each(["jordan", null])("lets only the project's client account confirm, not %s", async (account) => {
+    const response = await postApprovalResponse(request({ method: "POST", cookie: sessionId, account, body: input() }), orderId);
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ code: "FORBIDDEN", error: expect.stringContaining("Switch to Sofia Martinez") });
+    expect(mock.decide).not.toHaveBeenCalled();
+  });
+
+  it("shows the owner session's version as read-only to anyone but the client", async () => {
+    mock.getWorkspace.mockResolvedValue({
+      view: { order: { id: orderId, version: 3, projectKey: "willow" }, status: "awaiting_client_confirmation" },
+      canDecide: true, clientName: "Sofia Martinez", reason: null, fundingPlan: null,
+    });
+    expect(await (await getApprovalResponse(request({ cookie: sessionId }), orderId)).json()).toMatchObject({ canDecide: true, reason: null });
+    expect(await (await getApprovalResponse(request({ cookie: sessionId, account: "jordan" }), orderId)).json()).toMatchObject({ canDecide: false, reason: expect.stringContaining("Signed in as Jordan Lee") });
   });
 
   it("passes a request for changes to storage instead of treating it as approval", async () => {

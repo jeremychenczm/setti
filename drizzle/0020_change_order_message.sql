@@ -1,0 +1,2 @@
+ALTER TABLE "change_orders" ADD COLUMN "message_id" uuid;--> statement-breakpoint
+ALTER TABLE "change_orders" ADD CONSTRAINT "change_orders_message_fk" FOREIGN KEY ("case_id","message_id") REFERENCES "public"."chat_messages"("case_id","id") ON DELETE no action ON UPDATE no action;

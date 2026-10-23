@@ -84,6 +84,10 @@ describe("case chat HTTP boundary", () => {
     const asDesigner = await (await getCaseResponse(new NextRequest("http://localhost:3002/api/chat/willow", { headers: { cookie: "setti-demo-account=jordan" } }), "willow")).json();
     expect(asDesigner.draft.title).toBe("Revised lines from quote V1");
     expect(asDesigner.draftPreparing).toBeUndefined();
+    // Once that draft is sent as a version, the client sees the version card instead.
+    state.versions = [{ fromCurrentDraft: true } as unknown as NonNullable<StoredCase["versions"]>[number]];
+    const afterSending = await (await getCaseResponse(new NextRequest("http://localhost:3002/api/chat/willow", { headers: { cookie: "setti-demo-account=sofia" } }), "willow")).json();
+    expect(afterSending).toMatchObject({ draft: null, draftPreparing: false });
   });
   it("limits a chosen demo account to its own projects and role", async () => {
     const asSofia = { cookie: "setti-demo-account=sofia" };

@@ -6,7 +6,7 @@
  */
 import type { FromV1 } from "@/chat/types";
 import type { QuoteLine } from "@/quotes/types";
-import type { PricingChangeInput, PricingItem, PricingWorkspace } from "./types";
+import type { ChangeOrderSummary, PricingChangeInput, PricingItem, PricingWorkspace } from "./types";
 
 export interface FieldChange {
   label: string;
@@ -41,6 +41,8 @@ export interface ReviewSummary {
   stale: boolean;
   /** The draft changed after this review was saved; the lines are the review carried onto it, not saved yet. */
   carried: CarriedSummary | null;
+  /** This saved review has been sent to the client as a version. */
+  sent: { version: number; status: ChangeOrderSummary["status"] } | null;
   confirmed: number;
   lines: ReviewLine[];
   baselineTotalCents: number;
@@ -101,8 +103,9 @@ export function reviewSummary(workspace: PricingWorkspace): ReviewSummary | null
   const lines = stale ? [] : input.changes.map((change, index) => ({ ...lineOf(workspace, change, index), ...(contested.has(change.key) ? { needsChoice: true } : {}) }));
   const preview = workspace.preview;
   const carried = carryOver ? { updated: carryOver.updated, kept: carryOver.kept, added: carryOver.added, removed: carryOver.removed, conflicts: carryOver.conflicts.map((conflict) => conflict.name) } : null;
+  const issued = carried || stale ? undefined : [...workspace.orders].sort((left, right) => right.version - left.version).find((order) => order.reviewVersion === review.version);
   return {
-    version: review.version, stale, carried, lines, confirmed: input.changes.filter((change) => change.confirmed).length,
+    version: review.version, stale, carried, sent: issued ? { version: issued.version, status: issued.status } : null, lines, confirmed: input.changes.filter((change) => change.confirmed).length,
     baselineTotalCents: preview?.baselineTotals.totalCents ?? 0, proposedTotalCents: preview?.proposedTotals?.totalCents ?? null,
     deltaCents: preview?.deltaTotalCents ?? null, ready: !stale && !carried && !!preview?.ready,
   };

@@ -133,7 +133,7 @@ export function usePricingWorkspace(projectKey: CaseKey) {
     setConflict(false);
     setPendingCheck(null);
     setError(null);
-    setNotice("Latest AI draft adopted. Previous local pricing edits were replaced. Review every row and save before generating a client version.");
+    setNotice("Latest AI draft adopted. Previous local pricing edits were replaced. Review every row and save before sending it to the client.");
     setEditorEpoch((epoch) => epoch + 1);
   }, [workspace]);
 
@@ -171,7 +171,7 @@ export function usePricingWorkspace(projectKey: CaseKey) {
         if (!alive.current) return;
         if (orderBody(result) && result.order.reviewId === pending.payload.reviewId && result.order.reviewVersion === pending.payload.expectedVersion) {
           setLastOrder(result);
-          setNotice(`Client change order V${result.order.version} confirmed. No approval or payment has occurred.`);
+          setNotice(`Quote V${result.order.version} was sent to the client in the project chat. Nothing is approved or charged until they confirm it.`);
           const reviewChanged = !state.review || state.review.id !== pending.payload.reviewId || state.review.version !== pending.payload.expectedVersion;
           setConflict(reviewChanged);
           setError(reviewChanged ? "The requested client version was found, but the saved pricing review has since changed. Load the saved review before making further edits." : null);
@@ -206,7 +206,7 @@ export function usePricingWorkspace(projectKey: CaseKey) {
     try {
       const body = await requestJson(endpoint, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       if (!workspaceBody(body, projectKey)) throw new Error("The save response was incomplete.");
-      if (alive.current) { applySaved(body); setNotice(`Pricing saved · review ${body.review?.version ?? ""}. Generate a client version separately when ready.`); }
+      if (alive.current) { applySaved(body); setNotice(`Pricing saved · review ${body.review?.version ?? ""}. Send it to the client when every check passes.`); }
     } catch (cause) {
       if (!alive.current) return;
       setError(cause instanceof Error ? cause.message : "Save failed.");
@@ -227,7 +227,7 @@ export function usePricingWorkspace(projectKey: CaseKey) {
       if (!orderBody(body)) throw new Error("The change-order response was incomplete.");
       if (!alive.current) return;
       setLastOrder(body);
-      setNotice(`Client change order V${body.order.version} generated. The link is read-only and awaits client confirmation.`);
+      setNotice(`Quote V${body.order.version} sent to the client in the project chat. Nothing is approved or charged until they confirm it.`);
       try {
         const state = await getWorkspace();
         if (alive.current) {
@@ -237,11 +237,11 @@ export function usePricingWorkspace(projectKey: CaseKey) {
             setError("The client version was generated, but the saved pricing review has since changed. Load the saved review before making further edits.");
           }
         }
-      } catch { if (alive.current) setNotice(`Client change order V${body.order.version} was generated. The saved history could not be refreshed; the read-only link below is valid.`); }
+      } catch { if (alive.current) setNotice(`Quote V${body.order.version} was sent to the client in the project chat. The saved history could not be refreshed; the read-only link below is valid.`); }
     } catch (cause) {
       if (!alive.current) return;
-      setError(cause instanceof Error ? cause.message : "Could not generate the client version.");
-      const pending: PendingCheck = { kind: "issue", payload, reason: cause instanceof Error ? cause.message : "Could not generate the client version." };
+      setError(cause instanceof Error ? cause.message : "Could not send this version to the client.");
+      const pending: PendingCheck = { kind: "issue", payload, reason: cause instanceof Error ? cause.message : "Could not send this version to the client." };
       setPendingCheck(pending);
       try { await reconcile(pending); }
       catch { if (alive.current) setError("The generation response was lost. Check saved status before trying to generate another version."); }

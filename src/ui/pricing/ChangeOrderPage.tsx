@@ -2,7 +2,7 @@
 
 import { AllCommunityModule, type ColDef } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
-import { ArrowUpRight, FileText, LoaderCircle, LockKeyhole, RefreshCw } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, FileText, LoaderCircle, LockKeyhole, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ApprovalWorkspace } from "@/approval/types";
 import type { FinalQuoteLine, OldItemHandling } from "@/pricing/types";
@@ -50,7 +50,7 @@ export function ChangeOrderPage({ orderId }: { orderId: string }) {
   ], []);
 
   return <div className="min-h-dvh bg-[var(--canvas)] px-3 py-5 text-[var(--ink)] sm:px-6"><main className="mx-auto max-w-[1280px]">
-    <header className="mb-5 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-semibold"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--primary)] text-white">S</span>Setti</div><button onClick={() => void load()} disabled={loading || approvalBusy} className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Refresh status</button><span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-medium text-slate-500">{workspace?.clientName ? "Client review · demo session" : "Read-only shared review · demo"}</span></header>
+    <header className="mb-5 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-semibold"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[var(--primary)] text-white">S</span>Setti</div>{workspace?.clientName && order && <a href={`/chats/${order.projectKey}`} className="flex items-center gap-1.5 text-[12px] text-slate-500 hover:text-slate-900"><ArrowLeft className="h-3.5 w-3.5" />Back to project chat</a>}<button onClick={() => void load()} disabled={loading || approvalBusy} className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Refresh status</button><span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-medium text-slate-500">{workspace?.clientName ? "Client review · demo session" : "Read-only shared review · demo"}</span></header>
     {loading && !order && <div role="status" className="flex items-center gap-2 rounded-xl bg-white p-8 text-[13px] text-slate-500"><LoaderCircle className="h-4 w-4 animate-spin" />Loading the frozen client version…</div>}
     {error && <div role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-[12px] text-red-800">{error}</div>}
     {order && <>

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { ACCOUNT_COOKIE, accountOrDefault, clientOf } from "@/accounts/demo";
+import type { CaseKey } from "@/chat/types";
 import { approvalStore } from "./server";
 import { ApprovalStoreError } from "./store";
+import type { ApprovalWorkspace } from "./types";
 
 const uuid = z.uuid();
 const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
@@ -15,6 +18,18 @@ class HttpError extends Error { constructor(message: string, readonly status: nu
 function session(req: NextRequest): string | null {
   const parsed = uuid.safeParse(req.cookies.get("setti-demo-chat")?.value);
   return parsed.success ? parsed.data : null;
+}
+
+/** Only the project's client account confirms a version; anyone else in the session reads it. */
+function notTheClient(req: NextRequest, key: CaseKey): string | null {
+  const account = accountOrDefault(req.cookies.get(ACCOUNT_COOKIE)?.value);
+  const client = clientOf(key);
+  return account.id === client.id ? null : `Signed in as ${account.name}. Switch to ${client.name} from the avatar at the bottom left of the chat to confirm this version.`;
+}
+
+function asViewer(req: NextRequest, workspace: ApprovalWorkspace): ApprovalWorkspace {
+  const refusal = workspace.canDecide ? notTheClient(req, workspace.view.order.projectKey) : null;
+  return refusal ? { ...workspace, canDecide: false, reason: refusal } : workspace;
 }
 
 async function boundedJson(req: NextRequest): Promise<unknown> {
@@ -48,7 +63,7 @@ export async function getApprovalResponse(req: NextRequest, id: string) {
   if (!uuid.safeParse(id).success) return NextResponse.json({ code: "NOT_FOUND", error: "Change order not found." }, { status: 404, headers });
   try {
     const workspace = await approvalStore().getWorkspace(session(req), id);
-    return workspace ? NextResponse.json(workspace, { headers }) : NextResponse.json({ code: "NOT_FOUND", error: "Change order not found." }, { status: 404, headers });
+    return workspace ? NextResponse.json(asViewer(req, workspace), { headers }) : NextResponse.json({ code: "NOT_FOUND", error: "Change order not found." }, { status: 404, headers });
   } catch (error) { return fail(error); }
 }
 
@@ -58,6 +73,10 @@ export async function postApprovalResponse(req: NextRequest, id: string) {
   if (!sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "This shared link is view-only. Confirm from the demo session that owns the project." }, { status: 403, headers });
   try {
     const input = schema.parse(await boundedJson(req));
-    return NextResponse.json(await approvalStore().decide(sessionId, id, input), { headers });
+    const current = await approvalStore().getWorkspace(sessionId, id);
+    if (!current) return NextResponse.json({ code: "NOT_FOUND", error: "Change order not found." }, { status: 404, headers });
+    const refusal = notTheClient(req, current.view.order.projectKey);
+    if (refusal) return NextResponse.json({ code: "FORBIDDEN", error: refusal }, { status: 403, headers });
+    return NextResponse.json(asViewer(req, await approvalStore().decide(sessionId, id, input)), { headers });
   } catch (error) { return fail(error); }
 }

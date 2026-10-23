@@ -30,7 +30,9 @@ const dropSchema = z.strictObject({ itemId: z.string().min(1).max(100) });
 /** A client account sees that a draft is being prepared, never the designer's draft itself. */
 function snapshot(state: StoredCase, req: NextRequest): CaseSnapshot {
   const base = { ...state, quote: state.quote ?? preapprovedQuote(state.projectKey), opening: state.opening ?? defaultOpening(state.projectKey), aiConfigured: aiConfigured() };
-  return findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value)?.role === "client" ? { ...base, draft: null, draftPreparing: !!state.draft } : base;
+  // A draft already sent as a version is no longer being prepared.
+  const preparing = !!state.draft && !state.versions?.some((version) => version.fromCurrentDraft);
+  return findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value)?.role === "client" ? { ...base, draft: null, draftPreparing: preparing } : base;
 }
 
 function session(req: NextRequest): string {

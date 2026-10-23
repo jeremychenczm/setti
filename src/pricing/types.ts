@@ -165,6 +165,8 @@ export interface ChangeOrderSummary {
   issuedAt: string;
   totalCents: number;
   deltaTotalCents: number;
+  /** The saved review version it was issued from. */
+  reviewVersion: number;
   status: ChangeOrderView["status"];
 }
 

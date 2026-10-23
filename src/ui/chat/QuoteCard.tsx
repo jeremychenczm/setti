@@ -4,7 +4,7 @@ import type { OpeningQuote } from "@/opening/types";
 import { usd } from "../demo-data";
 
 /** The quote V1 attached to the designer's message. */
-export function QuoteCard({ opening, projectName, viewerRole, onOpen }: { opening: OpeningQuote; projectName: string; viewerRole: AccountRole; onOpen: () => void }) {
+export function QuoteCard({ opening, projectName, viewerRole, onOpen, replacedBy }: { opening: OpeningQuote; projectName: string; viewerRole: AccountRole; onOpen: () => void; replacedBy?: number | null }) {
   const { approved, pending } = opening.progress;
   const confirmed = approved === opening.lineCount;
   const label = confirmed ? "Approved by the client" : approved ? `Partially approved · ${approved} of ${opening.lineCount}` : pending ? "Awaiting client review" : "Declined by the client";
@@ -16,6 +16,7 @@ export function QuoteCard({ opening, projectName, viewerRole, onOpen }: { openin
           <div className="text-[13px] font-semibold">Quote V{opening.version} · {projectName}</div>
           <div className="mt-0.5 text-[12px] text-slate-500">{opening.lineCount} items · <span className="font-medium tabular-nums text-slate-700">{usd(opening.totalCents)}</span></div>
           <span className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${approved ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>{label}</span>
+          {opening.closed && replacedBy && <span className="ml-1.5 mt-2 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">Replaced by V{replacedBy}</span>}
           {approved > 0 && !confirmed && <div className="mt-1 text-[11px] text-slate-500">Approved {usd(opening.progress.approvedTotalCents)}{pending ? ` · ${pending} undecided` : ""}</div>}
         </div>
       </div>

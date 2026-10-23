@@ -102,6 +102,23 @@ export interface ChangeDraft {
   model: string;
 }
 
+/** A later quote version the designer sent into the chat, as its card shows it. */
+export interface SentVersion {
+  id: string;
+  version: number;
+  basedOnVersion: number;
+  title: string;
+  /** The designer's message it was sent with; null for a version issued before sending moved into the chat. */
+  messageId: string | null;
+  issuedAt: string;
+  changeCount: number;
+  totalCents: number;
+  deltaTotalCents: number;
+  status: "awaiting_client_confirmation" | "approved" | "declined" | "superseded";
+  /** Issued from the case's current draft as it stands now. */
+  fromCurrentDraft: boolean;
+}
+
 export interface StoredCase {
   id: string;
   projectKey: CaseKey;
@@ -112,6 +129,8 @@ export interface StoredCase {
   quote?: ApprovedQuoteReport;
   /** Where the project's V1 is with the client; optional for legacy store adapters. */
   opening?: OpeningQuote;
+  /** Versions after V1, oldest first; optional for legacy store adapters. */
+  versions?: SentVersion[];
 }
 
 export interface CaseSnapshot extends Omit<StoredCase, "quote" | "opening"> {

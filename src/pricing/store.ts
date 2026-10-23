@@ -31,6 +31,16 @@ function sameSource(review: Pick<PricingReview, "sourceDraftId" | "sourceDraftRe
   return !!draft && review.sourceDraftId === draft.id && review.sourceDraftRevision === draft.revision;
 }
 
+const usd = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+
+/** The designer's chat message that carries a new version to the client. */
+function versionMessage(order: FrozenChangeOrder): string {
+  const firstName = order.clientName.replace(/\s*\(demo client\)$/, "").split(/\s+/)[0];
+  const count = order.changes.length;
+  const delta = order.deltaTotalCents === 0 ? "no change" : `${order.deltaTotalCents > 0 ? "+" : "−"}${usd(Math.abs(order.deltaTotalCents))}`;
+  return `Hi ${firstName}, here is quote V${order.version}: ${order.title}. It changes ${count} line${count === 1 ? "" : "s"}, and the new total is ${usd(order.totals.totalCents)} (${delta} against the approved V${order.basedOnVersion}). Please review it and confirm.`;
+}
+
 function publicReview(row: ReviewRow): PricingReview {
   return { id: row.id, sourceDraftId: row.sourceDraftId, sourceDraftRevision: row.sourceDraftRevision, version: row.version, input: row.input, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() };
 }
@@ -98,7 +108,7 @@ async function workspace(tx: Transaction, row: CaseRow, quote: ApprovedQuoteRepo
     caseId: row.id, projectKey: row.projectKey, quote, sourceDraft, review,
     preview: review && sourceDraft && (!stale || carryOver) ? withOpenV1(previewPricing(quote, sourceDraft, carryOver?.input ?? review.input), await v1LinesLeftBehind(tx, row)) : null,
     stale, carryOver,
-    orders: orders.map(({ document, status }) => ({ id: document.id, version: document.version, issuedAt: document.issuedAt, totalCents: document.totals.totalCents, deltaTotalCents: document.deltaTotalCents, status: changeOrderView(document, status).status })),
+    orders: orders.map(({ document, status }) => ({ id: document.id, version: document.version, issuedAt: document.issuedAt, totalCents: document.totals.totalCents, deltaTotalCents: document.deltaTotalCents, reviewVersion: document.reviewVersion, status: changeOrderView(document, status).status })),
   };
 }
 
@@ -223,7 +233,11 @@ export function createPricingStore(db: Db): PricingStore {
         const document: FrozenChangeOrder = { ...clean, contentHash: changeOrderContentHash(clean) };
         await tx.update(revisions).set({ status: "superseded" }).where(and(eq(revisions.projectId, bridge.projectId), eq(revisions.status, "sent"), ne(revisions.id, revision.id)));
         await tx.update(pricingCases).set({ itemMapping: mapping }).where(eq(pricingCases.caseId, row.id));
-        await tx.insert(changeOrders).values({ id: document.id, caseId: row.id, reviewId: review.id, reviewVersion: review.version, revisionId: revision.id, contentHash: document.contentHash, document, issuedAt });
+        // Issuing sends: the version reaches the client as the designer's message in the chat.
+        const messageId = randomUUID();
+        await tx.insert(chatMessages).values({ caseId: row.id, id: messageId, actor: "designer", text: versionMessage(document), createdAt: issuedAt });
+        await tx.update(chatCases).set({ updatedAt: issuedAt }).where(eq(chatCases.id, row.id));
+        await tx.insert(changeOrders).values({ id: document.id, caseId: row.id, reviewId: review.id, reviewVersion: review.version, revisionId: revision.id, contentHash: document.contentHash, document, issuedAt, messageId });
         return changeOrderView(document, "sent");
       });
     },

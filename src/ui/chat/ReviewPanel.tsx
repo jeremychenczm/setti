@@ -15,6 +15,11 @@ function signed(cents: number): string {
   return cents < 0 ? `−${amount}` : `+${amount}`;
 }
 
+function sentLabel(sent: NonNullable<ReviewSummary["sent"]>): string {
+  const state = sent.status === "approved" ? "confirmed by the client" : sent.status === "declined" ? "the client asked for changes" : sent.status === "superseded" ? "replaced by a later version" : "awaiting the client";
+  return `Sent as V${sent.version} · ${state}`;
+}
+
 /** What happened to the saved review when the draft changed under it. */
 function CarriedNote({ carried }: { carried: CarriedSummary }) {
   const rows: [string, string[]][] = [["Needs your choice", carried.conflicts], ["Updated from the draft", carried.updated], ["Your edits kept", carried.kept], ["New in the draft", carried.added], ["No longer in the draft", carried.removed]];
@@ -69,7 +74,7 @@ export function ReviewPanel({ projectKey, draft, messages, onSourceMessage, canP
     <article className="space-y-4 p-4 text-[12px]">
       <div>
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px]">
-          <span className={`rounded-full px-2.5 py-1 font-medium ${summary.ready ? "bg-emerald-50 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{summary.carried ? "Not saved on the updated draft" : summary.ready ? "Ready to generate the client version" : "Checks still open"}</span>
+          <span className={`rounded-full px-2.5 py-1 font-medium ${summary.sent || summary.ready ? "bg-emerald-50 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{summary.carried ? "Not saved on the updated draft" : summary.sent ? sentLabel(summary.sent) : summary.ready ? "Ready to send to the client" : "Checks still open"}</span>
           <span className="text-[var(--muted)]">Saved review {summary.version}{summary.carried && ", carried onto the updated draft"} · {summary.confirmed} of {summary.lines.length} lines checked</span>
           <button onClick={() => void load()} aria-label="Reload the saved pricing review" className="ml-auto rounded-md p-1 text-[var(--muted)] hover:bg-[var(--canvas)]"><RefreshCw className="h-3.5 w-3.5" /></button>
         </div>

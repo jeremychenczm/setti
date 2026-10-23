@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, gt, ne } from "drizzle-orm";
 import { isAiInvocation } from "../ai/intent";
 import { currentCaseQuote } from "../approval/baseline";
+import { changeOrderView } from "../approval/view";
+import { revisions } from "../db/schema";
 import { quoteFingerprint } from "../quotes/fingerprint";
 import { readCaseMoneyContext } from "../ai/money-context";
 import type { Db } from "../db/client";
@@ -11,8 +13,9 @@ import { readOpening } from "../opening/read";
 import { openingQuotes } from "../opening/schema";
 import { QUOTE_MESSAGE_MAX, sentFromChat } from "../opening/types";
 import { insertBaseline } from "../pricing/bridge";
+import { changeOrders } from "../pricing/schema";
 import { chatCases, chatMessages } from "./schema";
-import type { AppendMessageInput, BeginAiResult, CaseKey, CaseMessage, ChatStore, SendQuoteInput, StoredCase } from "./types";
+import type { AppendMessageInput, BeginAiResult, CaseKey, CaseMessage, ChatStore, SendQuoteInput, SentVersion, StoredCase } from "./types";
 
 const RUN_TIMEOUT_MS = 180_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -66,9 +69,19 @@ function publicMessage(message: MessageRow): CaseMessage {
   };
 }
 
+async function sentVersions(tx: Transaction, row: CaseRow): Promise<SentVersion[]> {
+  const orders = await tx.select({ document: changeOrders.document, status: revisions.status, messageId: changeOrders.messageId }).from(changeOrders)
+    .innerJoin(revisions, eq(changeOrders.revisionId, revisions.id)).where(eq(changeOrders.caseId, row.id)).orderBy(asc(revisions.number));
+  return orders.map(({ document, status, messageId }) => ({
+    id: document.id, version: document.version, basedOnVersion: document.basedOnVersion, title: document.title, messageId, issuedAt: document.issuedAt,
+    changeCount: document.changes.length, totalCents: document.totals.totalCents, deltaTotalCents: document.deltaTotalCents, status: changeOrderView(document, status).status,
+    fromCurrentDraft: !!row.draft && document.sourceDraftId === row.draft.id && document.sourceDraftRevision === row.draft.revision,
+  }));
+}
+
 async function snapshot(tx: Transaction, row: CaseRow): Promise<StoredCase> {
   const messages = await tx.select().from(chatMessages).where(eq(chatMessages.caseId, row.id)).orderBy(asc(chatMessages.sequence));
-  return { id: row.id, projectKey: row.projectKey, messages: messages.map(publicMessage), draft: row.draft, activeMessageId: row.activeMessageId, quote: (await currentCaseQuote(tx, row.id, row.projectKey)) ?? undefined, opening: (await readOpening(tx, row)).opening };
+  return { id: row.id, projectKey: row.projectKey, messages: messages.map(publicMessage), draft: row.draft, activeMessageId: row.activeMessageId, quote: (await currentCaseQuote(tx, row.id, row.projectKey)) ?? undefined, opening: (await readOpening(tx, row)).opening, versions: await sentVersions(tx, row) };
 }
 
 async function expireRun(tx: Transaction, row: CaseRow): Promise<CaseRow> {

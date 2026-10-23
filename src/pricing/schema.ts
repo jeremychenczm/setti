@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
-import { chatCases } from "../chat/schema";
+import { check, foreignKey, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { chatCases, chatMessages } from "../chat/schema";
 import { projects, revisions } from "../db/schema";
 import type { DraftProposal, FrozenChangeOrder, PricingInput } from "./types";
 
@@ -40,7 +40,10 @@ export const changeOrders = pgTable("change_orders", {
   contentHash: text("content_hash").notNull(),
   document: jsonb("document").$type<FrozenChangeOrder>().notNull(),
   issuedAt: timestamp("issued_at", { withTimezone: true }).notNull(),
+  /** The designer's chat message that sent this version to the client; null on versions issued before sending moved into the chat. */
+  messageId: uuid("message_id"),
 }, (t) => [
   unique("change_orders_review_version_unique").on(t.reviewId, t.reviewVersion),
+  foreignKey({ name: "change_orders_message_fk", columns: [t.caseId, t.messageId], foreignColumns: [chatMessages.caseId, chatMessages.id] }),
   check("change_orders_review_version_positive", sql`${t.reviewVersion} > 0`),
 ]);

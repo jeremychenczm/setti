@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import { approvals, items, paymentOperations, paypalAuthorizations, paypalCaptures, paypalRefunds, projects, revisionLines, revisions } from "../db/schema";
-import { chatCases } from "../chat/schema";
+import { chatCases, chatMessages } from "../chat/schema";
 import { createChatStore } from "../chat/store";
 import { preapprovedQuote } from "../chat/cases";
 import { signOpeningForTest } from "../opening/testing";
@@ -230,7 +230,15 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
     expect(baselineApprovals).toHaveLength(3);
     expect(baselineApprovals.every((approval) => approval.signature.includes("demo signature"))).toBe(true);
     expect(await handle.db.select().from(approvals).where(eq(approvals.revisionId, first.order.revisionId))).toHaveLength(0);
+    const [order] = await handle.db.select().from(changeOrders);
     expect(await handle.db.select().from(changeOrders)).toHaveLength(1);
+    // Issuing sends: one designer message carries the version into the chat, and the chat shows its card.
+    const sent = (await handle.db.select().from(chatMessages).where(eq(chatMessages.caseId, workspace.caseId))).filter((message) => message.actor === "designer");
+    expect(sent.map((message) => message.id)).toEqual([order.messageId]);
+    expect(sent[0].text).toMatch(/^Hi Emma, here is quote V2: Reviewed chair update\. It changes 1 line, and the new total is \$[\d,.]+ \(\+\$[\d,.]+ against the approved V1\)\. Please review it and confirm\.$/);
+    expect((await createChatStore(handle.db).getCase(sessionId, "maple")).versions).toEqual([expect.objectContaining({
+      id: first.order.id, version: 2, basedOnVersion: 1, messageId: order.messageId, changeCount: 1, status: "awaiting_client_confirmation", fromCurrentDraft: true,
+    })]);
     for (const table of [paymentOperations, paypalAuthorizations, paypalCaptures, paypalRefunds]) {
       expect(await handle.db.select().from(table)).toHaveLength(0);
     }
