@@ -97,99 +97,144 @@ function sum(values: readonly number[]): number {
   return value;
 }
 
+/** What a plan is for: the frozen document (or V1) it funds and its version. */
+interface PlanHeader {
+  orderId: string;
+  contentHash: string;
+  basedOnVersion: number;
+  version: number;
+  quoteDeltaCents: number;
+}
+
+/** The funding groups of a document, and which baseline items it changes. */
+interface Groups {
+  groups: Group[];
+  changedItems: ReadonlySet<string>;
+}
+
+const PREVIEW_NOTICE = "This is a payment plan preview. No authorization, charge, release or refund has been executed.";
+const VENDOR_NOTICE = "Authorization and capture are separate steps. Furniture funding remains subject to vendor confirmation.";
+
 /**
  * Pure, conservative preview. It never calls PayPal or treats approval as payment.
  * The document supplies its frozen baseline; money facts must be mapped to that
  * baseline or the proposed product, rather than to names or row positions.
  */
 export function buildFundingPlan(order: FrozenChangeOrder, facts: FundingFacts): FundingPlan {
+  return planFunding(
+    { orderId: order.id, contentHash: order.contentHash, basedOnVersion: order.basedOnVersion, version: order.version, quoteDeltaCents: order.deltaTotalCents },
+    facts, [PREVIEW_NOTICE, "The quote difference is a budget change, not an amount to pay now.", VENDOR_NOTICE], () => documentGroups(order),
+  );
+}
+
+/** One approved line of a V1 signed line by line. */
+export interface OpeningFundingLine {
+  itemId: string;
+  label: string;
+  category: ItemCategory;
+  targetCents: number;
+}
+
+/**
+ * The same preview for a V1 signed line by line: every approved line is funded
+ * in full under the same furniture and service rules. Declined and undecided
+ * lines are not part of the agreement, so they are never funded.
+ */
+export function buildOpeningPlan(opening: { id: string; contentHash: string }, lines: readonly OpeningFundingLine[], facts: FundingFacts): FundingPlan {
+  return planFunding(
+    { orderId: opening.id, contentHash: opening.contentHash, basedOnVersion: 0, version: 1, quoteDeltaCents: lines.reduce((total, line) => total + line.targetCents, 0) },
+    facts, [PREVIEW_NOTICE, VENDOR_NOTICE],
+    () => ({ groups: lines.map((line) => ({ itemId: line.itemId, side: "baseline", label: line.label, category: line.category, targetCents: line.targetCents, changed: false, change: null })), changedItems: new Set() }),
+  );
+}
+
+/** The funding groups of a frozen change order; throws when its lines and changes cannot be matched exactly. */
+function documentGroups(order: FrozenChangeOrder): Groups {
+  const groups: Group[] = [];
+  const baseline = new Map(order.baselineLines.map((line) => [line.itemId, line]));
+  const proposed = new Map(order.lines.map((line) => [line.itemId, line]));
+  const changes = new Map(order.changes.filter((change) => change.itemId !== null).map((change) => [change.itemId!, change]));
+  if (baseline.size !== order.baselineLines.length || proposed.size !== order.lines.length ||
+      changes.size !== order.changes.filter((change) => change.itemId !== null).length) {
+    throw new Error("The frozen document contains duplicate quote or change identities.");
+  }
+  if (calculateQuoteTotals(order.lines).totalCents !== order.totals.totalCents ||
+      calculateQuoteTotals(order.baselineLines).totalCents !== order.baselineTotals.totalCents ||
+      order.totals.totalCents - order.baselineTotals.totalCents !== order.deltaTotalCents) {
+    throw new Error("The frozen quote totals do not match its line amounts.");
+  }
+
+  const consumed = new Set<string>();
+  for (const before of order.baselineLines) {
+    const change = changes.get(before.itemId);
+    const after = proposed.get(before.itemId);
+    if (!change) {
+      if (!after) throw new Error("An unchanged baseline item is missing from the proposed quote.");
+      groups.push({ itemId: before.itemId, side: "baseline", label: after.name, category: after.category, targetCents: calculateLineTotals(after).totalCents, changed: false, change: null });
+      consumed.add(after.itemId);
+      continue;
+    }
+    const feeId = `old-cost-${order.sourceDraftId}-${change.key}`;
+    const fee = proposed.get(feeId);
+    if (change.oldItemCostCents > 0) {
+      if (!fee || fee.origin !== "old_item_cost" || calculateLineTotals(fee).totalCents !== change.oldItemCostCents) {
+        throw new Error("The reviewed old-item cost cannot be matched to one frozen fee line.");
+      }
+      consumed.add(feeId);
+    } else if (fee) {
+      throw new Error("An unexpected old-item fee line needs review.");
+    }
+    if (change.action === "replace" || change.action === "remove") {
+      groups.push({ itemId: before.itemId, side: "baseline", label: before.name, category: change.oldItemHandling === "retained" ? before.category : "service", targetCents: change.oldItemCostCents, changed: true, change: change.action, handling: change.oldItemHandling });
+      if (change.action === "replace") {
+        if (!after || !change.after) throw new Error("The replacement product is missing from the frozen quote.");
+        groups.push({ itemId: after.itemId, side: "proposed", label: after.name, category: after.category, targetCents: calculateLineTotals(after).totalCents, changed: true, change: "replace" });
+        consumed.add(after.itemId);
+      } else if (after) throw new Error("A removed item still appears in the proposed quote.");
+    } else if (change.action === "quantity") {
+      if (!after) throw new Error("The changed quantity is missing from the frozen quote.");
+      groups.push({ itemId: before.itemId, side: "baseline", label: after.name, category: after.category, targetCents: sum([calculateLineTotals(after).totalCents, change.oldItemCostCents]), changed: true, change: "quantity", handling: change.oldItemHandling });
+      consumed.add(after.itemId);
+    } else {
+      throw new Error("An existing item has an unsupported change type.");
+    }
+  }
+  for (const change of order.changes) {
+    if (change.itemId !== null && !baseline.has(change.itemId)) throw new Error("A change refers to an unknown baseline item.");
+  }
+  for (const line of order.lines) {
+    if (consumed.has(line.itemId)) continue;
+    const addition = order.changes.find((change) => change.action === "add" && change.after?.itemId === line.itemId);
+    if (!addition || baseline.has(line.itemId)) throw new Error("A proposed line cannot be matched to its frozen change.");
+    groups.push({ itemId: line.itemId, side: "proposed", label: line.name, category: line.category, targetCents: calculateLineTotals(line).totalCents, changed: true, change: "add" });
+    consumed.add(line.itemId);
+  }
+  if (sum(groups.map((group) => group.targetCents)) !== order.totals.totalCents) throw new Error("Funding targets do not reconcile to the complete proposed quote.");
+  return { groups, changedItems: new Set(changes.keys()) };
+}
+
+function planFunding(header: PlanHeader, facts: FundingFacts, notices: string[], readGroups: () => Groups): FundingPlan {
   const blockers = [...(facts.blockers ?? [])];
-  const notices = [
-    "This is a payment plan preview. No authorization, charge, release or refund has been executed.",
-    "The quote difference is a budget change, not an amount to pay now.",
-    "Authorization and capture are separate steps. Furniture funding remains subject to vendor confirmation.",
-  ];
   const result: FundingPlan = {
-    orderId: order.id, contentHash: order.contentHash,
-    basedOnVersion: order.basedOnVersion, version: order.version,
-    quoteDeltaCents: order.deltaTotalCents, factsAsOf: facts.checkedAt,
+    ...header, factsAsOf: facts.checkedAt,
     status: facts.status === "no_records" ? "not_authorized" : "preview", executable: false,
     current: { heldCents: 0, capturedCents: 0, refundedCents: 0 },
     money: zeroMoney(), lines: [], actions: [], blockers, notices,
   };
-  const groups: Group[] = [];
   const grouped = new Set<string>();
   const byFact = new Map<string, FundingLineFact>();
-  const addGroup = (group: Group) => {
-    const id = key(group.itemId, group.side);
-    if (grouped.has(id)) throw new Error("The frozen document contains duplicate funding identities.");
-    if (!cents(group.targetCents)) throw new Error("A funding target is not a safe non-negative cent amount.");
-    grouped.add(id); groups.push(group);
-  };
 
   try {
     if (!Number.isFinite(Date.parse(facts.checkedAt))) blockers.push("The funding facts need a valid check time.");
     if (!["no_records", "recorded"].includes(facts.status)) blockers.push("The funding facts status is invalid.");
     if (facts.status === "no_records" && facts.lines.length) blockers.push("Funding records were supplied with a no-records status.");
-    const baseline = new Map(order.baselineLines.map((line) => [line.itemId, line]));
-    const proposed = new Map(order.lines.map((line) => [line.itemId, line]));
-    const changes = new Map(order.changes.filter((change) => change.itemId !== null).map((change) => [change.itemId!, change]));
-    if (baseline.size !== order.baselineLines.length || proposed.size !== order.lines.length ||
-        changes.size !== order.changes.filter((change) => change.itemId !== null).length) {
-      throw new Error("The frozen document contains duplicate quote or change identities.");
+    const { groups, changedItems } = readGroups();
+    for (const group of groups) {
+      const id = key(group.itemId, group.side);
+      if (grouped.has(id)) throw new Error("The frozen document contains duplicate funding identities.");
+      if (!cents(group.targetCents)) throw new Error("A funding target is not a safe non-negative cent amount.");
+      grouped.add(id);
     }
-    if (calculateQuoteTotals(order.lines).totalCents !== order.totals.totalCents ||
-        calculateQuoteTotals(order.baselineLines).totalCents !== order.baselineTotals.totalCents ||
-        order.totals.totalCents - order.baselineTotals.totalCents !== order.deltaTotalCents) {
-      throw new Error("The frozen quote totals do not match its line amounts.");
-    }
-
-    const consumed = new Set<string>();
-    for (const before of order.baselineLines) {
-      const change = changes.get(before.itemId);
-      const after = proposed.get(before.itemId);
-      if (!change) {
-        if (!after) throw new Error("An unchanged baseline item is missing from the proposed quote.");
-        addGroup({ itemId: before.itemId, side: "baseline", label: after.name, category: after.category, targetCents: calculateLineTotals(after).totalCents, changed: false, change: null });
-        consumed.add(after.itemId);
-        continue;
-      }
-      const feeId = `old-cost-${order.sourceDraftId}-${change.key}`;
-      const fee = proposed.get(feeId);
-      if (change.oldItemCostCents > 0) {
-        if (!fee || fee.origin !== "old_item_cost" || calculateLineTotals(fee).totalCents !== change.oldItemCostCents) {
-          throw new Error("The reviewed old-item cost cannot be matched to one frozen fee line.");
-        }
-        consumed.add(feeId);
-      } else if (fee) {
-        throw new Error("An unexpected old-item fee line needs review.");
-      }
-      if (change.action === "replace" || change.action === "remove") {
-        addGroup({ itemId: before.itemId, side: "baseline", label: before.name, category: change.oldItemHandling === "retained" ? before.category : "service", targetCents: change.oldItemCostCents, changed: true, change: change.action, handling: change.oldItemHandling });
-        if (change.action === "replace") {
-          if (!after || !change.after) throw new Error("The replacement product is missing from the frozen quote.");
-          addGroup({ itemId: after.itemId, side: "proposed", label: after.name, category: after.category, targetCents: calculateLineTotals(after).totalCents, changed: true, change: "replace" });
-          consumed.add(after.itemId);
-        } else if (after) throw new Error("A removed item still appears in the proposed quote.");
-      } else if (change.action === "quantity") {
-        if (!after) throw new Error("The changed quantity is missing from the frozen quote.");
-        addGroup({ itemId: before.itemId, side: "baseline", label: after.name, category: after.category, targetCents: sum([calculateLineTotals(after).totalCents, change.oldItemCostCents]), changed: true, change: "quantity", handling: change.oldItemHandling });
-        consumed.add(after.itemId);
-      } else {
-        throw new Error("An existing item has an unsupported change type.");
-      }
-    }
-    for (const change of order.changes) {
-      if (change.itemId !== null && !baseline.has(change.itemId)) throw new Error("A change refers to an unknown baseline item.");
-    }
-    for (const line of order.lines) {
-      if (consumed.has(line.itemId)) continue;
-      const addition = order.changes.find((change) => change.action === "add" && change.after?.itemId === line.itemId);
-      if (!addition || baseline.has(line.itemId)) throw new Error("A proposed line cannot be matched to its frozen change.");
-      addGroup({ itemId: line.itemId, side: "proposed", label: line.name, category: line.category, targetCents: calculateLineTotals(line).totalCents, changed: true, change: "add" });
-      consumed.add(line.itemId);
-    }
-    if (sum(groups.map((group) => group.targetCents)) !== order.totals.totalCents) throw new Error("Funding targets do not reconcile to the complete proposed quote.");
 
     for (const fact of facts.lines) {
       const side = fact.side ?? "baseline";
@@ -225,7 +270,7 @@ export function buildFundingPlan(order: FrozenChangeOrder, facts: FundingFacts):
       const remaining = Math.max(group.targetCents - paid, 0);
       if (paid > group.targetCents) {
         const conditional = ["returned", "cancelled"].includes(group.handling ?? "") && !fact.vendorCreditConfirmed;
-        if (group.handling === "pending" || group.handling === "not_applicable" && group.side === "baseline" && changes.has(group.itemId)) {
+        if (group.handling === "pending" || group.handling === "not_applicable" && group.side === "baseline" && changedItems.has(group.itemId)) {
           throw new Error("A captured item reduction needs a confirmed old-item handling decision.");
         }
         push(group, "refund", paid - group.targetCents, conditional ? "after_vendor_credit" : "on_payment_execution",
@@ -267,4 +312,3 @@ export function buildFundingPlan(order: FrozenChangeOrder, facts: FundingFacts):
   }
   return result;
 }
-

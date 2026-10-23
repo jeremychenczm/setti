@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildFundingPlan, type FundingFacts, type FundingLineFact } from "./funding";
+import { buildFundingPlan, buildOpeningPlan, type FundingFacts, type FundingLineFact } from "./funding";
 import { calculateQuoteTotals } from "../quotes/totals";
 import type { ApprovedQuoteLine } from "../quotes/types";
 import type { FinalQuoteLine, FrozenChangeOrder, OldItemHandling, ReviewedChange } from "../pricing/types";
@@ -211,3 +211,31 @@ describe("buildFundingPlan", () => {
   });
 });
 
+describe("buildOpeningPlan", () => {
+  const lines = [
+    { itemId: "desk", label: "Desk", category: "furniture" as const, targetCents: 110_000 },
+    { itemId: "consultation", label: "Design consultation", category: "service" as const, targetCents: 30_000 },
+  ];
+  const opening = { id: "v1-revision", contentHash: "a".repeat(64) };
+
+  it("holds approved furniture and charges approved services in full", () => {
+    const plan = buildOpeningPlan(opening, lines, facts());
+    expect(plan).toMatchObject({ orderId: "v1-revision", version: 1, basedOnVersion: 0, quoteDeltaCents: 140_000, status: "not_authorized" });
+    expect(plan.actions.map((action) => [action.itemId, action.kind, action.amountCents, action.timing])).toEqual([
+      ["desk", "new_authorization", 110_000, "on_payment_execution"],
+      ["consultation", "capture", 30_000, "on_payment_execution"],
+    ]);
+    expect(plan.notices.join(" ")).not.toMatch(/quote difference/);
+  });
+
+  it("captures a held line only after the supplier confirms, and leaves a paid service alone", () => {
+    const plan = buildOpeningPlan(opening, lines, facts(fact({ itemId: "desk", heldCents: 110_000 }), fact({ itemId: "consultation", capturedCents: 30_000 })));
+    expect(plan.actions.map((action) => [action.itemId, action.kind, action.timing])).toEqual([["desk", "capture", "after_vendor_confirmation"]]);
+  });
+
+  it("blocks money it cannot attribute to an approved line", () => {
+    const plan = buildOpeningPlan(opening, lines, facts(fact({ itemId: "sofa", heldCents: 50_000 })));
+    expect(plan.status).toBe("blocked");
+    expect(plan.blockers).toContain("A funding record cannot be attributed to this frozen quote.");
+  });
+});

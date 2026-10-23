@@ -74,6 +74,15 @@ export async function fundingFacts(db: Reader, document: FrozenChangeOrder, case
 }
 
 export function fundingFactsFrom(document: FrozenChangeOrder, itemMapping: Record<string, string>, ledger: ProjectLedger, now = new Date()): FundingFacts {
+  const mapped = fundingIdentities(document, itemMapping);
+  return ledgerFacts(mapped.byBusiness, mapped.blockers, ledger, document.id, now);
+}
+
+/**
+ * Settled ledger facts for the business items of one document (or V1), keyed by
+ * their funding identity. Supplier credits count only when recorded for `creditOrderId`.
+ */
+export function ledgerFacts(identities: ReadonlyMap<string, FundingIdentity>, identityBlockers: readonly string[], ledger: ProjectLedger, creditOrderId: string | null, now = new Date()): FundingFacts {
   const checkedAt = now.toISOString();
   const { authorizations, captures, operations } = ledger;
   const refunds = ledger.refunds.map((refund) => ({ refund }));
@@ -81,10 +90,7 @@ export function fundingFactsFrom(document: FrozenChangeOrder, itemMapping: Recor
   if (operations.some((operation) => operation.status === "pending" || operation.status === "unknown")) blockers.push("A payment operation is pending or has an unknown outcome. Reconcile it before preparing executable amounts.");
   if (captures.some((capture) => capture.status === "pending")) blockers.push("A capture is pending. Its outcome must be reconciled before calculating settled funds.");
   if (refunds.some(({ refund }) => refund.status === "pending")) blockers.push("A refund is pending. Do not promise another refund or charge until it is reconciled.");
-
-  const mapped = fundingIdentities(document, itemMapping);
-  const identities = mapped.byBusiness;
-  blockers.push(...mapped.blockers);
+  blockers.push(...identityBlockers);
 
   const facts = new Map<string, FundingLineFact>();
   const authorizationIds = new Set(authorizations.map((authorization) => authorization.id));
@@ -104,7 +110,7 @@ export function fundingFactsFrom(document: FrozenChangeOrder, itemMapping: Recor
       continue;
     }
     const key = `${identity.side}:${identity.itemId}`;
-    const credited = ledger.supplierEvents.some((event) => event.kind === "credit_confirmed" && event.changeOrderId === document.id && event.itemId === authorization.itemId);
+    const credited = ledger.supplierEvents.some((event) => event.kind === "credit_confirmed" && event.changeOrderId === creditOrderId && event.itemId === authorization.itemId);
     const fact = facts.get(key) ?? { ...identity, heldCents: 0, capturedCents: 0, refundedCents: 0, ...(credited ? { vendorCreditConfirmed: true } : {}) };
     fact.heldCents += heldCents; fact.capturedCents += capturedCents; fact.refundedCents += refundedCents;
     if (authorization.reauthorizedFromId && authorizations.some((old) => old.id === authorization.reauthorizedFromId && ["created", "partially_captured"].includes(old.status))) {
