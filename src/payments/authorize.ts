@@ -6,16 +6,17 @@
  * Whether the buyer approved is always read from PayPal (the order status),
  * never taken from the browser coming back, and a hold is recorded only from a
  * verified receipt: the operation's order, its custom id, the exact amount in
- * USD and a usable status.
+ * USD and a usable status. A checkout may also save the buyer's PayPal for the
+ * project's later holds; the token PayPal returns is stored with the hold.
  */
 import { eq } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { paymentOperations, paypalAuthorizations } from "../db/schema";
+import { paymentOperations, paypalAuthorizations, savedPaymentMethods } from "../db/schema";
 import { HONOR_PERIOD_DAYS } from "../money/authorization";
 import { noteInCase } from "./notes";
 import { claimOperation, recordCall, recordFailure, updateOperation, type PaymentOperation } from "./operations";
-import type { AuthorizationReceipt, OrderReceipt, PayPalPayments, PayPalResult } from "./paypal";
-import { formatCents, verifyAuthorization, type VerifiedAuthorization } from "./receipts";
+import type { AuthorizationReceipt, OrderReceipt, PayPalPayments, PayPalResult, SavedPayPalReceipt } from "./paypal";
+import { formatCents, holdStatus, verifyAuthorization, type VerifiedAuthorization } from "./receipts";
 
 const DAY_MS = 86_400_000;
 
@@ -27,15 +28,19 @@ export interface CheckoutLinks {
 export interface CheckoutDetails {
   /** What the buyer sees on PayPal, for example "Willow Residence · BERGMUND Chair · V3". */
   description: string;
+  /** What the buyer agrees to when the checkout also saves PayPal for the project. */
+  savePayPalDescription?: string;
 }
 
 /** Creates the PayPal order for an authorization operation, once; later calls return the same order. */
 export async function createCheckout(db: Db, paypal: PayPalPayments, operation: PaymentOperation, links: CheckoutLinks, details: CheckoutDetails): Promise<PaymentOperation> {
-  if (operation.kind !== "authorize") throw new Error(`Payment operation ${operation.id} is not an authorization`);
+  if (operation.kind !== "authorize" || operation.savedMethodId) throw new Error(`Payment operation ${operation.id} is not a checkout`);
+  if (operation.savePaymentMethod && !details.savePayPalDescription) throw new Error(`Checkout ${operation.id} saves PayPal but tells the buyer nothing about it`);
   if (operation.paypalOrderId || operation.status === "succeeded" || operation.status === "failed") return operation;
   const result = await paypal.createOrder({
     requestId: `${operation.requestId}-order`, amountCents: operation.amountCents, referenceId: operation.itemId!,
     customId: operation.id, invoiceId: `setti-${operation.id}`, description: details.description, ...links,
+    ...(operation.savePaymentMethod ? { savePayPal: { description: details.savePayPalDescription! } } : {}),
   });
   await logOrder(db, operation, "create_order", `${operation.requestId}-order`, result);
   if (result.kind !== "ok") {
@@ -86,6 +91,7 @@ export async function completeAuthorization(db: Db, paypal: PayPalPayments, oper
   const claim = await claimOperation(db, operationId, "authorize");
   if (claim.finished) return { operation: claim.operation, state: claim.operation.status === "succeeded" ? "authorized" : "failed" };
   const { operation } = claim;
+  if (operation.savedMethodId) throw new Error(`Payment operation ${operation.id} is a saved-PayPal hold, not a checkout`);
   if (!operation.paypalOrderId) return { operation, state: operation.status === "unknown" ? "unknown" : "awaiting_buyer" };
 
   // A hold PayPal is still reviewing is read back by its id.
@@ -93,6 +99,12 @@ export async function completeAuthorization(db: Db, paypal: PayPalPayments, oper
     const read = await paypal.getAuthorization(operation.paypalResourceId);
     await logHold(db, operation, read);
     if (read.kind !== "ok") return { operation: await updateOperation(db, operation.id, { failureMessage: `PayPal could not be reached to check the hold: ${read.message}` }), state: "unknown" };
+    // Only the order says whether PayPal was saved.
+    if (operation.savePaymentMethod && holdStatus(read.value.status) === "created") {
+      const order = await paypal.getOrder(operation.paypalOrderId);
+      await logOrder(db, operation, "get_order", null, order);
+      return settle(db, operation, read.value, order.kind === "ok" ? order.value.savedPayPal : undefined);
+    }
     return settle(db, operation, read.value);
   }
 
@@ -117,7 +129,7 @@ export async function completeAuthorization(db: Db, paypal: PayPalPayments, oper
     case "VOIDED":
       return fail(db, operation, "ORDER_VOIDED", "PayPal voided this checkout before it was authorized; nothing is held.");
     case "COMPLETED":
-      if (order.authorization) return settle(db, operation, order.authorization);
+      if (order.authorization) return settle(db, operation, order.authorization, order.savedPayPal);
       return { operation: await updateOperation(db, operation.id, { status: "unknown", failureCode: "RECEIPT_INCOMPLETE", failureMessage: "PayPal reports the checkout completed but returned no authorization." }), state: "unknown" };
     case "APPROVED":
       break;
@@ -132,14 +144,16 @@ export async function completeAuthorization(db: Db, paypal: PayPalPayments, oper
     return { operation: await recordFailure(db, operation.id, authorized), state: authorized.kind === "retryable" ? "awaiting_buyer" : "unknown" };
   }
   let receipt = authorized.value.authorization;
+  let saved = authorized.value.savedPayPal;
   if (!receipt?.paypalAuthorizationId || receipt.amountCents === undefined || !receipt.status) {
     // A minimal answer: read the order back for its authorization.
     const reread = await paypal.getOrder(operation.paypalOrderId);
     await logOrder(db, operation, "get_order", null, reread);
     receipt = reread.kind === "ok" ? reread.value.authorization ?? receipt : receipt;
+    saved = reread.kind === "ok" ? reread.value.savedPayPal ?? saved : saved;
   }
   if (!receipt) return { operation: await updateOperation(db, operation.id, { status: "unknown", failureCode: "RECEIPT_INCOMPLETE", failureMessage: "PayPal authorized the order without returning the authorization." }), state: "unknown" };
-  return settle(db, operation, receipt);
+  return settle(db, operation, receipt, saved);
 }
 
 /**
@@ -168,7 +182,8 @@ export async function cancelCheckout(db: Db, paypal: PayPalPayments, operationId
   return checkoutResult(await updateUnsettledCheckout(db, current.id, { status: "pending", failureCode: "CHECKOUT_CANCEL_REQUESTED", failureMessage: "You left PayPal. This checkout remains available to continue or check; an approval from another window will still be recorded. Start no replacement while this checkout is open." }), "cancelled");
 }
 
-async function settle(db: Db, operation: PaymentOperation, receipt: AuthorizationReceipt): Promise<{ operation: PaymentOperation; state: CheckoutState }> {
+/** Records a verified hold, or explains why it cannot be recorded yet. Holds placed with saved PayPal settle the same way. */
+export async function settle(db: Db, operation: PaymentOperation, receipt: AuthorizationReceipt, saved?: SavedPayPalReceipt): Promise<{ operation: PaymentOperation; state: CheckoutState }> {
   const verified = verifyAuthorization(receipt, { amountCents: operation.amountCents, orderId: operation.paypalOrderId!, customId: operation.id });
   if (!verified.ok) {
     return {
@@ -186,10 +201,10 @@ async function settle(db: Db, operation: PaymentOperation, receipt: Authorizatio
   if (hold.status !== "created") {
     return { operation: await updateOperation(db, operation.id, { status: "unknown", paypalResourceId: hold.paypalAuthorizationId, failureCode: "RECEIPT_MISMATCH", failureMessage: `A new authorization should be CREATED; PayPal reports ${receipt.status}.` }), state: "unknown" };
   }
-  return { operation: await recordHold(db, operation, hold), state: "authorized" };
+  return { operation: await recordHold(db, operation, hold, saved), state: "authorized" };
 }
 
-async function recordHold(db: Db, operation: PaymentOperation, hold: VerifiedAuthorization): Promise<PaymentOperation> {
+async function recordHold(db: Db, operation: PaymentOperation, hold: VerifiedAuthorization, saved?: SavedPayPalReceipt): Promise<PaymentOperation> {
   return db.transaction(async (tx) => {
     const [locked] = await tx.select().from(paymentOperations).where(eq(paymentOperations.id, operation.id)).for("update");
     if (locked.status === "succeeded") return locked;
@@ -201,11 +216,19 @@ async function recordHold(db: Db, operation: PaymentOperation, hold: VerifiedAut
         honorExpiresAt: hold.createdAt ? new Date(hold.createdAt.getTime() + HONOR_PERIOD_DAYS * DAY_MS) : null, expiresAt: hold.expiresAt,
         changeOrderId: operation.changeOrderId, operationId: operation.id,
       });
-      await noteInCase(tx, operation, ({ version, itemName }) => `PayPal Sandbox authorization recorded for V${version} · ${itemName}: ${formatCents(operation.amountCents)} USD is held (authorization ${hold.paypalAuthorizationId}, order ${operation.paypalOrderId}). Nothing has been charged; capture waits for the supplier confirmation.`);
     }
     const [done] = await tx.update(paymentOperations)
       .set({ status: "succeeded", paypalResourceId: hold.paypalAuthorizationId, failureCode: null, failureMessage: null, updatedAt: new Date() })
       .where(eq(paymentOperations.id, operation.id)).returning();
+    // A project keeps the first PayPal it saved; the database accepts one only from this succeeded checkout.
+    const stored = operation.savePaymentMethod && saved?.status === "VAULTED" && saved.tokenId
+      ? await tx.insert(savedPaymentMethods).values({ projectId: operation.projectId, sourceOperationId: operation.id, paypalTokenId: saved.tokenId }).onConflictDoNothing().returning({ id: savedPaymentMethods.id })
+      : [];
+    if (!existing) {
+      const how = operation.savedMethodId ? " with the client's saved PayPal" : "";
+      const savedNote = stored.length ? " The client saved PayPal for this project's later holds." : "";
+      await noteInCase(tx, operation, ({ version, itemName }) => `PayPal Sandbox authorization recorded${how} for V${version} · ${itemName}: ${formatCents(operation.amountCents)} USD is held (authorization ${hold.paypalAuthorizationId}, order ${operation.paypalOrderId}). Nothing has been charged; capture waits for the supplier confirmation.${savedNote}`);
+    }
     return done;
   });
 }
@@ -214,15 +237,16 @@ async function fail(db: Db, operation: PaymentOperation, code: string, message: 
   return { operation: await updateOperation(db, operation.id, { status: "failed", failureCode: code, failureMessage: message }), state: "failed" };
 }
 
-function logOrder(db: Db, operation: PaymentOperation, step: "create_order" | "get_order" | "authorize_order", requestId: string | null, result: PayPalResult<OrderReceipt>) {
+/** Order evidence: whether PayPal saved the buyer's PayPal is kept, the saved token never is. */
+export function logOrder(db: Db, operation: PaymentOperation, step: "create_order" | "get_order" | "authorize_order", requestId: string | null, result: PayPalResult<OrderReceipt>) {
   const order = result.kind === "ok" ? result.value : undefined;
   return recordCall(db, operation.id, step, requestId, result, order && {
     resourceId: order.orderId, status: order.status, amountCents: order.amountCents, currency: order.currency,
-    details: { authorizationId: order.authorization?.paypalAuthorizationId, authorizationStatus: order.authorization?.status, expirationTime: order.authorization?.expirationTime },
+    details: { authorizationId: order.authorization?.paypalAuthorizationId, authorizationStatus: order.authorization?.status, expirationTime: order.authorization?.expirationTime, savedPayPal: order.savedPayPal?.status },
   });
 }
 
-function logHold(db: Db, operation: PaymentOperation, result: PayPalResult<AuthorizationReceipt>) {
+export function logHold(db: Db, operation: PaymentOperation, result: PayPalResult<AuthorizationReceipt>) {
   const hold = result.kind === "ok" ? result.value : undefined;
   return recordCall(db, operation.id, "get_authorization", null, result, hold && {
     resourceId: hold.paypalAuthorizationId, status: hold.status, amountCents: hold.amountCents, currency: hold.currency,

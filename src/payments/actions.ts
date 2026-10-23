@@ -10,12 +10,13 @@ import type { Db } from "../db/client";
 import { items, paymentOperations, paypalCaptures, paypalRefunds } from "../db/schema";
 import type { ProjectLedger } from "../approval/store";
 import { changeOrders } from "../pricing/schema";
-import { cancelCheckout, completeAuthorization, createCheckout, type CheckoutLinks } from "./authorize";
+import { cancelCheckout, completeAuthorization, createCheckout, type CheckoutDetails, type CheckoutLinks } from "./authorize";
 import { businessItem, confirmedPlan, lockConfirmedVersion, PaymentActionError, type LineRef, type ShownVersion } from "./binding";
 import { executeCapture, refreshCapture } from "./capture";
 import { insertOperation, type PaymentOperation } from "./operations";
 import type { PayPalPayments } from "./paypal";
 import { executeRefund, refreshRefund } from "./refund";
+import { executeSavedHold } from "./saved-hold";
 import { executeVoid } from "./void";
 
 export type { LineRef } from "./binding";
@@ -23,11 +24,15 @@ export type { LineRef } from "./binding";
 /** Builds the PayPal return and cancel links for an operation. */
 export type LinkBuilder = (operationId: string) => CheckoutLinks;
 
-/** What the buyer sees on PayPal for an authorization. */
-async function checkoutDescription(db: Pick<Db, "select">, operation: PaymentOperation): Promise<string> {
+/** What the buyer sees on PayPal for an authorization, and what saving PayPal for the project means. */
+async function checkoutDetails(db: Pick<Db, "select">, operation: PaymentOperation): Promise<CheckoutDetails> {
   const [order] = await db.select({ document: changeOrders.document }).from(changeOrders).where(eq(changeOrders.id, operation.changeOrderId!));
   const [item] = await db.select({ name: items.name }).from(items).where(eq(items.id, operation.itemId!));
-  return `${order.document.projectName} · ${item.name} · V${order.document.version} (Setti sandbox demo)`;
+  const { projectName, version } = order.document;
+  return {
+    description: `${projectName} · ${item.name} · V${version} (Setti sandbox demo)`,
+    ...(operation.savePaymentMethod ? { savePayPalDescription: `Setti · ${projectName}: holds for the items you approve (sandbox demo)` } : {}),
+  };
 }
 
 /**
@@ -51,7 +56,7 @@ export async function startAuthorization(db: Db, paypal: PayPalPayments, session
     const prefix = `authorize:${version.order.id}:${itemId}:`;
     return insertOperation(tx, { businessKey: `${prefix}${attempt(ledger, "authorize", prefix)}`, projectId: version.projectId, kind: "authorize", amountCents: action.amountCents, binding: version.bind(itemId) });
   });
-  return createCheckout(db, paypal, operation, links(operation.id), { description: await checkoutDescription(db, operation) });
+  return createCheckout(db, paypal, operation, links(operation.id), await checkoutDetails(db, operation));
 }
 
 /** Holds of one business item that can still be captured or voided, oldest first, with what each still holds. */
@@ -211,8 +216,9 @@ export async function checkPayment(db: Db, paypal: PayPalPayments, sessionId: st
   const operation = await ownedOperation(db, sessionId, orderId, operationId);
   switch (operation.kind) {
     case "authorize":
+      if (operation.savedMethodId) return executeSavedHold(db, paypal, operation.id, await checkoutDetails(db, operation));
       if (!operation.paypalOrderId && (operation.status === "pending" || operation.status === "unknown")) {
-        return createCheckout(db, paypal, operation, links(operation.id), { description: await checkoutDescription(db, operation) });
+        return createCheckout(db, paypal, operation, links(operation.id), await checkoutDetails(db, operation));
       }
       return (await completeAuthorization(db, paypal, operation.id)).operation;
     case "capture": {
@@ -238,7 +244,7 @@ export async function checkPayment(db: Db, paypal: PayPalPayments, sessionId: st
 /** The client or studio abandons an open checkout; PayPal is asked first so an approval is never lost. */
 export async function cancelPayment(db: Db, paypal: PayPalPayments, sessionId: string, orderId: string, operationId: string): Promise<PaymentOperation> {
   const operation = await ownedOperation(db, sessionId, orderId, operationId);
-  if (operation.kind !== "authorize") throw new PaymentActionError("NOT_AVAILABLE", "Only an open PayPal checkout can be cancelled.");
+  if (operation.kind !== "authorize" || operation.savedMethodId) throw new PaymentActionError("NOT_AVAILABLE", "Only an open PayPal checkout can be cancelled.");
   return (await cancelCheckout(db, paypal, operation.id)).operation;
 }
 
@@ -254,7 +260,7 @@ export async function operationChangeOrder(db: Pick<Db, "select">, operationId: 
  */
 export async function returnFromPayPal(db: Db, paypal: PayPalPayments, operationId: string, token: string | null, outcome: "return" | "cancel") {
   const [operation] = await db.select().from(paymentOperations).where(eq(paymentOperations.id, operationId));
-  if (!operation || operation.kind !== "authorize" || !operation.paypalOrderId || operation.paypalOrderId !== token) return null;
+  if (!operation || operation.kind !== "authorize" || operation.savedMethodId || !operation.paypalOrderId || operation.paypalOrderId !== token) return null;
   const result = outcome === "return" ? await completeAuthorization(db, paypal, operation.id) : await cancelCheckout(db, paypal, operation.id);
   return { orderId: operation.changeOrderId!, state: result.state };
 }
