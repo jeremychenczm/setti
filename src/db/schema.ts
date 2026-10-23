@@ -149,6 +149,8 @@ export const paypalCaptures = pgTable(
       .notNull()
       .references(() => projects.id),
     authorizationId: uuid("authorization_id").references(() => paypalAuthorizations.id),
+    /** The design service a capture from the design-services hold pays for; empty for a capture from an item's own hold. */
+    itemId: uuid("item_id").references((): AnyPgColumn => items.id),
     paypalCaptureId: text("paypal_capture_id").notNull().unique(),
     amountCents: integer("amount_cents").notNull(),
     currency: text("currency").notNull().default("USD"),
@@ -230,6 +232,8 @@ export const paymentOperations = pgTable(
     supplierEventId: uuid("supplier_event_id").references((): AnyPgColumn => supplierEvents.id),
     /** A checkout that also asks PayPal to save the client's PayPal for this project's later holds. */
     savePaymentMethod: boolean("save_payment_method").notNull().default(false),
+    /** One checkout that holds every approved design service at once; each service is captured from it (see services_hold_lines). */
+    servicesHold: boolean("services_hold").notNull().default(false),
     /** A hold placed with the project's saved PayPal: no checkout, no buyer on PayPal. */
     savedMethodId: uuid("saved_method_id").references((): AnyPgColumn => savedPaymentMethods.id),
     requestId: text("request_id").notNull().unique(),
@@ -252,10 +256,10 @@ export const paymentOperations = pgTable(
     check("payment_operations_authorize_is_bound", sql`${t.kind} <> 'authorize' OR ${t.revisionId} IS NOT NULL`),
     check("payment_operations_save_on_checkout", sql`NOT ${t.savePaymentMethod} OR (${t.kind} = 'authorize' AND ${t.savedMethodId} IS NULL)`),
     check("payment_operations_saved_method_holds", sql`${t.savedMethodId} IS NULL OR (${t.kind} = 'authorize' AND ${t.approvalUrl} IS NULL)`),
-    check("payment_operations_capture_after_supplier",sql`${t.kind} <> 'capture' OR ${t.changeOrderId} IS NULL OR ${t.supplierEventId} IS NOT NULL`),
+    check("payment_operations_services_hold", sql`NOT ${t.servicesHold} OR (${t.kind} = 'authorize' AND ${t.itemId} IS NULL AND ${t.savedMethodId} IS NULL AND ${t.revisionId} IS NOT NULL)`),
     check(
       "payment_operations_binding_complete",
-      sql`(${t.changeOrderId} IS NULL AND ${t.revisionId} IS NULL AND ${t.contentHash} IS NULL AND ${t.revisionContentHash} IS NULL) OR (${t.revisionId} IS NOT NULL AND ${t.contentHash} IS NOT NULL AND ${t.revisionContentHash} IS NOT NULL AND ${t.itemId} IS NOT NULL)`,
+      sql`(${t.changeOrderId} IS NULL AND ${t.revisionId} IS NULL AND ${t.contentHash} IS NULL AND ${t.revisionContentHash} IS NULL) OR (${t.revisionId} IS NOT NULL AND ${t.contentHash} IS NOT NULL AND ${t.revisionContentHash} IS NOT NULL AND (${t.itemId} IS NOT NULL OR ${t.servicesHold}))`,
     ),
   ],
 );
@@ -294,6 +298,6 @@ export const approvals = pgTable(
 export { chatCases, chatMessages } from "../chat/schema";
 export { pricingCases, pricingReviews, changeOrders } from "../pricing/schema";
 export { changeOrderDecisions } from "../approval/schema";
-export { paypalCalls, savedPaymentMethods, supplierEvents } from "../payments/schema";
+export { paypalCalls, savedPaymentMethods, servicesHoldLines, supplierEvents } from "../payments/schema";
 export { trySeeds } from "../try/schema";
 export { openingQuotes, openingWithdrawals } from "../opening/schema";

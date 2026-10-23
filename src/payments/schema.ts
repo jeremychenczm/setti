@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { items, paymentOperations, projects } from "../db/schema";
 import { changeOrders } from "../pricing/schema";
 
@@ -63,7 +63,21 @@ export const savedPaymentMethods = pgTable("saved_payment_methods", {
   check("saved_payment_methods_token", sql`length(btrim(${t.paypalTokenId})) > 0`),
 ]);
 
-export type PayPalStep ="create_order" | "get_order" | "authorize_order" | "get_authorization" | "capture" | "get_capture" | "void" | "refund" | "get_refund";
+/**
+ * How a design-services hold is split across the approved service lines it pays
+ * for, written together with the hold's operation. Each line is captured from
+ * the hold separately, up to its amount. A record: never changed or deleted.
+ */
+export const servicesHoldLines = pgTable("services_hold_lines", {
+  operationId: uuid("operation_id").notNull().references(() => paymentOperations.id),
+  itemId: uuid("item_id").notNull().references(() => items.id),
+  amountCents: integer("amount_cents").notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.operationId, t.itemId] }),
+  check("services_hold_lines_amount", sql`${t.amountCents} > 0`),
+]);
+
+export type PayPalStep = "create_order" | "get_order" | "authorize_order" | "get_authorization" | "capture" | "get_capture" | "void" | "refund" | "get_refund";
 
 /**
  * Every PayPal call made for an operation, append-only: the receipt evidence

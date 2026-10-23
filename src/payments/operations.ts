@@ -34,8 +34,8 @@ export interface OperationBinding {
   revisionId: string;
   contentHash: string;
   revisionContentHash: string;
-  /** Business item UUID; a replacement keeps the quote's item id but is a different business item. */
-  itemId: string;
+  /** Business item UUID; a replacement keeps the quote's item id but is a different business item. Null only for the design-services hold. */
+  itemId: string | null;
 }
 
 export interface OperationRequest {
@@ -54,6 +54,8 @@ export interface OperationRequest {
   savePaymentMethod?: boolean;
   /** A hold placed with the project's saved PayPal instead of a checkout. */
   savedMethodId?: string | null;
+  /** The one checkout that holds every approved design service; its split is written separately. */
+  servicesHold?: boolean;
 }
 
 /** A new operation id and the request id every attempt of it sends to PayPal. */
@@ -75,7 +77,8 @@ function sameRequest(operation: PaymentOperation, request: OperationRequest): Pa
     && operation.changeOrderId === (binding?.changeOrderId ?? null) && operation.revisionId === (binding?.revisionId ?? null)
     && operation.contentHash === (binding?.contentHash ?? null) && operation.revisionContentHash === (binding?.revisionContentHash ?? null)
     && operation.itemId === (binding?.itemId ?? null) && operation.supplierEventId === (request.supplierEventId ?? null)
-    && operation.savePaymentMethod === (request.savePaymentMethod ?? false) && operation.savedMethodId === (request.savedMethodId ?? null);
+    && operation.savePaymentMethod === (request.savePaymentMethod ?? false) && operation.savedMethodId === (request.savedMethodId ?? null)
+    && operation.servicesHold === (request.servicesHold ?? false);
   if (!same) throw new PaymentOperationError("IDEMPOTENCY_CONFLICT", "This business event already has a payment operation with different details.");
   return operation;
 }
@@ -109,6 +112,7 @@ export async function insertOperation(db: Writer, request: OperationRequest): Pr
       supplierEventId: request.supplierEventId ?? null,
       savePaymentMethod: request.savePaymentMethod ?? false,
       savedMethodId: request.savedMethodId ?? null,
+      servicesHold: request.servicesHold ?? false,
     }).onConflictDoNothing({ target: paymentOperations.businessKey }).returning();
   } catch (error) {
     throw new PaymentOperationError("OPERATION_REFUSED", databaseMessage(error));

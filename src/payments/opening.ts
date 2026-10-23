@@ -32,8 +32,8 @@ export interface OpeningVersion {
   revisionContentHash: string;
   /** The approved lines, each with its business item UUID. */
   approved: { line: QuoteLine; itemId: string }[];
-  /** The binding an operation for this business item carries. */
-  bind(itemId: string): OperationBinding;
+  /** The binding an operation for this business item carries (none for the design-services hold). */
+  bind(itemId: string | null): OperationBinding;
 }
 
 /** Locks the case and loads its open V1. `shown` is the V1 hash the caller saw, when it acts on what it showed. */

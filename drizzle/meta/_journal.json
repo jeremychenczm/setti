@@ -169,6 +169,13 @@
       "when": 1792795342020,
       "tag": "0023_opening_payment_binding",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1792796316353,
+      "tag": "0024_design_services_hold",
+      "breakpoints": true
     }
   ]
 }

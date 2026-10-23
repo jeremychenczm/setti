@@ -38,8 +38,8 @@ export interface ConfirmedVersion {
   projectId: string;
   /** Quote line identity key → business item UUID, from the case's business project. */
   itemMapping: Record<string, string>;
-  /** The binding an operation for this business item carries. */
-  bind(itemId: string): OperationBinding;
+  /** The binding an operation for this business item carries (none for the design-services hold). */
+  bind(itemId: string | null): OperationBinding;
 }
 
 /** Hashes the caller saw; both must still describe the frozen document. */
