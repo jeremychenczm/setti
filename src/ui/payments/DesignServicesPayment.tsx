@@ -28,7 +28,7 @@ async function request(key: CaseKey, body?: Body): Promise<Reply> {
  * that agreement's page: the quote while V1 stands (`orderId` null), otherwise
  * the latest confirmed version.
  */
-export function DesignServicesPayment({ projectKey, orderId }: { projectKey: CaseKey; orderId: string | null }) {
+export function DesignServicesPayment({ projectKey, orderId, onPaid }: { projectKey: CaseKey; orderId: string | null; onPaid?: () => void }) {
   const [view, setView] = useState<ServicesPaymentView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +47,7 @@ export function DesignServicesPayment({ projectKey, orderId }: { projectKey: Cas
       const reply = await request(projectKey, body);
       setView(reply.view);
       setNotice(done?.(reply.view) ?? null);
+      if ((body.action === "approve" || body.action === "charge") && reply.view.dueCents === 0) onPaid?.();
       return reply;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The payment step did not finish. Reload to see what PayPal recorded.");

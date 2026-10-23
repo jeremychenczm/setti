@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ApprovalWorkspace } from "@/approval/types";
 import type { FinalQuoteLine, OldItemHandling } from "@/pricing/types";
 import { calculateLineTotals } from "@/quotes/totals";
-import { DesignServicesPayment } from "../payments/DesignServicesPayment";
+import { ProjectPayments } from "../payments/ProjectPayments";
 import { PaymentsPanel } from "../payments/PaymentsPanel";
 import { ApprovalPanel, isApprovalWorkspace } from "./ApprovalPanel";
 import { changeOrderStatusClass, changeOrderStatusLabel } from "./changeOrderStatus";
@@ -65,7 +65,7 @@ export function ChangeOrderPage({ orderId }: { orderId: string }) {
 
       <section className="mb-5 grid gap-4 rounded-xl bg-white p-5 shadow-sm lg:grid-cols-2"><div><h2 className="mb-2 text-[14px] font-semibold">Client terms</h2><p className="whitespace-pre-wrap text-[12px] leading-relaxed text-slate-600">{order.terms}</p></div><div><h2 className="mb-2 text-[14px] font-semibold">Designer review notes</h2><p className="whitespace-pre-wrap text-[12px] leading-relaxed text-slate-600">{order.reviewNotes || "No additional notes."}</p></div></section>
       {workspace && <ApprovalPanel key={order.id} workspace={workspace} loading={loading} onChange={setWorkspace} onBusyChange={setApprovalBusy} />}
-      {view?.decision?.decision === "approved" && <div className="mb-5"><DesignServicesPayment projectKey={order.projectKey} orderId={order.id} /></div>}
+      {view?.decision?.decision === "approved" && <div className="mb-5"><ProjectPayments projectKey={order.projectKey} orderId={order.id} /></div>}
       {view?.decision?.decision === "approved" && <PaymentsPanel key={`payments-${order.id}`} order={order} />}
       {order.constraints.length > 0 && <section className="mb-5 rounded-xl border border-blue-100 bg-blue-50 p-5 text-[12px] leading-relaxed text-blue-900"><h2 className="mb-2 font-semibold">Instructions preserved from the discussion</h2><ul className="list-disc space-y-1 pl-4">{order.constraints.map((constraint, index) => <li key={index}>{constraint}</li>)}</ul></section>}
       {order.issues.length > 0 && <details className="mb-5 rounded-xl bg-white p-5 shadow-sm"><summary className="cursor-pointer text-[14px] font-semibold">Designer checks and resolutions · {order.issues.length}</summary><ul className="mt-4 space-y-3 text-[12px] leading-relaxed">{order.issues.map((issue) => <li key={issue.id} className="rounded-lg bg-slate-50 p-3"><p className="font-medium">{issue.label}</p><p className="mt-1 whitespace-pre-wrap text-slate-600">{issue.note}</p></li>)}</ul></details>}
