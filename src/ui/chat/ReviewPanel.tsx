@@ -3,7 +3,7 @@
 import { Check, ClipboardCheck, LoaderCircle, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { CaseKey, CaseMessage, ChangeDraft } from "@/chat/types";
-import { reviewSummary, type ReviewLine, type ReviewSummary } from "@/pricing/review-diff";
+import { reviewSummary, type CarriedSummary, type ReviewLine, type ReviewSummary } from "@/pricing/review-diff";
 import type { PricingWorkspace } from "@/pricing/types";
 import { FromV1Note } from "../pricing/common";
 import { DraftCard } from "./DraftCard";
@@ -13,6 +13,20 @@ const KIND_LABELS: Record<ReviewLine["kind"], string> = { revised: "Revised from
 function signed(cents: number): string {
   const amount = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Math.abs(cents) / 100);
   return cents < 0 ? `−${amount}` : `+${amount}`;
+}
+
+/** What happened to the saved review when the draft changed under it. */
+function CarriedNote({ carried }: { carried: CarriedSummary }) {
+  const rows: [string, string[]][] = [["Needs your choice", carried.conflicts], ["Updated from the draft", carried.updated], ["Your edits kept", carried.kept], ["New in the draft", carried.added], ["No longer in the draft", carried.removed]];
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-[11px] leading-relaxed text-amber-950">
+      <p className="font-semibold">The draft changed after your saved review</p>
+      <p className="mt-0.5 text-amber-900">Your review was carried onto it. Fields only the draft changed take its values; fields you edited keep yours.</p>
+      <dl className="mt-2 space-y-1">{rows.filter(([, names]) => names.length).map(([label, names]) => (
+        <div key={label} className="grid grid-cols-[120px_1fr] gap-2"><dt className="text-amber-800">{label}</dt><dd className="min-w-0 break-words font-medium">{names.join(", ")}</dd></div>
+      ))}</dl>
+    </div>
+  );
 }
 
 const usd = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -55,13 +69,15 @@ export function ReviewPanel({ projectKey, draft, messages, onSourceMessage, canP
     <article className="space-y-4 p-4 text-[12px]">
       <div>
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px]">
-          <span className={`rounded-full px-2.5 py-1 font-medium ${summary.ready ? "bg-emerald-50 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{summary.ready ? "Ready to generate the client version" : "Checks still open"}</span>
-          <span className="text-[var(--muted)]">Saved review {summary.version} · {summary.confirmed} of {summary.lines.length} lines checked</span>
+          <span className={`rounded-full px-2.5 py-1 font-medium ${summary.ready ? "bg-emerald-50 text-emerald-700" : "bg-amber-100 text-amber-800"}`}>{summary.carried ? "Not saved on the updated draft" : summary.ready ? "Ready to generate the client version" : "Checks still open"}</span>
+          <span className="text-[var(--muted)]">Saved review {summary.version}{summary.carried && ", carried onto the updated draft"} · {summary.confirmed} of {summary.lines.length} lines checked</span>
           <button onClick={() => void load()} aria-label="Reload the saved pricing review" className="ml-auto rounded-md p-1 text-[var(--muted)] hover:bg-[var(--canvas)]"><RefreshCw className="h-3.5 w-3.5" /></button>
         </div>
         <h2 className="text-[15px] font-semibold leading-snug">{draft.title}</h2>
         <p className="mt-1.5 text-[12px] text-slate-600">Approved V{draft.basedOnVersion} {usd(summary.baselineTotalCents)} → proposed {summary.proposedTotalCents === null ? "not priced" : usd(summary.proposedTotalCents)}{summary.deltaCents !== null && ` (${signed(summary.deltaCents)})`}</p>
       </div>
+
+      {summary.carried && <CarriedNote carried={summary.carried} />}
 
       <ol className="space-y-3">
         {summary.lines.map((line, index) => (
@@ -69,7 +85,7 @@ export function ReviewPanel({ projectKey, draft, messages, onSourceMessage, canP
             <div className="mb-1.5 flex items-start gap-2">
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[11px] font-semibold text-[var(--primary)]">{index + 1}</span>
               <span className="min-w-0 flex-1"><span className="block font-semibold">{line.name}</span><span className="text-[11px] text-[var(--muted)]">{line.kind === "carried" ? line.changes.length ? "Carried over from V1, with changes" : "Carried over from V1, unchanged" : KIND_LABELS[line.kind]}</span></span>
-              {line.confirmed ? <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-700"><Check className="h-3.5 w-3.5" />Checked</span> : <span className="text-[11px] text-amber-700">Not checked</span>}
+              {line.needsChoice ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">Needs your choice</span> : line.confirmed ? <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-700"><Check className="h-3.5 w-3.5" />Checked</span> : <span className="text-[11px] text-amber-700">Not checked</span>}
             </div>
             <FromV1Note fromV1={line.fromV1} changes={line.changes} className="mb-2" />
             {line.changes.length ? <dl className="space-y-1">{line.changes.map((change) => (
@@ -83,7 +99,7 @@ export function ReviewPanel({ projectKey, draft, messages, onSourceMessage, canP
       </ol>
 
       {canPrice && <a href={pricingHref} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-[12px] font-medium text-white hover:bg-blue-600"><ClipboardCheck className="h-4 w-4" />Continue pricing</a>}
-      <p className="text-[10px] leading-relaxed text-[var(--muted)]">Only saved changes appear here. Reload after saving on the pricing page.</p>
+      <p className="text-[10px] leading-relaxed text-[var(--muted)]">{summary.carried ? "Nothing here is saved on the updated draft yet. Open the pricing page to check it and save." : "Only saved changes appear here. Reload after saving on the pricing page."}</p>
       <details className="rounded-xl border border-dashed border-[var(--line)]"><summary className="cursor-pointer px-3 py-2 text-[11px] font-medium text-slate-600">The draft as first proposed</summary>{draftCard}</details>
     </article>
   );

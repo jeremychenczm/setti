@@ -23,12 +23,24 @@ export interface ReviewLine {
   /** For a revised, carried or changed line: only the fields that differ. For an added line: its main values. */
   changes: FieldChange[];
   confirmed: boolean;
+  /** Carried onto a newer draft that changed the same fields: the designer has to choose. */
+  needsChoice?: boolean;
+}
+
+export interface CarriedSummary {
+  updated: string[];
+  kept: string[];
+  added: string[];
+  removed: string[];
+  conflicts: string[];
 }
 
 export interface ReviewSummary {
   version: number;
-  /** The draft changed after this review was saved, so it describes an older draft. */
+  /** The draft changed after this review was saved and it could not be carried onto the new one. */
   stale: boolean;
+  /** The draft changed after this review was saved; the lines are the review carried onto it, not saved yet. */
+  carried: CarriedSummary | null;
   confirmed: number;
   lines: ReviewLine[];
   baselineTotalCents: number;
@@ -82,12 +94,16 @@ function lineOf(workspace: PricingWorkspace, change: PricingChangeInput, index: 
 export function reviewSummary(workspace: PricingWorkspace): ReviewSummary | null {
   const review = workspace.review;
   if (!review || review.version < 1) return null;
-  const stale = workspace.stale || !workspace.sourceDraft || review.sourceDraftId !== workspace.sourceDraft.id || review.sourceDraftRevision !== workspace.sourceDraft.revision;
-  const lines = stale ? [] : review.input.changes.map((change, index) => lineOf(workspace, change, index));
+  const carryOver = workspace.sourceDraft ? workspace.carryOver ?? null : null;
+  const stale = !carryOver && (workspace.stale || !workspace.sourceDraft || review.sourceDraftId !== workspace.sourceDraft.id || review.sourceDraftRevision !== workspace.sourceDraft.revision);
+  const input = carryOver?.input ?? review.input;
+  const contested = new Set(carryOver?.conflicts.map((conflict) => conflict.key));
+  const lines = stale ? [] : input.changes.map((change, index) => ({ ...lineOf(workspace, change, index), ...(contested.has(change.key) ? { needsChoice: true } : {}) }));
   const preview = workspace.preview;
+  const carried = carryOver ? { updated: carryOver.updated, kept: carryOver.kept, added: carryOver.added, removed: carryOver.removed, conflicts: carryOver.conflicts.map((conflict) => conflict.name) } : null;
   return {
-    version: review.version, stale, lines, confirmed: review.input.changes.filter((change) => change.confirmed).length,
+    version: review.version, stale, carried, lines, confirmed: input.changes.filter((change) => change.confirmed).length,
     baselineTotalCents: preview?.baselineTotals.totalCents ?? 0, proposedTotalCents: preview?.proposedTotals?.totalCents ?? null,
-    deltaCents: preview?.deltaTotalCents ?? null, ready: !stale && !!preview?.ready,
+    deltaCents: preview?.deltaTotalCents ?? null, ready: !stale && !carried && !!preview?.ready,
   };
 }

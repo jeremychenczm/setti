@@ -2,6 +2,7 @@ import type { CaseKey, CaseMessage, ChangeDraft, DraftChange, FromV1, ProductPag
 import type { ApprovedQuoteLine, ApprovedQuoteReport, QuoteCategory } from "@/quotes/types";
 import type { QuoteTotals } from "@/quotes/totals";
 import type { ClientDecision } from "@/approval/types";
+import type { ReviewCarryOver } from "./carry-over";
 import type { FieldChange } from "./review-diff";
 
 export type OldItemHandling = "pending" | "not_ordered" | "cancelled" | "returned" | "retained" | "not_applicable";
@@ -66,6 +67,16 @@ export interface PricingPreview {
   deltaTotalCents: number | null;
   problems: string[];
   ready: boolean;
+}
+
+/**
+ * The draft's own proposal, priced as the pricing page first fills it in, kept
+ * with a saved review. It is the common starting point for telling the
+ * designer's edits apart from the draft's later changes.
+ */
+export interface DraftProposal {
+  quoteId: string;
+  input: PricingInput;
 }
 
 export interface PricingReview {
@@ -165,6 +176,8 @@ export interface PricingWorkspace {
   review: PricingReview | null;
   preview: PricingPreview | null;
   stale: boolean;
+  /** When the draft changed after the review was saved: the review moved onto the current draft, unsaved. */
+  carryOver?: ReviewCarryOver | null;
   orders: ChangeOrderSummary[];
 }
 

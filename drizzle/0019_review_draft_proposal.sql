@@ -1,0 +1,1 @@
+ALTER TABLE "pricing_reviews" ADD COLUMN "draft_proposal" jsonb;

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CaseKey } from "@/chat/types";
 import { createPricingInput } from "@/pricing/calculation";
+import type { CarryOverConflict, ReviewCarryOver } from "@/pricing/carry-over";
 import { quoteFingerprint } from "@/quotes/fingerprint";
 import type { ChangeOrderView, IssuePricingInput, PricingInput, PricingWorkspace, SavePricingInput } from "@/pricing/types";
 
@@ -13,6 +14,17 @@ function canonical(value: unknown): unknown {
   return value;
 }
 function sameInput(left: PricingInput, right: PricingInput): boolean { return JSON.stringify(canonical(left)) === JSON.stringify(canonical(right)); }
+const list = (names: string[]) => names.join(", ");
+function carryOverNotice(version: number, carried: ReviewCarryOver): string {
+  const parts = [
+    carried.updated.length && `updated from the draft: ${list(carried.updated)}`,
+    carried.kept.length && `your edits kept: ${list(carried.kept)}`,
+    carried.added.length && `new: ${list(carried.added)}`,
+    carried.removed.length && `no longer in the draft: ${list(carried.removed)}`,
+    carried.conflicts.length && `needs your choice: ${list(carried.conflicts.map((conflict) => conflict.name))}`,
+  ].filter(Boolean);
+  return `The draft changed after saved review ${version}. Your review was carried onto it${parts.length ? ` · ${parts.join(" · ")}` : ""}. Save to keep it.`;
+}
 function workspaceBody(value: unknown, key: CaseKey): value is PricingWorkspace {
   return Boolean(value && typeof value === "object" && "projectKey" in value && value.projectKey === key && "quote" in value && "orders" in value);
 }
@@ -43,6 +55,8 @@ export function usePricingWorkspace(projectKey: CaseKey) {
   const [editorEpoch, setEditorEpoch] = useState(0);
   const [editorSource, setEditorSource] = useState<{ id: string; revision: number } | null>(null);
   const [lastOrder, setLastOrder] = useState<ChangeOrderView | null>(null);
+  const [carryConflicts, setCarryConflicts] = useState<CarryOverConflict[]>([]);
+  const [choices, setChoices] = useState<Record<string, "mine" | "latest">>({});
   const alive = useRef(true);
   const mutating = useRef(false);
   const endpoint = `/api/pricing/${projectKey}`;
@@ -57,14 +71,19 @@ export function usePricingWorkspace(projectKey: CaseKey) {
 
   const applySaved = useCallback((state: PricingWorkspace) => {
     setWorkspace(state);
-    let nextInput = state.review ? structuredClone(state.review.input) : null;
+    // A review saved against an older draft arrives already carried onto the current one.
+    const carried = state.carryOver && state.sourceDraft ? state.carryOver : null;
+    let nextInput = carried ? structuredClone(carried.input) : state.review ? structuredClone(state.review.input) : null;
     if (!nextInput && state.sourceDraft && (!state.sourceDraft.basedOnQuoteFingerprint || state.sourceDraft.basedOnQuoteFingerprint === quoteFingerprint(state.quote))) {
       try { nextInput = createPricingInput(state.quote, state.sourceDraft); }
       catch (cause) { setError(`${cause instanceof Error ? cause.message : "The AI draft no longer matches the original quote."} Return to the chat and ask @AI to prepare a new draft.`); }
     }
     setInput(nextInput);
-    setEditorSource(state.review ? { id: state.review.sourceDraftId, revision: state.review.sourceDraftRevision } : state.sourceDraft ? { id: state.sourceDraft.id, revision: state.sourceDraft.revision } : null);
-    setAdoptedLatest(false);
+    setEditorSource(carried ? { id: state.sourceDraft!.id, revision: state.sourceDraft!.revision } : state.review ? { id: state.review.sourceDraftId, revision: state.review.sourceDraftRevision } : state.sourceDraft ? { id: state.sourceDraft.id, revision: state.sourceDraft.revision } : null);
+    setAdoptedLatest(Boolean(carried));
+    setCarryConflicts(carried?.conflicts ?? []);
+    setChoices({});
+    if (carried && state.review) setNotice(carryOverNotice(state.review.version, carried));
     setConflict(false);
     setPendingCheck(null);
     setEditorEpoch((epoch) => epoch + 1);
@@ -109,12 +128,23 @@ export function usePricingWorkspace(projectKey: CaseKey) {
     }
     setEditorSource({ id: workspace.sourceDraft.id, revision: workspace.sourceDraft.revision });
     setAdoptedLatest(true);
+    setCarryConflicts([]);
+    setChoices({});
     setConflict(false);
     setPendingCheck(null);
     setError(null);
     setNotice("Latest AI draft adopted. Previous local pricing edits were replaced. Review every row and save before generating a client version.");
     setEditorEpoch((epoch) => epoch + 1);
   }, [workspace]);
+
+  /** For a line both the designer and the newer draft changed: which values it keeps. */
+  const choose = useCallback((key: string, choice: "mine" | "latest") => {
+    const conflict = carryConflicts.find((entry) => entry.key === key);
+    if (!conflict) return;
+    setInput((previous) => previous ? { ...previous, changes: previous.changes.map((change) => change.key === key ? structuredClone(conflict[choice]) : change) } : previous);
+    setChoices((previous) => ({ ...previous, [key]: choice }));
+    setEditorEpoch((epoch) => epoch + 1);
+  }, [carryConflicts]);
 
   const reconcile = useCallback(async (pending: PendingCheck) => {
     const state = await getWorkspace();
@@ -165,7 +195,7 @@ export function usePricingWorkspace(projectKey: CaseKey) {
   }, [pendingCheck, reconcile]);
 
   const save = useCallback(async () => {
-    if (!workspace?.sourceDraft || !input || mutating.current || pendingCheck || conflict || !editorSource || editorSource.id !== workspace.sourceDraft.id || editorSource.revision !== workspace.sourceDraft.revision || input.baselineFingerprint !== currentBaselineFingerprint || (workspace.sourceDraft.basedOnQuoteFingerprint && workspace.sourceDraft.basedOnQuoteFingerprint !== currentBaselineFingerprint)) return;
+    if (!workspace?.sourceDraft || !input || mutating.current || pendingCheck || conflict || carryConflicts.some((entry) => !choices[entry.key]) || !editorSource || editorSource.id !== workspace.sourceDraft.id || editorSource.revision !== workspace.sourceDraft.revision || input.baselineFingerprint !== currentBaselineFingerprint || (workspace.sourceDraft.basedOnQuoteFingerprint && workspace.sourceDraft.basedOnQuoteFingerprint !== currentBaselineFingerprint)) return;
     const payload: SavePricingInput = {
       sourceDraftId: workspace.sourceDraft.id, sourceDraftRevision: workspace.sourceDraft.revision,
       expectedVersion: workspace.review && workspace.review.version > 0 ? workspace.review.version : null,
@@ -185,7 +215,7 @@ export function usePricingWorkspace(projectKey: CaseKey) {
       try { await reconcile(pending); }
       catch { if (alive.current) setError("The save response was lost and its result could not be verified. Check saved status before retrying."); }
     } finally { mutating.current = false; if (alive.current) setBusy(null); }
-  }, [workspace, input, pendingCheck, conflict, editorSource, currentBaselineFingerprint, endpoint, projectKey, applySaved, reconcile]);
+  }, [workspace, input, pendingCheck, conflict, carryConflicts, choices, editorSource, currentBaselineFingerprint, endpoint, projectKey, applySaved, reconcile]);
 
   const issue = useCallback(async () => {
     if (!workspace?.review || workspace.review.version < 1 || mutating.current || pendingCheck || conflict || !input || input.baselineFingerprint !== currentBaselineFingerprint || (workspace.sourceDraft?.basedOnQuoteFingerprint && workspace.sourceDraft.basedOnQuoteFingerprint !== currentBaselineFingerprint)) return;
@@ -222,5 +252,6 @@ export function usePricingWorkspace(projectKey: CaseKey) {
   const draftBaselineStale = Boolean(workspace?.sourceDraft?.basedOnQuoteFingerprint && workspace.sourceDraft.basedOnQuoteFingerprint !== currentBaselineFingerprint);
   const baselineStale = Boolean(workspace && input && input.baselineFingerprint !== currentBaselineFingerprint);
   const sourceStale = baselineStale || Boolean(workspace?.sourceDraft && editorSource && (editorSource.id !== workspace.sourceDraft.id || editorSource.revision !== workspace.sourceDraft.revision));
-  return { workspace, input, setInput, loading, busy, error, notice, pendingCheck: Boolean(pendingCheck), conflict, saved, adoptedLatest, sourceStale, baselineStale, draftBaselineStale, editorEpoch, lastOrder, reload, adoptLatest, save, issue, checkSavedStatus };
+  const choicesPending = carryConflicts.some((entry) => !choices[entry.key]);
+  return { workspace, input, setInput, loading, busy, error, notice, pendingCheck: Boolean(pendingCheck), conflict, saved, adoptedLatest, sourceStale, baselineStale, draftBaselineStale, editorEpoch, lastOrder, carryConflicts, choices, choicesPending, choose, reload, adoptLatest, save, issue, checkSavedStatus };
 }

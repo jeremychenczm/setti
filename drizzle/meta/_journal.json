@@ -134,6 +134,13 @@
       "when": 1792713646570,
       "tag": "0018_opening_decisions",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1792730075970,
+      "tag": "0019_review_draft_proposal",
+      "breakpoints": true
     }
   ]
 }

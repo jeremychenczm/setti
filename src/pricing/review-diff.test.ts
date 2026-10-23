@@ -50,6 +50,14 @@ describe("saved pricing review summary", () => {
     expect(stale.lines).toEqual([]);
   });
 
+  it("shows a review carried onto a newer draft as unsaved, flagging lines that need a choice", () => {
+    const older = workspace(() => {}, 1);
+    const input = structuredClone(older.review!.input);
+    const carried = reviewSummary({ ...older, carryOver: { input, updated: ["Office chair"], kept: [], added: [], removed: ["Desk"], conflicts: [{ key: "change-1", name: "LED bulb E26, 800 lumen", mine: input.changes[1], latest: input.changes[1], changes: [] }] } })!;
+    expect(carried).toMatchObject({ stale: false, ready: false, carried: { updated: ["Office chair"], removed: ["Desk"], conflicts: ["LED bulb E26, 800 lumen"] } });
+    expect(carried.lines.map((line) => line.needsChoice ?? false)).toEqual([false, true]);
+  });
+
   it("has no summary before a review is saved", () => {
     const unsaved = workspace(() => {});
     expect(reviewSummary({ ...unsaved, review: { ...unsaved.review!, version: 0 } })).toBeNull();

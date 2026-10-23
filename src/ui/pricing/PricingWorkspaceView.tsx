@@ -11,6 +11,7 @@ import { fieldKey, PricingGrid, type EditableGridField, type RawFields } from ".
 import { usePricingWorkspace } from "./usePricingWorkspace";
 import { changeOrderStatusLabel } from "./changeOrderStatus";
 import { differences } from "@/pricing/review-diff";
+import { CarryOverChoices } from "./CarryOverChoices";
 
 const handlingLabels: Record<OldItemHandling, string> = { pending: "Not checked yet", not_ordered: "Not ordered", cancelled: "Order cancelled", returned: "Returned / return arranged", retained: "Retained in the project", not_applicable: "Not applicable" };
 const quantityIdentityFields = new Set<keyof PricingItem>(["name", "vendor", "sku", "specification", "category", "unitLabel"]);
@@ -24,7 +25,7 @@ export function PricingWorkspaceView({ projectKey }: { projectKey: CaseKey }) {
   const numericErrors = rawByEpoch.epoch === state.editorEpoch ? rawByEpoch.errors : {};
   const hasInvalidNumbers = Object.keys(numericErrors).length > 0;
   const stale = state.sourceStale || state.draftBaselineStale || Boolean(workspace?.stale && !state.adoptedLatest);
-  const disabled = Boolean(state.busy || state.loading || stale || state.pendingCheck || state.conflict || !workspace?.sourceDraft);
+  const disabled = Boolean(state.busy || state.loading || stale || state.pendingCheck || state.conflict || state.choicesPending || !workspace?.sourceDraft);
   const selected = input?.changes.find((change) => change.key === selectedKey) ?? input?.changes[0] ?? null;
   // A line that comes back from V1, compared live against V1 as the designer edits it.
   const selectedV1Line = selected && input ? workspace?.sourceDraft?.changes[input.changes.indexOf(selected)]?.fromV1?.line : undefined;
@@ -115,6 +116,8 @@ export function PricingWorkspaceView({ projectKey }: { projectKey: CaseKey }) {
           {workspace.sourceDraft && !state.draftBaselineStale && <button onClick={state.adoptLatest} disabled={Boolean(state.busy) || state.pendingCheck} className="mt-3 rounded-lg bg-amber-900 px-3 py-2 font-medium text-white disabled:opacity-50">Re-price from the latest draft</button>}
           {state.draftBaselineStale && <a href={`/chats/${projectKey}`} className="mt-3 inline-block font-semibold underline">Return to chat · ask @AI for a new draft</a>}
         </div>}
+
+        {state.carryConflicts.length > 0 && <CarryOverChoices conflicts={state.carryConflicts} choices={state.choices} onChoose={state.choose} disabled={Boolean(state.busy)} />}
 
         {workspace && input && <>
           <div className="mb-5 grid gap-3 sm:grid-cols-3"><TotalTile label={`Approved V${workspace.quote.version} total · USD`} amount={baselineTotals?.totalCents ?? null} /><TotalTile label="Proposed quote total · USD" amount={preview?.proposedTotals?.totalCents ?? null} /><TotalTile label="Quote difference · USD" amount={preview?.deltaTotalCents ?? null} signed /></div>

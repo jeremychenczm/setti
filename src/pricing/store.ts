@@ -13,6 +13,7 @@ import { openingQuotes } from "../opening/schema";
 import { quoteFingerprint } from "../quotes/fingerprint";
 import type { ApprovedQuoteReport } from "../quotes/types";
 import { createPricingInput, prepareChangeOrder, previewPricing, validatePricingInput, PricingValidationError } from "./calculation";
+import { carryOverReview, type ReviewCarryOver } from "./carry-over";
 import { changeOrders, pricingCases, pricingReviews } from "./schema";
 import type { FrozenChangeOrder, PricingReview, PricingStore, PricingWorkspace } from "./types";
 import { freezeRevision, insertBaseline } from "./bridge";
@@ -83,13 +84,20 @@ async function workspace(tx: Transaction, row: CaseRow, quote: ApprovedQuoteRepo
     }
   }
   const fingerprint = quoteFingerprint(quote);
-  const stale = (!!stored && (!sameSource(stored, sourceDraft) || stored.input.baselineFingerprint !== fingerprint)) || !!(sourceDraft?.basedOnQuoteFingerprint !== undefined && sourceDraft.basedOnQuoteFingerprint !== fingerprint);
+  const draftMatchesQuote = !(sourceDraft?.basedOnQuoteFingerprint !== undefined && sourceDraft.basedOnQuoteFingerprint !== fingerprint);
+  const stale = (!!stored && (!sameSource(stored, sourceDraft) || stored.input.baselineFingerprint !== fingerprint)) || !draftMatchesQuote;
+  // A newer draft on the same baseline: the saved review moves onto it, keeping the designer's edits.
+  let carryOver: ReviewCarryOver | null = null;
+  if (stale && stored?.draftProposal && sourceDraft && draftMatchesQuote && stored.draftProposal.quoteId === quote.id) {
+    try { carryOver = carryOverReview(quote, stored.draftProposal.input, stored.input, createPricingInput(quote, sourceDraft)); }
+    catch { /* A draft that no longer prices against the quote is redrafted from the chat. */ }
+  }
   const orders = await tx.select({ document: changeOrders.document, status: revisions.status }).from(changeOrders)
     .innerJoin(revisions, eq(changeOrders.revisionId, revisions.id)).where(eq(changeOrders.caseId, row.id)).orderBy(desc(revisions.number));
   return {
     caseId: row.id, projectKey: row.projectKey, quote, sourceDraft, review,
-    preview: review && sourceDraft && !stale ? withOpenV1(previewPricing(quote, sourceDraft, review.input), await v1LinesLeftBehind(tx, row)) : null,
-    stale,
+    preview: review && sourceDraft && (!stale || carryOver) ? withOpenV1(previewPricing(quote, sourceDraft, carryOver?.input ?? review.input), await v1LinesLeftBehind(tx, row)) : null,
+    stale, carryOver,
     orders: orders.map(({ document, status }) => ({ id: document.id, version: document.version, issuedAt: document.issuedAt, totalCents: document.totals.totalCents, deltaTotalCents: document.deltaTotalCents, status: changeOrderView(document, status).status })),
   };
 }
@@ -156,10 +164,11 @@ export function createPricingStore(db: Db): PricingStore {
         catch (error) {
           throw new PricingStoreError("INVALID_INPUT", "Pricing fields do not match the current draft.", error instanceof PricingValidationError ? error.problems : undefined);
         }
+        const draftProposal = { quoteId: quote.id, input: createPricingInput(quote, draft) };
         if (old) {
-          await tx.update(pricingReviews).set({ input, sourceDraftId: draft.id, sourceDraftRevision: draft.revision, version: old.version + 1, updatedAt: new Date() }).where(eq(pricingReviews.id, old.id));
+          await tx.update(pricingReviews).set({ input, draftProposal, sourceDraftId: draft.id, sourceDraftRevision: draft.revision, version: old.version + 1, updatedAt: new Date() }).where(eq(pricingReviews.id, old.id));
         } else {
-          await tx.insert(pricingReviews).values({ caseId: row.id, sourceDraftId: draft.id, sourceDraftRevision: draft.revision, version: 1, input });
+          await tx.insert(pricingReviews).values({ caseId: row.id, sourceDraftId: draft.id, sourceDraftRevision: draft.revision, version: 1, input, draftProposal });
         }
         return workspace(tx, row, quote);
       });

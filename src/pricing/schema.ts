@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { chatCases } from "../chat/schema";
 import { projects, revisions } from "../db/schema";
-import type { FrozenChangeOrder, PricingInput } from "./types";
+import type { DraftProposal, FrozenChangeOrder, PricingInput } from "./types";
 
 /** A demo chat case acquires a separate business project only when a review is issued. */
 export const pricingCases = pgTable("pricing_cases", {
@@ -21,6 +21,8 @@ export const pricingReviews = pgTable("pricing_reviews", {
   sourceDraftRevision: integer("source_draft_revision").notNull(),
   version: integer("version").notNull(),
   input: jsonb("input").$type<PricingInput>().notNull(),
+  /** What the draft proposed when the review was saved; null on reviews saved before this was kept. */
+  draftProposal: jsonb("draft_proposal").$type<DraftProposal>(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [

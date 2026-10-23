@@ -113,15 +113,19 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
     expect((await store.getWorkspace(sessionId, "maple")).review?.version).toBe(2);
   });
 
-  it("preserves a stale review until the designer explicitly resets it to the new AI draft", async () => {
+  it("carries a saved review onto a newer draft, unsaved, until the designer saves it there", async () => {
     const { workspace, draft } = await seed();
     const saved = await saveReady(workspace);
+    expect((await handle.db.select().from(pricingReviews))[0].draftProposal).toEqual({ quoteId: preapprovedQuote("maple")!.id, input: workspace.review!.input });
     const newDraft = { ...draft, revision: 2, title: "Updated AI direction" };
     await handle.db.update(chatCases).set({ draft: newDraft }).where(eq(chatCases.id, workspace.caseId));
     const stale = await store.getWorkspace(sessionId, "maple");
     expect(stale.stale).toBe(true);
-    expect(stale.preview).toBeNull();
     expect(stale.review?.input).toEqual(saved.review?.input);
+    // The draft only changed its title, which the designer had already rewritten: every edit stays.
+    expect(stale.carryOver).toMatchObject({ updated: [], kept: ["Lounge chair"], added: [], removed: [], conflicts: [] });
+    expect(stale.carryOver?.input).toEqual(saved.review?.input);
+    expect(stale.preview?.ready).toBe(true);
     await expect(issue(saved)).rejects.toMatchObject({ code: "PRICING_STALE_SOURCE" });
     await expect(store.saveReview(sessionId, "maple", { sourceDraftId: draft.id, sourceDraftRevision: 1, expectedVersion: 1, input: saved.review!.input })).rejects.toMatchObject({ code: "PRICING_STALE_SOURCE" });
     const reset = await store.saveReview(sessionId, "maple", { sourceDraftId: newDraft.id, sourceDraftRevision: 2, expectedVersion: 1, input: createPricingInput(preapprovedQuote("maple")!, newDraft) });
@@ -182,7 +186,7 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
     const saved = await saveReady(workspace);
     const legacyInput: Record<string, unknown> = { ...saved.review!.input };
     delete legacyInput.baselineFingerprint;
-    await handle.db.update(pricingReviews).set({ input: legacyInput as unknown as PricingInput }).where(eq(pricingReviews.id, saved.review!.id));
+    await handle.db.update(pricingReviews).set({ input: legacyInput as unknown as PricingInput, draftProposal: null }).where(eq(pricingReviews.id, saved.review!.id));
     const legacy = await store.getWorkspace(sessionId, "maple");
     expect(legacy.stale).toBe(true);
     expect(legacy.preview).toBeNull();
