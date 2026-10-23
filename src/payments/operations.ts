@@ -25,9 +25,12 @@ export class PaymentOperationError extends Error {
   }
 }
 
-/** The client-confirmed version an operation executes. The database checks it again on insert. */
+/**
+ * The client-confirmed version an operation executes. The database checks it again on insert.
+ * A V1 signed line by line has no change order; its hashes are the V1 document's and revision's.
+ */
 export interface OperationBinding {
-  changeOrderId: string;
+  changeOrderId: string | null;
   revisionId: string;
   contentHash: string;
   revisionContentHash: string;

@@ -216,7 +216,11 @@ export const paymentOperations = pgTable(
     amountCents: integer("amount_cents").notNull(),
     currency: text("currency").notNull().default("USD"),
     finalCapture: boolean("final_capture").notNull().default(false),
-    /** The client-confirmed version this move executes, with both frozen hashes and the business item. */
+    /**
+     * The client-confirmed version this move executes, with both frozen hashes and the business item.
+     * A move for a V1 signed line by line has no change order: it names the V1 revision, the hash of
+     * the V1 document the client signed and the approved line's item.
+     */
     changeOrderId: uuid("change_order_id").references((): AnyPgColumn => changeOrders.id),
     revisionId: uuid("revision_id").references((): AnyPgColumn => revisions.id),
     contentHash: text("content_hash"),
@@ -245,13 +249,13 @@ export const paymentOperations = pgTable(
     check("payment_operations_usd", sql`${t.currency} = 'USD'`),
     check("payment_operations_hold_moves_have_authorization", sql`${t.kind} NOT IN ('capture', 'void', 'reauthorize') OR ${t.authorizationId} IS NOT NULL`),
     check("payment_operations_refund_has_capture", sql`${t.kind} <> 'refund' OR ${t.captureId} IS NOT NULL`),
-    check("payment_operations_authorize_is_bound", sql`${t.kind} <> 'authorize' OR ${t.changeOrderId} IS NOT NULL`),
+    check("payment_operations_authorize_is_bound", sql`${t.kind} <> 'authorize' OR ${t.revisionId} IS NOT NULL`),
     check("payment_operations_save_on_checkout", sql`NOT ${t.savePaymentMethod} OR (${t.kind} = 'authorize' AND ${t.savedMethodId} IS NULL)`),
     check("payment_operations_saved_method_holds", sql`${t.savedMethodId} IS NULL OR (${t.kind} = 'authorize' AND ${t.approvalUrl} IS NULL)`),
     check("payment_operations_capture_after_supplier",sql`${t.kind} <> 'capture' OR ${t.changeOrderId} IS NULL OR ${t.supplierEventId} IS NOT NULL`),
     check(
       "payment_operations_binding_complete",
-      sql`(${t.changeOrderId} IS NULL AND ${t.revisionId} IS NULL AND ${t.contentHash} IS NULL AND ${t.revisionContentHash} IS NULL) OR (${t.changeOrderId} IS NOT NULL AND ${t.revisionId} IS NOT NULL AND ${t.contentHash} IS NOT NULL AND ${t.revisionContentHash} IS NOT NULL AND ${t.itemId} IS NOT NULL)`,
+      sql`(${t.changeOrderId} IS NULL AND ${t.revisionId} IS NULL AND ${t.contentHash} IS NULL AND ${t.revisionContentHash} IS NULL) OR (${t.revisionId} IS NOT NULL AND ${t.contentHash} IS NOT NULL AND ${t.revisionContentHash} IS NOT NULL AND ${t.itemId} IS NOT NULL)`,
     ),
   ],
 );
