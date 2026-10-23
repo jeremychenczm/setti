@@ -10,6 +10,7 @@ import { clientSignatureName, type OpeningLine, type OpeningQuote, type OpeningS
 import { calculateLineTotals, calculateQuoteTotals, type QuoteLineTotals } from "@/quotes/totals";
 import type { QuoteLine } from "@/quotes/types";
 import { usd } from "../demo-data";
+import { DesignServicesPayment } from "../payments/DesignServicesPayment";
 import { LineReview, LineStateBadge, type LineChoice } from "./LineReview";
 import { ResolvePanel, type ResolveItem } from "./ResolvePanel";
 import { SignBar } from "./SignBar";
@@ -344,6 +345,8 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
               <p className="pt-1 text-[10px] leading-relaxed text-[var(--muted)]">Includes the tax and delivery assumptions listed below.{approval ? " Approval is simulated." : ""}</p>
             </div>
           </div>
+
+          {open && opening.progress.approved > 0 && <DesignServicesPayment projectKey={quote.projectId as CaseKey} orderId={null} />}
 
           <div className="mt-6 rounded-xl border border-dashed border-slate-200 px-4 py-3 text-[11px] leading-relaxed text-[var(--muted)]"><span className="font-medium text-slate-600">About this example. </span>{quote.demoNotice}<ul className="mt-2 list-disc space-y-1 pl-4">{quote.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul><p className="mt-2 font-medium">{quote.paymentNote}</p></div>
         </div>

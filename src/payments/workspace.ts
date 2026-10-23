@@ -113,7 +113,10 @@ function steps(plan: FundingPlan, line: FundingLine, canAct: boolean, events: Su
       case "new_authorization":
         return [step("authorize", action.amountCents, ready && line.category === "furniture", "The client approves this hold on PayPal (Sandbox). Nothing is charged until the supplier confirms the order.", "client")];
       case "capture":
-        if (action.timing !== "after_vendor_confirmation") return [step("capture", action.amountCents, false, "This charge needs a separate payment step that is not part of this demo.")];
+        if (action.timing !== "after_vendor_confirmation") {
+          const designService = line.category === "service" && (line.change === null || line.change === "add" || line.change === "quantity");
+          return [step("capture", action.amountCents, false, designService ? "Design services are paid together in one PayPal checkout, under Design services on this page." : "This charge needs a separate payment step that is not part of this demo.")];
+        }
         return ordered
           ? [step("capture", action.amountCents, ready, retainedCost
             ? "The supplier confirmed this version's retained cost. Capture only that cost; closing the hold releases its unused balance."
