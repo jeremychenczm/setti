@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import type { DemoAccount } from "../accounts/demo";
 import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
-import { items, savedPaymentMethods } from "../db/schema";
+import { items, revisionLines, savedPaymentMethods } from "../db/schema";
 import { PaymentActionError } from "./binding";
 import { lockPaymentBasis } from "./services";
 
@@ -18,10 +18,14 @@ export interface ItemHoldView {
   targetCents: number;
   heldCents: number;
   capturedCents: number;
-  state: "captured" | "held" | "holding" | "failed" | "to_hold";
+  state: "captured" | "confirmed" | "held" | "holding" | "failed" | "to_hold";
   paypalAuthorizationId: string | null;
   expiresAt: string | null;
   failureMessage: string | null;
+  /** The terms the client approved, which the supplier's confirmation must match (V1 lines only). */
+  terms: { quantity: number; unitPriceCents: number; taxCents: number; freightCents: number } | null;
+  /** The supplier's order confirmation recorded for this version (demo, entered by the designer). */
+  supplier: { reference: string; totalCents: number; leadTimeDays: number | null } | null;
 }
 
 export interface ItemHoldsView {
@@ -33,11 +37,15 @@ export interface ItemHoldsView {
   savedPayPal: boolean;
   /** Either account of the project may hold the rest with the client's saved PayPal. */
   canHold: boolean;
+  /** On V1 the designer records supplier confirmations and captures here; a change order has its own payments panel. */
+  canConfirmSupplier: boolean;
+  /** The hash of the document the client confirmed, sent back with supplier and capture steps. */
+  contentHash: string | null;
   reason: string | null;
 }
 
 export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseKey, account: DemoAccount | null): Promise<ItemHoldsView> {
-  const empty = (reason: string): ItemHoldsView => ({ projectKey: key, basis: null, items: [], toHoldCents: 0, savedPayPal: false, canHold: false, reason });
+  const empty = (reason: string): ItemHoldsView => ({ projectKey: key, basis: null, items: [], toHoldCents: 0, savedPayPal: false, canHold: false, canConfirmSupplier: false, contentHash: null, reason });
   if (!sessionId) return empty("Open this project from the browser that owns the demo case.");
   let basis;
   try { basis = await db.transaction((tx) => lockPaymentBasis(tx, sessionId, key)); }
@@ -47,6 +55,9 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
   }
   const { ledger, plan } = basis;
   const kinds = new Map((await db.select({ id: items.id, kind: items.kind }).from(items).where(eq(items.projectId, basis.projectId))).map((row) => [row.id, row.kind]));
+  // On V1 the approved terms are the V1 revision's lines; a change order's page shows its own.
+  const v1Terms = basis.orderId ? new Map() : new Map((await db.select().from(revisionLines).where(eq(revisionLines.revisionId, basis.key)))
+    .map((row) => [row.itemId, { quantity: row.quantity, unitPriceCents: row.unitPriceCents, taxCents: row.taxCents, freightCents: row.freightCents }]));
   const now = Date.now();
   const lines = plan.lines.flatMap((line): ItemHoldView[] => {
     const businessId = basis.businessItem(line);
@@ -55,7 +66,9 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
     const hold = ledger.authorizations.filter((entry) => entry.itemId === businessId && (entry.status === "created" || entry.status === "partially_captured") && !(entry.expiresAt && entry.expiresAt.getTime() <= now))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
     const funded = line.heldCents + line.capturedCents - line.refundedCents;
+    const event = ledger.supplierEvents.find((entry) => entry.kind === "order_confirmed" && entry.itemId === businessId && (basis.orderId ? entry.changeOrderId === basis.orderId : entry.revisionId === basis.key));
     const state = line.capturedCents - line.refundedCents >= line.targetCents ? "captured"
+      : funded >= line.targetCents && event ? "confirmed"
       : funded >= line.targetCents ? "held"
         : latest?.status === "pending" || latest?.status === "unknown" ? "holding"
           : latest?.status === "failed" ? "failed" : "to_hold";
@@ -63,6 +76,8 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
       itemId: line.itemId, label: line.label, targetCents: line.targetCents, heldCents: line.heldCents, capturedCents: line.capturedCents - line.refundedCents, state,
       paypalAuthorizationId: hold?.paypalAuthorizationId ?? null, expiresAt: hold?.expiresAt?.toISOString() ?? null,
       failureMessage: state === "failed" ? latest?.failureMessage ?? null : null,
+      terms: v1Terms.get(businessId) ?? null,
+      supplier: event ? { reference: event.reference, totalCents: event.totalCents, leadTimeDays: event.leadTimeDays } : null,
     }];
   });
   const toHoldCents = lines.reduce((total, line) => total + Math.max(line.targetCents - line.heldCents - line.capturedCents, 0), 0);
@@ -74,5 +89,6 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
       : !saved ? "Items are held with the PayPal the client saves when paying the design services."
         : !member ? "Only the project's client or designer can hold items."
           : null;
-  return { projectKey: key, basis: { version: basis.version, orderId: basis.orderId }, items: lines, toHoldCents, savedPayPal: !!saved, canHold, reason };
+  const canConfirmSupplier = account?.role === "designer" && !basis.orderId;
+  return { projectKey: key, basis: { version: basis.version, orderId: basis.orderId }, items: lines, toHoldCents, savedPayPal: !!saved, canHold, canConfirmSupplier, contentHash: basis.contentHash, reason };
 }

@@ -5,13 +5,13 @@ import { isCaseKey } from "@/chat/cases";
 import type { CaseKey } from "@/chat/types";
 import { assertSandbox, SandboxGuardError } from "@/config/paypalEnv";
 import { createDb } from "@/db/client";
-import { cancelPayment, checkPayment, operationPage, returnFromPayPal, startAuthorization, startCapture, startRefund, startRelease, type LinkBuilder } from "./actions";
+import { cancelPayment, checkPayment, operationPage, returnFromPayPal, startAuthorization, startCapture, startOpeningCapture, startRefund, startRelease, type LinkBuilder } from "./actions";
 import { cancelCheckout, completeAuthorization } from "./authorize";
 import { PaymentActionError } from "./binding";
 import { PaymentOperationError } from "./operations";
 import { sandboxPayPal } from "./server";
 import { callbackState, validCallbackState } from "./callback-state";
-import { recordSupplierCredit, recordSupplierOrder } from "./supplier";
+import { recordOpeningSupplierOrder, recordSupplierCredit, recordSupplierOrder } from "./supplier";
 import { paymentsWorkspace } from "./workspace";
 import { refreshRecordedFees } from "./fee-refresh";
 import { holdApprovedItems } from "./item-holds";
@@ -44,7 +44,14 @@ const servicesSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("cancel"), operationId: uuid }),
   z.strictObject({ action: z.literal("charge") }),
 ]);
-const holdSchema = z.strictObject({ action: z.literal("hold") });
+const holdSchema = z.discriminatedUnion("action", [
+  z.strictObject({ action: z.literal("hold") }),
+  z.strictObject({
+    action: z.literal("supplier_order"), itemId: z.string().min(1).max(300), contentHash: hash, quantity: z.number().int().min(1).max(10_000), unitPriceCents: cents, taxCents: cents, freightCents: cents,
+    inStock: z.boolean(), leadTimeDays: z.number().int().min(0).max(3_650).nullable(), reference: z.string().trim().min(1).max(200), note: z.string().trim().max(1_000),
+  }),
+  z.strictObject({ action: z.literal("capture"), itemId: z.string().min(1).max(300), contentHash: hash }),
+]);
 class HttpError extends Error { constructor(message: string, readonly status: number) { super(message); } }
 
 const database = globalThis as typeof globalThis & { settiChatDatabase?: ReturnType<typeof createDb> };
@@ -250,17 +257,32 @@ export async function getItemHoldsResponse(req: NextRequest, rawKey: string) {
   catch (error) { return fail(error); }
 }
 
-/** Holds each approved furniture item with the client's saved PayPal; either account of the project may run it. */
+/**
+ * Holds each approved furniture item with the client's saved PayPal (either account of the
+ * project). On V1 the designer also records the supplier's confirmation and captures here.
+ */
 export async function postItemHoldsResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
   const sessionId = session(req);
   if (!sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "Payment steps run only from the browser that owns the demo case." }, { status: 403, headers });
   try {
-    holdSchema.parse(await boundedJson(req));
+    const input = holdSchema.parse(await boundedJson(req));
     const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
     if (!account || !canOpenProject(account, rawKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
-    const held = await holdApprovedItems(db(), sandboxPayPal(), sessionId, rawKey);
-    return NextResponse.json({ view: await holdsView(req, rawKey, sessionId), attempted: held.length }, { headers });
+    if (input.action !== "hold" && account.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "Only the designer records supplier confirmations and captures." }, { status: 403, headers });
+    let attempted = 0;
+    switch (input.action) {
+      case "hold":
+        attempted = (await holdApprovedItems(db(), sandboxPayPal(), sessionId, rawKey)).length;
+        break;
+      case "supplier_order":
+        await recordOpeningSupplierOrder(db(), sessionId, rawKey, input);
+        break;
+      case "capture":
+        attempted = (await startOpeningCapture(db(), sandboxPayPal(), sessionId, rawKey, input)).length;
+        break;
+    }
+    return NextResponse.json({ view: await holdsView(req, rawKey, sessionId), attempted }, { headers });
   } catch (error) { return fail(error); }
 }
 

@@ -31,6 +31,8 @@ export interface PaymentBasis {
   orderId: string | null;
   /** Names the agreement in business keys: the change order, or the V1 revision. */
   key: string;
+  /** The hash of the document the client confirmed: the change order, or the signed V1. */
+  contentHash: string;
   ledger: ProjectLedger;
   plan: FundingPlan;
   /** The business item behind a plan line, if the agreement has it. */
@@ -55,7 +57,7 @@ export async function lockPaymentBasis(tx: Tx, sessionId: string, key: CaseKey):
     const { ledger, plan } = await openingPlan(tx, version);
     const approved = new Map(version.approved.map((entry) => [entry.line.itemId, entry.itemId]));
     return {
-      projectId: version.projectId, version: 1, orderId: null, key: version.revisionId, ledger, plan,
+      projectId: version.projectId, version: 1, orderId: null, key: version.revisionId, contentHash: version.contentHash, ledger, plan,
       businessItem: (line) => line.side === "baseline" ? approved.get(line.itemId) : undefined, bind: version.bind,
     };
   }
@@ -66,7 +68,7 @@ export async function lockPaymentBasis(tx: Tx, sessionId: string, key: CaseKey):
   const { ledger, plan } = await confirmedPlan(tx, version);
   const { byGroup } = fundingIdentities(version.order, version.itemMapping);
   return {
-    projectId: version.projectId, version: version.order.version, orderId: version.order.id, key: version.order.id, ledger, plan,
+    projectId: version.projectId, version: version.order.version, orderId: version.order.id, key: version.order.id, contentHash: version.order.contentHash, ledger, plan,
     businessItem: (line) => byGroup.get(`${line.side}:${line.itemId}`), bind: version.bind,
   };
 }

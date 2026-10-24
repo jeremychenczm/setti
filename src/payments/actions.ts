@@ -14,9 +14,11 @@ import { changeOrders, pricingCases } from "../pricing/schema";
 import { chatCases } from "../chat/schema";
 import type { CaseKey } from "../chat/types";
 import { cancelCheckout, completeAuthorization, createCheckout, type CheckoutDetails, type CheckoutLinks } from "./authorize";
-import { businessItem, confirmedPlan, lockConfirmedVersion, PaymentActionError, type LineRef, type ShownVersion } from "./binding";
+import type { FundingPlan } from "../approval/funding";
+import { businessItem, confirmedPlan, lockConfirmedVersion, PaymentActionError, type LineRef, type ShownVersion, type Tx } from "./binding";
+import { lockOpeningVersion, openingPlan } from "./opening";
 import { executeCapture, refreshCapture } from "./capture";
-import { insertOperation, type PaymentOperation } from "./operations";
+import { insertOperation, type OperationBinding, type PaymentOperation } from "./operations";
 import type { PayPalPayments } from "./paypal";
 import { executeRefund, refreshRefund } from "./refund";
 import { executeSavedHold } from "./saved-hold";
@@ -109,32 +111,55 @@ export function attempt(ledger: ProjectLedger, kind: PaymentOperation["kind"], p
 export async function startCapture(db: Db, paypal: PayPalPayments, sessionId: string, orderId: string, input: LineRef & ShownVersion): Promise<PaymentOperation[]> {
   const operations = await db.transaction(async (tx) => {
     const version = await lockConfirmedVersion(tx, sessionId, orderId, input);
-    const itemId = businessItem(version, input);
     const { ledger, plan } = await confirmedPlan(tx, version);
-    const event = ledger.supplierEvents.find((entry) => entry.kind === "order_confirmed" && entry.changeOrderId === version.order.id && entry.itemId === itemId);
-    const started = event ? ledger.operations.filter((operation) => operation.kind === "capture" && operation.supplierEventId === event.id) : [];
-    const open = started.filter((operation) => operation.status === "pending" || operation.status === "unknown");
-    if (open.length) return open;
-    if (plan.status === "blocked") throw new PaymentActionError("PLAN_BLOCKED", "Resolve the funding blockers before capturing.", plan.blockers);
-    const action = plan.actions.find((entry) => entry.kind === "capture" && entry.timing === "after_vendor_confirmation" && entry.itemId === input.itemId && entry.side === input.side);
-    if (!action) {
-      if (started.length) return started;
-      throw new PaymentActionError("NOT_AVAILABLE", "Nothing on this line is waiting to be captured.");
-    }
-    if (!event) throw new PaymentActionError("NOT_AVAILABLE", "Record the supplier's order confirmation before capturing; nothing is captured without it.");
-    let remaining = action.amountCents;
-    const created: PaymentOperation[] = [];
-    for (const { hold, heldCents } of openHolds(ledger, itemId)) {
-      if (remaining <= 0) break;
-      const amountCents = Math.min(heldCents, remaining);
-      const prefix = `capture:${event.id}:${hold.id}:`;
-      created.push(await insertOperation(tx, { businessKey: `${prefix}${attempt(ledger, "capture", prefix)}`, projectId: version.projectId, kind: "capture", authorizationId: hold.id, amountCents, finalCapture: true, binding: version.bind(itemId), supplierEventId: event.id }));
-      remaining -= amountCents;
-    }
-    if (remaining > 0) throw new PaymentActionError("PLAN_BLOCKED", "The open holds on this line no longer cover the confirmed amount. Check the authorizations before capturing.");
-    return created;
+    return captureOperations(tx, { ledger, plan, projectId: version.projectId, itemId: businessItem(version, input), line: input, bind: version.bind, eventOf: (event) => event.changeOrderId === version.order.id });
   });
   return runEach(operations, (id) => executeCapture(db, paypal, id));
+}
+
+/** The same designer step for an item of a V1 the client signed line by line, after the supplier confirmed it on V1. */
+export async function startOpeningCapture(db: Db, paypal: PayPalPayments, sessionId: string, key: CaseKey, input: { itemId: string; contentHash: string }): Promise<PaymentOperation[]> {
+  const operations = await db.transaction(async (tx) => {
+    const version = await lockOpeningVersion(tx, sessionId, key, input);
+    const entry = version.approved.find((candidate) => candidate.line.itemId === input.itemId);
+    if (!entry) throw new PaymentActionError("NOT_FOUND", "This line is not an approved line of quote V1.");
+    const { ledger, plan } = await openingPlan(tx, version);
+    return captureOperations(tx, { ledger, plan, projectId: version.projectId, itemId: entry.itemId, line: { itemId: input.itemId, side: "baseline" }, bind: version.bind, eventOf: (event) => event.revisionId === version.revisionId });
+  });
+  return runEach(operations, (id) => executeCapture(db, paypal, id));
+}
+
+/**
+ * Writes the captures of one item once the supplier confirmed it for this version: one per
+ * open hold (oldest first), each closing its hold. Repeating resumes the same operations.
+ */
+async function captureOperations(tx: Tx, scope: {
+  ledger: ProjectLedger; plan: FundingPlan; projectId: string; itemId: string; line: LineRef;
+  bind: (itemId: string) => OperationBinding; eventOf: (event: ProjectLedger["supplierEvents"][number]) => boolean;
+}): Promise<PaymentOperation[]> {
+  const { ledger, plan, itemId, line } = scope;
+  const event = ledger.supplierEvents.find((entry) => entry.kind === "order_confirmed" && entry.itemId === itemId && scope.eventOf(entry));
+  const started = event ? ledger.operations.filter((operation) => operation.kind === "capture" && operation.supplierEventId === event.id) : [];
+  const open = started.filter((operation) => operation.status === "pending" || operation.status === "unknown");
+  if (open.length) return open;
+  if (plan.status === "blocked") throw new PaymentActionError("PLAN_BLOCKED", "Resolve the funding blockers before capturing.", plan.blockers);
+  const action = plan.actions.find((entry) => entry.kind === "capture" && entry.timing === "after_vendor_confirmation" && entry.itemId === line.itemId && entry.side === line.side);
+  if (!action) {
+    if (started.length) return started;
+    throw new PaymentActionError("NOT_AVAILABLE", "Nothing on this line is waiting to be captured.");
+  }
+  if (!event) throw new PaymentActionError("NOT_AVAILABLE", "Record the supplier's order confirmation before capturing; nothing is captured without it.");
+  let remaining = action.amountCents;
+  const created: PaymentOperation[] = [];
+  for (const { hold, heldCents } of openHolds(ledger, itemId)) {
+    if (remaining <= 0) break;
+    const amountCents = Math.min(heldCents, remaining);
+    const prefix = `capture:${event.id}:${hold.id}:`;
+    created.push(await insertOperation(tx, { businessKey: `${prefix}${attempt(ledger, "capture", prefix)}`, projectId: scope.projectId, kind: "capture", authorizationId: hold.id, amountCents, finalCapture: true, binding: scope.bind(itemId), supplierEventId: event.id }));
+    remaining -= amountCents;
+  }
+  if (remaining > 0) throw new PaymentActionError("PLAN_BLOCKED", "The open holds on this line no longer cover the confirmed amount. Check the authorizations before capturing.");
+  return created;
 }
 
 /**
