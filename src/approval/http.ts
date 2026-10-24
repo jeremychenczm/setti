@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ACCOUNT_COOKIE, accountOrDefault, clientOf } from "@/accounts/demo";
 import type { CaseKey } from "@/chat/types";
+import { holdItemsAfterConfirmation } from "@/payments/http";
 import { approvalStore } from "./server";
 import { ApprovalStoreError } from "./store";
 import type { ApprovalWorkspace } from "./types";
@@ -77,6 +78,8 @@ export async function postApprovalResponse(req: NextRequest, id: string) {
     if (!current) return NextResponse.json({ code: "NOT_FOUND", error: "Change order not found." }, { status: 404, headers });
     const refusal = notTheClient(req, current.view.order.projectKey);
     if (refusal) return NextResponse.json({ code: "FORBIDDEN", error: refusal }, { status: 403, headers });
-    return NextResponse.json(asViewer(req, await approvalStore().decide(sessionId, id, input)), { headers });
+    const decided = await approvalStore().decide(sessionId, id, input);
+    if (decided.view.decision?.decision === "approved") await holdItemsAfterConfirmation(sessionId, current.view.order.projectKey);
+    return NextResponse.json(asViewer(req, decided), { headers });
   } catch (error) { return fail(error); }
 }

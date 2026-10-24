@@ -286,6 +286,16 @@ export async function postItemHoldsResponse(req: NextRequest, rawKey: string) {
   } catch (error) { return fail(error); }
 }
 
+/**
+ * Once the client confirms a new version, its new holds go on the client's saved
+ * PayPal right away. Best effort: with no saved PayPal, or if PayPal does not
+ * answer, the items stay "to hold" and either account can hold them from the page.
+ */
+export async function holdItemsAfterConfirmation(sessionId: string, key: CaseKey): Promise<void> {
+  try { await holdApprovedItems(db(), sandboxPayPal(), sessionId, key); }
+  catch { /* the item list shows what is still to hold */ }
+}
+
 /** The design-services checkout must belong to this session's project. */
 async function servicesOperation(sessionId: string, key: CaseKey, operationId: string): Promise<void> {
   const owned = await db().transaction(async (tx) => (await lockPaymentBasis(tx, sessionId, key)).ledger.operations.some((operation) => operation.id === operationId && operation.servicesHold));

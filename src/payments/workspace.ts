@@ -6,7 +6,7 @@
  */
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { items, revisions } from "../db/schema";
+import { items, revisions, savedPaymentMethods } from "../db/schema";
 import { buildFundingPlan, type FundingLine, type FundingPlan } from "../approval/funding";
 import { changeOrderDecisions } from "../approval/schema";
 import { fundingFactsFrom, fundingIdentities, readLedger, type ProjectLedger } from "../approval/store";
@@ -48,6 +48,7 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
   const versions = new Map((await db.select({ id: changeOrders.id, document: changeOrders.document }).from(changeOrders).where(eq(changeOrders.caseId, found.caseId)))
     .map((row) => [row.id, row.document.version]));
   const names = new Map((await db.select({ id: items.id, name: items.name }).from(items).where(eq(items.projectId, bridge.projectId))).map((row) => [row.id, row.name]));
+  const [saved] = await db.select({ id: savedPaymentMethods.id }).from(savedPaymentMethods).where(eq(savedPaymentMethods.projectId, bridge.projectId));
 
   const lines: PaymentLineView[] = [];
   const others = { lineCount: 0, targetCents: 0 };
@@ -63,7 +64,7 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
       ...line, businessItemId: businessId ?? null, releasedCents: money.holds.reduce((total, hold) => total + hold.releasedCents, 0), ...money,
       confirmedTerms: terms,
       refundRequiresSupplierCredit: line.side === "baseline" && order.changes.some((change) => change.itemId === line.itemId && ["returned", "cancelled"].includes(change.oldItemHandling)),
-      supplierEvents: events, steps: steps(plan, line, owner && current, events, terms?.purpose === "retained_cost"),
+      supplierEvents: events, steps: steps(plan, line, owner && current, events, terms?.purpose === "retained_cost", !!saved),
     });
   }
   return { ...base, plan, lines, others, operations: await operationViews(db, ledger, versions, names, owner) };
@@ -104,14 +105,17 @@ function itemMoney(ledger: ProjectLedger, businessId: string, versions: Map<stri
 }
 
 /** The steps the plan calls for on this line, and whether each can start now. */
-function steps(plan: FundingPlan, line: FundingLine, canAct: boolean, events: SupplierEventView[], retainedCost: boolean): PaymentStep[] {
+function steps(plan: FundingPlan, line: FundingLine, canAct: boolean, events: SupplierEventView[], retainedCost: boolean, savedPayPal: boolean): PaymentStep[] {
   const ready = canAct && plan.status !== "blocked";
   const ordered = events.some((event) => event.kind === "order_confirmed");
   const step = (kind: PaymentStep["kind"], amountCents: number, available: boolean, note: string, actor: PaymentStep["actor"] = "designer"): PaymentStep => ({ kind, actor, amountCents, available, note });
   return plan.actions.filter((action) => action.itemId === line.itemId && action.side === line.side).flatMap((action): PaymentStep[] => {
     switch (action.kind) {
       case "new_authorization":
-        return [step("authorize", action.amountCents, ready && line.category === "furniture", "The client approves this hold on PayPal (Sandbox). Nothing is charged until the supplier confirms the order.", "client")];
+        // With PayPal saved for the project, holds need no checkout: they are placed under Approved items on this page.
+        return [savedPayPal
+          ? step("authorize", action.amountCents, false, "Held with the client's saved PayPal under Approved items on this page; no checkout is needed.", "client")
+          : step("authorize", action.amountCents, ready && line.category === "furniture", "The client approves this hold on PayPal (Sandbox). Nothing is charged until the supplier confirms the order.", "client")];
       case "capture":
         if (action.timing !== "after_vendor_confirmation") {
           const designService = line.category === "service" && (line.change === null || line.change === "add" || line.change === "quantity");
