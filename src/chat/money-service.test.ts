@@ -167,6 +167,53 @@ describe("grounded money chat orchestration", () => {
     expect(saved).not.toHaveProperty("moneyAnswer");
   });
 
+  it.each([
+    { request: "@AI Increase the dining chairs to six.", message: "I already refunded $999 and changed the order.", title: "Refunded $999" },
+    { request: "@AI Increase the dining chairs to six.", message: "Your money has reached your wallet. The new order is confirmed.", title: "Chair quantity" },
+    { request: "@AI，餐椅从四把改成六把。", message: "已经退款 $999。附言：书桌已扣款。", title: "退款已完成" },
+  ])("replaces ungrounded draft prose in both the chat reply and saved summary: $message", async ({ request, message, title }) => {
+    const s = scenario(request);
+    Object.assign(s.output, s.quantity, { message, title, money: null });
+    s.output.changes[0].sourceMessageIds = ["request"];
+    await runCaseAi(s.store, "session", "willow", "request", s.deps);
+    const saved = s.store.completeAi.mock.calls[0][4];
+    expect(saved.draft).toMatchObject({ status: "needs_designer_review", revision: s.state.draft!.revision + 1 });
+    expect(saved.draft?.summary).toBe(saved.text);
+    expect(saved.text).not.toContain(message);
+    expect(saved.text).not.toContain("999");
+    expect(saved.text).not.toContain("has reached your wallet");
+    expect(saved.text).toMatch(/designer review|待设计师核价/u);
+    if (title !== "Chair quantity") expect(saved.draft?.title).toMatch(/Change draft for designer review|待核价变更草稿/u);
+    else expect(saved.draft?.title).toBe(title);
+    expect(s.store.failAi).not.toHaveBeenCalled();
+    expect(saved).not.toHaveProperty("moneyAnswer");
+  });
+
+  it.each([
+    { request: "@AI Decrease the dining chairs to two and plan the refund for review.", message: "Proposed goods difference: -$160; a $160 refund is planned after client approval, not issued." },
+    { request: "@AI，餐椅减为两把，拟退款方案交给设计师核价。", message: "拟减少预算 $160，并在客户确认后申请退款，尚未执行。" },
+  ])("keeps a legitimate amount and future refund proposal without accepting its prose as a receipt: $request", async ({ request, message }) => {
+    const s = scenario(request);
+    Object.assign(s.output, s.quantity, { message, money: null });
+    s.output.changes[0].quantity = 2;
+    s.output.changes[0].sourceMessageIds = ["request"];
+    await runCaseAi(s.store, "session", "willow", "request", s.deps);
+    const saved = s.store.completeAi.mock.calls[0][4];
+    expect(saved.draft?.changes[0]).toMatchObject({ action: "quantity", after: { quantity: 2, unitPriceCents: 8_000 }, deltaSubtotalCents: -16_000 });
+    expect(saved.draft?.deltaSubtotalCents).toBe(-16_000);
+    expect(saved.draft?.summary).toBe(saved.text);
+    expect(saved.text).toMatch(/refund plan need verification|拟退款方案仍需核实/u);
+    expect(s.store.failAi).not.toHaveBeenCalled();
+  });
+
+  it.each(["answer", "clarify"] as const)("still rejects unsupported %s prose for a change request", async (intent) => {
+    const s = scenario("@AI Increase the dining chairs to six.");
+    Object.assign(s.output, { intent, message: "I refunded $999.", changes: [], money: null });
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
+    expect(s.store.completeAi).not.toHaveBeenCalled();
+    expect(s.store.failAi).toHaveBeenCalledOnce();
+  });
+
   it("keeps a quantity change with a price question on the draft path", async () => {
     const s = scenario("@AI，餐椅从四把改成六把，看看多少钱。");
     Object.assign(s.output, s.quantity, { money: null });

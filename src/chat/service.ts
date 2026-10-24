@@ -28,6 +28,13 @@ export interface DraftDependencies {
   configured: () => boolean;
 }
 
+/** Model prose cannot turn a proposed change into an apparent payment receipt. */
+function draftReviewMessage(changeCount: number, request: string): string {
+  return /[\u3400-\u9fff]/u.test(request)
+    ? `已整理 ${changeCount} 项待设计师核价的变更。价格、税费、运费、旧物处理及拟退款方案仍需核实。创建此草稿不代表批准订单，也不会执行付款或退款。`
+    : `Prepared ${changeCount} proposed change${changeCount === 1 ? "" : "s"} for designer review. Prices, taxes, delivery, old-item handling and any refund plan need verification. Creating this draft does not approve orders or execute payments.`;
+}
+
 export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKey, messageId: string, dependencies?: Partial<DraftDependencies>): Promise<StoredCase> {
   const deps: DraftDependencies = { readPage: readProductPage, callModel: callChangeModel, configured: aiConfigured, ...dependencies };
   const start = await store.beginAi(sessionId, key, messageId);
@@ -71,6 +78,16 @@ export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKe
     const output = { ...result.output };
     delete output.money;
     const generated = buildDraft({ output, quote, messages, pages, current: state.draft, triggerId: messageId, model: result.model });
+    if (generated.draft) {
+      // Preserve valid proposals even when the model mentions a legitimate price or
+      // future refund. Render payment claims only through the grounded money path;
+      // a draft's chat reply and saved summary always use server-owned copy.
+      generated.text = draftReviewMessage(generated.draft.changes.length, trigger.text);
+      generated.draft.summary = generated.text;
+      if (hasUnsupportedMoneyClaim(generated.draft.title)) {
+        generated.draft.title = /[\u3400-\u9fff]/u.test(trigger.text) ? "待核价变更草稿" : "Change draft for designer review";
+      }
+    }
     return await store.completeAi(sessionId, key, messageId, runId, { ...generated, model: result.model });
   } catch (error) {
     // Never persist API error bodies, secrets, SQL, or upstream request headers.
