@@ -123,6 +123,6 @@ export function carryOverReview(quote: ApprovedQuoteReport, proposed: PricingInp
   });
   return {
     ...result,
-    input: { ...latest, title: saved.title !== proposed.title ? saved.title : latest.title, terms: saved.terms, reviewNotes: saved.reviewNotes, changes, issues },
+    input: { ...latest, title: saved.title !== proposed.title ? saved.title : latest.title, terms: saved.terms, reviewNotes: saved.reviewNotes, ...(saved.source ? { source: saved.source } : {}), changes, issues },
   };
 }

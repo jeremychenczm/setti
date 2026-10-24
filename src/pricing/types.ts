@@ -52,6 +52,18 @@ export interface PricingIssue {
   note: string;
 }
 
+/**
+ * Why a version changes the agreement. The client asked in the chat, the studio
+ * proposes it, or a supplier's notice changed a price or term; the client
+ * confirms the version either way before any money moves.
+ */
+export interface ChangeSource {
+  kind: "client" | "designer" | "vendor";
+  /** For a supplier notice: the supplier, and what its notice says. Empty otherwise. */
+  vendor: string;
+  notice: string;
+}
+
 export interface PricingInput {
   baselineFingerprint: string;
   title: string;
@@ -59,6 +71,8 @@ export interface PricingInput {
   issues: PricingIssue[];
   terms: string;
   reviewNotes: string;
+  /** Saved reviews from before sources were recorded have none; the draft's author decides then. */
+  source?: ChangeSource;
 }
 
 export interface PricingPreview {
@@ -140,6 +154,8 @@ export interface PricingDocumentBody {
   constraints: string[];
   sourceMessages: Pick<CaseMessage, "id" | "actor" | "text" | "createdAt">[];
   sources: ProductPage[];
+  /** Why this version changes the agreement. Versions issued before sources were recorded have none. */
+  source?: ChangeSource;
 }
 
 export interface FrozenChangeOrder extends PricingDocumentBody {

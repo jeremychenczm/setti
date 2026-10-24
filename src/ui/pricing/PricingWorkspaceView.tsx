@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowUpRight, Check, ClipboardCheck, LoaderCircle, RefreshCw
 import { useMemo, useState } from "react";
 import { clientOf } from "@/accounts/demo";
 import type { CaseKey } from "@/chat/types";
-import { previewPricing, requiresOldItemHandling } from "@/pricing/calculation";
+import { draftSource, previewPricing, requiresOldItemHandling } from "@/pricing/calculation";
 import type { OldItemHandling, PricingChangeInput, PricingItem } from "@/pricing/types";
 import { calculateLineTotals, calculateQuoteTotals } from "@/quotes/totals";
 import { centsText, dateTime, Field, inputClass, LocalShareLink, money, parseDollars, TotalTile, FromV1Note } from "./common";
@@ -13,6 +13,7 @@ import { usePricingWorkspace } from "./usePricingWorkspace";
 import { changeOrderStatusLabel } from "./changeOrderStatus";
 import { differences } from "@/pricing/review-diff";
 import { CarryOverChoices } from "./CarryOverChoices";
+import { ChangeSourceFields } from "./ChangeSource";
 
 const handlingLabels: Record<OldItemHandling, string> = { pending: "Not checked yet", not_ordered: "Not ordered", cancelled: "Order cancelled", returned: "Returned / return arranged", retained: "Retained in the project", not_applicable: "Not applicable" };
 const quantityIdentityFields = new Set<keyof PricingItem>(["name", "vendor", "sku", "specification", "category", "unitLabel"]);
@@ -158,6 +159,7 @@ export function PricingWorkspaceView({ projectKey }: { projectKey: CaseKey }) {
           <section className="mb-5 rounded-xl bg-white p-4 shadow-sm sm:p-5"><h2 className="mb-4 text-[14px] font-semibold">Resolve the draft’s open items</h2><fieldset disabled={disabled} className="space-y-4">{input.issues.length === 0 && <p className="text-[12px] text-slate-500">No open items were supplied by this draft.</p>}{input.issues.map((issue, index) => <div key={issue.id} className="rounded-lg border border-slate-200 p-3"><label className="flex items-start gap-2 text-[12px] leading-relaxed"><input aria-label={`Resolve issue ${index + 1}`} type="checkbox" checked={issue.resolved} onChange={(event) => setInput((previous) => previous ? { ...previous, issues: previous.issues.map((entry) => entry.id === issue.id ? { ...entry, resolved: event.target.checked } : entry) } : previous)} className="mt-0.5" /><span>{issue.label}</span></label><textarea aria-label={`Resolution note ${index + 1}`} rows={2} placeholder="Record how this was checked or resolved." className={`${inputClass} mt-2`} value={issue.note} onChange={(event) => setInput((previous) => previous ? { ...previous, issues: previous.issues.map((entry) => entry.id === issue.id ? { ...entry, note: event.target.value } : entry) } : previous)} /></div>)}</fieldset></section>
 
           {workspace.sourceDraft?.constraints.length ? <section className="mb-5 rounded-xl border border-blue-100 bg-blue-50 p-4 text-[12px] leading-relaxed text-blue-900"><h2 className="mb-2 font-semibold">Instructions carried into the client version</h2><ul className="list-disc space-y-1 pl-4">{workspace.sourceDraft.constraints.map((constraint, index) => <li key={index}>{constraint}</li>)}</ul></section> : null}
+          <ChangeSourceFields value={input.source ?? draftSource({ model: workspace.sourceDraft?.model ?? "" })} disabled={disabled} onChange={(source) => setInput((previous) => previous ? { ...previous, source } : previous)} />
           <section className="mb-5 rounded-xl bg-white p-4 shadow-sm sm:p-5"><fieldset disabled={disabled} className="grid gap-4 lg:grid-cols-2"><Field label="Client terms" hint="Required. State scope, delivery assumptions, cancellation terms and what this version asks the client to confirm."><textarea aria-label="Client terms" rows={5} className={inputClass} value={input.terms} onChange={(event) => setInput((previous) => previous ? { ...previous, terms: event.target.value, changes: previous.changes.map((change) => ({ ...change, confirmed: false })) } : previous)} /></Field><Field label="Designer review notes" hint="These notes will also be frozen into the read-only client version."><textarea aria-label="Designer review notes" rows={5} className={inputClass} value={input.reviewNotes} onChange={(event) => setInput((previous) => previous ? { ...previous, reviewNotes: event.target.value } : previous)} /></Field></fieldset></section>
 
           {(hasInvalidNumbers || preview?.problems.length) ? <section role="status" className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-[12px] leading-relaxed text-amber-900"><h2 className="mb-2 font-semibold">Before sending it to the client</h2><ul className="list-disc space-y-1 pl-4">{Object.values(numericErrors).map((problem, index) => <li key={`number-${index}`}>{problem}</li>)}{preview?.problems.map((problem, index) => <li key={index}>{problem}</li>)}</ul></section> : null}

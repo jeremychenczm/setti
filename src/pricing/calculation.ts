@@ -4,7 +4,7 @@ import { calculateLineTotals, calculateQuoteTotals, type QuoteTotals } from "../
 import { quoteFingerprint } from "../quotes/fingerprint";
 import type { CaseMessage, ChangeDraft, DraftChange } from "@/chat/types";
 import { differences } from "./review-diff";
-import type { FinalQuoteLine, PricingChangeInput, PricingDocumentBody, PricingInput, PricingItem, PricingPreview, ReviewedChange } from "./types";
+import type { ChangeSource, FinalQuoteLine, PricingChangeInput, PricingDocumentBody, PricingInput, PricingItem, PricingPreview, ReviewedChange } from "./types";
 
 const MAX_CENTS = 2_000_000_000;
 const cents = z.number().int().min(0).max(MAX_CENTS);
@@ -39,7 +39,13 @@ export const pricingInputSchema = z.strictObject({
   })).min(1).max(100),
   issues: z.array(z.strictObject({ id: z.string().min(1).max(100), label: text(10_000), resolved: z.boolean(), note: text(10_000) })).max(300),
   terms: text(30_000), reviewNotes: text(20_000),
+  source: z.strictObject({ kind: z.enum(["client", "designer", "vendor"]), vendor: text(300), notice: text(10_000) }).optional(),
 });
+
+/** A draft the designer wrote is the studio's proposal; one drafted from the chat is the client's request. */
+export function draftSource(draft: Pick<ChangeDraft, "model">): ChangeSource {
+  return { kind: draft.model === "designer" ? "designer" : "client", vendor: "", notice: "" };
+}
 
 export class PricingValidationError extends Error {
   readonly problems: string[];
@@ -137,7 +143,7 @@ export function createPricingInput(quote: ApprovedQuoteReport, draft: ChangeDraf
       };
     }),
     issues: draft.unresolved.map((label, index) => ({ id: `issue-${index}`, label, resolved: false, note: "" })),
-    terms: "", reviewNotes: "",
+    terms: "", reviewNotes: "", source: draftSource(draft),
   };
 }
 
@@ -265,6 +271,7 @@ export function previewPricing(quote: ApprovedQuoteReport, draft: ChangeDraft, v
   const initialEvidence = new Map(createPricingInput(quote, draft).changes.map((change) => [change.key, change.priceEvidence]));
   if (!input.title.trim()) problems.push("Enter a change order title.");
   if (!input.terms.trim()) problems.push("Enter the terms for this quote and old-item handling.");
+  if (input.source?.kind === "vendor" && (!input.source.vendor.trim() || !input.source.notice.trim())) problems.push("Name the supplier and enter what its notice says, so the client sees why the price changed.");
   for (const [index, change] of input.changes.entries()) {
     const label = change.after?.name.trim() || quote.lines.find((line) => line.itemId === change.itemId)?.name || change.key;
     if (!change.confirmed) problems.push(`${label}: the designer has not confirmed this line's pricing.`);
@@ -336,5 +343,10 @@ export function prepareChangeOrder(quote: ApprovedQuoteReport, draft: ChangeDraf
     terms: input.terms, reviewNotes: input.reviewNotes, issues: input.issues, constraints: [...draft.constraints],
     sourceMessages: sourceMessages.map(({ id, actor, text, createdAt }) => ({ id, actor, text, createdAt })),
     sources: draft.sources,
+    source: frozenSource(input.source ?? draftSource(draft)),
   });
+}
+
+function frozenSource(source: ChangeSource): ChangeSource {
+  return source.kind === "vendor" ? { kind: "vendor", vendor: source.vendor.trim(), notice: source.notice.trim() } : { kind: source.kind, vendor: "", notice: "" };
 }

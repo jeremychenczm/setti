@@ -39,7 +39,8 @@ function versionMessage(order: FrozenChangeOrder): string {
   const firstName = clientSignatureName(order).split(/\s+/)[0];
   const count = order.changes.length;
   const delta = order.deltaTotalCents === 0 ? "no change" : `${order.deltaTotalCents > 0 ? "+" : "−"}${usd(Math.abs(order.deltaTotalCents))}`;
-  return `Hi ${firstName}, here is quote V${order.version}: ${order.title}. It changes ${count} line${count === 1 ? "" : "s"}, and the new total is ${usd(order.totals.totalCents)} (${delta} against the approved V${order.basedOnVersion}). Please review it and confirm.`;
+  const reason = order.source?.kind === "vendor" ? ` It follows a notice from ${order.source.vendor}.` : "";
+  return `Hi ${firstName}, here is quote V${order.version}: ${order.title}.${reason} It changes ${count} line${count === 1 ? "" : "s"}, and the new total is ${usd(order.totals.totalCents)} (${delta} against the approved V${order.basedOnVersion}). Please review it and confirm.`;
 }
 
 function publicReview(row: ReviewRow): PricingReview {

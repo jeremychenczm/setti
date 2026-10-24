@@ -1,6 +1,7 @@
 import type { ApprovedQuoteReport, QuoteLine } from "@/quotes/types";
 import type { MoneyAnswer, MoneyContext } from "../ai/money-types";
 import type { OpeningQuote, QuoteView } from "../opening/types";
+import type { ChangeSource } from "../pricing/types";
 
 export type CaseKey = "willow" | "maple";
 export type HumanActor = "designer" | "client";
@@ -117,6 +118,8 @@ export interface SentVersion {
   status: "awaiting_client_confirmation" | "approved" | "declined" | "superseded";
   /** Issued from the case's current draft as it stands now. */
   fromCurrentDraft: boolean;
+  /** Why the version changes the agreement; absent on versions issued before sources were recorded. */
+  source?: ChangeSource;
 }
 
 export interface StoredCase {

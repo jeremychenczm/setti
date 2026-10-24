@@ -76,6 +76,7 @@ async function sentVersions(tx: Transaction, row: CaseRow): Promise<SentVersion[
     id: document.id, version: document.version, basedOnVersion: document.basedOnVersion, title: document.title, messageId, issuedAt: document.issuedAt,
     changeCount: document.changes.length, totalCents: document.totals.totalCents, deltaTotalCents: document.deltaTotalCents, status: changeOrderView(document, status).status,
     fromCurrentDraft: !!row.draft && document.sourceDraftId === row.draft.id && document.sourceDraftRevision === row.draft.revision,
+    ...(document.source ? { source: document.source } : {}),
   }));
 }
 
