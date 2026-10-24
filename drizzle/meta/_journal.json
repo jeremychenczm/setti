@@ -183,6 +183,13 @@
       "when": 1792799074203,
       "tag": "0025_saved_hold_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1792801118936,
+      "tag": "0026_v1_supplier_events",
+      "breakpoints": true
     }
   ]
 }
