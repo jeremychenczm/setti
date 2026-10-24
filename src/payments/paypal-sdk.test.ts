@@ -179,4 +179,19 @@ describe("PayPal SDK adapter", () => {
     });
     expect((sent as { body: { paymentSource: { paypal: object } } }).body.paymentSource.paypal).not.toHaveProperty("experienceContext");
   });
+
+  it("keeps the payer-action link and return URLs for approval of the same saved-method order", async () => {
+    let sent: unknown;
+    const approvalUrl = "https://www.sandbox.paypal.com/checkoutnow?token=ORDER-2";
+    const paypal = adapter({}, { createOrder: async (request: unknown) => { sent = request; return response({
+      id: "ORDER-2", status: "PAYER_ACTION_REQUIRED", links: [{ rel: "payer-action", href: approvalUrl }],
+      purchaseUnits: [{ amount: { currencyCode: "USD", value: "271.88" }, customId: "op-1" }],
+    }); } } as never);
+    const { referenceId, customId, invoiceId, description, returnUrl, cancelUrl } = checkout;
+    expect(await paypal.createSavedPayPalOrder({ referenceId, customId, invoiceId, description, returnUrl, cancelUrl,
+      requestId: "setti-op-2", paypalTokenId: "TOKEN-1", amountCents: 27_188 })).toMatchObject({
+      kind: "ok", value: { orderId: "ORDER-2", status: "PAYER_ACTION_REQUIRED", amountCents: 27_188, customId: "op-1", approvalUrl },
+    });
+    expect(sent).toMatchObject({ body: { paymentSource: { paypal: { vaultId: "TOKEN-1", experienceContext: { returnUrl, cancelUrl } } } } });
+  });
 });

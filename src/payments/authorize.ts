@@ -83,15 +83,25 @@ function checkoutReceiptError(order: OrderReceipt, operation: PaymentOperation):
   return null;
 }
 
+/** A buyer fallback is only a provider link for this exact Sandbox order and amount. */
+export function verifiedApprovalLink(order: OrderReceipt, operation: PaymentOperation): string | null {
+  if (!order.approvalUrl || order.orderId !== operation.paypalOrderId || order.amountCents !== operation.amountCents || order.currency !== "USD") return null;
+  try {
+    const url = new URL(order.approvalUrl);
+    return url.protocol === "https:" && ["www.sandbox.paypal.com", "sandbox.paypal.com"].includes(url.hostname)
+      && !url.username && !url.password && url.searchParams.get("token") === order.orderId ? url.href : null;
+  } catch { return null; }
+}
+
 /**
  * Advances an authorization from what PayPal reports now: approved orders are
  * authorized, completed ones are read back, unapproved ones keep waiting.
  */
-export async function completeAuthorization(db: Db, paypal: PayPalPayments, operationId: string): Promise<{ operation: PaymentOperation; state: CheckoutState }> {
+export async function completeAuthorization(db: Db, paypal: PayPalPayments, operationId: string, allowSaved = false): Promise<{ operation: PaymentOperation; state: CheckoutState }> {
   const claim = await claimOperation(db, operationId, "authorize");
   if (claim.finished) return { operation: claim.operation, state: claim.operation.status === "succeeded" ? "authorized" : "failed" };
   const { operation } = claim;
-  if (operation.savedMethodId) throw new Error(`Payment operation ${operation.id} is a saved-PayPal hold, not a checkout`);
+  if (operation.savedMethodId && !allowSaved) throw new Error(`Payment operation ${operation.id} is a saved-PayPal hold, not a checkout`);
   if (!operation.paypalOrderId) return { operation, state: operation.status === "unknown" ? "unknown" : "awaiting_buyer" };
 
   // A hold PayPal is still reviewing is read back by its id.
@@ -120,12 +130,17 @@ export async function completeAuthorization(db: Db, paypal: PayPalPayments, oper
   switch (order.status) {
     case "CREATED":
     case "PAYER_ACTION_REQUIRED":
-    case "SAVED":
+    case "SAVED": {
+      const approvalUrl = operation.savedMethodId ? verifiedApprovalLink({ ...order, approvalUrl: order.approvalUrl ?? operation.approvalUrl ?? undefined }, operation) : order.approvalUrl;
+      if (operation.savedMethodId && !approvalUrl) return checkoutResult(await updateUnsettledCheckout(db, operation.id, {
+        status: "unknown", failureCode: "SAVED_PAYPAL_APPROVAL_UNAVAILABLE", failureMessage: "PayPal needs the client, but returned no verified approval link for this order. Check this same hold; no replacement will be started.",
+      }), "unknown");
       return checkoutResult(await updateUnsettledCheckout(db, operation.id, {
-        status: "pending", ...(!operation.approvalUrl && order.approvalUrl ? { approvalUrl: order.approvalUrl } : {}),
-        failureCode: operation.failureCode === "CHECKOUT_CANCEL_REQUESTED" ? operation.failureCode : null,
-        failureMessage: operation.failureCode === "CHECKOUT_CANCEL_REQUESTED" ? operation.failureMessage : null,
+        status: "pending", ...(!operation.approvalUrl && approvalUrl ? { approvalUrl } : {}),
+        failureCode: operation.failureCode === "CHECKOUT_CANCEL_REQUESTED" ? operation.failureCode : operation.savedMethodId ? "SAVED_PAYPAL_NEEDS_CLIENT" : null,
+        failureMessage: operation.failureCode === "CHECKOUT_CANCEL_REQUESTED" ? operation.failureMessage : operation.savedMethodId ? "PayPal needs the client to approve this same item hold. Continue on PayPal, then check the result; no new hold is created." : null,
       }), "awaiting_buyer");
+    }
     case "VOIDED":
       return fail(db, operation, "ORDER_VOIDED", "PayPal voided this checkout before it was authorized; nothing is held.");
     case "COMPLETED":
@@ -160,17 +175,18 @@ export async function completeAuthorization(db: Db, paypal: PayPalPayments, oper
  * Leaving checkout is not proof that an approval cannot arrive from another
  * window. Keep the same operation open until PayPal reports a terminal result.
  */
-export async function cancelCheckout(db: Db, paypal: PayPalPayments, operationId: string): Promise<{ operation: PaymentOperation; state: CheckoutState }> {
+export async function cancelCheckout(db: Db, paypal: PayPalPayments, operationId: string, allowSaved = false): Promise<{ operation: PaymentOperation; state: CheckoutState }> {
   const [current] = await db.select().from(paymentOperations).where(eq(paymentOperations.id, operationId));
   if (!current || current.kind !== "authorize") throw new Error(`Authorization operation ${operationId} does not exist`);
+  if (current.savedMethodId && !allowSaved) throw new Error(`Payment operation ${current.id} is a saved-PayPal hold, not a checkout`);
   if (current.status === "succeeded" || current.status === "failed") return { operation: current, state: current.status === "succeeded" ? "authorized" : "failed" };
-  if (current.paypalResourceId) return completeAuthorization(db, paypal, operationId);
+  if (current.paypalResourceId) return completeAuthorization(db, paypal, operationId, allowSaved);
   if (!current.paypalOrderId) {
     return checkoutResult(await updateUnsettledCheckout(db, current.id, { status: "unknown", failureCode: "CHECKOUT_CANCEL_REQUESTED", failureMessage: "You left checkout while PayPal may still be preparing it. Check this same checkout before starting another authorization." }), "cancelled");
   }
   const found = await paypal.getOrder(current.paypalOrderId);
   await logOrder(db, current, "get_order", null, found);
-  if (found.kind === "ok" && (found.value.status === "APPROVED" || found.value.status === "COMPLETED")) return completeAuthorization(db, paypal, operationId);
+  if (found.kind === "ok" && (found.value.status === "APPROVED" || found.value.status === "COMPLETED")) return completeAuthorization(db, paypal, operationId, allowSaved);
   if (found.kind === "rejected" && found.code === "RESOURCE_NOT_FOUND") return checkoutResult(await updateUnsettledCheckout(db, current.id, { status: "failed", failureCode: "ORDER_EXPIRED", failureMessage: "PayPal no longer has this checkout. Start a new authorization if it is still needed." }), "failed");
   if (found.kind !== "ok") {
     return checkoutResult(await updateUnsettledCheckout(db, current.id, { failureMessage: `PayPal could not confirm that the checkout was not approved: ${found.message}` }), "unknown");

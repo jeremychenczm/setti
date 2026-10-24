@@ -79,7 +79,7 @@ export async function postApprovalResponse(req: NextRequest, id: string) {
     const refusal = notTheClient(req, current.view.order.projectKey);
     if (refusal) return NextResponse.json({ code: "FORBIDDEN", error: refusal }, { status: 403, headers });
     const decided = await approvalStore().decide(sessionId, id, input);
-    if (decided.view.decision?.decision === "approved") await holdItemsAfterConfirmation(sessionId, current.view.order.projectKey);
+    if (decided.view.decision?.decision === "approved") await holdItemsAfterConfirmation(sessionId, current.view.order.projectKey, req);
     return NextResponse.json(asViewer(req, decided), { headers });
   } catch (error) { return fail(error); }
 }

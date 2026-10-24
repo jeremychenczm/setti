@@ -7,7 +7,7 @@ import { paymentOperations, paypalAuthorizations, savedPaymentMethods } from "..
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import { signOpeningForTest } from "../opening/testing";
 import { completeAuthorization } from "./authorize";
-import { holdApprovedItems } from "./item-holds";
+import { cancelItemHold, checkItemHold, holdApprovedItems } from "./item-holds";
 import { itemHoldsView } from "./item-holds-view";
 import { lockOpeningVersion } from "./opening";
 import { insertOperation } from "./operations";
@@ -31,7 +31,7 @@ describe.skipIf(!testDatabaseUrl)("holding approved items with saved PayPal", ()
   });
   afterAll(() => handle?.pool.end());
 
-  const hold = () => holdApprovedItems(handle.db, paypal, session, "willow");
+  const hold = () => holdApprovedItems(handle.db, paypal, session, "willow", links);
   const view = (account = client) => itemHoldsView(handle.db, session, "willow", account);
   const savedHolds = () => handle.db.select().from(paymentOperations).where(isNotNull(paymentOperations.savedMethodId));
 
@@ -62,20 +62,27 @@ describe.skipIf(!testDatabaseUrl)("holding approved items with saved PayPal", ()
     expect(await hold()).toEqual([]);
   });
 
-  it("leaves the other items held when one fails, and retries only that one", async () => {
+  it("leaves other items held while one needs client approval, then finishes that same item and order", async () => {
     await signOpeningForTest(handle.db, session, "willow");
     await payServices();
     paypal.then("answer-payer-action");
     const first = await hold();
-    expect(first.filter((operation) => operation.status === "failed")).toHaveLength(1);
+    const waiting = first.find((operation) => operation.failureCode === "SAVED_PAYPAL_NEEDS_CLIENT")!;
+    expect(waiting).toMatchObject({ status: "pending", approvalUrl: expect.stringContaining(waiting.paypalOrderId!) });
     expect(first.filter((operation) => operation.status === "succeeded")).toHaveLength(FURNITURE.length - 1);
-    const failed = (await view()).items.filter((line) => line.state === "failed");
-    expect(failed).toEqual([expect.objectContaining({ failureMessage: expect.stringMatching(/approve this hold/) })]);
-
-    const retry = await hold();
-    expect(retry).toHaveLength(1);
-    expect(retry[0]).toMatchObject({ status: "succeeded", itemId: first.find((operation) => operation.status === "failed")!.itemId });
+    const before = await view();
+    expect(before).toMatchObject({ canHold: false });
+    expect(before.items.filter((line) => line.state === "awaiting_client")).toEqual([expect.objectContaining({ operationId: waiting.id, approvalUrl: waiting.approvalUrl, canCheck: true, canCancel: true })]);
+    expect((await view(designer)).items.find((line) => line.operationId === waiting.id)).toMatchObject({ approvalUrl: null, canCheck: true, canCancel: false });
+    expect((await view(otherClient)).items.find((line) => line.operationId === waiting.id)).toMatchObject({ approvalUrl: null, canCheck: false, canCancel: false });
+    expect(await hold()).toEqual([expect.objectContaining({ id: waiting.id, status: "pending", paypalOrderId: waiting.paypalOrderId })]);
+    expect(await cancelItemHold(handle.db, paypal, session, "willow", waiting.id)).toMatchObject({ id: waiting.id, status: "pending", failureCode: "CHECKOUT_CANCEL_REQUESTED" });
+    paypal.approve(waiting.paypalOrderId!);
+    expect(await checkItemHold(handle.db, paypal, session, "willow", waiting.id)).toMatchObject({ status: "succeeded", itemId: waiting.itemId, paypalOrderId: waiting.paypalOrderId });
     expect((await view()).items.every((line) => line.state === "held")).toBe(true);
+    expect(await hold()).toEqual([]);
+    expect(paypal.calls.filter((call) => "paypalTokenId" in call)).toHaveLength(FURNITURE.length);
+    expect(await handle.db.select().from(paypalAuthorizations).where(isNotNull(paypalAuthorizations.itemId))).toHaveLength(FURNITURE.length);
   });
 
   it("finishes a hold whose answer was lost before holding anything else", async () => {
@@ -85,10 +92,20 @@ describe.skipIf(!testDatabaseUrl)("holding approved items with saved PayPal", ()
     const first = await hold();
     const lost = first.find((operation) => operation.status === "unknown")!;
     expect(lost).toBeTruthy();
-    expect((await view()).items.find((line) => line.state === "holding")).toBeTruthy();
+    expect((await view()).items.find((line) => line.state === "unknown")).toMatchObject({ operationId: lost.id, canCheck: true, approvalUrl: null });
     expect(await hold()).toEqual([expect.objectContaining({ id: lost.id, status: "succeeded" })]);
     expect(await hold()).toEqual([]);
     expect(await handle.db.select().from(paypalAuthorizations).where(isNotNull(paypalAuthorizations.itemId))).toHaveLength(FURNITURE.length);
+  });
+
+  it("refuses to reconcile another session's item hold", async () => {
+    await signOpeningForTest(handle.db, session, "willow");
+    await payServices();
+    paypal.then("answer-payer-action");
+    const waiting = (await hold()).find((operation) => operation.approvalUrl)!;
+    await expect(checkItemHold(handle.db, paypal, randomUUID(), "willow", waiting.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(cancelItemHold(handle.db, paypal, randomUUID(), "willow", waiting.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(paypal.calls.filter((call) => "paypalTokenId" in call)).toHaveLength(FURNITURE.length);
   });
 
   it("holds a line the client signs later, with the same saved PayPal", async () => {

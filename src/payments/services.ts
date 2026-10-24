@@ -7,16 +7,16 @@
  */
 import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { items, revisions, savedPaymentMethods, servicesHoldLines } from "../db/schema";
+import { items, paypalAuthorizations, paypalCaptures, revisions, savedPaymentMethods, servicesHoldLines } from "../db/schema";
 import type { FundingPlan } from "../approval/funding";
 import { fundingIdentities, type ProjectLedger } from "../approval/store";
 import { chatCases } from "../chat/schema";
 import type { CaseKey } from "../chat/types";
 import { changeOrders, pricingCases } from "../pricing/schema";
 import { attempt, checkoutDetails, type LinkBuilder } from "./actions";
-import { createCheckout } from "./authorize";
+import { completeAuthorization, createCheckout } from "./authorize";
 import { confirmedPlan, lockConfirmedVersion, PaymentActionError, type Tx } from "./binding";
-import { executeCapture } from "./capture";
+import { executeCapture, refreshCapture } from "./capture";
 import { lockOpeningVersion, openingPlan } from "./opening";
 import { insertOperation, type OperationBinding, type PaymentOperation } from "./operations";
 import type { PayPalPayments } from "./paypal";
@@ -108,6 +108,28 @@ export async function startServicesCheckout(db: Db, paypal: PayPalPayments, sess
     return created;
   });
   return createCheckout(db, paypal, operation, links(operation.id), await checkoutDetails(db, operation));
+}
+
+/** Recovers the same checkout after a lost create/authorize answer, including on V1. */
+export async function checkServicesCheckout(db: Db, paypal: PayPalPayments, sessionId: string, key: CaseKey, operationId: string, links: LinkBuilder) {
+  let operation = await db.transaction(async (tx) => {
+    const basis = await lockPaymentBasis(tx, sessionId, key);
+    const found = basis.ledger.operations.find((entry) => entry.id === operationId && entry.servicesHold);
+    if (!found) throw new PaymentActionError("NOT_FOUND", "This design-services checkout does not belong to this project.");
+    return found;
+  });
+  if (!operation.paypalOrderId && (operation.status === "pending" || operation.status === "unknown")) {
+    operation = await createCheckout(db, paypal, operation, links(operation.id), await checkoutDetails(db, operation));
+  }
+  const result = await completeAuthorization(db, paypal, operation.id);
+  if (result.state === "authorized") {
+    const pending = await db.select({ id: paypalCaptures.id }).from(paypalCaptures)
+      .innerJoin(paypalAuthorizations, eq(paypalCaptures.authorizationId, paypalAuthorizations.id))
+      .where(and(eq(paypalAuthorizations.operationId, operation.id), eq(paypalCaptures.status, "pending")));
+    for (const capture of pending) await refreshCapture(db, paypal, capture.id);
+    await chargeServices(db, paypal, sessionId, key);
+  }
+  return result;
 }
 
 /**

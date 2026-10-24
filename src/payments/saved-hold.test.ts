@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { DEMO_ACCOUNTS } from "../accounts/demo";
 import { createChatStore } from "../chat/store";
 import { paymentOperations, paypalAuthorizations, paypalCalls, savedPaymentMethods } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
@@ -132,14 +133,83 @@ describe.skipIf(!testDatabaseUrl)("holds placed with saved PayPal", () => {
     expect(steps).toEqual(["create_order", "get_order"]);
   });
 
-  it("holds nothing when PayPal wants the client again or reports another amount", async () => {
+  it("leaves ambiguous legacy saved-method orders for manual review without provider reads or writes", async () => {
+    await checkoutSavingPayPal();
+    const [method] = await savedMethods();
+    const third = await v3();
+    const pending = await writeHold(third, "baseline", 27_188, { savedMethodId: method.id });
+    await handle.db.update(paymentOperations).set({ status: "unknown", failureCode: "LEGACY_SAVED_PAYPAL_REVIEW_REQUIRED", failureMessage: "Several legacy attempts need manual reconciliation." }).where(eq(paymentOperations.id, pending.id));
+    const reads = paypal.reads.length, writes = paypal.calls.length;
+    expect(await executeSavedHold(handle.db, paypal, pending.id, details)).toMatchObject({ status: "unknown", failureCode: "LEGACY_SAVED_PAYPAL_REVIEW_REQUIRED" });
+    expect(await checkPayment(handle.db, paypal, session, third.id, pending.id, links)).toMatchObject({ status: "unknown", failureCode: "LEGACY_SAVED_PAYPAL_REVIEW_REQUIRED" });
+    expect(paypal.reads).toHaveLength(reads);
+    expect(paypal.calls).toHaveLength(writes);
+  });
+
+  it("continues the same saved-method order through client approval, callback and repeated checks", async () => {
     await checkoutSavingPayPal();
     const [method] = await savedMethods();
     const third = await v3();
     const needsClient = await writeHold(third, "baseline", 27_188, { savedMethodId: method.id });
     paypal.then("answer-payer-action");
-    expect(await executeSavedHold(handle.db, paypal, needsClient.id, details)).toMatchObject({ status: "failed", failureCode: "SAVED_PAYPAL_NEEDS_CLIENT", approvalUrl: null });
+    const waiting = await executeSavedHold(handle.db, paypal, needsClient.id, details, links(needsClient.id));
+    expect(waiting).toMatchObject({ status: "pending", failureCode: "SAVED_PAYPAL_NEEDS_CLIENT", approvalUrl: expect.stringContaining(waiting.paypalOrderId!) });
+    const client = DEMO_ACCOUNTS.find((account) => account.projectKey === "willow")!;
+    const clientView = await paymentsWorkspace(handle.db, session, third.id, undefined, client);
+    expect(clientView?.operations.find((operation) => operation.id === needsClient.id)).toMatchObject({ approvalUrl: waiting.approvalUrl, canContinue: true, canCheck: true, canCancel: true });
+    const designerView = await paymentsWorkspace(handle.db, session, third.id, undefined, DEMO_ACCOUNTS[0]);
+    expect(designerView?.operations.find((operation) => operation.id === needsClient.id)).toMatchObject({ approvalUrl: null, canContinue: false, canCheck: true, canCancel: false });
+    expect(await returnFromPayPal(handle.db, paypal, waiting.id, "another-order", "return")).toBeNull();
+    expect(await checkPayment(handle.db, paypal, session, third.id, waiting.id, links)).toMatchObject({ status: "pending", paypalOrderId: waiting.paypalOrderId });
+    paypal.approve(waiting.paypalOrderId!);
+    expect(await returnFromPayPal(handle.db, paypal, waiting.id, waiting.paypalOrderId, "return")).toMatchObject({ state: "authorized" });
+    expect(await checkPayment(handle.db, paypal, session, third.id, waiting.id, links)).toMatchObject({ status: "succeeded", id: waiting.id });
+    expect(paypal.calls.filter((call) => "paypalTokenId" in call)).toHaveLength(1);
+    expect(paypal.calls.filter((call) => "orderId" in call && call.orderId === waiting.paypalOrderId)).toHaveLength(1);
+    expect(await handle.db.select().from(paypalAuthorizations).where(eq(paypalAuthorizations.operationId, waiting.id))).toHaveLength(1);
+  });
 
+  it("keeps a cancelled fallback open, records a late approval and recovers a lost authorize response", async () => {
+    await checkoutSavingPayPal();
+    const [method] = await savedMethods();
+    const third = await v3();
+    const operation = await writeHold(third, "baseline", 27_188, { savedMethodId: method.id });
+    paypal.then("answer-payer-action");
+    const waiting = await executeSavedHold(handle.db, paypal, operation.id, details);
+    expect(await cancelPayment(handle.db, paypal, session, third.id, operation.id)).toMatchObject({ id: operation.id, status: "pending", failureCode: "CHECKOUT_CANCEL_REQUESTED" });
+    paypal.readsUnavailable = true;
+    expect(await checkPayment(handle.db, paypal, session, third.id, operation.id, links)).toMatchObject({ status: "pending", paypalOrderId: waiting.paypalOrderId });
+    paypal.readsUnavailable = false;
+    paypal.approve(waiting.paypalOrderId!);
+    paypal.then("lose-response");
+    expect(await returnFromPayPal(handle.db, paypal, operation.id, waiting.paypalOrderId, "return")).toMatchObject({ state: "unknown" });
+    expect(await checkPayment(handle.db, paypal, session, third.id, operation.id, links)).toMatchObject({ status: "succeeded", id: operation.id });
+    expect(await cancelPayment(handle.db, paypal, session, third.id, operation.id)).toMatchObject({ status: "succeeded" });
+    expect(paypal.calls.filter((call) => "paypalTokenId" in call)).toHaveLength(1);
+    expect(await handle.db.select().from(paypalAuthorizations).where(eq(paypalAuthorizations.operationId, operation.id))).toHaveLength(1);
+  });
+
+  it.each([undefined, "https://attacker.example/checkout?token=x", "https://www.sandbox.paypal.com/checkoutnow?token=another-order"])("keeps an unverified payer-action link unknown rather than replacing the hold: %s", async (approvalUrl) => {
+    await checkoutSavingPayPal();
+    const [method] = await savedMethods();
+    const third = await v3();
+    const operation = await writeHold(third, "baseline", 27_188, { savedMethodId: method.id });
+    const original = paypal.createSavedPayPalOrder.bind(paypal);
+    paypal.createSavedPayPalOrder = async (command) => {
+      const result = await original(command);
+      return result.kind === "ok" ? { ...result, value: { ...result.value, approvalUrl } } : result;
+    };
+    paypal.then("answer-payer-action");
+    expect(await executeSavedHold(handle.db, paypal, operation.id, details)).toMatchObject({ status: "unknown", failureCode: "SAVED_PAYPAL_APPROVAL_UNAVAILABLE", approvalUrl: null });
+    // Checking recovers the real provider order/link; it does not retry the saved token.
+    expect(await checkPayment(handle.db, paypal, session, third.id, operation.id, links)).toMatchObject({ status: "pending", failureCode: "SAVED_PAYPAL_NEEDS_CLIENT" });
+    expect(paypal.calls.filter((call) => "paypalTokenId" in call)).toHaveLength(1);
+  });
+
+  it("holds nothing when PayPal reports another amount", async () => {
+    await checkoutSavingPayPal();
+    const [method] = await savedMethods();
+    const third = await v3();
     const otherAmount = await writeHold(third, "baseline", 27_188, { savedMethodId: method.id });
     paypal.then("answer-other-amount");
     expect(await executeSavedHold(handle.db, paypal, otherAmount.id, details)).toMatchObject({ status: "unknown", failureCode: "RECEIPT_MISMATCH" });
@@ -203,11 +273,15 @@ describe.skipIf(!testDatabaseUrl)("holds placed with saved PayPal", () => {
         .rejects.toMatchObject({ message: expect.stringMatching(refused) });
     });
 
-    it("keeps a saved-PayPal hold without an approval link and its saved PayPal fixed", async () => {
+    it("keeps a saved-PayPal hold's source, provider order and first approval link fixed", async () => {
       await checkoutSavingPayPal();
       const [method] = await savedMethods();
       const pending = await writeHold(await v3(), "baseline", 27_188, { savedMethodId: method.id });
+      paypal.then("answer-payer-action");
+      const waiting = await executeSavedHold(handle.db, paypal, pending.id, details);
+      expect(waiting.approvalUrl).toBeTruthy();
       await expect(handle.db.update(paymentOperations).set({ approvalUrl: "https://www.sandbox.paypal.com/checkoutnow?token=X" }).where(eq(paymentOperations.id, pending.id))).rejects.toThrow();
+      await expect(handle.db.update(paymentOperations).set({ paypalOrderId: "another-order" }).where(eq(paymentOperations.id, pending.id))).rejects.toThrow();
       await expect(handle.db.update(paymentOperations).set({ savedMethodId: null }).where(eq(paymentOperations.id, pending.id))).rejects.toThrow();
       await expect(handle.db.update(paymentOperations).set({ savePaymentMethod: true }).where(eq(paymentOperations.id, pending.id))).rejects.toThrow();
     });

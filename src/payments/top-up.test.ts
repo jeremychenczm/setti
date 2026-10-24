@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { DEMO_ACCOUNTS, type DemoAccount } from "../accounts/demo";
 import { paypalAuthorizations } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import type { FrozenChangeOrder } from "../pricing/types";
@@ -33,7 +34,7 @@ describe.skipIf(!testDatabaseUrl)("additional authorization after a confirmed ch
     expect(await returnFromPayPal(handle.db, paypal, checkout.id, checkout.paypalOrderId, "return")).toMatchObject({ state: "authorized" });
     return checkout;
   }
-  const chairLine = async (order: FrozenChangeOrder) => (await paymentsWorkspace(handle.db, session, order.id))!.lines.find((line) => line.itemId === CHAIR && (line.side === "baseline" || line.change === "replace"))!;
+  const chairLine = async (order: FrozenChangeOrder, account: DemoAccount = DEMO_ACCOUNTS[1]) => (await paymentsWorkspace(handle.db, session, order.id, undefined, account))!.lines.find((line) => line.itemId === CHAIR && (line.side === "baseline" || line.change === "replace"))!;
 
   it("asks only for the $271.88 the confirmed six chairs still need, as a second independent hold", async () => {
     const six = await confirmChange(handle.db, session, "willow", { action: "quantity", itemId: CHAIR, quantity: 6, after: { taxCents: 6_563 } });
@@ -50,7 +51,7 @@ describe.skipIf(!testDatabaseUrl)("additional authorization after a confirmed ch
     expect(new Set(holds.map((hold) => hold.itemId)).size).toBe(1);
     expect(holds.find((hold) => hold.amountCents === 54_375)?.changeOrderId).toBe(v2.id);
 
-    const after = await chairLine(six);
+    const after = await chairLine(six, DEMO_ACCOUNTS[0]);
     expect(after).toMatchObject({ targetCents: 81_563, heldCents: 81_563, capturedCents: 0, holds: [expect.objectContaining({ version: v2.version }), expect.objectContaining({ version: six.version })] });
     expect(after.steps.map((step) => [step.kind, step.amountCents, step.available])).toEqual([["supplier_confirmation", 81_563, true], ["capture", 81_563, false]]);
     await expect(startAuthorization(handle.db, paypal, session, six.id, { itemId: CHAIR, side: "baseline", ...shown(six) }, links)).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
@@ -76,7 +77,7 @@ describe.skipIf(!testDatabaseUrl)("additional authorization after a confirmed ch
       action: "replace", itemId: CHAIR, oldItemHandling: "not_ordered",
       after: { ...bergmund(4, 4_375), name: "ODGER Chair", sku: "DEMO-ODGER", specification: "ODGER Chair, white/beige", sourceUrl: null },
     });
-    const workspace = (await paymentsWorkspace(handle.db, session, other.id))!;
+    const workspace = (await paymentsWorkspace(handle.db, session, other.id, undefined, DEMO_ACCOUNTS[1]))!;
     const oldChair = workspace.lines.find((line) => line.itemId === CHAIR && line.side === "baseline")!;
     const newChair = workspace.lines.find((line) => line.itemId === CHAIR && line.side === "proposed")!;
     expect(oldChair).toMatchObject({ targetCents: 0, heldCents: 54_375, steps: [expect.objectContaining({ kind: "void", amountCents: 54_375 })] });

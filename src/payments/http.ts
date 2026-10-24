@@ -14,9 +14,9 @@ import { callbackState, validCallbackState } from "./callback-state";
 import { recordOpeningSupplierOrder, recordSupplierCredit, recordSupplierOrder } from "./supplier";
 import { paymentsWorkspace } from "./workspace";
 import { refreshRecordedFees } from "./fee-refresh";
-import { holdApprovedItems } from "./item-holds";
+import { cancelItemHold, checkItemHold, holdApprovedItems } from "./item-holds";
 import { itemHoldsView } from "./item-holds-view";
-import { chargeServices, lockPaymentBasis, startServicesCheckout } from "./services";
+import { chargeServices, checkServicesCheckout, lockPaymentBasis, startServicesCheckout } from "./services";
 import { servicesPaymentView } from "./services-view";
 
 const uuid = z.uuid();
@@ -42,6 +42,7 @@ const servicesSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("checkout") }),
   z.strictObject({ action: z.literal("approve"), operationId: uuid }),
   z.strictObject({ action: z.literal("cancel"), operationId: uuid }),
+  z.strictObject({ action: z.literal("check"), operationId: uuid }),
   z.strictObject({ action: z.literal("charge") }),
 ]);
 const holdSchema = z.discriminatedUnion("action", [
@@ -51,6 +52,8 @@ const holdSchema = z.discriminatedUnion("action", [
     inStock: z.boolean(), leadTimeDays: z.number().int().min(0).max(3_650).nullable(), reference: z.string().trim().min(1).max(200), note: z.string().trim().max(1_000),
   }),
   z.strictObject({ action: z.literal("capture"), itemId: z.string().min(1).max(300), contentHash: hash }),
+  z.strictObject({ action: z.literal("check"), operationId: uuid }),
+  z.strictObject({ action: z.literal("cancel"), operationId: uuid }),
 ]);
 class HttpError extends Error { constructor(message: string, readonly status: number) { super(message); } }
 
@@ -109,7 +112,9 @@ function fail(error: unknown) {
 export async function getPaymentsResponse(req: NextRequest, id: string) {
   if (!uuid.safeParse(id).success) return NextResponse.json({ code: "NOT_FOUND", error: "This change order could not be found." }, { status: 404, headers });
   try {
-    const workspace = await paymentsWorkspace(db(), session(req), id);
+    const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
+    const workspace = await paymentsWorkspace(db(), session(req), id, undefined, account);
+    if (workspace && account && !canOpenProject(account, workspace.projectKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
     return workspace ? NextResponse.json(workspace, { headers }) : NextResponse.json({ code: "NOT_FOUND", error: "This change order could not be found." }, { status: 404, headers });
   } catch (error) { return fail(error); }
 }
@@ -120,6 +125,19 @@ export async function postPaymentsResponse(req: NextRequest, id: string) {
   if (!sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "This share link is read-only. Payment steps run only from the browser that owns the demo case." }, { status: 403, headers });
   try {
     const input = actionSchema.parse(await boundedJson(req));
+    const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
+    if (!account) return NextResponse.json({ code: "FORBIDDEN", error: "Choose an account before starting payment steps." }, { status: 403, headers });
+    const workspace = await paymentsWorkspace(db(), sessionId, id, undefined, account);
+    if (!workspace) return NextResponse.json({ code: "NOT_FOUND", error: "This change order could not be found." }, { status: 404, headers });
+    if (!canOpenProject(account, workspace.projectKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
+    const client = account.role === "client" && account.projectKey === workspace.projectKey;
+    if (input.action === "authorize" && !client) return NextResponse.json({ code: "FORBIDDEN", error: "Only this project's client can approve a PayPal checkout." }, { status: 403, headers });
+    if (["capture", "release", "refund", "supplier_order", "supplier_credit"].includes(input.action) && account.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "Only the designer records supplier confirmations, captures, releases and refunds." }, { status: 403, headers });
+    if (input.action === "check" || input.action === "cancel") {
+      const operation = workspace.operations.find((entry) => entry.id === input.operationId);
+      if (!operation) return NextResponse.json({ code: "NOT_FOUND", error: "This payment step does not belong to this project." }, { status: 404, headers });
+      if ((input.action === "check" && operation.kind !== "authorize" && account.role !== "designer") || (input.action === "cancel" && !client)) return NextResponse.json({ code: "FORBIDDEN", error: "Switch to the account responsible for this payment step." }, { status: 403, headers });
+    }
     let operationId: string | null = null, redirectUrl: string | null = null;
     switch (input.action) {
       case "authorize": {
@@ -153,7 +171,7 @@ export async function postPaymentsResponse(req: NextRequest, id: string) {
         await refreshRecordedFees(db(), sandboxPayPal(), sessionId, id);
         break;
     }
-    return NextResponse.json({ workspace: await paymentsWorkspace(db(), sessionId, id), operationId, redirectUrl }, { headers });
+    return NextResponse.json({ workspace: await paymentsWorkspace(db(), sessionId, id, undefined, account), operationId, redirectUrl }, { headers });
   } catch (error) { return fail(error); }
 }
 
@@ -216,7 +234,7 @@ export async function postServicesPaymentResponse(req: NextRequest, rawKey: stri
     const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
     const client = account?.role === "client" && canOpenProject(account, rawKey);
     if (!account || !canOpenProject(account, rawKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
-    if (input.action !== "charge" && !client) return NextResponse.json({ code: "FORBIDDEN", error: "Only the client pays the design services. Switch to the client's account first." }, { status: 403, headers });
+    if (input.action !== "charge" && input.action !== "check" && !client) return NextResponse.json({ code: "FORBIDDEN", error: "Only the client pays the design services. Switch to the client's account first." }, { status: 403, headers });
     const paypal = sandboxPayPal();
     let paypalOrderId: string | null = null, operationId: string | null = null;
     switch (input.action) {
@@ -236,6 +254,12 @@ export async function postServicesPaymentResponse(req: NextRequest, rawKey: stri
         await servicesOperation(sessionId, rawKey, input.operationId);
         await cancelCheckout(db(), paypal, input.operationId);
         break;
+      case "check": {
+        const result = await checkServicesCheckout(db(), paypal, sessionId, rawKey, input.operationId, paypalLinks(req));
+        operationId = result.operation.id;
+        paypalOrderId = result.operation.paypalOrderId;
+        break;
+      }
       case "charge":
         await chargeServices(db(), paypal, sessionId, rawKey);
         break;
@@ -269,17 +293,24 @@ export async function postItemHoldsResponse(req: NextRequest, rawKey: string) {
     const input = holdSchema.parse(await boundedJson(req));
     const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
     if (!account || !canOpenProject(account, rawKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
-    if (input.action !== "hold" && account.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "Only the designer records supplier confirmations and captures." }, { status: 403, headers });
+    if ((input.action === "supplier_order" || input.action === "capture") && account.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "Only the designer records supplier confirmations and captures." }, { status: 403, headers });
+    if (input.action === "cancel" && account.role !== "client") return NextResponse.json({ code: "FORBIDDEN", error: "Only the client leaves a PayPal checkout." }, { status: 403, headers });
     let attempted = 0;
     switch (input.action) {
       case "hold":
-        attempted = (await holdApprovedItems(db(), sandboxPayPal(), sessionId, rawKey)).length;
+        attempted = (await holdApprovedItems(db(), sandboxPayPal(), sessionId, rawKey, paypalLinks(req))).length;
         break;
       case "supplier_order":
         await recordOpeningSupplierOrder(db(), sessionId, rawKey, input);
         break;
       case "capture":
         attempted = (await startOpeningCapture(db(), sandboxPayPal(), sessionId, rawKey, input)).length;
+        break;
+      case "check":
+        await checkItemHold(db(), sandboxPayPal(), sessionId, rawKey, input.operationId);
+        break;
+      case "cancel":
+        await cancelItemHold(db(), sandboxPayPal(), sessionId, rawKey, input.operationId);
         break;
     }
     return NextResponse.json({ view: await holdsView(req, rawKey, sessionId), attempted }, { headers });
@@ -291,8 +322,8 @@ export async function postItemHoldsResponse(req: NextRequest, rawKey: string) {
  * PayPal right away. Best effort: with no saved PayPal, or if PayPal does not
  * answer, the items stay "to hold" and either account can hold them from the page.
  */
-export async function holdItemsAfterConfirmation(sessionId: string, key: CaseKey): Promise<void> {
-  try { await holdApprovedItems(db(), sandboxPayPal(), sessionId, key); }
+export async function holdItemsAfterConfirmation(sessionId: string, key: CaseKey, req?: NextRequest): Promise<void> {
+  try { await holdApprovedItems(db(), sandboxPayPal(), sessionId, key, req ? paypalLinks(req) : undefined); }
   catch { /* the item list shows what is still to hold */ }
 }
 

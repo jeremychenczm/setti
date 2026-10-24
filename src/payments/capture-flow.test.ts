@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { DEMO_ACCOUNTS } from "../accounts/demo";
 import { createChatStore } from "../chat/store";
 import { paymentOperations, paypalAuthorizations, paypalCaptures, supplierEvents } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
@@ -25,7 +26,7 @@ describe.skipIf(!testDatabaseUrl)("supplier confirmation and capture", () => {
   afterAll(() => handle?.pool.end());
 
   const capture = () => startCapture(handle.db, paypal, session, v3.id, { itemId: CHAIR, side: "baseline", ...shown(v3) });
-  const chair = async () => (await paymentsWorkspace(handle.db, session, v3.id))!.lines.find((line) => line.itemId === CHAIR)!;
+  const chair = async () => (await paymentsWorkspace(handle.db, session, v3.id, undefined, DEMO_ACCOUNTS[0]))!.lines.find((line) => line.itemId === CHAIR)!;
   const captureCalls = () => paypal.calls.filter((call) => "finalCapture" in call);
 
   it("captures nothing until the supplier confirmation is recorded", async () => {

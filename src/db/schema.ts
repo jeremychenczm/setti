@@ -255,7 +255,7 @@ export const paymentOperations = pgTable(
     check("payment_operations_refund_has_capture", sql`${t.kind} <> 'refund' OR ${t.captureId} IS NOT NULL`),
     check("payment_operations_authorize_is_bound", sql`${t.kind} <> 'authorize' OR ${t.revisionId} IS NOT NULL`),
     check("payment_operations_save_on_checkout", sql`NOT ${t.savePaymentMethod} OR (${t.kind} = 'authorize' AND ${t.savedMethodId} IS NULL)`),
-    check("payment_operations_saved_method_holds", sql`${t.savedMethodId} IS NULL OR (${t.kind} = 'authorize' AND ${t.approvalUrl} IS NULL)`),
+    check("payment_operations_saved_method_holds", sql`${t.savedMethodId} IS NULL OR ${t.kind} = 'authorize'`),
     check("payment_operations_services_hold", sql`NOT ${t.servicesHold} OR (${t.kind} = 'authorize' AND ${t.itemId} IS NULL AND ${t.savedMethodId} IS NULL AND ${t.revisionId} IS NOT NULL)`),
     check(
       "payment_operations_binding_complete",

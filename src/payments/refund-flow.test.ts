@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { DEMO_ACCOUNTS } from "../accounts/demo";
 import { createChatStore } from "../chat/store";
 import { paymentOperations, paypalCaptures, paypalRefunds } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
@@ -33,7 +34,7 @@ describe.skipIf(!testDatabaseUrl)("returning captured chairs refunds the confirm
   const line = { itemId: CHAIR, side: "baseline" as const };
   const refund = () => startRefund(handle.db, paypal, session, v4.id, { ...line, ...shown(v4) });
   const credit = (creditCents: number) => recordSupplierCredit(handle.db, session, v4.id, { ...line, ...shown(v4), creditCents, reference: "DEMO-CREDIT-1", note: "Demo supplier credit entered by the designer." });
-  const chair = async () => (await paymentsWorkspace(handle.db, session, v4.id))!.lines.find((entry) => entry.itemId === CHAIR)!;
+  const chair = async () => (await paymentsWorkspace(handle.db, session, v4.id, undefined, DEMO_ACCOUNTS[0]))!.lines.find((entry) => entry.itemId === CHAIR)!;
   const refundCalls = () => paypal.calls.filter((call) => "paypalCaptureId" in call);
 
   it("waits for the supplier credit before any refund", async () => {

@@ -28,21 +28,29 @@ These are real PayPal Sandbox transactions. Setti approves them on the server wi
 
 ## Testing instructions
 
-A three-minute walkthrough of one change that moves money three different ways. Every PayPal step runs against the Sandbox.
+A walkthrough of one change that moves money three different ways. Every PayPal step runs against the Sandbox.
 
 1. Open `/try` and wait until the **Maple Ave** chat opens.
 2. Select **See them in Quote V2**. Under **Payments · V2**, check the $800 hold for the lounge chair and the $300 capture for the wool rug, with their PayPal IDs and the PayPal fee. Then select **Return to the project conversation**.
 3. Select the account at the bottom left of the sidebar and switch to **Emma Park** (the client). Select **Try chair + rug example**, then send the message. The AI drafts the change: the chair becomes a light oak writing desk and the rug goes back.
 4. Switch the account back to **Jordan Lee** (the designer). Open the current draft and select **Review pricing**.
-5. Enter the desk's price (for example $1,100), set the rug's handling to *returned* with its restocking fee (for example $60), and confirm each line and open item. Select **Save pricing review**, then **Send to client as V3**. V3 goes into the project chat as a quote card.
+5. Complete the desk's supplier, SKU, specification, room, pricing unit, USD unit price, tax, delivery, return terms and price evidence. For this fictional demo, you can use: `Maple Demo Supplier`, `DESK-DEMO-1100`, `Light oak writing desk`, `Window corner`, `item`, `$1,100`, `$0` tax, `$0` delivery, `Demo: returnable subject to supplier confirmation`, and `Fictional demo supplier quote DESK-DEMO-1100; USD 1,100; tax and delivery zero`. Set the chair's old-item handling to *not ordered* at `$0` and explain that its hold will be released. Set the rug to *returned* at `$60` and note its demo restocking fee. Enter the change order's terms, resolve each open item with a verification note, and confirm each line. These are demo inputs, not AI-verified supplier prices. Select **Save pricing review**, then **Send to client as V3**. V3 goes into the project chat as a quote card.
 6. Switch the account to **Emma Park**. In the chat, select **Review and confirm** on the V3 card. Type `Emma Park` as the signature, tick the acknowledgement and select **Confirm V3 · scope, prices and terms**. Only the client's account can confirm.
-7. Under **Payments · V3**, run the three money steps. Each step asks you to confirm it first:
+7. Under **Payments · V3**, run the three money steps. Switch to **Jordan Lee** for supplier records, releases, captures and refunds; switch to **Emma Park** for a PayPal checkout. Each money step asks you to confirm it first:
    - **Lounge chair → desk.** Select **Release $800.00 hold**, then **Confirm release**. Nothing was charged, so nothing is refunded.
    - **Desk.** Select **Authorize $1,100.00 with PayPal**. On the PayPal Sandbox page, choose to pay with a debit or credit card: use `4012 0000 3333 0026`, any future expiry date, any security code and any US address. Back in Setti, select **Record supplier confirmation (demo)**, **Save supplier confirmation**, then **Capture $1,100.00** and **Confirm capture**.
    - **Wool rug.** Select **Record supplier credit (demo)**, enter the $240 credit and select **Save supplier credit**, then **Refund $240.00** and **Confirm refund**. The $60 restocking fee stays with the supplier.
 8. Back in the chat, select **Ask about payments** and send the message. The AI explains each item's money from the recorded PayPal results and shows the evidence.
 
 Supplier confirmations are demo records that the designer types in; there is no supplier integration.
+
+### Recover a payment that did not finish
+
+On **Design services**, use **Check PayPal status** after a timeout or a lost checkout response. It recovers the original checkout with the same request id; it does not create a replacement payment. If approval is still needed, the project's client can select **Continue on PayPal**. After PayPal confirms the hold, Setti captures each service once; a remaining capture can be resumed with **Finish charging the design services**.
+
+On **Approved items**, a saved PayPal hold can require the buyer again. The client sees **Continue on PayPal** for that same order, while either project participant can check its status. Leaving PayPal keeps an unresolved order available to check; it is not proof that money did not move. No replacement hold starts while its outcome is unresolved.
+
+The server checks the selected demo account as well as the owning browser session. Only the project's client starts or leaves its checkout; designer-only payment and supplier actions are refused from client accounts. These are demo roles, not real identity authentication.
 
 ## What is real
 
@@ -51,11 +59,12 @@ Supplier confirmations are demo records that the designer types in; there is no 
 | Authorize, capture, release (void) and refund | Real PayPal Sandbox calls through the official server SDK, with PayPal-Request-Id idempotency; an incomplete or lost answer is read back from PayPal |
 | PayPal fees and the studio's net | Read from PayPal's seller breakdown, never estimated |
 | Money already on `/try` projects | Real Sandbox transactions, approved on the server with a Sandbox test card |
+| Design-services checkout and saved PayPal | PayPal / Pay Later JS SDK buttons; one authorization split into per-service captures, with saved PayPal used for individual approved-item holds. Provider payer-action approval resumes the original order. |
 | AI change drafts and money answers | Real model calls (needs `ANTHROPIC_API_KEY`); the first draft on a `/try` project is scripted |
 | Designer pricing review, client change orders and confirmation | Real, saved in Postgres and frozen by content hash; the client signs as a demo identity without a login |
 | Supplier order confirmations and credits | Demo records entered by the designer |
 | Quote reports | Real AG Grid reports; the Maple and Willow quote contents are demo data |
-| Not in this build | Hosted demo, PayPal JS SDK buttons and Pay Later, saved payment methods (Vault), procurement timeline |
+| Not in this build | Hosted demo, procurement timeline, supplier integration and real user authentication |
 
 ## Sandbox evidence
 

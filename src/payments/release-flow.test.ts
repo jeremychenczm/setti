@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { DEMO_ACCOUNTS } from "../accounts/demo";
 import { createChatStore } from "../chat/store";
 import { paymentOperations, paypalAuthorizations, paypalCaptures, paypalRefunds, supplierEvents } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
@@ -30,7 +31,7 @@ describe.skipIf(!testDatabaseUrl)("cancelling an uncaptured line releases its ho
 
   const cancelChairs = () => confirmChange(handle.db, session, "willow", { action: "remove", itemId: CHAIR, oldItemHandling: "not_ordered", oldItemCostCents: 0 });
   const release = (order: FrozenChangeOrder) => startRelease(handle.db, paypal, session, order.id, { itemId: CHAIR, side: "baseline", ...shown(order) });
-  const chairIn = async (order: FrozenChangeOrder, side: "baseline" | "proposed" = "baseline") => (await paymentsWorkspace(handle.db, session, order.id))!.lines.find((line) => line.itemId === CHAIR && line.side === side)!;
+  const chairIn = async (order: FrozenChangeOrder, side: "baseline" | "proposed" = "baseline") => (await paymentsWorkspace(handle.db, session, order.id, undefined, DEMO_ACCOUNTS[0]))!.lines.find((line) => line.itemId === CHAIR && line.side === side)!;
 
   it("voids the $543.75 hold once the client confirms the cancelling version, refunding nothing", async () => {
     const v3 = await cancelChairs();

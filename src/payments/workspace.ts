@@ -6,6 +6,7 @@
  */
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db/client";
+import type { DemoAccount } from "../accounts/demo";
 import { items, revisions, savedPaymentMethods } from "../db/schema";
 import { buildFundingPlan, type FundingLine, type FundingPlan } from "../approval/funding";
 import { changeOrderDecisions } from "../approval/schema";
@@ -21,7 +22,7 @@ import type { CaptureView, HoldView, OperationView, PaymentLineView, PaymentStep
 type Reader = Pick<Db, "select">;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function paymentsWorkspace(db: Reader, sessionId: string | null, orderId: string, now = new Date()): Promise<PaymentsWorkspace | null> {
+export async function paymentsWorkspace(db: Reader, sessionId: string | null, orderId: string, now = new Date(), account: DemoAccount | null = null): Promise<PaymentsWorkspace | null> {
   if (!UUID.test(orderId)) return null;
   const [found] = await db.select({ document: changeOrders.document, caseId: changeOrders.caseId, status: revisions.status, sessionId: chatCases.sessionId })
     .from(changeOrders).innerJoin(revisions, eq(changeOrders.revisionId, revisions.id)).innerJoin(chatCases, eq(changeOrders.caseId, chatCases.id))
@@ -29,6 +30,7 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
   if (!found) return null;
   const order = found.document;
   const owner = !!sessionId && sessionId === found.sessionId;
+  const member = owner && !!account && (account.role === "designer" || account.projectKey === order.projectKey);
   const [decision] = await db.select({ id: changeOrderDecisions.id }).from(changeOrderDecisions)
     .where(and(eq(changeOrderDecisions.orderId, orderId), eq(changeOrderDecisions.decision, "approved")));
   const [bridge] = await db.select().from(pricingCases).where(eq(pricingCases.caseId, found.caseId));
@@ -37,7 +39,7 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
     : !decision ? "Payment steps start only after the client confirms this exact version."
       : !current ? `A newer client-confirmed version replaced V${order.version}. Start payment steps from the current version; results of steps already started stay recorded here.`
         : null;
-  const base = { orderId, version: order.version, current, canAct: owner && current, canReconcile: owner && !!decision, reason, environment: "sandbox" as const };
+  const base = { projectKey: order.projectKey, orderId, version: order.version, current, canAct: owner && current, canReconcile: owner && !!decision, reason, environment: "sandbox" as const };
   if (!bridge || !decision) return { ...base, plan: null, lines: [], others: { lineCount: order.lines.length, targetCents: order.totals.totalCents }, operations: [] };
 
   const ledger = await readLedger(db, bridge.projectId);
@@ -64,10 +66,10 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
       ...line, businessItemId: businessId ?? null, releasedCents: money.holds.reduce((total, hold) => total + hold.releasedCents, 0), ...money,
       confirmedTerms: terms,
       refundRequiresSupplierCredit: line.side === "baseline" && order.changes.some((change) => change.itemId === line.itemId && ["returned", "cancelled"].includes(change.oldItemHandling)),
-      supplierEvents: events, steps: steps(plan, line, owner && current, events, terms?.purpose === "retained_cost", !!saved),
+      supplierEvents: events, steps: steps(plan, line, owner && current, events, terms?.purpose === "retained_cost", !!saved).map((step) => ({ ...step, available: step.available && member && step.actor === account?.role })),
     });
   }
-  return { ...base, plan, lines, others, operations: await operationViews(db, ledger, versions, names, owner) };
+  return { ...base, plan, lines, others, operations: await operationViews(db, ledger, versions, names, member, account) };
 }
 
 function itemMoney(ledger: ProjectLedger, businessId: string, versions: Map<string, number>, now: Date, calls: (typeof paypalCalls.$inferSelect)[]): { holds: HoldView[]; captures: CaptureView[]; refunds: RefundView[] } {
@@ -146,7 +148,7 @@ function steps(plan: FundingPlan, line: FundingLine, canAct: boolean, events: Su
   });
 }
 
-async function operationViews(db: Reader, ledger: ProjectLedger, versions: Map<string, number>, names: Map<string, string>, owner: boolean): Promise<OperationView[]> {
+async function operationViews(db: Reader, ledger: ProjectLedger, versions: Map<string, number>, names: Map<string, string>, member: boolean, account: DemoAccount | null): Promise<OperationView[]> {
   const ids = ledger.operations.map((operation) => operation.id);
   const calls = ids.length ? await db.select().from(paypalCalls).where(inArray(paypalCalls.operationId, ids)).orderBy(desc(paypalCalls.createdAt)) : [];
   return [...ledger.operations].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).map((operation) => ({
@@ -154,7 +156,10 @@ async function operationViews(db: Reader, ledger: ProjectLedger, versions: Map<s
     itemLabel: operation.itemId ? names.get(operation.itemId) ?? null : operation.servicesHold ? "Design services" : null,
     version: operation.changeOrderId ? versions.get(operation.changeOrderId) ?? null : null,
     requestId: operation.requestId, attempts: operation.attempts, paypalOrderId: operation.paypalOrderId,
-    approvalUrl: owner && operation.kind === "authorize" && operation.status === "pending" && !operation.paypalResourceId ? operation.approvalUrl : null,
+    approvalUrl: member && account?.role === "client" && operation.kind === "authorize" && operation.status === "pending" && !operation.paypalResourceId ? operation.approvalUrl : null,
+    canContinue: member && account?.role === "client" && operation.kind === "authorize" && operation.status === "pending" && !operation.paypalResourceId && !!operation.approvalUrl,
+    canCheck: member && (operation.kind === "authorize" || account?.role === "designer"),
+    canCancel: member && account?.role === "client" && operation.kind === "authorize" && !!operation.approvalUrl && ["pending", "unknown"].includes(operation.status),
     paypalResourceId: operation.paypalResourceId, failureCode: operation.failureCode, failureMessage: operation.failureMessage,
     createdAt: operation.createdAt.toISOString(), updatedAt: operation.updatedAt.toISOString(),
     calls: calls.filter((call) => call.operationId === operation.id).map((call) => ({

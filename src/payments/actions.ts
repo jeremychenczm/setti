@@ -63,7 +63,9 @@ export async function startAuthorization(db: Db, paypal: PayPalPayments, session
     const prefix = `authorize:${version.order.id}:${itemId}:`;
     return insertOperation(tx, { businessKey: `${prefix}${attempt(ledger, "authorize", prefix)}`, projectId: version.projectId, kind: "authorize", amountCents: action.amountCents, binding: version.bind(itemId) });
   });
-  return createCheckout(db, paypal, operation, links(operation.id), await checkoutDetails(db, operation));
+  return operation.savedMethodId
+    ? executeSavedHold(db, paypal, operation.id, await checkoutDetails(db, operation), links(operation.id))
+    : createCheckout(db, paypal, operation, links(operation.id), await checkoutDetails(db, operation));
 }
 
 /** Holds of one business item that can still be captured or voided, oldest first, with what each still holds. */
@@ -246,7 +248,7 @@ export async function checkPayment(db: Db, paypal: PayPalPayments, sessionId: st
   const operation = await ownedOperation(db, sessionId, orderId, operationId);
   switch (operation.kind) {
     case "authorize":
-      if (operation.savedMethodId) return executeSavedHold(db, paypal, operation.id, await checkoutDetails(db, operation));
+      if (operation.savedMethodId) return executeSavedHold(db, paypal, operation.id, await checkoutDetails(db, operation), links(operation.id));
       if (!operation.paypalOrderId && (operation.status === "pending" || operation.status === "unknown")) {
         return createCheckout(db, paypal, operation, links(operation.id), await checkoutDetails(db, operation));
       }
@@ -274,8 +276,8 @@ export async function checkPayment(db: Db, paypal: PayPalPayments, sessionId: st
 /** The client or studio abandons an open checkout; PayPal is asked first so an approval is never lost. */
 export async function cancelPayment(db: Db, paypal: PayPalPayments, sessionId: string, orderId: string, operationId: string): Promise<PaymentOperation> {
   const operation = await ownedOperation(db, sessionId, orderId, operationId);
-  if (operation.kind !== "authorize" || operation.savedMethodId) throw new PaymentActionError("NOT_AVAILABLE", "Only an open PayPal checkout can be cancelled.");
-  return (await cancelCheckout(db, paypal, operation.id)).operation;
+  if (operation.kind !== "authorize" || (operation.savedMethodId && !operation.approvalUrl)) throw new PaymentActionError("NOT_AVAILABLE", "Only an open PayPal checkout can be cancelled.");
+  return (await cancelCheckout(db, paypal, operation.id, !!operation.savedMethodId)).operation;
 }
 
 /** The page an operation belongs to, so a returning buyer lands on it: the change order, or the quote for V1. */
@@ -286,7 +288,7 @@ export async function operationPage(db: Pick<Db, "select">, operationId: string)
     ? await db.select({ projectKey: chatCases.projectKey }).from(changeOrders).innerJoin(chatCases, eq(chatCases.id, changeOrders.caseId)).where(eq(changeOrders.id, operation.changeOrderId))
     : await db.select({ projectKey: chatCases.projectKey }).from(pricingCases).innerJoin(chatCases, eq(chatCases.id, pricingCases.caseId)).where(eq(pricingCases.baselineRevisionId, operation.revisionId));
   if (!found) return null;
-  const anchor = operation.servicesHold ? "design-services" : "payments";
+  const anchor = operation.servicesHold ? "design-services" : operation.changeOrderId ? "payments" : "item-holds";
   return operation.changeOrderId ? { path: `/change-orders/${operation.changeOrderId}`, anchor, projectKey: found.projectKey } : { path: `/quotes/${found.projectKey}`, anchor, projectKey: found.projectKey };
 }
 
@@ -296,7 +298,7 @@ export async function operationPage(db: Pick<Db, "select">, operationId: string)
  */
 export async function returnFromPayPal(db: Db, paypal: PayPalPayments, operationId: string, token: string | null, outcome: "return" | "cancel") {
   const [operation] = await db.select().from(paymentOperations).where(eq(paymentOperations.id, operationId));
-  if (!operation || operation.kind !== "authorize" || operation.savedMethodId || !operation.paypalOrderId || operation.paypalOrderId !== token) return null;
-  const result = outcome === "return" ? await completeAuthorization(db, paypal, operation.id) : await cancelCheckout(db, paypal, operation.id);
+  if (!operation || operation.kind !== "authorize" || (operation.savedMethodId && !operation.approvalUrl) || !operation.paypalOrderId || operation.paypalOrderId !== token) return null;
+  const result = outcome === "return" ? await completeAuthorization(db, paypal, operation.id, !!operation.savedMethodId) : await cancelCheckout(db, paypal, operation.id, !!operation.savedMethodId);
   return { orderId: operation.changeOrderId, servicesHold: operation.servicesHold, state: result.state };
 }

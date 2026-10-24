@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { DEMO_ACCOUNTS } from "../accounts/demo";
 import { createChatStore } from "../chat/store";
 import { paymentOperations, paypalAuthorizations, paypalCalls } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
@@ -11,6 +12,7 @@ import type { OrderReceipt } from "./paypal";
 import { bergmund, confirmChange, shown } from "./testing/cases";
 import { FakePayPal } from "./testing/fake-paypal";
 import { paymentsWorkspace } from "./workspace";
+import { confirmSupplier } from "./testing/flows";
 
 const CHAIR = "willow-dining-chair";
 const links = (operationId: string) => ({ returnUrl: `http://localhost:3002/api/payments/paypal/return?op=${operationId}`, cancelUrl: `http://localhost:3002/api/payments/paypal/cancel?op=${operationId}` });
@@ -51,7 +53,7 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     expect(hold.expiresAt).toBeTruthy();
     expect(hold.honorExpiresAt!.getTime() - hold.createdAt.getTime()).toBeLessThan(4 * 86_400_000);
 
-    const workspace = (await paymentsWorkspace(handle.db, session, v2.id))!;
+    const workspace = (await paymentsWorkspace(handle.db, session, v2.id, undefined, DEMO_ACCOUNTS[0]))!;
     const chair = workspace.lines.find((line) => line.itemId === CHAIR && line.side === "proposed")!;
     expect(chair).toMatchObject({ targetCents: 54_375, heldCents: 54_375, capturedCents: 0, refundedCents: 0, holds: [{ paypalAuthorizationId: hold.paypalAuthorizationId, version: v2.version, status: "created" }] });
     expect(chair.steps.map((step) => [step.kind, step.amountCents, step.available])).toEqual([["supplier_confirmation", 54_375, true], ["capture", 54_375, false]]);
@@ -251,7 +253,7 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, servicesHold: false, state: "authorized" });
     expect((await holds())[0]).toMatchObject({ changeOrderId: v2.id, amountCents: 54_375 });
     // The newer version counts the held $543.75 and asks only for the uncovered amount.
-    const next = (await paymentsWorkspace(handle.db, session, v3.id))!;
+    const next = (await paymentsWorkspace(handle.db, session, v3.id, undefined, DEMO_ACCOUNTS[1]))!;
     expect(next.lines.find((line) => line.itemId === CHAIR)).toMatchObject({ targetCents: 81_563, heldCents: 54_375, steps: expect.arrayContaining([expect.objectContaining({ kind: "authorize", amountCents: 27_188, available: true })]) });
   });
 

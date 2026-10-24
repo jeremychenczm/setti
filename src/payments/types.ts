@@ -1,4 +1,5 @@
 import type { FundingPlan } from "@/approval/funding";
+import type { CaseKey } from "@/chat/types";
 import type { SettlementView } from "./fees";
 
 export type RecordedSettlement = SettlementView & { observedAt: string | null };
@@ -125,6 +126,9 @@ export interface OperationView {
   paypalOrderId: string | null;
   /** Buyer approval link, shown only to the owning session while the checkout is open. */
   approvalUrl: string | null;
+  canContinue?: boolean;
+  canCheck?: boolean;
+  canCancel?: boolean;
   paypalResourceId: string | null;
   failureCode: string | null;
   failureMessage: string | null;
@@ -134,6 +138,7 @@ export interface OperationView {
 }
 
 export interface PaymentsWorkspace {
+  projectKey: CaseKey;
   orderId: string;
   version: number;
   /** True only for the latest client-confirmed version, the one new payment steps start from. */

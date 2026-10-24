@@ -8,8 +8,8 @@ import { getItemHoldsResponse, getPaymentsResponse, getServicesPaymentResponse, 
 const mock = vi.hoisted(() => ({
   startAuthorization: vi.fn(), startCapture: vi.fn(), startRelease: vi.fn(), startRefund: vi.fn(), checkPayment: vi.fn(), cancelPayment: vi.fn(),
   returnFromPayPal: vi.fn(), operationPage: vi.fn(), paymentsWorkspace: vi.fn(), recordSupplierOrder: vi.fn(), recordSupplierCredit: vi.fn(),
-  startServicesCheckout: vi.fn(), chargeServices: vi.fn(), lockPaymentBasis: vi.fn(), servicesPaymentView: vi.fn(), completeAuthorization: vi.fn(), cancelCheckout: vi.fn(),
-  holdApprovedItems: vi.fn(), itemHoldsView: vi.fn(),
+  startServicesCheckout: vi.fn(), checkServicesCheckout: vi.fn(), chargeServices: vi.fn(), lockPaymentBasis: vi.fn(), servicesPaymentView: vi.fn(), completeAuthorization: vi.fn(), cancelCheckout: vi.fn(),
+  holdApprovedItems: vi.fn(), checkItemHold: vi.fn(), cancelItemHold: vi.fn(), itemHoldsView: vi.fn(),
   db: { transaction: (work: (tx: object) => unknown) => work({}) },
 }));
 vi.mock("./actions", () => ({
@@ -18,9 +18,9 @@ vi.mock("./actions", () => ({
 }));
 vi.mock("./supplier", () => ({ recordSupplierOrder: mock.recordSupplierOrder, recordSupplierCredit: mock.recordSupplierCredit }));
 vi.mock("./workspace", () => ({ paymentsWorkspace: mock.paymentsWorkspace }));
-vi.mock("./services", () => ({ startServicesCheckout: mock.startServicesCheckout, chargeServices: mock.chargeServices, lockPaymentBasis: mock.lockPaymentBasis }));
+vi.mock("./services", () => ({ startServicesCheckout: mock.startServicesCheckout, checkServicesCheckout: mock.checkServicesCheckout, chargeServices: mock.chargeServices, lockPaymentBasis: mock.lockPaymentBasis }));
 vi.mock("./services-view", () => ({ servicesPaymentView: mock.servicesPaymentView }));
-vi.mock("./item-holds", () => ({ holdApprovedItems: mock.holdApprovedItems }));
+vi.mock("./item-holds", () => ({ holdApprovedItems: mock.holdApprovedItems, checkItemHold: mock.checkItemHold, cancelItemHold: mock.cancelItemHold }));
 vi.mock("./item-holds-view", () => ({ itemHoldsView: mock.itemHoldsView }));
 vi.mock("./authorize", () => ({ completeAuthorization: mock.completeAuthorization, cancelCheckout: mock.cancelCheckout }));
 vi.mock("./server", () => ({ sandboxPayPal: () => ({}) }));
@@ -30,10 +30,11 @@ const orderId = randomUUID(), sessionId = randomUUID(), operationId = randomUUID
 const origin = "http://localhost:3002";
 const authorize = { action: "authorize", itemId: "willow-dining-chair", side: "proposed", contentHash: "a".repeat(64), revisionContentHash: "b".repeat(64) };
 
-function post(body: unknown, options: { cookie?: string | null; origin?: string } = {}) {
+function post(body: unknown, options: { cookie?: string | null; account?: string | null; origin?: string } = {}) {
+  const account = options.account === undefined ? ((body as { action?: string }).action === "authorize" ? "sofia" : "jordan") : options.account;
   return new NextRequest(`${origin}/api/change-orders/${orderId}/payments`, {
     method: "POST", body: JSON.stringify(body),
-    headers: { "Content-Type": "application/json", Origin: options.origin ?? origin, ...(options.cookie === null ? {} : { Cookie: `setti-demo-chat=${options.cookie ?? sessionId}` }) },
+    headers: { "Content-Type": "application/json", Origin: options.origin ?? origin, ...(options.cookie === null ? {} : { Cookie: [`setti-demo-chat=${options.cookie ?? sessionId}`, ...(account ? [`setti-demo-account=${account}`] : [])].join("; ") }) },
   });
 }
 
@@ -43,15 +44,17 @@ describe("payment HTTP boundaries", () => {
     vi.stubEnv("PAYPAL_ENV", "sandbox");
     vi.stubEnv("PAYPAL_CLIENT_ID", "http-test-client");
     vi.stubEnv("PAYPAL_CLIENT_SECRET", "http-test-secret");
-    mock.paymentsWorkspace.mockResolvedValue({ orderId, version: 3, lines: [], operations: [] });
+    mock.paymentsWorkspace.mockResolvedValue({ orderId, projectKey: "willow", version: 3, lines: [], operations: [{ id: operationId, kind: "authorize", status: "pending" }] });
     mock.startAuthorization.mockResolvedValue({ id: operationId, status: "pending", approvalUrl: "https://www.sandbox.paypal.com/checkoutnow?token=ORDER-1", paypalResourceId: null });
+    mock.checkPayment.mockResolvedValue({ id: operationId });
+    mock.cancelPayment.mockResolvedValue({ id: operationId });
   });
   afterEach(() => vi.unstubAllEnvs());
 
   it("serves the read-only view without a session and never starts a step without one", async () => {
     const response = await getPaymentsResponse(new NextRequest(`${origin}/api/change-orders/${orderId}/payments`), orderId);
     expect(response.status).toBe(200);
-    expect(mock.paymentsWorkspace).toHaveBeenCalledWith(mock.db, null, orderId);
+    expect(mock.paymentsWorkspace).toHaveBeenCalledWith(mock.db, null, orderId, undefined, null);
     expect((await postPaymentsResponse(post(authorize, { cookie: null }), orderId)).status).toBe(403);
     expect(mock.startAuthorization).not.toHaveBeenCalled();
   });
@@ -90,6 +93,35 @@ describe("payment HTTP boundaries", () => {
     const response = await postPaymentsResponse(post(authorize), orderId);
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ code: "STALE_VERSION" });
+  });
+
+  it("enforces the designer role for supplier records and money execution", async () => {
+    const lineRef = { itemId: "willow-dining-chair", side: "baseline", contentHash: "a".repeat(64), revisionContentHash: "b".repeat(64) };
+    const actions = [
+      { action: "capture", ...lineRef }, { action: "release", ...lineRef }, { action: "refund", ...lineRef },
+      { action: "supplier_order", ...lineRef, quantity: 1, unitPriceCents: 100, taxCents: 0, freightCents: 0, inStock: true, leadTimeDays: 1, reference: "SUP-1", note: "" },
+      { action: "supplier_credit", ...lineRef, creditCents: 100, reference: "CREDIT-1", note: "" },
+    ];
+    for (const action of actions) {
+      for (const account of ["sofia", "emma", null]) expect((await postPaymentsResponse(post(action, { account }), orderId)).status).toBe(403);
+    }
+    expect(mock.startCapture).not.toHaveBeenCalled();
+    expect(mock.startRelease).not.toHaveBeenCalled();
+    expect(mock.startRefund).not.toHaveBeenCalled();
+    expect(mock.recordSupplierOrder).not.toHaveBeenCalled();
+    expect(mock.recordSupplierCredit).not.toHaveBeenCalled();
+    expect((await postPaymentsResponse(post(authorize, { account: "jordan" }), orderId)).status).toBe(403);
+    expect((await postPaymentsResponse(post(authorize, { account: "emma" }), orderId)).status).toBe(403);
+  });
+
+  it("allows participants to check authorization, but only the client to leave it", async () => {
+    for (const account of ["jordan", "sofia"]) expect((await postPaymentsResponse(post({ action: "check", operationId }, { account }), orderId)).status).toBe(200);
+    expect((await postPaymentsResponse(post({ action: "cancel", operationId }, { account: "jordan" }), orderId)).status).toBe(403);
+    expect((await postPaymentsResponse(post({ action: "cancel", operationId }, { account: "sofia" }), orderId)).status).toBe(200);
+    mock.paymentsWorkspace.mockResolvedValue({ orderId, projectKey: "willow", operations: [{ id: operationId, kind: "refund" }] });
+    expect((await postPaymentsResponse(post({ action: "check", operationId }, { account: "sofia" }), orderId)).status).toBe(403);
+    expect((await postPaymentsResponse(post({ action: "check", operationId }, { account: "jordan" }), orderId)).status).toBe(200);
+    expect((await postPaymentsResponse(post({ action: "check", operationId: randomUUID() }), orderId)).status).toBe(404);
   });
 
   it("sends the returning buyer to the change order with the outcome PayPal reported", async () => {
@@ -144,6 +176,7 @@ describe("design-services payment HTTP boundaries", () => {
     mock.startServicesCheckout.mockResolvedValue({ id: operationId, status: "pending", paypalOrderId: "ORDER-1", paypalResourceId: null });
     mock.lockPaymentBasis.mockResolvedValue({ ledger: { operations: [{ id: operationId, servicesHold: true }] } });
     mock.completeAuthorization.mockResolvedValue({ state: "authorized" });
+    mock.checkServicesCheckout.mockResolvedValue({ state: "authorized", operation: { id: operationId, paypalOrderId: "ORDER-1" } });
   });
   afterEach(() => vi.unstubAllEnvs());
 
@@ -169,6 +202,18 @@ describe("design-services payment HTTP boundaries", () => {
     expect((await postServicesPaymentResponse(services({ action: "charge" }, "jordan"), "willow")).status).toBe(200);
     expect((await postServicesPaymentResponse(services({ action: "approve", operationId }, "jordan"), "willow")).status).toBe(403);
     expect((await postServicesPaymentResponse(services({ action: "checkout", amountCents: 1 }, "sofia"), "willow")).status).toBe(400);
+  });
+
+  it("lets either project participant reconcile the same service checkout", async () => {
+    for (const account of ["sofia", "jordan"]) {
+      const response = await postServicesPaymentResponse(services({ action: "check", operationId }, account), "willow");
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ operationId, paypalOrderId: "ORDER-1" });
+    }
+    expect(mock.checkServicesCheckout).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow", operationId, expect.any(Function));
+    expect((await postServicesPaymentResponse(services({ action: "check", operationId }, "emma"), "willow")).status).toBe(403);
+    mock.checkServicesCheckout.mockRejectedValueOnce(new PaymentActionError("NOT_FOUND", "Checkout not found."));
+    expect((await postServicesPaymentResponse(services({ action: "check", operationId }, "sofia"), "willow")).status).toBe(404);
   });
 
   it("shows the payment only to accounts that can open the project", async () => {
@@ -204,8 +249,17 @@ describe("item-holds HTTP boundaries", () => {
       const response = await postItemHoldsResponse(holds({ action: "hold" }, account), "willow");
       expect(await response.json()).toMatchObject({ attempted: 1, view: { projectKey: "willow" } });
     }
-    expect(mock.holdApprovedItems).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow");
+    expect(mock.holdApprovedItems).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow", expect.any(Function));
     const get = await getItemHoldsResponse(new NextRequest(`${origin}/api/quotes/willow/item-holds`, { headers: { Cookie: `setti-demo-chat=${sessionId}; setti-demo-account=emma` } }), "willow");
     expect(get.status).toBe(403);
+  });
+
+  it("checks saved holds for either participant and only lets the client leave checkout", async () => {
+    for (const account of ["sofia", "jordan"]) expect((await postItemHoldsResponse(holds({ action: "check", operationId }, account), "willow")).status).toBe(200);
+    expect(mock.checkItemHold).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow", operationId);
+    expect((await postItemHoldsResponse(holds({ action: "check", operationId }, "emma"), "willow")).status).toBe(403);
+    expect((await postItemHoldsResponse(holds({ action: "cancel", operationId }, "jordan"), "willow")).status).toBe(403);
+    expect((await postItemHoldsResponse(holds({ action: "cancel", operationId }, "sofia"), "willow")).status).toBe(200);
+    expect(mock.cancelItemHold).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow", operationId);
   });
 });

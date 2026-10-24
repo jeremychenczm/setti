@@ -6,7 +6,7 @@ import type { CaseKey } from "@/chat/types";
 import type { ServiceChargeView, ServicesPaymentView } from "@/payments/services-view";
 import { money } from "../pricing/common";
 
-type Body = { action: "checkout" | "charge" } | { action: "approve" | "cancel"; operationId: string };
+type Body = { action: "checkout" | "charge" } | { action: "approve" | "cancel" | "check"; operationId: string };
 interface Reply { view: ServicesPaymentView; operationId: string | null; paypalOrderId: string | null }
 
 async function request(key: CaseKey, body?: Body): Promise<Reply> {
@@ -47,7 +47,7 @@ export function DesignServicesPayment({ projectKey, orderId, onPaid }: { project
       const reply = await request(projectKey, body);
       setView(reply.view);
       setNotice(done?.(reply.view) ?? null);
-      if ((body.action === "approve" || body.action === "charge") && reply.view.dueCents === 0) onPaid?.();
+      if ((body.action === "approve" || body.action === "charge" || body.action === "check") && reply.view.dueCents === 0) onPaid?.();
       return reply;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The payment step did not finish. Reload to see what PayPal recorded.");
@@ -87,15 +87,20 @@ export function DesignServicesPayment({ projectKey, orderId, onPaid }: { project
           await run("approve", { action: "approve", operationId: checkout.current }, (next) => next.dueCents === 0 ? "Paid. Each design service was captured on PayPal." : next.canFinish ? "PayPal approved the payment. Some services are not captured yet; finish charging below." : null);
         }}
         onCancel={async () => {
-          if (checkout.current) await run("cancel", { action: "cancel", operationId: checkout.current }, () => "You closed PayPal. Nothing was charged; you can pay again.");
+          if (checkout.current) await run("cancel", { action: "cancel", operationId: checkout.current }, (next) => next.dueCents === 0 ? "PayPal confirmed the payment. Each service was captured." : next.canFinish ? "PayPal confirmed the hold. Finish charging the services below." : "You closed PayPal. Check this same checkout or continue it before starting another payment.");
         }}
         onError={() => { setError("PayPal could not finish the payment. Nothing is recorded as paid; try again or reload the page."); void load(); }}
       />
       {!view.savedPayPal && <p className="mt-2 text-[10px] leading-relaxed text-[var(--muted)]">Paying also saves PayPal for this project, which you approve on PayPal, so the studio can hold each approved item later without another checkout.</p>}
     </div>}
+    {view.canCheck && view.checkout && <div className="mt-4 flex flex-wrap items-center gap-3">
+      <button type="button" disabled={!!busy} onClick={() => void run("check", { action: "check", operationId: view.checkout!.operationId }, (next) => next.dueCents === 0 ? "Paid. The original PayPal checkout was recovered and each service was captured." : next.canFinish ? "PayPal confirmed the hold. Finish charging the services below." : next.canPay ? "The original checkout is ready. Continue on PayPal to approve it." : "PayPal has not confirmed the outcome yet. Check this same checkout again.")}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-3 py-2 text-[12px] font-medium disabled:opacity-50">{busy === "check" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Check PayPal status</button>
+      {view.checkout.approvalUrl && !busy && <a href={view.checkout.approvalUrl} className="text-[12px] font-medium text-[var(--primary)] underline">Continue on PayPal</a>}
+    </div>}
     {view.canFinish && <button type="button" disabled={!!busy} onClick={() => void run("charge", { action: "charge" }, (next) => next.dueCents === 0 ? "Paid. Each design service was captured on PayPal." : null)}
       className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-2 text-[12px] font-medium text-white disabled:opacity-50">{busy === "charge" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Finish charging the design services</button>}
-    {busy && busy !== "charge" && <p role="status" className="mt-3 flex items-center gap-1.5 text-[11px] text-[var(--muted)]"><LoaderCircle className="h-3 w-3 animate-spin" />{busy === "approve" ? "Confirming with PayPal and capturing each service…" : "Working with PayPal…"}</p>}
+    {busy && busy !== "charge" && busy !== "check" && <p role="status" className="mt-3 flex items-center gap-1.5 text-[11px] text-[var(--muted)]"><LoaderCircle className="h-3 w-3 animate-spin" />{busy === "approve" ? "Confirming with PayPal and capturing each service…" : "Working with PayPal…"}</p>}
     {view.reason && !view.canPay && !view.canFinish && <p className="mt-3 text-[11px] text-[var(--muted)]">{view.reason}</p>}
     {view.checkout?.failureMessage && !charged && <p className="mt-3 text-[11px] text-amber-800">{view.checkout.failureMessage}</p>}
     {error && <p role="alert" className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[12px] text-red-800">{error}</p>}

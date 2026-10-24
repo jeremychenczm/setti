@@ -54,6 +54,9 @@ export interface SavedPayPalOrderCommand {
   customId: string;
   invoiceId: string;
   description: string;
+  /** Where the buyer returns if PayPal requires approval of this same saved-method order. */
+  returnUrl?: string;
+  cancelUrl?: string;
 }
 
 /** What PayPal reported about saving the buyer's PayPal on an order. */

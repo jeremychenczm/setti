@@ -96,6 +96,10 @@ export function createSdkPayPal(controllers: { orders: OrdersController; payment
             paypal: {
               vaultId: command.paypalTokenId,
               storedCredential: { paymentInitiator: PaymentInitiator.Merchant, usage: StoredPaymentSourceUsageType.Subsequent, usagePattern: UsagePattern.UnscheduledPostpaid },
+              ...(command.returnUrl && command.cancelUrl ? { experienceContext: {
+                brandName: BRAND, returnUrl: command.returnUrl, cancelUrl: command.cancelUrl,
+                userAction: PaypalExperienceUserAction.PayNow, shippingPreference: PaypalWalletContextShippingPreference.NoShipping,
+              } } : {}),
             },
           },
         },

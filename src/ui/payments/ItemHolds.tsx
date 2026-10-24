@@ -1,6 +1,6 @@
 "use client";
 
-import { Armchair, CheckCircle2, CircleDollarSign, LoaderCircle, LockKeyhole, Truck, TriangleAlert } from "lucide-react";
+import { Armchair, ArrowUpRight, CheckCircle2, CircleDollarSign, LoaderCircle, LockKeyhole, RefreshCw, Truck, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CaseKey } from "@/chat/types";
 import type { ItemHoldView, ItemHoldsView } from "@/payments/item-holds-view";
@@ -9,6 +9,7 @@ import { centsText, dateTime, Field, inputClass, money, parseDollars } from "../
 type Terms = NonNullable<ItemHoldView["terms"]>;
 type Body =
   | { action: "hold" }
+  | { action: "check" | "cancel"; operationId: string }
   | { action: "capture"; itemId: string; contentHash: string }
   | { action: "supplier_order"; itemId: string; contentHash: string; quantity: number; unitPriceCents: number; taxCents: number; freightCents: number; inStock: boolean; leadTimeDays: number | null; reference: string; note: string };
 
@@ -63,12 +64,14 @@ export function ItemHolds({ projectKey, orderId, holdRequest }: { projectKey: Ca
   return <section id="item-holds" aria-labelledby="item-holds-title" className="mt-6 rounded-xl border border-[var(--line)] bg-white p-5">
     <div className="flex flex-wrap items-center gap-2">
       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-blue-700"><Armchair className="h-4 w-4" /></span>
-      <div className="mr-auto"><h2 id="item-holds-title" className="text-[13px] font-semibold">Approved items · V{view.basis.version}</h2><p className="text-[11px] text-[var(--muted)]">Each item gets its own PayPal hold with the PayPal the client saved, no checkout</p></div>
+      <div className="mr-auto"><h2 id="item-holds-title" className="text-[13px] font-semibold">Approved items · V{view.basis.version}</h2><p className="text-[11px] text-[var(--muted)]">Each item gets its own hold with saved PayPal. If PayPal needs the client, the same order continues through checkout.</p></div>
       <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${covered === view.items.length ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{covered} of {view.items.length} held</span>
     </div>
     <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">A hold reserves the item&apos;s amount on the client&apos;s PayPal. Nothing is charged until the supplier confirms the item on the approved terms; a hold lasts up to 29 days.</p>
     <div className="mt-3 max-h-[480px] overflow-y-auto"><table className="w-full border-collapse text-[12px]"><tbody>{view.items.map((line) => <ItemRow key={line.itemId} line={line}
       designer={view.canConfirmSupplier} busy={busy} open={confirming === line.itemId}
+      onCheck={() => { if (line.operationId) void run(`check:${line.itemId}`, { action: "check", operationId: line.operationId }); }}
+      onCancel={() => { if (line.operationId) void run(`cancel:${line.itemId}`, { action: "cancel", operationId: line.operationId }); }}
       onConfirm={() => setConfirming(confirming === line.itemId ? null : line.itemId)}
       onRecord={async (order) => { if (await run(`supplier:${line.itemId}`, { action: "supplier_order", itemId: line.itemId, contentHash, ...order })) setConfirming(null); }}
       onCapture={() => void run(`capture:${line.itemId}`, { action: "capture", itemId: line.itemId, contentHash })} />)}</tbody></table></div>
@@ -80,15 +83,18 @@ export function ItemHolds({ projectKey, orderId, holdRequest }: { projectKey: Ca
   </section>;
 }
 
-function ItemRow({ line, designer, busy, open, onConfirm, onRecord, onCapture }: {
+function ItemRow({ line, designer, busy, open, onConfirm, onRecord, onCapture, onCheck, onCancel }: {
   line: ItemHoldView; designer: boolean; busy: string | null; open: boolean;
   onConfirm: () => void; onRecord: (order: SupplierOrder) => Promise<void>; onCapture: () => void;
+  onCheck: () => void; onCancel: () => void;
 }) {
   const status = {
     captured: <span className="inline-flex items-center gap-1 text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" />Captured</span>,
     confirmed: <span className="inline-flex items-center gap-1 text-emerald-700"><Truck className="h-3.5 w-3.5" />Supplier confirmed · {line.supplier?.reference}</span>,
     held: <span className="inline-flex items-center gap-1 text-blue-700"><LockKeyhole className="h-3.5 w-3.5" />Held{line.expiresAt ? ` · until ${dateTime(line.expiresAt)}` : ""}</span>,
     holding: <span className="inline-flex items-center gap-1 text-[var(--muted)]"><LoaderCircle className="h-3.5 w-3.5 animate-spin" />Holding</span>,
+    awaiting_client: <span className="text-amber-800">Client approval needed</span>,
+    unknown: <span className="text-amber-800">Outcome unknown · check PayPal</span>,
     failed: <span className="inline-flex items-center gap-1 text-amber-800" title={line.failureMessage ?? undefined}><TriangleAlert className="h-3.5 w-3.5" />Not held</span>,
     to_hold: <span className="text-[var(--muted)]">To hold</span>,
   }[line.state];
@@ -99,7 +105,13 @@ function ItemRow({ line, designer, busy, open, onConfirm, onRecord, onCapture }:
       : null;
   return <>
     <tr className="border-t border-[var(--line)] first:border-t-0">
-      <td className="py-2 pr-3">{line.label}{line.state === "failed" && line.failureMessage && <p className="mt-0.5 text-[10px] text-amber-800">{line.failureMessage}</p>}</td>
+      <td className="py-2 pr-3">{line.label}{line.failureMessage && <p className="mt-0.5 text-[10px] text-amber-800">{line.failureMessage}</p>}
+        {(line.canCheck || line.approvalUrl) && <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px]">
+          {line.approvalUrl && <a href={line.approvalUrl} className="inline-flex items-center gap-1 font-medium text-blue-700 underline">Continue on PayPal<ArrowUpRight className="h-3 w-3" /></a>}
+          {line.canCheck && <button type="button" disabled={!!busy} onClick={onCheck} className="inline-flex items-center gap-1 font-medium underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Check PayPal status</button>}
+          {line.canCancel && <button type="button" disabled={!!busy} onClick={onCancel} className="underline disabled:opacity-50">Leave checkout</button>}
+        </div>}
+      </td>
       <td className="py-2 pr-3 text-right tabular-nums">{money(line.targetCents)}</td>
       <td className="py-2 text-right text-[11px] whitespace-nowrap">{status}{action}</td>
     </tr>

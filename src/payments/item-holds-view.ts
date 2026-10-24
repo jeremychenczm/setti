@@ -18,7 +18,12 @@ export interface ItemHoldView {
   targetCents: number;
   heldCents: number;
   capturedCents: number;
-  state: "captured" | "confirmed" | "held" | "holding" | "failed" | "to_hold";
+  state: "captured" | "confirmed" | "held" | "holding" | "awaiting_client" | "unknown" | "failed" | "to_hold";
+  operationId: string | null;
+  /** Only the owning project's client receives the provider approval link. */
+  approvalUrl: string | null;
+  canCheck: boolean;
+  canCancel: boolean;
   paypalAuthorizationId: string | null;
   expiresAt: string | null;
   failureMessage: string | null;
@@ -54,6 +59,8 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
     throw error;
   }
   const { ledger, plan } = basis;
+  const member = !!account && (account.role === "designer" || account.projectKey === key);
+  const client = member && account?.role === "client";
   const kinds = new Map((await db.select({ id: items.id, kind: items.kind }).from(items).where(eq(items.projectId, basis.projectId))).map((row) => [row.id, row.kind]));
   // On V1 the approved terms are the V1 revision's lines; a change order's page shows its own.
   const v1Terms = basis.orderId ? new Map() : new Map((await db.select().from(revisionLines).where(eq(revisionLines.revisionId, basis.key)))
@@ -70,25 +77,32 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
     const state = line.capturedCents - line.refundedCents >= line.targetCents ? "captured"
       : funded >= line.targetCents && event ? "confirmed"
       : funded >= line.targetCents ? "held"
-        : latest?.status === "pending" || latest?.status === "unknown" ? "holding"
+        : latest?.status === "unknown" ? "unknown"
+          : latest?.status === "pending" && latest.approvalUrl ? "awaiting_client"
+          : latest?.status === "pending" ? "holding"
           : latest?.status === "failed" ? "failed" : "to_hold";
     return [{
       itemId: line.itemId, label: line.label, targetCents: line.targetCents, heldCents: line.heldCents, capturedCents: line.capturedCents - line.refundedCents, state,
+      operationId: latest?.id ?? null,
+      approvalUrl: client && state === "awaiting_client" ? latest?.approvalUrl ?? null : null,
+      canCheck: member && !!latest?.savedMethodId && ["holding", "awaiting_client", "unknown"].includes(state),
+      canCancel: client && state === "awaiting_client",
       paypalAuthorizationId: hold?.paypalAuthorizationId ?? null, expiresAt: hold?.expiresAt?.toISOString() ?? null,
-      failureMessage: state === "failed" ? latest?.failureMessage ?? null : null,
+      failureMessage: ["failed", "awaiting_client", "unknown"].includes(state) ? latest?.failureMessage ?? null : null,
       terms: v1Terms.get(businessId) ?? null,
       supplier: event ? { reference: event.reference, totalCents: event.totalCents, leadTimeDays: event.leadTimeDays } : null,
     }];
   });
   const toHoldCents = lines.reduce((total, line) => total + Math.max(line.targetCents - line.heldCents - line.capturedCents, 0), 0);
   const [saved] = await db.select({ id: savedPaymentMethods.id }).from(savedPaymentMethods).where(eq(savedPaymentMethods.projectId, basis.projectId));
-  const member = !!account && (account.role === "designer" || account.projectKey === key);
-  const canHold = member && !!saved && (toHoldCents > 0 || lines.some((line) => line.state === "holding"));
+  const waiting = lines.some((line) => ["holding", "awaiting_client", "unknown"].includes(line.state));
+  const canHold = member && !!saved && toHoldCents > 0 && !waiting;
   const reason = !lines.length ? "The client has not approved a furniture item yet."
     : toHoldCents === 0 ? null
       : !saved ? "Items are held with the PayPal the client saves when paying the design services."
         : !member ? "Only the project's client or designer can hold items."
-          : null;
+          : waiting ? "An item hold is still open. Continue or check that same PayPal order before starting more holds."
+            : null;
   const canConfirmSupplier = account?.role === "designer" && !basis.orderId;
   return { projectKey: key, basis: { version: basis.version, orderId: basis.orderId }, items: lines, toHoldCents, savedPayPal: !!saved, canHold, canConfirmSupplier, contentHash: basis.contentHash, reason };
 }

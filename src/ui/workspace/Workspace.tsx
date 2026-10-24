@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { accountOrDefault, canOpenProject, clientOf, DEMO_ACCOUNTS, rememberAccount, type AccountId, type DemoAccount } from "@/accounts/demo";
 import type { CaseKey } from "@/chat/types";
 import { mapleApprovedQuote } from "@/quotes/demo-quote";
@@ -31,6 +31,7 @@ function reachable(account: DemoAccount, wanted: CaseKey): CaseKey {
 
 export function Workspace({ initialView = "chats", initialQuote = "willow", initialCase, initialAccount }: { initialView?: View; initialQuote?: CaseKey; initialCase?: CaseKey; initialAccount?: string }) {
   const [account, setAccount] = useState<DemoAccount>(() => accountOrDefault(initialAccount));
+  useEffect(() => { rememberAccount(account.id); }, [account.id]);
   const [view, setView] = useState<View>(initialView);
   const [quoteId, setQuoteId] = useState<CaseKey>(() => reachable(account, initialQuote));
   const [activeId, setActiveId] = useState<CaseKey>(() => reachable(account, initialCase ?? (initialView === "quotes" ? initialQuote : "willow")));
