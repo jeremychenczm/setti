@@ -3,7 +3,11 @@ import { createPricingStore } from "./store";
 
 const database = globalThis as typeof globalThis & { settiChatDatabase?: ReturnType<typeof createDb> };
 
-export function pricingStore() {
+export function pricingDb() {
   database.settiChatDatabase ??= createDb();
-  return createPricingStore(database.settiChatDatabase.db);
+  return database.settiChatDatabase.db;
+}
+
+export function pricingStore() {
+  return createPricingStore(pricingDb());
 }

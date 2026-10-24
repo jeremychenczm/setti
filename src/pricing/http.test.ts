@@ -7,10 +7,11 @@ import { approvedForTest } from "@/opening/testing";
 const willowApprovedQuote = approvedForTest("willow");
 import { createPricingInput } from "./calculation";
 import { PricingStoreError } from "./store";
-import { getChangeOrderResponse, getPricingResponse, issuePricingResponse, savePricingResponse } from "./http";
+import { getChangeOrderResponse, getPricingResponse, issuePricingResponse, postLineChangeResponse, savePricingResponse } from "./http";
 
-const mock = vi.hoisted(() => ({ getWorkspace: vi.fn(), saveReview: vi.fn(), issueReview: vi.fn(), getOrder: vi.fn() }));
-vi.mock("./server", () => ({ pricingStore: () => mock }));
+const mock = vi.hoisted(() => ({ getWorkspace: vi.fn(), saveReview: vi.fn(), issueReview: vi.fn(), getOrder: vi.fn(), startLineChange: vi.fn() }));
+vi.mock("./server", () => ({ pricingStore: () => mock, pricingDb: () => ({}) }));
+vi.mock("./line-change", () => ({ startLineChange: mock.startLineChange }));
 
 const messageId = randomUUID();
 const draft = buildDraft({
@@ -125,5 +126,25 @@ describe("pricing HTTP boundaries", () => {
     expect(response.headers.get("set-cookie")).toBeNull();
     expect(response.headers.get("x-robots-tag")).toContain("noindex");
     expect((await response.json()).order.id).toBe(id);
+  });
+});
+
+describe("designer line changes", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mock.startLineChange.mockResolvedValue({ draft: { id: "draft-1", revision: 2 } });
+  });
+  const change = (account: string) => new NextRequest("http://localhost:3002/api/pricing/willow/change-line", {
+    method: "POST", body: JSON.stringify({ itemId: "willow-desk" }),
+    headers: { "Content-Type": "application/json", Origin: "http://localhost:3002", Cookie: `setti-demo-chat=${randomUUID()}; setti-demo-account=${account}` },
+  });
+
+  it("lets the designer start a change and sends them to the pricing page; the client cannot", async () => {
+    expect((await postLineChangeResponse(change("sofia"), "willow")).status).toBe(403);
+    expect(mock.startLineChange).not.toHaveBeenCalled();
+    const response = await postLineChangeResponse(change("jordan"), "willow");
+    expect(await response.json()).toEqual({ href: "/pricing/willow", draftId: "draft-1", revision: 2 });
+    expect(mock.startLineChange.mock.calls[0][2]).toBe("willow");
+    expect(mock.startLineChange.mock.calls[0][3]).toEqual({ itemId: "willow-desk" });
   });
 });

@@ -4,7 +4,8 @@ import { z } from "zod";
 import { ACCOUNT_COOKIE, findAccount } from "@/accounts/demo";
 import { isCaseKey } from "@/chat/cases";
 import { pricingInputSchema, PricingValidationError } from "./calculation";
-import { pricingStore } from "./server";
+import { pricingDb, pricingStore } from "./server";
+import { startLineChange } from "./line-change";
 import { PricingStoreError } from "./store";
 
 const uuid = z.uuid();
@@ -15,6 +16,7 @@ const saveSchema = z.strictObject({
   input: pricingInputSchema,
 });
 const issueSchema = z.strictObject({ reviewId: uuid, expectedVersion: z.number().int().positive() });
+const lineSchema = z.strictObject({ itemId: z.string().min(1).max(300) });
 const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
 
 /** Pricing is the designer's work in progress; a client account sees the change order once it is issued. */
@@ -99,6 +101,19 @@ export async function issuePricingResponse(req: NextRequest, rawKey: string) {
   try {
     const input = issueSchema.parse(await boundedJson(req));
     return respond(req, session, await pricingStore().issueReview(session, rawKey, input));
+  } catch (error) { return failure(req, session, error); }
+}
+
+/** The designer changes a line of the current agreement; the pricing page opens on the draft that now carries it. */
+export async function postLineChangeResponse(req: NextRequest, rawKey: string) {
+  if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
+  const session = sessionId(req);
+  const refusal = clientRefusal(req, session);
+  if (refusal) return refusal;
+  try {
+    const { itemId } = lineSchema.parse(await boundedJson(req));
+    const { draft } = await startLineChange(pricingDb(), session, rawKey, { itemId });
+    return respond(req, session, { href: `/pricing/${rawKey}`, draftId: draft.id, revision: draft.revision });
   } catch (error) { return failure(req, session, error); }
 }
 

@@ -73,6 +73,8 @@ export interface QuoteActions {
   drop: (itemId: string) => Promise<string | null>;
   /** Puts a declined line in a designer draft and opens the pricing page. */
   revise: (itemId: string) => Promise<string | null>;
+  /** Puts an approved line in a designer draft, to change its price, quantity or terms, and opens the pricing page. */
+  changeLine: (itemId: string) => Promise<string | null>;
   ask: (itemId: string, text: string) => Promise<string | null>;
 }
 
@@ -324,6 +326,11 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
               onAsk={(text) => actions.ask(selected.itemId, text)} onOpenChat={onOpenChat}
               onDrop={() => actions.drop(selected.itemId)} onRevise={() => revise(selected.itemId)}
             />}
+            {viewer.role === "designer" && open && lineOf(selected.itemId).state === "approved" && <ChangeLineButton onChange={async () => {
+              setActionError(null);
+              const failure = await actions.changeLine(selected.itemId);
+              if (failure) setActionError(failure);
+            }} />}
           </LineDetails>}
 
           <div className="mt-6 grid items-start gap-6 lg:grid-cols-[1fr_300px]">
@@ -355,6 +362,15 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
         selectedCount={ticked.length} onApproveRest={approveRest} onApproveSelected={() => setTickedChoices({ decision: "approved", note: "" })} onDeclineSelected={(reason) => setTickedChoices({ decision: "declined", note: reason })} onUndecideSelected={() => setTickedChoices(null)} onClearSelection={() => grid.current?.deselectAll()} onSign={sign} />}
     </section>
   );
+}
+
+/** The designer starts a new version from an approved line, for example after a supplier's price notice. */
+export function ChangeLineButton({ onChange }: { onChange: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  return <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-[var(--line)] pt-3">
+    <button type="button" disabled={busy} onClick={() => { setBusy(true); void onChange().finally(() => setBusy(false)); }} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--canvas)] disabled:opacity-50">Change this line</button>
+    <span className="text-[11px] text-[var(--muted)]">Price, quantity or terms changed, for example a supplier&apos;s price notice? The client confirms it in a new version before any money moves.</span>
+  </div>;
 }
 
 function Meta({ label, value, note }: { label: string; value: string; note: string }) {

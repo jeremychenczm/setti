@@ -70,6 +70,12 @@ export function QuoteBoard({ projectKey, viewer, options, focusItemId, onBack, o
       window.location.assign((result.body as { href: string }).href);
       return null;
     },
+    async changeLine(itemId: string) {
+      const result = await post(`/api/pricing/${projectKey}/change-line`, { itemId });
+      if (!result.ok) return failure(result.body, "The line could not be changed. Please retry.");
+      window.location.assign((result.body as { href: string }).href);
+      return null;
+    },
     async ask(itemId: string, text: string) {
       const result = await post(`/api/chat/${projectKey}`, { id: crypto.randomUUID(), actor: viewer.role, text, aboutItemId: itemId });
       if (!result.ok) return failure(result.body, "The question could not be sent. Please retry.");
