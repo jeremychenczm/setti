@@ -25,15 +25,28 @@ beforeEach(() => {
 });
 
 function post(body: unknown, headers: Record<string, string> = {}) {
-  return new NextRequest("http://localhost:3002/api/chat/willow", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", ...headers } });
+  return new NextRequest("http://localhost:3002/api/chat/willow", { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", origin: "http://localhost:3002", ...headers } });
 }
 
 describe("case chat HTTP boundary", () => {
+  it.each(["127.0.0.1:3002", "localhost:3002"])("accepts a discussion from the actual %s browser origin", async (host) => {
+    const req = post({ id: randomUUID(), actor: "client", text: "Hello" }, { host, origin: "http://" + host });
+    expect((await postCaseResponse(req, "willow")).status).toBe(200);
+    expect(mocks.store.appendMessage).toHaveBeenCalledTimes(1);
+  });
+  it("rejects missing, opaque and forged origins before writing a discussion", async () => {
+    for (const origin of [null, "null", "http://localhost:3002", "https://attacker.example"]) {
+      const req = post({ id: randomUUID(), actor: "client", text: "Hello" }, { host: "127.0.0.1:3002" });
+      if (origin === null) req.headers.delete("origin"); else req.headers.set("origin", origin);
+      expect((await postCaseResponse(req, "willow")).status).toBe(403);
+    }
+    expect(mocks.store.appendMessage).not.toHaveBeenCalled();
+  });
   it("sets an opaque HttpOnly cookie and supplies no baseline before the client approves V1", async () => {
     const response = await getCaseResponse(new NextRequest("http://localhost:3002/api/chat/willow"), "willow");
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toContain("HttpOnly");
-    expect(response.headers.get("set-cookie")).toContain("SameSite=strict");
+    expect(response.headers.get("set-cookie")).toContain("SameSite=lax");
     const body = await response.json();
     expect(body.quote).toBeNull();
     expect(body.opening).toMatchObject({ status: "draft", lineCount: 28 });
@@ -107,7 +120,7 @@ describe("case chat HTTP boundary", () => {
 });
 
 function sendQuote(body: unknown, headers: Record<string, string> = {}, key = "willow") {
-  return postQuoteResponse(new NextRequest(`http://localhost:3002/api/chat/${key}/quote`, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", ...headers } }), key);
+  return postQuoteResponse(new NextRequest(`http://localhost:3002/api/chat/${key}/quote`, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", origin: "http://localhost:3002", ...headers } }), key);
 }
 
 describe("quote V1 HTTP boundary", () => {
@@ -146,7 +159,7 @@ describe("quote V1 HTTP boundary", () => {
 
 describe("quote V1 decisions HTTP boundary", () => {
   const request = (path: string, body: unknown, account?: string) => new NextRequest(`http://localhost:3002/api/quotes/willow/${path}`, {
-    method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", ...(account ? { cookie: `setti-demo-account=${account}` } : {}) },
+    method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json", origin: "http://localhost:3002", ...(account ? { cookie: `setti-demo-account=${account}` } : {}) },
   });
   const signature = { signingId: randomUUID(), contentHash: "a".repeat(64), signature: "Sofia Martinez", acknowledged: true, decisions: [{ itemId: "willow-sofa", decision: "declined", note: "Too big." }] };
 

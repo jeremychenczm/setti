@@ -6,7 +6,7 @@ A project chat for independent interior designers that keeps every dollar in syn
 
 ## Try it
 
-Open **`/try`**. It starts a fresh demo workspace in your browser with money already on PayPal Sandbox, so you need no PayPal account.
+Open **`/try`**. Read the starting story, choose a role and select **Work through this change**. Opening the page only reads saved state; it does not create a payment. Each visitor gets a private workspace, and both roles share the same project.
 
 To run it yourself (Node.js 22 or later, Docker):
 
@@ -18,23 +18,27 @@ npm run db:migrate
 npm run dev                  # then open http://localhost:3000/try
 ```
 
-`/try` prepares the **Maple Ave** project in about fifteen seconds:
+Starting the recommended **Maple Ave** walkthrough prepares this history:
 
 - Emma, the client, has confirmed V2 with a lounge chair ($800) and a wool rug ($300).
 - **$800 is held** on PayPal for the lounge chair. Nothing is charged until its supplier confirms the order.
 - **$300 is captured** for the wool rug, after its supplier confirmed the order. PayPal's fee and the studio's net are read back from PayPal.
 
-These are real PayPal Sandbox transactions. Setti approves them on the server with PayPal's documented Sandbox test card (`4012 0000 3333 0026`), instead of a buyer on PayPal. Opening `/try` again brings you back to your project; **Start over** prepares a new one. The server prepares at most `SETTI_TRY_PER_HOUR` new projects per hour (default 30).
+These starting payments are real PayPal Sandbox transactions. Setti approves them on the server with PayPal's documented Sandbox test card (`4012 0000 3333 0026`). A private run identity is saved before money is prepared. Each preparation stage is saved; after an interruption, continue the same run to check its original operations. **Start a separate Maple run** creates a new project without undoing the old transactions. **Previous Maple runs** lets the same visitor return to earlier records. The server allocates at most `SETTI_TRY_PER_HOUR` new Maple runs per hour (default 30).
+
+**Start with first quote** opens Willow's sent V1 as Sofia without making a payment call. Choose the lines to approve, sign them, then pay for approved design services and save PayPal through its Sandbox wallet. This wallet approval is separate from Maple's prepared test-card transactions.
+
+**Browse read-only examples** opens `/try/cases`, which needs no database or PayPal connection. Six fictional cases explain approval, holds, returns, service reductions, saved-method approval and recovery. A separate dated recording shows the real Sandbox proof from 22 October. Example records never become executable projects or payment IDs.
 
 ## Testing instructions
 
 A walkthrough of one change that moves money three different ways. Every PayPal step runs against the Sandbox.
 
-1. Open `/try` and wait until the **Maple Ave** chat opens.
-2. Select **See them in Quote V2**. Under **Payments · V2**, check the $800 hold for the lounge chair and the $300 capture for the wool rug, with their PayPal IDs and the PayPal fee. Then select **Return to the project conversation**.
-3. Select the account at the bottom left of the sidebar and switch to **Emma Park** (the client). Select **Try chair + rug example**, then send the message. The AI drafts the change: the chair becomes a light oak writing desk and the rug goes back.
-4. Switch the account back to **Jordan Lee** (the designer). Open the current draft and select **Review pricing**.
-5. Complete the desk's supplier, SKU, specification, room, pricing unit, USD unit price, tax, delivery, return terms and price evidence. For this fictional demo, you can use: `Maple Demo Supplier`, `DESK-DEMO-1100`, `Light oak writing desk`, `Window corner`, `item`, `$1,100`, `$0` tax, `$0` delivery, `Demo: returnable subject to supplier confirmation`, and `Fictional demo supplier quote DESK-DEMO-1100; USD 1,100; tax and delivery zero`. Set the chair's old-item handling to *not ordered* at `$0` and explain that its hold will be released. Set the rug to *returned* at `$60` and note its demo restocking fee. Enter the change order's terms, resolve each open item with a verification note, and confirm each line. These are demo inputs, not AI-verified supplier prices. Select **Save pricing review**, then **Send to client as V3**. V3 goes into the project chat as a quote card.
+1. Open `/try`, keep **Emma · client** selected and select **Work through this change**. The preparation page reports the saved stages before opening the Maple chat.
+2. Expand the guide's starting story and select **Inspect the prepared V2 payment records**. Under **Payments · V2**, inspect the chair's $800 hold and rug's $300 capture, including their PayPal references. Return to the chat.
+3. Select **Use chair + rug message**, edit it if desired, then send. This asks the configured model for a new draft; selecting the example alone sends nothing.
+4. Use the guide's **Continue as Jordan** hand-off to open the designer pricing review. The guide stays available on the pricing and change-order pages.
+5. Select **Load sample supplier details** for this exact desk-and-rug scenario. Review the fictional desk's $1,100 price, SKU, zero tax and delivery, the unplaced chair order and the rug's $60 retained cost. The editable fields are filled, but confirmations and open checks remain yours. Resolve each issue with a review note, confirm the changed lines and check the terms. Select **Save pricing review**, then **Send to client as V3**.
 6. Switch the account to **Emma Park**. In the chat, select **Review and confirm** on the V3 card. Type `Emma Park` as the signature, tick the acknowledgement and select **Confirm V3 · scope, prices and terms**. Only the client's account can confirm.
 7. Under **Payments · V3**, run the three money steps. Switch to **Jordan Lee** for supplier records, releases, captures and refunds; switch to **Emma Park** for a PayPal checkout. Each money step asks you to confirm it first:
    - **Lounge chair → desk.** Select **Release $800.00 hold**, then **Confirm release**. Nothing was charged, so nothing is refunded.
@@ -58,7 +62,8 @@ The server checks the selected demo account as well as the owning browser sessio
 |---|---|
 | Authorize, capture, release (void) and refund | Real PayPal Sandbox calls through the official server SDK, with PayPal-Request-Id idempotency; an incomplete or lost answer is read back from PayPal |
 | PayPal fees and the studio's net | Read from PayPal's seller breakdown, never estimated |
-| Money already on `/try` projects | Real Sandbox transactions, approved on the server with a Sandbox test card |
+| Prepared Maple payments | Real Sandbox transactions created after the visitor starts preparation, approved with a Sandbox test card; preparation progress and operation references are saved |
+| `/try/cases` examples | Read-only fictional teaching cases; the separately labelled 22 October evidence is a historical real Sandbox recording |
 | Design-services checkout and saved PayPal | PayPal / Pay Later JS SDK buttons; one authorization split into per-service captures, with saved PayPal used for individual approved-item holds. Provider payer-action approval resumes the original order. |
 | AI change drafts and money answers | Real model calls (needs `ANTHROPIC_API_KEY`); the first draft on a `/try` project is scripted |
 | Designer pricing review, client change orders and confirmation | Real, saved in Postgres and frozen by content hash; the client signs as a demo identity without a login |
@@ -90,7 +95,8 @@ All project scopes, approvals and signatures are **demo data**. Maple's prices, 
 
 | Path | What it is |
 |---|---|
-| `src/try/` | The `/try` entry: seeds each visitor's Maple project through the app's own chat, pricing, approval and payment code. |
+| `src/try/` | Private visitors and saved runs; explicit, resumable Maple preparation through the normal business services; a payment-free Willow quote entry. |
+| `src/demo/`, `src/ui/try/` | Labelled sample supplier materials, read-only cases, the entry page and role-aware guides derived from saved project state. |
 | `src/chat/`, `src/ai/` | Project chat, AI change drafts and money answers grounded in the PayPal ledger. |
 | `src/pricing/`, `src/approval/` | Designer pricing review, frozen client change orders, client confirmation and the funding plan. |
 | `src/payments/` | PayPal Sandbox execution: authorize, capture, release, refund, supplier gates, fee read-back and recovery of lost answers. |

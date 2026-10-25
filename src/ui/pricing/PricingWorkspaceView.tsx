@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowUpRight, Check, ClipboardCheck, LoaderCircle, RefreshCw
 import { useMemo, useState } from "react";
 import { clientOf } from "@/accounts/demo";
 import type { CaseKey } from "@/chat/types";
+import { canLoadMapleSampleMaterials, loadMapleSampleMaterials, MAPLE_SAMPLE_MATERIALS } from "@/demo/maple-materials";
 import { draftSource, previewPricing, requiresOldItemHandling } from "@/pricing/calculation";
 import type { OldItemHandling, PricingChangeInput, PricingItem } from "@/pricing/types";
 import { calculateLineTotals, calculateQuoteTotals } from "@/quotes/totals";
@@ -42,6 +43,16 @@ export function PricingWorkspaceView({ projectKey }: { projectKey: CaseKey }) {
   const nextVersion = workspace ? Math.max(workspace.quote.version, ...workspace.orders.map((order) => order.version)) + 1 : null;
   const client = clientOf(projectKey);
   const canIssue = Boolean(state.saved && preview?.ready && workspace && !workspace.stale && !disabled && !issuedForSavedReview && !hasInvalidNumbers);
+  const sampleMaterialsAvailable = Boolean(workspace && input && canLoadMapleSampleMaterials(workspace.quote, input));
+
+  function loadSampleMaterials() {
+    if (disabled || !workspace || !input) return;
+    const filled = loadMapleSampleMaterials(workspace.quote, input);
+    if (!filled) return;
+    setInput(filled);
+    setRawByEpoch({ epoch: state.editorEpoch, values: {}, errors: {} });
+    setSelectedKey(filled.changes.find((change) => change.itemId === "chair")?.key ?? null);
+  }
 
   function patchChange(key: string, patch: Partial<PricingChangeInput>) {
     setInput((previous) => previous ? { ...previous, changes: previous.changes.map((change) => change.key === key ? { ...change, ...patch } : change) } : previous);
@@ -105,7 +116,7 @@ export function PricingWorkspaceView({ projectKey }: { projectKey: CaseKey }) {
   const header = <header className="mb-5 flex flex-wrap items-center gap-3"><a href={`/chats/${projectKey}`} className="flex items-center gap-1.5 text-[12px] text-slate-500 hover:text-slate-900"><ArrowLeft className="h-3.5 w-3.5" />Back to project chat</a><span className="ml-auto rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-800">Demo designer workspace</span></header>;
 
   return (
-    <div className="min-h-dvh bg-[var(--canvas)] px-3 py-5 text-[var(--ink)] sm:px-6">
+    <div id="pricing-workspace" data-pricing-source-stale={stale ? "true" : "false"} className="min-h-dvh bg-[var(--canvas)] px-3 py-5 text-[var(--ink)] sm:px-6">
       <main className="mx-auto max-w-[1360px]">
         {header}
         <div className="mb-6"><div className="mb-2 flex items-center gap-2 text-[11px] uppercase tracking-wider text-slate-500"><ClipboardCheck className="h-4 w-4" />{workspace?.quote.projectName ?? projectKey} · Designer pricing</div><h1 className="text-[26px] font-semibold tracking-tight">Review the change before issuing it</h1><p className="mt-2 max-w-3xl text-[12px] leading-relaxed text-slate-500">Check prices, old-item handling and unresolved details. Save your review, then send it to the client as a new version in the project chat. V1 remains unchanged.</p><p className="mt-2 text-[10px] text-slate-400">Demo designer · pricing edits are saved for this demo project and browser.</p></div>
@@ -114,7 +125,7 @@ export function PricingWorkspaceView({ projectKey }: { projectKey: CaseKey }) {
         {state.error && <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-[12px] leading-relaxed text-red-800"><p className="whitespace-pre-wrap">{state.error}</p>{state.pendingCheck && <button onClick={() => void state.checkSavedStatus()} disabled={Boolean(state.busy)} className="mt-2 font-semibold underline disabled:opacity-50">Check saved status</button>}{state.conflict && <button onClick={() => void state.reload()} disabled={Boolean(state.busy)} className="mt-2 font-semibold underline disabled:opacity-50">Load saved review · discard local edits</button>}{!workspace && !state.loading && <button onClick={() => void state.reload()} className="mt-2 font-semibold underline">Try loading again</button>}</div>}
         {state.notice && <div role="status" className="mb-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-[12px] leading-relaxed text-blue-800">{state.notice}</div>}
 
-        {workspace && (!workspace.sourceDraft || stale) && <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-[12px] leading-relaxed text-amber-900">
+        {workspace && (!workspace.sourceDraft || stale) && <div id="pricing-source-status" className="mb-5 scroll-mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-[12px] leading-relaxed text-amber-900">
           <h2 className="font-semibold">{state.draftBaselineStale ? "The original quote behind this AI draft has changed" : workspace.sourceDraft ? state.baselineStale ? "This pricing review uses an older quote snapshot" : "The AI draft has changed" : "There is no current AI draft to price"}</h2>
           <p className="mt-1">{state.draftBaselineStale ? "This draft cannot be repriced against the current original quote. Return to the project chat and ask @AI to prepare a new draft." : workspace.sourceDraft ? "Adopt the latest valid draft and quote explicitly before editing or generating another client version. Existing local pricing edits will be replaced." : "Return to the chat and ask @AI to prepare a change draft. An earlier pricing review cannot be issued after its source draft is withdrawn."}</p>
           {workspace.sourceDraft && !state.draftBaselineStale && <button onClick={state.adoptLatest} disabled={Boolean(state.busy) || state.pendingCheck} className="mt-3 rounded-lg bg-amber-900 px-3 py-2 font-medium text-white disabled:opacity-50">Re-price from the latest draft</button>}
@@ -126,6 +137,18 @@ export function PricingWorkspaceView({ projectKey }: { projectKey: CaseKey }) {
         {workspace && input && <>
           <div className="mb-5 grid gap-3 sm:grid-cols-3"><TotalTile label={`Approved V${workspace.quote.version} total · USD`} amount={baselineTotals?.totalCents ?? null} /><TotalTile label="Proposed quote total · USD" amount={preview?.proposedTotals?.totalCents ?? null} /><TotalTile label="Quote difference · USD" amount={preview?.deltaTotalCents ?? null} signed /></div>
           <p className="mb-5 flex items-start gap-2 text-[11px] leading-relaxed text-slate-500"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />The quote difference is not the amount to pay now. No approval, authorization, charge or refund happens on this page.</p>
+
+          {sampleMaterialsAvailable && <section aria-labelledby="maple-sample-title" className="mb-5 rounded-xl border border-blue-100 bg-blue-50/50 p-4 sm:p-5">
+            <div className="flex flex-wrap items-center gap-2"><h2 id="maple-sample-title" className="mr-auto text-[14px] font-semibold">Maple sample supplier documents</h2><span className="rounded-full bg-white px-2 py-1 text-[10px] font-medium text-blue-800">Fictional demo materials</span></div>
+            <p className="mt-2 text-[12px] leading-relaxed text-slate-600">{MAPLE_SAMPLE_MATERIALS.reference} · {MAPLE_SAMPLE_MATERIALS.supplier}. Prepared for this walkthrough; review these supplied examples before confirming the change.</p>
+            <div className="mt-3 grid gap-3 text-[12px] sm:grid-cols-3">
+              <div className="rounded-lg bg-white p-3"><h3 className="font-semibold">New writing desk</h3><p className="mt-1">1 each · {money(MAPLE_SAMPLE_MATERIALS.desk.unitPriceCents)}</p><p className="mt-1 text-[11px] text-slate-500">{MAPLE_SAMPLE_MATERIALS.desk.sku}<br />Line tax {money(0)} · delivery {money(0)}<br />Sample lead time: 14 days</p></div>
+              <div className="rounded-lg bg-white p-3"><h3 className="font-semibold">Original lounge chair</h3><p className="mt-1">Not ordered · retained cost {money(0)}</p><p className="mt-1 text-[11px] text-slate-500">The sample cancellation note records no retained goods or cancellation cost.</p></div>
+              <div className="rounded-lg bg-white p-3"><h3 className="font-semibold">Wool rug return</h3><p className="mt-1">Retained cost {money(MAPLE_SAMPLE_MATERIALS.rug.oldItemCostCents)}</p><p className="mt-1 text-[11px] text-slate-500">The sample return note leaves {money(24_000)} to refund after matching supplier credit.</p></div>
+            </div>
+            <details className="mt-3 text-[11px] leading-relaxed text-slate-600"><summary className="cursor-pointer font-medium">Read sample terms and source notes</summary><div className="mt-2 space-y-2"><p>{MAPLE_SAMPLE_MATERIALS.desk.returnPolicy}</p><p>{MAPLE_SAMPLE_MATERIALS.chair.note}</p><p>{MAPLE_SAMPLE_MATERIALS.rug.note}</p><p>{MAPLE_SAMPLE_MATERIALS.terms}</p></div></details>
+            <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" disabled={disabled} onClick={loadSampleMaterials} className="rounded-lg bg-[var(--primary)] px-3.5 py-2 text-[12px] font-semibold text-white disabled:opacity-50">Load sample supplier details</button><p className="flex-1 text-[11px] leading-relaxed text-slate-500">Fills editable prices, references and terms. Check each changed row and resolve the open questions yourself, then save the review.</p></div>
+          </section>}
 
           <div className="mb-4 flex flex-wrap items-center gap-2 text-[11px]"><span className={`rounded-full px-2.5 py-1 ${state.saved && !hasInvalidNumbers ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-800"}`}>{state.saved && !hasInvalidNumbers ? `Saved review ${workspace.review?.version}` : "Unsaved pricing edits"}</span><span className="text-slate-400">{workspace.sourceDraft?.model === "designer" ? "Designer draft" : "AI draft"} revision {workspace.sourceDraft?.revision ?? "withdrawn"} · V{workspace.quote.version} is read-only</span>{!state.busy && !state.pendingCheck && <button onClick={() => void state.reload()} className="ml-auto flex items-center gap-1 text-slate-500 hover:underline"><RefreshCw className="h-3 w-3" />Reload saved review · discard local edits</button>}</div>
 

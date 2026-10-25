@@ -5,6 +5,7 @@
  * authentication.
  */
 import type { CaseKey } from "@/chat/types";
+import { DEMO_ACCOUNT_MAX_AGE, DEMO_COOKIE_SAME_SITE } from "./cookie-policy";
 
 export type AccountId = "jordan" | "sofia" | "emma";
 export type AccountRole = "designer" | "client";
@@ -51,5 +52,6 @@ export function clientOf(key: CaseKey): DemoAccount {
 
 /** Sets the cookie in the browser. A year, so a demo visitor stays who they picked. */
 export function rememberAccount(id: AccountId): void {
-  document.cookie = `${ACCOUNT_COOKIE}=${id}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=strict`;
+  const secure = typeof window !== "undefined" && window.location.protocol === "https:" ? "; secure" : "";
+  document.cookie = `${ACCOUNT_COOKIE}=${id}; path=/; max-age=${DEMO_ACCOUNT_MAX_AGE}; samesite=${DEMO_COOKIE_SAME_SITE}${secure}`;
 }

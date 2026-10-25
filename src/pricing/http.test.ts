@@ -41,6 +41,22 @@ describe("pricing HTTP boundaries", () => {
     mock.issueReview.mockResolvedValue({ order: { id: randomUUID(), version: 2 }, status: "awaiting_client_confirmation" });
   });
 
+  it.each(["127.0.0.1:3002", "localhost:3002"])("accepts pricing from the browser's actual %s origin", async (host) => {
+    const req = request("/api/pricing/willow", "PUT", saveBody(), undefined, "http://" + host);
+    req.headers.set("host", host);
+    expect((await savePricingResponse(req, "willow")).status).toBe(200);
+    expect(mock.saveReview).toHaveBeenCalledTimes(1);
+  });
+  it("rejects missing, opaque or forged pricing origins", async () => {
+    for (const origin of [null, "null", "http://localhost:3002", "https://attacker.example"]) {
+      const req = request("/api/pricing/willow", "PUT", saveBody());
+      req.headers.set("host", "127.0.0.1:3002");
+      if (origin === null) req.headers.delete("origin"); else req.headers.set("origin", origin);
+      expect((await savePricingResponse(req, "willow")).status).toBe(403);
+    }
+    expect(mock.saveReview).not.toHaveBeenCalled();
+  });
+
   it("keeps the pricing review to the designer: a client account gets the change order once it is issued", async () => {
     const asClient = (path: string, method = "GET", body?: unknown) => new NextRequest(`http://localhost:3002${path}`, {
       method, headers: { cookie: "setti-demo-account=sofia", ...(method !== "GET" ? { "Content-Type": "application/json", Origin: "http://localhost:3002" } : {}) },
@@ -57,6 +73,7 @@ describe("pricing HTTP boundaries", () => {
     const response = await getPricingResponse(request("/api/pricing/willow"), "willow");
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toContain("HttpOnly");
+    expect(response.headers.get("set-cookie")).toContain("SameSite=lax");
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(mock.getWorkspace.mock.calls[0][0]).toMatch(/^[\da-f-]{36}$/);
     const session = randomUUID();

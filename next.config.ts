@@ -1,8 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Keep the dev badge out of the bottom-left corner, where the sidebar footer sits.
-  devIndicators: { position: "bottom-right" },
+  // The floating development badge overlaps the chat's Send button on narrow screens.
+  devIndicators: false,
 };
 
 export default nextConfig;

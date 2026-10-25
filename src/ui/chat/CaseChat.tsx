@@ -7,8 +7,8 @@ import { isAiInvocation } from "@/ai/intent";
 import { clientOf, DEMO_ACCOUNTS, type AccountId, type DemoAccount } from "@/accounts/demo";
 import type { CaseKey, CaseMessage, HumanActor } from "@/chat/types";
 import type { QuoteDocument } from "@/quotes/types";
+import { isMapleSampleScope, MAPLE_MIXED_CHANGE_MESSAGE } from "@/demo/maple-materials";
 import type { Person } from "../demo-data";
-import { TrySeedNotice } from "../try/TrySeedNotice";
 import { AccountMenu } from "../workspace/AccountMenu";
 import { useDismiss } from "../useDismiss";
 import { useResizableWidth } from "../useResizableWidth";
@@ -94,9 +94,7 @@ export function CaseChat({ projectKey, quote, account, onSwitchAccount, onOpenQu
   };
   const lineName = (itemId: string) => (currentQuote.lines.find((line) => line.itemId === itemId) ?? quote.lines.find((line) => line.itemId === itemId))?.name ?? itemId;
   const sentOn = opening?.sentAt ? new Date(opening.sentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
-  const mixedExampleAvailable = projectKey === "maple" && !draft
-    && currentQuote.lines.some((line) => line.itemId === "chair")
-    && currentQuote.lines.some((line) => line.itemId === "rug");
+  const mixedExampleAvailable = projectKey === "maple" && !draft && isMapleSampleScope(currentQuote);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
@@ -131,7 +129,7 @@ export function CaseChat({ projectKey, quote, account, onSwitchAccount, onOpenQu
   }
 
   function tryMixedChange() {
-    setText("@AI Replace the Lounge chair with one light oak writing desk and return the Wool rug. Keep all other items unchanged.");
+    setText(MAPLE_MIXED_CHANGE_MESSAGE);
     input.current?.focus();
   }
 
@@ -163,7 +161,6 @@ export function CaseChat({ projectKey, quote, account, onSwitchAccount, onOpenQu
 
       <div ref={panel.rowRef} className="relative flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
-          {projectKey === "maple" && <TrySeedNotice />}
           {snapshot?.aiConfigured === false && <div role="status" className="border-b border-amber-100 bg-amber-50 px-4 py-2.5 text-[11px] leading-relaxed text-amber-800">AI is not configured on this server yet. You can still discuss this case; an @AI request will show a configuration error.</div>}
 
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
@@ -185,7 +182,7 @@ export function CaseChat({ projectKey, quote, account, onSwitchAccount, onOpenQu
           </div>
 
           <div className="border-t border-[var(--line)] bg-white px-4 py-3 sm:px-5">
-            {mixedExampleAvailable && !text.trim() && <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-blue-50/60 px-3 py-2 text-[11px] leading-relaxed text-slate-600"><span className="flex-1">One request can change several items. Each keeps its own payment progress.</span><button disabled={sendDisabled} onClick={tryMixedChange} className="font-medium text-[var(--primary)] hover:underline disabled:opacity-50">Try chair + rug example</button></div>}
+            {mixedExampleAvailable && !text.trim() && <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-blue-50/60 px-3 py-2 text-[11px] leading-relaxed text-slate-600"><span className="flex-1">Replace the chair and return the rug in one request. Sample supplier details are available on Review pricing.</span><button disabled={sendDisabled} onClick={tryMixedChange} className="font-medium text-[var(--primary)] hover:underline disabled:opacity-50">Use chair + rug message</button><span className="w-full text-[10px] text-slate-500">Edit the message, then send it to ask AI for a review draft.</span></div>}
             <div className="rounded-2xl border border-[var(--line)] bg-[var(--canvas)] px-3 py-2.5 focus-within:border-blue-200">
               <textarea ref={input} aria-label="Project message" value={text} onChange={(event) => setText(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); submit(); } }} disabled={sendDisabled} placeholder="Discuss this case, paste a product link, or ask @AI…" maxLength={8000} rows={2} className="max-h-40 min-h-[44px] w-full resize-y bg-transparent text-[13px] leading-relaxed outline-none placeholder:text-[var(--muted)] disabled:opacity-60" />
               <div className="mt-1 flex flex-wrap items-center gap-2">{account.role === "designer" && <div ref={attachRoot} className="relative"><button onClick={() => setAttachOpen((value) => !value)} disabled={sendDisabled} aria-haspopup="menu" aria-expanded={attachOpen} aria-label="Attach" className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-[var(--primary)] hover:bg-blue-50 disabled:opacity-50"><Plus className="h-3.5 w-3.5" /></button>{attachOpen && <div role="menu" className="absolute bottom-full left-0 z-20 mb-2 w-60 rounded-xl border border-[var(--line)] bg-white p-1.5 shadow-lg"><button role="menuitem" disabled={!canSendQuote} onClick={() => { setAttachOpen(false); setSendQuoteOpen(true); }} className="flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-[var(--canvas)] disabled:cursor-not-allowed disabled:opacity-50"><FileText className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" /><span className="min-w-0"><span className="block text-[12px] font-medium">Send quote V1</span><span className="block text-[11px] text-[var(--muted)]">{opening?.status === "draft" ? `${opening.lineCount} items · ${usd(opening.totalCents)}` : opening?.status === "sent" ? `Sent ${sentOn}` : "This project started from an approved quote"}</span></span></button></div>}</div>}<button disabled={sendDisabled} onClick={mentionAi} title="Mention AI" className="flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-blue-50 disabled:opacity-50"><AtSign className="h-3 w-3" />AI</button>{!text.trim() && !openingPending && <button disabled={sendDisabled} onClick={askAboutFunds} className="rounded-full bg-white px-2.5 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-blue-50 disabled:opacity-50">Ask about payments</button>}<span className="hidden items-center gap-1 text-[10px] text-[var(--muted)] sm:flex"><Link2 className="h-3 w-3" />Paste product links in the message</span>{text.length > 7600 && <span className={`text-[10px] ${text.length > 8000 ? "text-red-600" : "text-[var(--muted)]"}`}>{text.length}/8000</span>}<button onClick={submit} disabled={!text.trim() || text.trim().length > 8000 || sendDisabled} aria-label="Send project message" className="ml-auto rounded-full bg-[var(--primary)] p-2 text-white hover:bg-blue-600 disabled:bg-slate-200 disabled:text-slate-400"><SendHorizontal className="h-4 w-4" /></button></div>

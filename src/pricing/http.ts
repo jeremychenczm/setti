@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ACCOUNT_COOKIE, findAccount } from "@/accounts/demo";
 import { isCaseKey } from "@/chat/cases";
+import { isSameOriginRequest } from "@/http/origin";
+import { privateDemoCookieOptions } from "@/accounts/cookie-policy";
 import { pricingInputSchema, PricingValidationError } from "./calculation";
 import { pricingDb, pricingStore } from "./server";
 import { startLineChange } from "./line-change";
@@ -32,10 +34,7 @@ function sessionId(req: NextRequest): string {
 
 function respond(req: NextRequest, session: string, body: unknown, status = 200) {
   const response = NextResponse.json(body, { status, headers });
-  response.cookies.set("setti-demo-chat", session, {
-    httpOnly: true, sameSite: "strict", path: "/", maxAge: 60 * 60 * 24 * 30,
-    secure: req.nextUrl.protocol === "https:",
-  });
+  response.cookies.set("setti-demo-chat", session, privateDemoCookieOptions(req.nextUrl.protocol));
   return response;
 }
 
@@ -45,8 +44,7 @@ class RequestError extends Error {
 
 async function boundedJson(req: NextRequest): Promise<unknown> {
   if (!req.headers.get("content-type")?.startsWith("application/json")) throw new RequestError("The request must be JSON.", 415);
-  const origin = req.headers.get("origin");
-  if (origin && origin !== req.nextUrl.origin) throw new RequestError("Pricing changes from other sites are not accepted.", 403);
+  if (!isSameOriginRequest(req)) throw new RequestError("Pricing changes from other sites are not accepted.", 403);
   if (!req.body) throw new RequestError("The pricing request is empty.", 400);
   const reader = req.body.getReader();
   const chunks: Uint8Array[] = [];

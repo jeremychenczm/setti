@@ -58,6 +58,19 @@ describe("client approval HTTP boundaries", () => {
     });
   });
 
+  it.each(["127.0.0.1:3002", "localhost:3002"])("accepts a client decision from the actual %s browser origin", async (host) => {
+    const req = request({ method: "POST", cookie: sessionId, body: input(), headers: { Host: host, Origin: "http://" + host } });
+    expect((await postApprovalResponse(req, orderId)).status).toBe(200);
+    expect(mock.decide).toHaveBeenCalledTimes(1);
+  });
+  it("rejects opaque and alias-forged client decision origins", async () => {
+    for (const origin of ["null", "http://localhost:3002", "https://attacker.example"]) {
+      const req = request({ method: "POST", cookie: sessionId, body: input(), headers: { Host: "127.0.0.1:3002", Origin: origin } });
+      expect((await postApprovalResponse(req, orderId)).status).toBe(403);
+    }
+    expect(mock.decide).not.toHaveBeenCalled();
+  });
+
   it("allows public reads without creating a session or granting a confirmation cookie", async () => {
     const response = await getApprovalResponse(request(), orderId);
     expect(response.status).toBe(200);

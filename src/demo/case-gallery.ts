@@ -1,0 +1,51 @@
+/** Read-only examples. No record here is an executable project or PayPal identifier. */
+export const DEMO_CASES = [
+  {
+    id: "approval", title: "Before the client says yes", project: "Willow Residence", status: "Awaiting client", amount: "Nothing held",
+    question: "Can the studio charge just because it sent a quote?",
+    answer: "A sent quote is a proposal. The client selects the lines they approve and signs the exact version. Payment approval is a separate step.",
+    events: [{ actor: "Jordan · designer", text: "Sends an itemised quote with service rates and supplier terms." }, { actor: "Sofia · client", text: "Approves the consultation, leaves a light undecided and asks about delivery." }, { actor: "Setti", text: "Keeps each decision against the frozen quote. Signing creates no payment." }],
+    next: "Sofia signs her chosen lines, then separately approves a PayPal Sandbox payment.",
+    inspect: "The quote version, signed line decisions and separate payment status.",
+  },
+  {
+    id: "held", title: "Held does not mean charged", project: "Maple Ave · lounge chair", status: "Held", amount: "$800 held",
+    question: "The chair was cancelled before ordering. Is this a refund?",
+    answer: "The $800 was authorised, not captured. Cancelling the chair releases the unused hold. A refund returns money that has already been charged.",
+    events: [{ actor: "Emma · client", text: "Approves the chair and authorises an $800 hold." }, { actor: "Jordan · designer", text: "Has not placed a supplier order. Emma asks for a desk instead." }, { actor: "Setti", text: "Plans a release for the old hold and a separate authorisation for the desk." }],
+    next: "Emma confirms the changed quote. Jordan then confirms the release of the old chair hold.",
+    inspect: "The original authorisation, its unspent amount and the release result.",
+  },
+  {
+    id: "refund", title: "A return after money moved", project: "Maple Ave · wool rug", status: "Partial refund", amount: "$240 returned",
+    question: "Why return $240 when the rug originally cost $300?",
+    answer: "The confirmed return keeps a $60 supplier fee. The refund target is $240. The designer records the supplier credit before executing the refund.",
+    events: [{ actor: "Jordan · designer", text: "Records supplier confirmation; the $300 rug payment is captured." }, { actor: "Emma · client", text: "Confirms the return with a $60 retained fee in the new version." }, { actor: "Jordan · designer", text: "Records the $240 supplier credit and confirms a $240 refund." }],
+    next: "Check the refund result. Reconcile a pending or unknown response before trying again.",
+    inspect: "The capture, confirmed retained cost, supplier credit and refund. PayPal fees are separate from the supplier fee.",
+  },
+  {
+    id: "service", title: "Less design work after payment", project: "Design consultation · example", status: "Service reduction", amount: "$150 refund target",
+    question: "Can a paid service be reduced, just like a physical item?",
+    answer: "A confirmed scope reduction can create a service refund. In this example two $150 consultation hours were paid, then the client confirms a reduction to one hour. The refund belongs to that service's capture.",
+    events: [{ actor: "Client", text: "Approves and pays for two consultation hours: $300." }, { actor: "Designer", text: "Reviews a reduction to one hour, with no additional cancellation fee." }, { actor: "Client", text: "Signs the reduced scope. The target is $150, leaving $150 to refund." }],
+    next: "The designer checks the confirmed service line and executes its $150 refund.",
+    inspect: "The service's own capture and refundable balance, even when several services shared the initial authorisation.",
+  },
+  {
+    id: "payer-action", title: "A saved method needs the client", project: "Willow Residence · example", status: "Approval needed", amount: "Same order",
+    question: "What if a saved PayPal method needs another approval?",
+    answer: "The unresolved order remains the same. The client continues on PayPal for that order. No replacement hold starts while its outcome is uncertain.",
+    events: [{ actor: "Setti", text: "Starts an approved-item hold using the saved Sandbox method." }, { actor: "PayPal", text: "Asks the buyer to approve this order again." }, { actor: "Client", text: "Can continue on PayPal or check the same operation after returning." }],
+    next: "The client uses Continue on PayPal. Check the original operation after approval or cancellation.",
+    inspect: "The unchanged order ID, amount, approval link and final status. This illustration has no executable order.",
+  },
+  {
+    id: "recovery", title: "The answer was lost, not the refund", project: "Maple Ave · recovery example", status: "Check original operation", amount: "One refund",
+    question: "The refund request timed out. Should the designer send another?",
+    answer: "Check the original operation first. PayPal may already have completed the refund. Recovery reads the existing result and matches its operation reference.",
+    events: [{ actor: "Designer", text: "Confirms a $240 refund." }, { actor: "Connection", text: "The response is lost. Setti records the outcome as unknown." }, { actor: "Setti", text: "Checks the original order and finds the matching refund, completing the same operation." }],
+    next: "Use Check PayPal status for the original operation instead of creating a second refund.",
+    inspect: "The request reference, recovered refund ID and proof that exactly one refund exists. A dated real recording appears below.",
+  },
+] as const;

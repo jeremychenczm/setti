@@ -4,6 +4,8 @@ import { z } from "zod";
 import { ACCOUNT_COOKIE, accountOrDefault, canOpenProject, findAccount } from "@/accounts/demo";
 import { aiConfigured } from "@/ai/model";
 import { isAiInvocation } from "@/ai/intent";
+import { isSameOriginRequest } from "@/http/origin";
+import { privateDemoCookieOptions } from "@/accounts/cookie-policy";
 import { defaultOpening } from "@/opening/document";
 import { openingStore } from "@/opening/server";
 import { OpeningStoreError } from "@/opening/store";
@@ -42,17 +44,13 @@ function session(req: NextRequest): string {
 
 function respond(req: NextRequest, sessionId: string, body: unknown, status = 200) {
   const response = NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
-  response.cookies.set(cookieName, sessionId, {
-    httpOnly: true, sameSite: "strict", path: "/", maxAge: 60 * 60 * 24 * 30,
-    secure: req.nextUrl.protocol === "https:",
-  });
+  response.cookies.set(cookieName, sessionId, privateDemoCookieOptions(req.nextUrl.protocol));
   return response;
 }
 
 async function boundedJson(req: NextRequest): Promise<unknown> {
   if (!req.headers.get("content-type")?.startsWith("application/json")) throw new HttpError("The request must be JSON.", 415);
-  const origin = req.headers.get("origin");
-  if (origin && origin !== req.nextUrl.origin) throw new HttpError("Chat writes from other sites are not accepted.", 403);
+  if (!isSameOriginRequest(req)) throw new HttpError("Chat writes from other sites are not accepted.", 403);
   if (!req.body) throw new HttpError("The message is empty.", 400);
   const reader = req.body.getReader();
   let size = 0;

@@ -5,6 +5,8 @@ import { isCaseKey } from "@/chat/cases";
 import type { CaseKey } from "@/chat/types";
 import { assertSandbox, SandboxGuardError } from "@/config/paypalEnv";
 import { createDb } from "@/db/client";
+import { isSameOriginRequest, requestOrigin } from "@/http/origin";
+import { refreshDemoCookies } from "@/http/demo-cookies";
 import { cancelPayment, checkPayment, operationPage, returnFromPayPal, startAuthorization, startCapture, startOpeningCapture, startRefund, startRelease, type LinkBuilder } from "./actions";
 import { cancelCheckout, completeAuthorization } from "./authorize";
 import { PaymentActionError } from "./binding";
@@ -70,7 +72,9 @@ function session(req: NextRequest): string | null {
 
 /** PayPal sends the buyer back here; SETTI_PUBLIC_URL overrides the request origin when the app runs behind a proxy. */
 export function paypalLinks(req: NextRequest): LinkBuilder {
-  const base = (process.env.SETTI_PUBLIC_URL?.trim() || req.nextUrl.origin).replace(/\/$/, "");
+  const origin = process.env.SETTI_PUBLIC_URL?.trim() || requestOrigin(req);
+  if (!origin) throw new HttpError("The request host is invalid.", 400);
+  const base = origin.replace(/\/$/, "");
   return (operationId) => ({
     returnUrl: `${base}/api/payments/paypal/return?op=${operationId}&state=${callbackState(operationId, "return")}`,
     cancelUrl: `${base}/api/payments/paypal/cancel?op=${operationId}&state=${callbackState(operationId, "cancel")}`,
@@ -78,7 +82,7 @@ export function paypalLinks(req: NextRequest): LinkBuilder {
 }
 
 async function boundedJson(req: NextRequest): Promise<unknown> {
-  if (req.headers.get("origin") !== req.nextUrl.origin) throw new HttpError("Payment steps must be started from this app's pages.", 403);
+  if (!isSameOriginRequest(req)) throw new HttpError("Payment steps must be started from this app's pages.", 403);
   if (!req.headers.get("content-type")?.startsWith("application/json")) throw new HttpError("The request must be JSON.", 415);
   if (!req.body) throw new HttpError("The payment request is empty.", 400);
   const reader = req.body.getReader(), chunks: Uint8Array[] = [];
@@ -115,7 +119,7 @@ export async function getPaymentsResponse(req: NextRequest, id: string) {
     const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
     const workspace = await paymentsWorkspace(db(), session(req), id, undefined, account);
     if (workspace && account && !canOpenProject(account, workspace.projectKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
-    return workspace ? NextResponse.json(workspace, { headers }) : NextResponse.json({ code: "NOT_FOUND", error: "This change order could not be found." }, { status: 404, headers });
+    return workspace ? refreshDemoCookies(NextResponse.json(workspace, { headers }), req) : NextResponse.json({ code: "NOT_FOUND", error: "This change order could not be found." }, { status: 404, headers });
   } catch (error) { return fail(error); }
 }
 
@@ -171,19 +175,20 @@ export async function postPaymentsResponse(req: NextRequest, id: string) {
         await refreshRecordedFees(db(), sandboxPayPal(), sessionId, id);
         break;
     }
-    return NextResponse.json({ workspace: await paymentsWorkspace(db(), sessionId, id, undefined, account), operationId, redirectUrl }, { headers });
+    return refreshDemoCookies(NextResponse.json({ workspace: await paymentsWorkspace(db(), sessionId, id, undefined, account), operationId, redirectUrl }, { headers }), req);
   } catch (error) { return fail(error); }
 }
 
 /** PayPal redirects the buyer here after approving (`return`) or leaving (`cancel`). */
 export async function paypalRedirectResponse(req: NextRequest, outcome: "return" | "cancel") {
   const operationId = uuid.safeParse(req.nextUrl.searchParams.get("op"));
-  const home = new URL("/", req.nextUrl.origin);
+  const origin = requestOrigin(req) ?? req.nextUrl.origin;
+  const home = new URL("/", origin);
   if (!operationId.success) return NextResponse.redirect(home, 303);
   let target: Awaited<ReturnType<typeof operationPage>> = null;
   const page = (state: string) => {
     if (!target) return NextResponse.redirect(home, 303);
-    const url = new URL(target.path, req.nextUrl.origin);
+    const url = new URL(target.path, origin);
     url.searchParams.set("paypal", state);
     url.hash = target.anchor;
     return NextResponse.redirect(url, 303);
@@ -216,7 +221,7 @@ export async function getServicesPaymentResponse(req: NextRequest, rawKey: strin
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
   const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
   if (account && !canOpenProject(account, rawKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
-  try { return NextResponse.json(await servicesView(req, rawKey), { headers }); }
+  try { return refreshDemoCookies(NextResponse.json(await servicesView(req, rawKey), { headers }), req); }
   catch (error) { return fail(error); }
 }
 
@@ -264,7 +269,7 @@ export async function postServicesPaymentResponse(req: NextRequest, rawKey: stri
         await chargeServices(db(), paypal, sessionId, rawKey);
         break;
     }
-    return NextResponse.json({ view: await servicesView(req, rawKey, sessionId), operationId, paypalOrderId }, { headers });
+    return refreshDemoCookies(NextResponse.json({ view: await servicesView(req, rawKey, sessionId), operationId, paypalOrderId }, { headers }), req);
   } catch (error) { return fail(error); }
 }
 
@@ -277,7 +282,7 @@ export async function getItemHoldsResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
   const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
   if (account && !canOpenProject(account, rawKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
-  try { return NextResponse.json(await holdsView(req, rawKey), { headers }); }
+  try { return refreshDemoCookies(NextResponse.json(await holdsView(req, rawKey), { headers }), req); }
   catch (error) { return fail(error); }
 }
 
@@ -313,7 +318,7 @@ export async function postItemHoldsResponse(req: NextRequest, rawKey: string) {
         await cancelItemHold(db(), sandboxPayPal(), sessionId, rawKey, input.operationId);
         break;
     }
-    return NextResponse.json({ view: await holdsView(req, rawKey, sessionId), attempted }, { headers });
+    return refreshDemoCookies(NextResponse.json({ view: await holdsView(req, rawKey, sessionId), attempted }, { headers }), req);
   } catch (error) { return fail(error); }
 }
 

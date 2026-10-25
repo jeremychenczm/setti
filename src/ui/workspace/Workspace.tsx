@@ -10,6 +10,7 @@ import { willowQuote } from "@/quotes/willow-quote";
 import { CaseChat } from "../chat/CaseChat";
 import { ConversationList, type ProjectChat } from "./ConversationList";
 import { Sidebar, type View } from "./Sidebar";
+import { TrySeedNotice } from "../try/TrySeedNotice";
 
 const QuoteBoard = dynamic(() => import("../quotes/QuoteBoard").then((m) => m.QuoteBoard), {
   loading: () => <div className="flex flex-1 items-center justify-center rounded-xl bg-white text-sm text-[var(--muted)]">Loading quote…</div>,
@@ -69,15 +70,20 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
     <div className="flex h-dvh min-h-0 gap-2 bg-[var(--canvas)] p-2 text-[var(--ink)]">
       <div className="hidden shrink-0 xl:flex"><Sidebar view={view} onView={setView} account={account} onSwitchAccount={switchAccount} /></div>
 
-      {view === "chats" && (
-        <>
-          <div className="hidden min-h-0 shrink-0 2xl:flex"><ConversationList projects={visibleProjects} activeId={activeId} onOpen={open} /></div>
-          <CaseChat key={`${account.id}:${activeId}`} projectKey={activeId} quote={quotes[activeId]} account={account} onSwitchAccount={switchAccount} onOpenQuote={openCaseQuote} onSelectCase={open} />
-        </>
-      )}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+        <TrySeedNotice projectKey={view === "chats" ? activeId : quoteId} account={account} onSwitchAccount={switchAccount} onOpenChat={() => { setActiveId(view === "quotes" ? quoteId : activeId); setView("chats"); }} currentView={view} />
+        <div className="flex min-h-0 min-w-0 flex-1 gap-2">
+          {view === "chats" && (
+            <>
+              <div className="hidden min-h-0 shrink-0 2xl:flex"><ConversationList projects={visibleProjects} activeId={activeId} onOpen={open} /></div>
+              <CaseChat key={`${account.id}:${activeId}`} projectKey={activeId} quote={quotes[activeId]} account={account} onSwitchAccount={switchAccount} onOpenQuote={openCaseQuote} onSelectCase={open} />
+            </>
+          )}
 
-      {view === "quotes" && <QuoteBoard key={`${account.id}:${quoteId}:${focusItemId ?? ""}`} projectKey={quoteId} viewer={account} options={visibleProjects.map((project) => project.key)} focusItemId={focusItemId}
-        onSelectQuote={(id) => { setQuoteId(id); setActiveId(id); setFocusItemId(null); }} onBack={openQuoteChat} onOpenChat={openQuoteChat} />}
+          {view === "quotes" && <QuoteBoard key={`${account.id}:${quoteId}:${focusItemId ?? ""}`} projectKey={quoteId} viewer={account} options={visibleProjects.map((project) => project.key)} focusItemId={focusItemId}
+            onSelectQuote={(id) => { setQuoteId(id); setActiveId(id); setFocusItemId(null); }} onBack={openQuoteChat} onOpenChat={openQuoteChat} />}
+        </div>
+      </div>
     </div>
   );
 }

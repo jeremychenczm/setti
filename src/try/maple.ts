@@ -6,10 +6,17 @@
  * and payment code. Only the AI draft is scripted, and supplier events are
  * designer-entered demo records, exactly as in the app.
  */
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { paymentOperations } from "../db/schema";
-import { returnFromPayPal, startAuthorization, startCapture, type LinkBuilder } from "../payments/actions";
+import { paymentOperations, paypalCaptures, revisions } from "../db/schema";
+import { createApprovalStore } from "../approval/store";
+import { chatCases } from "../chat/schema";
+import { clientSignatureName } from "../opening/types";
+import { changeOrders } from "../pricing/schema";
+import { checkoutDetails, returnFromPayPal, startAuthorization, startCapture, type LinkBuilder } from "../payments/actions";
+import { completeAuthorization, createCheckout } from "../payments/authorize";
+import { businessItem, lockConfirmedVersion } from "../payments/binding";
+import { executeCapture, refreshCapture } from "../payments/capture";
 import type { PaymentOperation } from "../payments/operations";
 import type { PayPalPayments } from "../payments/paypal";
 import { recordSupplierOrder } from "../payments/supplier";
@@ -17,6 +24,10 @@ import type { FrozenChangeOrder, PricingItem } from "../pricing/types";
 import { confirmScriptedChanges, shown, type ScriptedCopy } from "./scripted-change";
 
 export const MAPLE = "maple" as const;
+
+export class MaplePreparationError extends Error {
+  constructor(message: string, readonly recoverable = true) { super(message); }
+}
 
 export interface PaymentStep {
   label: string;
@@ -87,26 +98,82 @@ export function confirmSupplierOrder(db: Db, run: MapleRun, order: FrozenChangeO
 /** Starts the checkout, has it approved, and finishes the authorization the way PayPal's return does. */
 export async function authorizeItem(options: MapleOptions, run: MapleRun, order: FrozenChangeOrder, itemId: string, label: string) {
   const { db, paypal, links } = options;
-  const checkout = await startAuthorization(db, paypal, run.session, order.id, { ...ref(itemId, "proposed"), ...shown(order) }, links);
-  if (!checkout.paypalOrderId || !checkout.approvalUrl) throw new Error(`${label}: PayPal did not return an approval link (${checkout.status}).`);
-  await options.approve(checkout.approvalUrl, checkout.paypalOrderId, label);
+  const prior = await originalOperation(db, run, order, itemId, "authorize");
+  if (prior?.status === "succeeded") { run.record(label, [prior]); return prior; }
+  if (prior?.status === "failed") throw new MaplePreparationError(`${label}: PayPal refused this original authorization. It needs review before another hold is attempted.`, false);
+  let checkout = prior
+    ? await createCheckout(db, paypal, prior, links(prior.id), await checkoutDetails(db, prior))
+    : await startAuthorization(db, paypal, run.session, order.id, { ...ref(itemId, "proposed"), ...shown(order) }, links);
+  if (checkout.status === "failed") throw new MaplePreparationError(`${label}: PayPal refused the original checkout.`, false);
+  if (checkout.paypalOrderId && !checkout.approvalUrl) checkout = (await completeAuthorization(db, paypal, checkout.id)).operation;
+  if (checkout.status === "succeeded") { run.record(label, [checkout]); return checkout; }
+  if (!checkout.paypalOrderId || !checkout.approvalUrl) throw new MaplePreparationError(`${label}: PayPal did not return an approval link (${checkout.status}).`, checkout.status !== "failed");
+  const found = await paypal.getOrder(checkout.paypalOrderId);
+  if (found.kind !== "ok") throw new MaplePreparationError(`${label}: the original PayPal order could not be read; no replacement was created.`);
+  if (found.value.status !== "APPROVED" && found.value.status !== "COMPLETED") await options.approve(checkout.approvalUrl, checkout.paypalOrderId, label);
   const back = await returnFromPayPal(db, paypal, checkout.id, checkout.paypalOrderId, "return");
-  if (back?.state !== "authorized") throw new Error(`${label}: authorization did not complete (${back?.state ?? "no result"}).`);
   const [authorized] = await db.select().from(paymentOperations).where(eq(paymentOperations.id, checkout.id));
+  if (back?.state !== "authorized") throw new MaplePreparationError(`${label}: authorization did not complete (${back?.state ?? "no result"}).`, authorized.status !== "failed");
   run.record(label, [authorized]);
+  return authorized;
+}
+
+/** Reuses V2 even if preparing it finished just before the previous request stopped. */
+export async function ensureMapleQuote(db: Db, session: string): Promise<FrozenChangeOrder> {
+  const [existing] = await db.select({ document: changeOrders.document, status: revisions.status }).from(changeOrders)
+    .innerJoin(chatCases, eq(chatCases.id, changeOrders.caseId)).innerJoin(revisions, eq(revisions.id, changeOrders.revisionId))
+    .where(and(eq(chatCases.sessionId, session), eq(chatCases.projectKey, MAPLE), eq(revisions.number, 2)));
+  if (existing) {
+    const order = existing.document;
+    const chair = order.lines.find((line) => line.itemId === "chair"), rug = order.lines.find((line) => line.itemId === "rug");
+    if (chair?.sku !== "DEMO-CHAIR-2" || chair.unitPriceCents !== 80_000 || rug?.sku !== "DEMO-RUG-2" || rug.unitPriceCents !== 30_000) {
+      throw new MaplePreparationError("This project's V2 is different from the prepared Maple scenario. Its existing money was left unchanged.", false);
+    }
+    if (existing.status !== "sent" && existing.status !== "approved") throw new MaplePreparationError("The prepared V2 has been replaced or declined. Continue the existing project instead of preparing more money.", false);
+    if (existing.status === "sent") await createApprovalStore(db).decide(session, order.id, {
+      decision: "approved", ...shown(order), acknowledged: true, signature: clientSignatureName(order), note: "",
+    });
+    return order;
+  }
+  return confirmScriptedChanges(db, session, MAPLE, [
+    { action: "replace", itemId: "chair", after: product("Lounge chair", "DEMO-CHAIR-2", 80_000) },
+    { action: "replace", itemId: "rug", after: product("Wool rug", "DEMO-RUG-2", 30_000) },
+  ], { copy: startCopy });
+}
+
+async function originalOperation(db: Db, run: MapleRun, order: FrozenChangeOrder, itemId: string, kind: "authorize" | "capture") {
+  const version = await db.transaction((tx) => lockConfirmedVersion(tx, run.session, order.id, shown(order)));
+  const businessId = businessItem(version, ref(itemId, "proposed"));
+  const [operation] = await db.select().from(paymentOperations).where(and(
+    eq(paymentOperations.changeOrderId, order.id), eq(paymentOperations.itemId, businessId), eq(paymentOperations.kind, kind),
+  )).orderBy(paymentOperations.createdAt).limit(1);
+  return operation;
+}
+
+/** Resumes the original capture, including pending provider outcomes; never substitutes a new attempt. */
+export async function captureMapleRug(options: MapleOptions, run: MapleRun, initial: FrozenChangeOrder) {
+  const prior = await originalOperation(options.db, run, initial, "rug", "capture");
+  if (prior?.status === "failed") throw new MaplePreparationError("The original rug capture was refused and needs review before another attempt.", false);
+  const operations = prior ? [await executeCapture(options.db, options.paypal, prior.id)]
+    : await startCapture(options.db, options.paypal, run.session, initial.id, { ...ref("rug", "proposed"), ...shown(initial) });
+  run.record("Capture the rug after supplier confirmation", operations);
+  for (const operation of operations) {
+    if (operation.status !== "succeeded") throw new MaplePreparationError("PayPal has not confirmed the original rug capture yet.", operation.status !== "failed");
+    const [capture] = await options.db.select().from(paypalCaptures).where(eq(paypalCaptures.operationId, operation.id));
+    const current = capture?.status === "pending" ? await refreshCapture(options.db, options.paypal, capture.id) : capture;
+    if (current?.status !== "completed") throw new MaplePreparationError("The original rug capture is still pending or declined.", current?.status !== "declined");
+  }
+  return operations;
 }
 
 /** Confirms V2, holds the chair, and captures the rug after its supplier confirmed it. */
 export async function startMaple(options: MapleOptions, run: MapleRun): Promise<FrozenChangeOrder> {
-  const { db, paypal } = options;
+  const { db } = options;
   run.log("Confirming the first version: a lounge chair and a wool rug.");
-  const initial = await confirmScriptedChanges(db, run.session, MAPLE, [
-    { action: "replace", itemId: "chair", after: product("Lounge chair", "DEMO-CHAIR-2", 80_000) },
-    { action: "replace", itemId: "rug", after: product("Wool rug", "DEMO-RUG-2", 30_000) },
-  ], { copy: startCopy });
+  const initial = await ensureMapleQuote(db, run.session);
   await authorizeItem(options, run, initial, "chair", "Authorize the lounge chair ($800.00)");
   await authorizeItem(options, run, initial, "rug", "Authorize the wool rug ($300.00)");
   await confirmSupplierOrder(db, run, initial, "rug");
-  run.record("Capture the rug after supplier confirmation", await startCapture(db, paypal, run.session, initial.id, { ...ref("rug", "proposed"), ...shown(initial) }));
+  await captureMapleRug(options, run, initial);
   return initial;
 }

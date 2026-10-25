@@ -51,6 +51,27 @@ describe("payment HTTP boundaries", () => {
   });
   afterEach(() => vi.unstubAllEnvs());
 
+  it.each(["127.0.0.1:3002", "localhost:3002"])("uses the actual %s browser authority for payment writes and PayPal callbacks", async (host) => {
+    const req = post(authorize, { origin: "http://" + host });
+    req.headers.set("host", host);
+    const response = await postPaymentsResponse(req, orderId);
+    expect(response.status).toBe(200);
+    const links = mock.startAuthorization.mock.calls[0][5](operationId);
+    expect(new URL(links.returnUrl).origin).toBe("http://" + host);
+    expect(new URL(links.cancelUrl).origin).toBe("http://" + host);
+  });
+
+  it("rejects missing, opaque or forged payment origins before contacting PayPal", async () => {
+    for (const origin of [null, "null", "http://localhost:3002", "https://attacker.example"]) {
+      const req = post(authorize);
+      req.headers.set("host", "127.0.0.1:3002");
+      if (origin === null) req.headers.delete("origin"); else req.headers.set("origin", origin);
+      req.headers.set("x-forwarded-host", "attacker.example");
+      expect((await postPaymentsResponse(req, orderId)).status).toBe(403);
+    }
+    expect(mock.startAuthorization).not.toHaveBeenCalled();
+  });
+
   it("serves the read-only view without a session and never starts a step without one", async () => {
     const response = await getPaymentsResponse(new NextRequest(`${origin}/api/change-orders/${orderId}/payments`), orderId);
     expect(response.status).toBe(200);
@@ -73,6 +94,28 @@ describe("payment HTTP boundaries", () => {
     const [, , session, id, input, links] = mock.startAuthorization.mock.calls[0];
     expect([session, id, input.itemId]).toEqual([sessionId, orderId, "willow-dining-chair"]);
     expect(links(operationId)).toEqual({ returnUrl: `${origin}/api/payments/paypal/return?op=${operationId}&state=${callbackState(operationId, "return")}`, cancelUrl: `${origin}/api/payments/paypal/cancel?op=${operationId}&state=${callbackState(operationId, "cancel")}` });
+  });
+
+  it("upgrades the existing session and selected client before leaving for PayPal", async () => {
+    const req = post(authorize, { account: "sofia" });
+    const visitor = randomUUID();
+    req.cookies.set("setti-try-visitor", visitor);
+    const response = await postPaymentsResponse(req, orderId);
+    expect(response.status).toBe(200);
+    expect(response.cookies.get("setti-demo-chat")).toMatchObject({ value: sessionId, httpOnly: true, sameSite: "lax" });
+    expect(response.cookies.get("setti-try-visitor")).toMatchObject({ value: visitor, httpOnly: true, sameSite: "lax" });
+    expect(response.cookies.get("setti-demo-account")).toMatchObject({ value: "sofia", sameSite: "lax", httpOnly: false });
+  });
+
+  it("upgrades cookies when an old pending checkout is opened through a read-only status lookup", async () => {
+    const response = await getPaymentsResponse(new NextRequest(`${origin}/api/change-orders/${orderId}/payments`, { headers: {
+      Cookie: `setti-demo-chat=${sessionId}; setti-demo-account=sofia`,
+    } }), orderId);
+    expect(response.status).toBe(200);
+    expect(response.cookies.get("setti-demo-chat")).toMatchObject({ value: sessionId, sameSite: "lax", httpOnly: true });
+    expect(response.cookies.get("setti-demo-account")).toMatchObject({ value: "sofia", sameSite: "lax" });
+    expect(mock.startAuthorization).not.toHaveBeenCalled();
+    expect(mock.checkPayment).not.toHaveBeenCalled();
   });
 
   it("routes designer steps without accepting any client-supplied amount", async () => {

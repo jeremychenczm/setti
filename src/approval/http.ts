@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ACCOUNT_COOKIE, accountOrDefault, clientOf } from "@/accounts/demo";
 import type { CaseKey } from "@/chat/types";
+import { isSameOriginRequest } from "@/http/origin";
 import { holdItemsAfterConfirmation } from "@/payments/http";
 import { approvalStore } from "./server";
 import { ApprovalStoreError } from "./store";
@@ -34,7 +35,7 @@ function asViewer(req: NextRequest, workspace: ApprovalWorkspace): ApprovalWorks
 }
 
 async function boundedJson(req: NextRequest): Promise<unknown> {
-  if (req.headers.get("origin") !== req.nextUrl.origin) throw new HttpError("The client decision must be submitted from this app's page.", 403);
+  if (!isSameOriginRequest(req)) throw new HttpError("The client decision must be submitted from this app's page.", 403);
   if (!req.headers.get("content-type")?.startsWith("application/json")) throw new HttpError("The request must be JSON.", 415);
   if (!req.body) throw new HttpError("Enter the client decision.", 400);
   const reader = req.body.getReader(), chunks: Uint8Array[] = [];
