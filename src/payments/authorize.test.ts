@@ -257,6 +257,22 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     expect(next.lines.find((line) => line.itemId === CHAIR)).toMatchObject({ targetCents: 81_563, heldCents: 54_375, steps: expect.arrayContaining([expect.objectContaining({ kind: "authorize", amountCents: 27_188, available: true })]) });
   });
 
+  it("offers payment steps only to the account responsible for them", async () => {
+    const stepsFor = async (account: (typeof DEMO_ACCOUNTS)[number] | null) => (await paymentsWorkspace(handle.db, session, v2.id, undefined, account))!.lines.flatMap((line) => line.steps);
+    for (const account of [null, DEMO_ACCOUNTS[2]]) expect((await stepsFor(account)).every((step) => !step.available)).toBe(true);
+    expect((await stepsFor(DEMO_ACCOUNTS[1])).filter((step) => step.available).map((step) => step.kind)).toEqual(["authorize"]);
+    expect((await stepsFor(DEMO_ACCOUNTS[0])).filter((step) => step.available).every((step) => step.actor === "designer")).toBe(true);
+
+    const checkout = await start();
+    paypal.approve(checkout.paypalOrderId!);
+    await back(checkout.id, checkout.paypalOrderId);
+    expect((await stepsFor(DEMO_ACCOUNTS[0])).filter((step) => step.available).map((step) => step.kind)).toEqual(["supplier_confirmation"]);
+    expect((await stepsFor(DEMO_ACCOUNTS[1])).every((step) => !step.available)).toBe(true);
+    await confirmSupplier(handle.db, session, v2, "proposed");
+    expect((await stepsFor(DEMO_ACCOUNTS[0])).filter((step) => step.available).map((step) => step.kind)).toEqual(["capture"]);
+    expect((await stepsFor(DEMO_ACCOUNTS[1])).every((step) => !step.available)).toBe(true);
+  });
+
   it("lets neither a shared read-only link nor another session start or reconcile a checkout", async () => {
     await expect(start(v2, randomUUID())).rejects.toMatchObject({ code: "FORBIDDEN" });
     const checkout = await start();

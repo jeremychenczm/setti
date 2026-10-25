@@ -59,6 +59,10 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
     throw error;
   }
   const { ledger, plan } = basis;
+  // A later successful attempt cannot resolve the older provider order's uncertain money.
+  // Keep migration warnings visible even when that item is already fully funded.
+  const manualReviews = ledger.operations.filter((operation) => operation.failureCode === "LEGACY_SAVED_PAYPAL_REVIEW_REQUIRED"
+    && (operation.status === "pending" || operation.status === "unknown"));
   const member = !!account && (account.role === "designer" || account.projectKey === key);
   const client = member && account?.role === "client";
   const kinds = new Map((await db.select({ id: items.id, kind: items.kind }).from(items).where(eq(items.projectId, basis.projectId))).map((row) => [row.id, row.kind]));
@@ -68,13 +72,16 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
   const now = Date.now();
   const lines = plan.lines.flatMap((line): ItemHoldView[] => {
     const businessId = basis.businessItem(line);
-    if (!businessId || kinds.get(businessId) !== "furniture" || line.targetCents === 0) return [];
+    const manualReview = manualReviews.find((operation) => operation.itemId === businessId);
+    if (!businessId || kinds.get(businessId) !== "furniture" || (line.targetCents === 0 && !manualReview)) return [];
     const latest = ledger.operations.filter((operation) => operation.kind === "authorize" && operation.itemId === businessId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
+    const displayedOperation = manualReview ?? latest;
     const hold = ledger.authorizations.filter((entry) => entry.itemId === businessId && (entry.status === "created" || entry.status === "partially_captured") && !(entry.expiresAt && entry.expiresAt.getTime() <= now))
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
     const funded = line.heldCents + line.capturedCents - line.refundedCents;
     const event = ledger.supplierEvents.find((entry) => entry.kind === "order_confirmed" && entry.itemId === businessId && (basis.orderId ? entry.changeOrderId === basis.orderId : entry.revisionId === basis.key));
-    const state = line.capturedCents - line.refundedCents >= line.targetCents ? "captured"
+    const state = manualReview ? "unknown"
+      : line.capturedCents - line.refundedCents >= line.targetCents ? "captured"
       : funded >= line.targetCents && event ? "confirmed"
       : funded >= line.targetCents ? "held"
         : latest?.status === "unknown" ? "unknown"
@@ -83,12 +90,12 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
           : latest?.status === "failed" ? "failed" : "to_hold";
     return [{
       itemId: line.itemId, label: line.label, targetCents: line.targetCents, heldCents: line.heldCents, capturedCents: line.capturedCents - line.refundedCents, state,
-      operationId: latest?.id ?? null,
-      approvalUrl: client && state === "awaiting_client" ? latest?.approvalUrl ?? null : null,
-      canCheck: member && !!latest?.savedMethodId && ["holding", "awaiting_client", "unknown"].includes(state),
-      canCancel: client && state === "awaiting_client",
+      operationId: displayedOperation?.id ?? null,
+      approvalUrl: !manualReview && client && state === "awaiting_client" ? displayedOperation?.approvalUrl ?? null : null,
+      canCheck: member && !!displayedOperation?.savedMethodId && ["holding", "awaiting_client", "unknown"].includes(state),
+      canCancel: !manualReview && client && state === "awaiting_client",
       paypalAuthorizationId: hold?.paypalAuthorizationId ?? null, expiresAt: hold?.expiresAt?.toISOString() ?? null,
-      failureMessage: ["failed", "awaiting_client", "unknown"].includes(state) ? latest?.failureMessage ?? null : null,
+      failureMessage: ["failed", "awaiting_client", "unknown"].includes(state) ? displayedOperation?.failureMessage ?? null : null,
       terms: v1Terms.get(businessId) ?? null,
       supplier: event ? { reference: event.reference, totalCents: event.totalCents, leadTimeDays: event.leadTimeDays } : null,
     }];
@@ -96,8 +103,9 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
   const toHoldCents = lines.reduce((total, line) => total + Math.max(line.targetCents - line.heldCents - line.capturedCents, 0), 0);
   const [saved] = await db.select({ id: savedPaymentMethods.id }).from(savedPaymentMethods).where(eq(savedPaymentMethods.projectId, basis.projectId));
   const waiting = lines.some((line) => ["holding", "awaiting_client", "unknown"].includes(line.state));
-  const canHold = member && !!saved && toHoldCents > 0 && !waiting;
-  const reason = !lines.length ? "The client has not approved a furniture item yet."
+  const canHold = member && !!saved && toHoldCents > 0 && !waiting && plan.status !== "blocked" && manualReviews.length === 0;
+  const reason = manualReviews.length ? manualReviews[0].failureMessage ?? "Legacy PayPal orders require manual review before this project can place any further holds."
+    : !lines.length ? "The client has not approved a furniture item yet."
     : toHoldCents === 0 ? null
       : !saved ? "Items are held with the PayPal the client saves when paying the design services."
         : !member ? "Only the project's client or designer can hold items."

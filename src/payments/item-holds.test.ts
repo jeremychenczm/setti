@@ -119,6 +119,38 @@ describe.skipIf(!testDatabaseUrl)("holding approved items with saved PayPal", ()
     expect(await savedHolds()).toHaveLength(FURNITURE.length);
   });
 
+  it("keeps an older legacy-review warning visible after a later hold succeeded on that item", async () => {
+    await signOpeningForTest(handle.db, session, "willow", caseDocument("willow").lines.filter((line) => line.itemId !== COVER).map((line) => ({ itemId: line.itemId, decision: "approved" as const })));
+    await payServices();
+    const [succeeded] = await hold();
+    const fundedLine = (await view()).items.find((line) => line.paypalAuthorizationId === succeeded.paypalResourceId)!;
+    expect(fundedLine.state).toBe("held");
+    await signOpeningForTest(handle.db, session, "willow", [{ itemId: COVER, decision: "approved" }]);
+    expect(await view()).toMatchObject({ canHold: true, toHoldCents: expect.any(Number) });
+
+    // Model the exact post-migration state without weakening a database trigger:
+    // an older unresolved provider order beside the already completed later attempt.
+    const legacyId = randomUUID();
+    const warning = "This item has multiple authorization attempts. The original PayPal orders need manual review; no automatic authorization or replacement is allowed.";
+    await handle.db.insert(paymentOperations).values({ ...succeeded, id: legacyId, businessKey: `legacy-review:${legacyId}`, requestId: `setti-op-${legacyId}`,
+      status: "unknown", failureCode: "LEGACY_SAVED_PAYPAL_REVIEW_REQUIRED", failureMessage: warning,
+      paypalOrderId: "LEGACY-ORDER", paypalResourceId: null, approvalUrl: "https://www.sandbox.paypal.com/checkoutnow?token=LEGACY-ORDER",
+      createdAt: new Date(succeeded.createdAt.getTime() - 1_000), updatedAt: new Date(), attempts: 0 });
+
+    const reads = paypal.reads.length, writes = paypal.calls.length;
+    for (const account of [client, designer]) {
+      const blocked = await view(account);
+      expect(blocked).toMatchObject({ canHold: false, reason: warning });
+      expect(blocked.toHoldCents).toBeGreaterThan(0);
+      expect(blocked.items.find((line) => line.itemId === fundedLine.itemId)).toMatchObject({ state: "unknown", operationId: legacyId,
+        heldCents: succeeded.amountCents, failureMessage: warning, approvalUrl: null, canCancel: false });
+    }
+    expect(await hold()).toEqual([expect.objectContaining({ id: legacyId, failureCode: "LEGACY_SAVED_PAYPAL_REVIEW_REQUIRED" })]);
+    expect(await checkItemHold(handle.db, paypal, session, "willow", legacyId)).toMatchObject({ id: legacyId, status: "unknown", failureCode: "LEGACY_SAVED_PAYPAL_REVIEW_REQUIRED" });
+    expect(paypal.reads).toHaveLength(reads);
+    expect(paypal.calls).toHaveLength(writes);
+  });
+
   it("needs saved PayPal and an account of the project", async () => {
     await signOpeningForTest(handle.db, session, "willow");
     await expect(hold()).rejects.toMatchObject({ code: "NOT_AVAILABLE", message: expect.stringMatching(/Paying the design services saves it/) });
