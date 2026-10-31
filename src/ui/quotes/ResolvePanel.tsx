@@ -13,7 +13,7 @@ export interface ResolveItem {
  * The designer's list of V1 lines that are not agreed yet: declined lines with
  * the client's reason, and undecided lines with their questions in the chat.
  */
-export function ResolvePanel({ items, onSelect, onOpenChat, onRevise }: { items: ResolveItem[]; onSelect: (itemId: string) => void; onOpenChat: () => void; onRevise: (item: ResolveItem) => void }) {
+export function ResolvePanel({ items, onSelect, onDrop, onOpenChat, onRevise }: { items: ResolveItem[]; onSelect: (itemId: string) => void; onDrop: (itemId: string) => void; onOpenChat: () => void; onRevise: (item: ResolveItem) => void }) {
   const declined = items.filter((item) => item.line.state === "declined");
   const pending = items.filter((item) => item.line.state === "pending");
   return (
@@ -29,7 +29,7 @@ export function ResolvePanel({ items, onSelect, onOpenChat, onRevise }: { items:
             {item.line.questions > 0 && <button onClick={onOpenChat} className="flex items-center gap-1 text-[var(--primary)] hover:underline"><MessageCircleQuestion className="h-3.5 w-3.5" />{item.line.questions} in chat</button>}
             <span className="ml-auto flex gap-2">
               {item.line.state === "declined" && <button onClick={() => onRevise(item)} className="rounded-md bg-[var(--primary-fill)] px-2.5 py-1 font-medium text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">Revise</button>}
-              <button onClick={() => onSelect(item.itemId)} className="rounded-md border border-[var(--line)] px-2.5 py-1 font-medium hover:bg-slate-50">{item.line.state === "declined" ? "Drop…" : "Withdraw…"}</button>
+              <button onClick={() => onDrop(item.itemId)} className="rounded-md border border-[var(--line)] px-2.5 py-1 font-medium hover:bg-slate-50">{item.line.state === "declined" ? "Drop…" : "Withdraw…"}</button>
             </span>
           </li>
         ))}

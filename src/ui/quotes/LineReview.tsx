@@ -28,7 +28,7 @@ export function LineStateBadge({ state, choice, draft, forClient = false }: { st
  * The decision part of a line's details. The client chooses here and signs all
  * choices at once in the signing bar; a question goes to the chat right away.
  */
-export function LineReview({ name, line, role, canDecide, canResolve, choice, onChoose, onAsk, onOpenChat, onDrop, onRevise }: {
+export function LineReview({ name, line, role, canDecide, canResolve, choice, onChoose, onAsk, onOpenChat, startDropping = false, onDrop, onRevise }: {
   name: string;
   line: OpeningLine;
   role: "designer" | "client";
@@ -40,6 +40,8 @@ export function LineReview({ name, line, role, canDecide, canResolve, choice, on
   onChoose: (choice: LineChoice | null) => void;
   onAsk: (text: string) => Promise<string | null>;
   onOpenChat: () => void;
+  /** Opened from "Drop…" or "Withdraw…": the confirmation shows straight away. */
+  startDropping?: boolean;
   onDrop: () => Promise<string | null>;
   /** Opens the pricing page on a designer draft with this line; returns an error to show, or null. */
   onRevise: () => Promise<string | null>;
@@ -48,7 +50,7 @@ export function LineReview({ name, line, role, canDecide, canResolve, choice, on
   const [asking, setAsking] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [confirmDrop, setConfirmDrop] = useState(false);
+  const [confirmDrop, setConfirmDrop] = useState(startDropping && canResolve);
 
   async function ask() {
     if (!question.trim() || asking) return;

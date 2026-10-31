@@ -114,6 +114,8 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
   const [room, setRoom] = useState("all");
   const [visibleCount, setVisibleCount] = useState(allRows.length);
   const [selectedId, setSelectedId] = useState<string | null>(focusItemId ?? null);
+  // The item whose drawer opened from "Drop…" or "Withdraw…", which opens on that confirmation.
+  const [dropFor, setDropFor] = useState<string | null>(null);
   const grid = useRef<GridApi<QuoteRow> | null>(null);
   const selected = allRows.find((line) => line.itemId === selectedId);
   const rooms = useMemo(() => [...new Set(quote.lines.map((line) => line.room))], [quote]);
@@ -132,10 +134,6 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
   const chosen = pendingLines.filter((line) => choices[line.itemId]);
   const toApprove = chosen.filter((line) => choices[line.itemId].decision === "approved");
   const missingReasons = chosen.filter((line) => choices[line.itemId].decision === "declined" && !choices[line.itemId].note.trim()).map((line) => line.name);
-
-  useEffect(() => {
-    if (focusItemId) window.requestAnimationFrame(() => document.getElementById("quote-line-details")?.scrollIntoView({ behavior: "smooth", block: "center" }));
-  }, [focusItemId]);
 
   function choose(itemId: string, choice: LineChoice | null) {
     setNotice(null);
@@ -272,7 +270,7 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
             <button onClick={downloadCsv} title="Download all items in the quote, including filtered items" className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-3 py-2 text-[12px] font-medium hover:bg-[var(--canvas)]"><Download className="h-3.5 w-3.5" />Download CSV</button>
           </div>
           {supplierCount > 1 && <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2.5 text-[11px] leading-relaxed text-brand-800">{supplierLines.length} items from {supplierCount} fictional supplier quotes + {estimateCount} simulated service estimates. Tax and delivery are test assumptions; select Details for the supplier quote, price note and return terms of each line.</p>}
-          {resolveItems.length > 0 && <ResolvePanel items={resolveItems} onSelect={setSelectedId} onOpenChat={onOpenChat} onRevise={(item) => void revise(item.itemId)} />}
+          {resolveItems.length > 0 && <ResolvePanel items={resolveItems} onSelect={(itemId) => { setDropFor(null); setSelectedId(itemId); }} onDrop={(itemId) => { setDropFor(itemId); setSelectedId(itemId); }} onOpenChat={onOpenChat} onRevise={(item) => void revise(item.itemId)} />}
           {actionError && <p role="alert" className="mb-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2.5 text-[12px] text-red-800">{actionError}</p>}
           {reviewing && <p className="mb-3 rounded-lg border border-brand-100 bg-white px-3 py-2.5 text-[12px] leading-relaxed text-slate-600"><strong className="font-medium text-[var(--ink)]">Review each line.</strong> Select a line to approve or decline it, or to ask about it. Tick several lines to approve or decline them together. Lines you leave undecided can be signed later.</p>}
           {notice && <p role="status" className="mb-3 rounded-lg bg-emerald-50 px-3 py-2.5 text-[12px] text-emerald-800">{notice}</p>}
@@ -317,14 +315,14 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
             <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] bg-slate-50/60 px-4 py-3 text-[11px] text-[var(--muted)]"><span aria-live="polite">Showing {visibleCount} of {totals.lineCount} items · Filters do not change the quote total</span><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-[var(--primary-fill)]" />AG Grid Community</span></div>
           </div>
 
-          {selected && <LineDetails key={selected.itemId} line={selected} onClose={() => setSelectedId(null)}>
+          {selected && <LineDetails key={`${selected.itemId}${dropFor === selected.itemId ? ":drop" : ""}`} line={selected} onClose={() => setSelectedId(null)}>
             {signedV1 && <LineReview
               name={selected.name} line={lineOf(selected.itemId)} role={viewer.role}
               canDecide={reviewing && lineOf(selected.itemId).state === "pending"}
               canResolve={resolveItems.some((item) => item.itemId === selected.itemId)}
               choice={choices[selected.itemId]} onChoose={(choice) => choose(selected.itemId, choice)}
               onAsk={(text) => actions.ask(selected.itemId, text)} onOpenChat={onOpenChat}
-              onDrop={() => actions.drop(selected.itemId)} onRevise={() => revise(selected.itemId)}
+              startDropping={dropFor === selected.itemId} onDrop={() => actions.drop(selected.itemId)} onRevise={() => revise(selected.itemId)}
             />}
             {viewer.role === "designer" && open && lineOf(selected.itemId).state === "approved" && <ChangeLineButton onChange={async () => {
               setActionError(null);
@@ -381,16 +379,33 @@ function Amount({ label, value, strong }: { label: string; value: number; strong
   return <div className={`flex items-center justify-between gap-4 ${strong ? "text-[14px] font-semibold" : "text-slate-500"}`}><span>{label}</span><span className="tabular-nums">{usd(value)}</span></div>;
 }
 
+/** One quote line's card in a drawer beside the table: what it is, its terms and source, and its decision. */
 function LineDetails({ line, onClose, children }: { line: QuoteRow; onClose: () => void; children?: ReactNode }) {
-  return (
-    <div id="quote-line-details" className="mt-4 scroll-mt-6 rounded-xl border border-brand-100 bg-brand-50/30 p-5">
-      <div className="mb-4 flex items-center gap-2"><ArrowUpRight className="h-4 w-4 text-[var(--primary)]" /><h2 className="text-[13px] font-semibold">{line.name}</h2><span className="text-[10px] text-[var(--muted)]">Item details</span><button onClick={onClose} aria-label="Close item details" className="ml-auto rounded-md p-1 hover:bg-brand-100"><X className="h-3.5 w-3.5" /></button></div>
-      <div className="grid gap-5 text-[12px] lg:grid-cols-3">
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [onClose]);
+  return (<>
+    {/* A click beside the drawer closes it. */}
+    <div aria-hidden className="fixed inset-0 z-30" onClick={onClose} />
+    <aside id="quote-line-details" role="dialog" aria-labelledby="quote-line-title" className="fixed inset-y-0 right-0 z-40 flex w-full max-w-[400px] flex-col border-l border-[var(--line)] bg-white shadow-2xl">
+      <header className="flex items-start gap-3 border-b border-[var(--line)] px-5 py-4">
+        <div className="min-w-0 flex-1">
+          <h2 id="quote-line-title" className="text-[15px] font-semibold leading-snug">{line.name}</h2>
+          <p className="mt-0.5 text-[11px] text-[var(--muted)]">{line.vendor} · {line.room}</p>
+          <p className="mt-2 text-[12px] tabular-nums text-slate-600">{line.quantity} × {usd(line.unitPriceCents)} · <span className="font-semibold text-[var(--ink)]">{usd(line.totalCents)}</span></p>
+        </div>
+        <button onClick={onClose} aria-label="Close item details" className="rounded-md p-1 text-[var(--muted)] hover:bg-[var(--canvas)] hover:text-[var(--ink)]"><X className="h-4 w-4" /></button>
+      </header>
+      <div className="flex-1 overflow-y-auto px-5 py-4 text-[12px]">
+      <div className="space-y-5">
         <div><div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Specification</div><p className="leading-relaxed">{line.specification}</p><p className="mt-2 text-[11px] text-[var(--muted)]">{line.sku} · {line.room} · Priced per {line.unitLabel ?? "each"}</p><p className="mt-1 text-[11px] text-[var(--muted)]">{line.leadTimeDays === null ? line.category === "service" ? "Service · no product delivery" : "Stock and lead time to be confirmed" : `Estimated lead time: ${line.leadTimeDays / 7} weeks (sample)`}</p></div>
         <div><div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Return & cancellation terms</div><p className="leading-relaxed">{line.returnPolicy}</p><p className="mt-2 text-[11px] text-[var(--muted)]">{line.customMade ? "Custom-made" : "Not custom-made"} · {line.nonReturnable === null ? "Return eligibility to be confirmed" : line.nonReturnable ? "Non-returnable" : "See the agreed terms"}</p>{line.source.returnPolicyUrl && <a href={line.source.returnPolicyUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[11px] text-[var(--primary)] hover:underline">Supplier return policy<ArrowUpRight className="h-3 w-3" /></a>}</div>
         <div><div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Source · {line.source.kind === "public_reference" ? "public retail price" : line.source.kind === "estimate" ? "test estimate" : line.category === "furniture" ? "supplier quote" : "example"}</div><div className="flex items-start gap-1.5"><FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--primary)]" /><span>{line.source.name}</span></div><p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">{line.source.note}</p>{line.source.priceNote && <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">{line.source.priceNote}</p>}{line.source.checkedAt && <p className="mt-1 text-[10px] text-[var(--muted)]">Price checked: {line.source.checkedAt}</p>}<p className="mt-1 break-all font-mono text-[10px] text-[var(--muted)]">{line.source.reference}</p>{line.source.url && <a href={line.source.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[11px] text-[var(--primary)] hover:underline">View product & price<ArrowUpRight className="h-3 w-3" /></a>}</div>
       </div>
       {children}
-    </div>
-  );
+      </div>
+    </aside>
+  </>);
 }
