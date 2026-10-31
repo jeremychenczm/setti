@@ -7,7 +7,7 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db/client";
 import type { DemoAccount } from "../accounts/demo";
-import { items, revisions, savedPaymentMethods } from "../db/schema";
+import { items, revisions } from "../db/schema";
 import { buildFundingPlan, type FundingLine, type FundingPlan } from "../approval/funding";
 import { changeOrderDecisions } from "../approval/schema";
 import { fundingFactsFrom, fundingIdentities, readLedger, type ProjectLedger } from "../approval/store";
@@ -17,12 +17,13 @@ import { paypalCalls } from "./schema";
 import { summarizeHold } from "./holds";
 import { confirmedSupplierTerms } from "./supplier-terms";
 import { recordedSettlement } from "./fee-evidence";
-import type { CaptureView, HoldView, OperationView, PaymentLineView, PaymentStep, PaymentsWorkspace, RefundView, SupplierEventView } from "./types";
+import { activeSavedMethod, savedMethodView, type SavedMethodView } from "./saved-methods";
+import type { CaptureView, DemoCheckout, HoldView, OperationView, PaymentLineView, PaymentStep, PaymentsWorkspace, RefundView, SupplierEventView } from "./types";
 
 type Reader = Pick<Db, "select">;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function paymentsWorkspace(db: Reader, sessionId: string | null, orderId: string, now = new Date(), account: DemoAccount | null = null): Promise<PaymentsWorkspace | null> {
+export async function paymentsWorkspace(db: Reader, sessionId: string | null, orderId: string, now = new Date(), account: DemoAccount | null = null, demo: DemoCheckout | null = null): Promise<PaymentsWorkspace | null> {
   if (!UUID.test(orderId)) return null;
   const [found] = await db.select({ document: changeOrders.document, caseId: changeOrders.caseId, status: revisions.status, sessionId: chatCases.sessionId })
     .from(changeOrders).innerJoin(revisions, eq(changeOrders.revisionId, revisions.id)).innerJoin(chatCases, eq(changeOrders.caseId, chatCases.id))
@@ -40,7 +41,7 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
       : !current ? `A newer client-confirmed version replaced V${order.version}. Start payment steps from the current version; results of steps already started stay recorded here.`
         : null;
   const base = { projectKey: order.projectKey, orderId, version: order.version, current, canAct: owner && current, canReconcile: owner && !!decision, reason, environment: "sandbox" as const };
-  if (!bridge || !decision) return { ...base, plan: null, lines: [], others: { lineCount: order.lines.length, targetCents: order.totals.totalCents }, operations: [] };
+  if (!bridge || !decision) return { ...base, plan: null, lines: [], others: { lineCount: order.lines.length, targetCents: order.totals.totalCents }, operations: [], savedMethod: null, canRemoveSaved: false, checkout: null };
 
   const ledger = await readLedger(db, bridge.projectId);
   const operationIds = ledger.operations.map((operation) => operation.id);
@@ -50,7 +51,8 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
   const versions = new Map((await db.select({ id: changeOrders.id, document: changeOrders.document }).from(changeOrders).where(eq(changeOrders.caseId, found.caseId)))
     .map((row) => [row.id, row.document.version]));
   const names = new Map((await db.select({ id: items.id, name: items.name }).from(items).where(eq(items.projectId, bridge.projectId))).map((row) => [row.id, row.name]));
-  const [saved] = await db.select({ id: savedPaymentMethods.id }).from(savedPaymentMethods).where(eq(savedPaymentMethods.projectId, bridge.projectId));
+  const savedMethod = savedMethodView(await activeSavedMethod(db, bridge.projectId));
+  const client = member && account?.role === "client";
 
   const lines: PaymentLineView[] = [];
   const others = { lineCount: 0, targetCents: 0 };
@@ -66,10 +68,14 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
       ...line, businessItemId: businessId ?? null, releasedCents: money.holds.reduce((total, hold) => total + hold.releasedCents, 0), ...money,
       confirmedTerms: terms,
       refundRequiresSupplierCredit: line.side === "baseline" && order.changes.some((change) => change.itemId === line.itemId && ["returned", "cancelled"].includes(change.oldItemHandling)),
-      supplierEvents: events, steps: steps(plan, line, owner && current, events, terms?.purpose === "retained_cost", !!saved).map((step) => ({ ...step, available: step.available && member && step.actor === account?.role })),
+      supplierEvents: events, steps: steps(plan, line, owner && current, events, terms?.purpose === "retained_cost", savedMethod).map((step) => ({ ...step, available: step.available && member && step.actor === account?.role })),
     });
   }
-  return { ...base, plan, lines, others, operations: await operationViews(db, ledger, versions, names, member, account) };
+  return {
+    ...base, plan, lines, others, operations: await operationViews(db, ledger, versions, names, member, account),
+    savedMethod, canRemoveSaved: client && !!savedMethod,
+    checkout: client && current && demo ? { ...demo, canSave: !savedMethod } : null,
+  };
 }
 
 function itemMoney(ledger: ProjectLedger, businessId: string, versions: Map<string, number>, now: Date, calls: (typeof paypalCalls.$inferSelect)[]): { holds: HoldView[]; captures: CaptureView[]; refunds: RefundView[] } {
@@ -107,17 +113,17 @@ function itemMoney(ledger: ProjectLedger, businessId: string, versions: Map<stri
 }
 
 /** The steps the plan calls for on this line, and whether each can start now. */
-function steps(plan: FundingPlan, line: FundingLine, canAct: boolean, events: SupplierEventView[], retainedCost: boolean, savedPayPal: boolean): PaymentStep[] {
+function steps(plan: FundingPlan, line: FundingLine, canAct: boolean, events: SupplierEventView[], retainedCost: boolean, saved: SavedMethodView | null): PaymentStep[] {
   const ready = canAct && plan.status !== "blocked";
   const ordered = events.some((event) => event.kind === "order_confirmed");
   const step = (kind: PaymentStep["kind"], amountCents: number, available: boolean, note: string, actor: PaymentStep["actor"] = "designer"): PaymentStep => ({ kind, actor, amountCents, available, note });
   return plan.actions.filter((action) => action.itemId === line.itemId && action.side === line.side).flatMap((action): PaymentStep[] => {
     switch (action.kind) {
       case "new_authorization":
-        // With PayPal saved for the project, holds need no checkout: they are placed under Approved items on this page.
-        return [savedPayPal
-          ? step("authorize", action.amountCents, false, "Held with the client's saved PayPal under Approved items on this page; no checkout is needed.", "client")
-          : step("authorize", action.amountCents, ready && line.category === "furniture", "The client approves this hold on PayPal (Sandbox). Nothing is charged until the supplier confirms the order.", "client")];
+        // With a payment method saved for the project, the hold needs no PayPal window.
+        return [step("authorize", action.amountCents, ready && line.category === "furniture", saved
+          ? `Held with the client's saved ${saved.kind === "card" ? saved.label : `PayPal (${saved.label})`} without leaving Setti. Nothing is charged until the supplier confirms the order.`
+          : "The client approves this hold with PayPal or a card (Sandbox). Nothing is charged until the supplier confirms the order.", "client")];
       case "capture":
         if (action.timing !== "after_vendor_confirmation") {
           const designService = line.category === "service" && (line.change === null || line.change === "add" || line.change === "quantity");

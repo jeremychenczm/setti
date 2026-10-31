@@ -14,7 +14,9 @@ import { MaplePreparationError } from "./maple";
 import type { TryDeps } from "./service";
 
 /** Historical V1 service payment, using the same service capture path as checkout.
- * Test-card preparation does not pretend that the visitor saved a PayPal wallet.
+ * The client paid with PayPal's Sandbox test card and agreed to save it for the
+ * project, so later item holds need no PayPal window. It is labelled as a card,
+ * never as the visitor's PayPal wallet.
  */
 export async function prepareHomeServices(deps: TryDeps, session: string): Promise<string[]> {
   const operation = await deps.db.transaction(async (tx) => {
@@ -25,7 +27,7 @@ export async function prepareHomeServices(deps: TryDeps, session: string): Promi
     const action = basis.plan.actions.find((entry) => entry.itemId === "design" && entry.kind === "capture" && entry.timing === "on_payment_execution");
     const itemId = action && basis.businessItem(action);
     if (!action || !itemId) throw new MaplePreparationError("The V1 design service has no payment to prepare.", false);
-    const created = await insertOperation(tx, { businessKey: `try-v1-services:${basis.key}`, projectId: basis.projectId, kind: "authorize", amountCents: action.amountCents, binding: basis.bind(null), servicesHold: true });
+    const created = await insertOperation(tx, { businessKey: `try-v1-services:${basis.key}`, projectId: basis.projectId, kind: "authorize", amountCents: action.amountCents, binding: basis.bind(null), servicesHold: true, savePaymentMethod: true });
     await tx.insert(servicesHoldLines).values({ operationId: created.id, itemId, amountCents: action.amountCents });
     return created;
   });
@@ -37,7 +39,7 @@ export async function prepareHomeServices(deps: TryDeps, session: string): Promi
     const found = await deps.paypal.getOrder(checkout.paypalOrderId);
     if (found.kind !== "ok") throw new MaplePreparationError("The original V1 service checkout could not be checked.");
     if (!["APPROVED", "COMPLETED"].includes(found.value.status ?? "")) {
-      const approved = await deps.testCard(checkout.paypalOrderId);
+      const approved = await deps.testCard(checkout.paypalOrderId, { save: checkout.savePaymentMethod });
       if (approved.kind !== "ok" || !["APPROVED", "COMPLETED"].includes(approved.value.status ?? "")) throw new MaplePreparationError("The original V1 service checkout still needs approval.", approved.kind !== "rejected");
     }
   }

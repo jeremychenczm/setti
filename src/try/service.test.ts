@@ -23,7 +23,7 @@ describe.skipIf(!testDatabaseUrl)("/try durable preparation with fake PayPal", (
   afterAll(() => handle?.pool.end());
   const deps = (overrides: Partial<TryDeps> = {}): TryDeps => ({
     db: handle.db, paypal, links, perHour: 30,
-    testCard: (orderId) => { approvals.push(orderId); return paypal.confirmWithTestCard(orderId); }, ...overrides,
+    testCard: (orderId, options) => { approvals.push(orderId); return paypal.confirmWithTestCard(orderId, options); }, ...overrides,
   });
   async function allocate(visitorId = randomUUID()) {
     const result = await startTry(deps(), null, { visitorId });

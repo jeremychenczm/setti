@@ -7,7 +7,8 @@
  */
 import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { items, paypalAuthorizations, paypalCaptures, revisions, savedPaymentMethods, servicesHoldLines } from "../db/schema";
+import { items, paypalAuthorizations, paypalCaptures, revisions, servicesHoldLines } from "../db/schema";
+import { activeSavedMethod } from "./saved-methods";
 import type { FundingPlan } from "../approval/funding";
 import { fundingIdentities, type ProjectLedger } from "../approval/store";
 import { chatCases } from "../chat/schema";
@@ -90,7 +91,8 @@ async function serviceCharges(tx: Tx, basis: PaymentBasis): Promise<{ itemId: st
  * still to be charged, split line by line, and saves PayPal for the project's
  * later holds unless it already has. A repeated click resumes the same checkout.
  */
-export async function startServicesCheckout(db: Db, paypal: PayPalPayments, sessionId: string, key: CaseKey, links: LinkBuilder): Promise<PaymentOperation> {
+/** Starts (or resumes) the design-services checkout. `save` is the client's consent to save the payment method for this project. */
+export async function startServicesCheckout(db: Db, paypal: PayPalPayments, sessionId: string, key: CaseKey, links: LinkBuilder, options: { save?: boolean } = {}): Promise<PaymentOperation> {
   const operation = await db.transaction(async (tx) => {
     const basis = await lockPaymentBasis(tx, sessionId, key);
     const open = basis.ledger.operations.find((entry) => entry.servicesHold && (entry.status === "pending" || entry.status === "unknown"));
@@ -98,11 +100,11 @@ export async function startServicesCheckout(db: Db, paypal: PayPalPayments, sess
     if (basis.plan.status === "blocked") throw new PaymentActionError("PLAN_BLOCKED", "Resolve the funding blockers before paying.", basis.plan.blockers);
     const split = await serviceCharges(tx, basis);
     if (!split.length) throw new PaymentActionError("NOT_AVAILABLE", "Approve at least one design service before paying. No design service is waiting to be charged.");
-    const [saved] = await tx.select({ id: savedPaymentMethods.id }).from(savedPaymentMethods).where(eq(savedPaymentMethods.projectId, basis.projectId));
+    const saved = await activeSavedMethod(tx, basis.projectId);
     const prefix = `services:${basis.key}:`;
     const created = await insertOperation(tx, {
       businessKey: `${prefix}${attempt(basis.ledger, "authorize", prefix)}`, projectId: basis.projectId, kind: "authorize",
-      amountCents: split.reduce((total, line) => total + line.amountCents, 0), binding: basis.bind(null), servicesHold: true, savePaymentMethod: !saved,
+      amountCents: split.reduce((total, line) => total + line.amountCents, 0), binding: basis.bind(null), servicesHold: true, savePaymentMethod: (options.save ?? true) && !saved,
     });
     await tx.insert(servicesHoldLines).values(split.map((line) => ({ operationId: created.id, ...line })));
     return created;

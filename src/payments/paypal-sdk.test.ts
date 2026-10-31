@@ -168,7 +168,7 @@ describe("PayPal SDK adapter", () => {
     let sent: unknown;
     const paypal = adapter({}, { createOrder: async (request: unknown) => { sent = request; return response({ id: "ORDER-2", status: "COMPLETED" }); } } as never);
     const { referenceId, customId, invoiceId, description } = checkout;
-    await paypal.createSavedPayPalOrder({ referenceId, customId, invoiceId, description, requestId: "setti-op-2", paypalTokenId: "TOKEN-1", amountCents: 27_188 });
+    await paypal.createSavedPayPalOrder({ referenceId, customId, invoiceId, description, requestId: "setti-op-2", paypalTokenId: "TOKEN-1", kind: "paypal", amountCents: 27_188 });
     expect(sent).toMatchObject({
       paypalRequestId: "setti-op-2",
       body: {
@@ -189,9 +189,56 @@ describe("PayPal SDK adapter", () => {
     }); } } as never);
     const { referenceId, customId, invoiceId, description, returnUrl, cancelUrl } = checkout;
     expect(await paypal.createSavedPayPalOrder({ referenceId, customId, invoiceId, description, returnUrl, cancelUrl,
-      requestId: "setti-op-2", paypalTokenId: "TOKEN-1", amountCents: 27_188 })).toMatchObject({
+      requestId: "setti-op-2", paypalTokenId: "TOKEN-1", kind: "paypal", amountCents: 27_188 })).toMatchObject({
       kind: "ok", value: { orderId: "ORDER-2", status: "PAYER_ACTION_REQUIRED", amountCents: 27_188, customId: "op-1", approvalUrl },
     });
     expect(sent).toMatchObject({ body: { paymentSource: { paypal: { vaultId: "TOKEN-1", experienceContext: { returnUrl, cancelUrl } } } } });
+  });
+
+  it("asks PayPal to save the Sandbox test card only when the checkout saves the method", async () => {
+    const sent: { body: { paymentSource: { card: Record<string, unknown> } } }[] = [];
+    const approve = createSdkTestCardApproval({ confirmOrder: async (request: never) => { sent.push(request); return response({ id: "ORDER-1", status: "APPROVED" }, 200); } } as never);
+    await approve("ORDER-1");
+    await approve("ORDER-1", { save: true });
+    expect(sent[0].body.paymentSource.card).not.toHaveProperty("attributes");
+    expect(sent[1].body.paymentSource.card).toMatchObject({ number: "4012000033330026", attributes: { vault: { storeInVault: "ON_SUCCESS" } } });
+  });
+
+  it("labels a saved card by brand and last digits, and a saved PayPal account by a masked email, never in full", async () => {
+    const authorized = (paymentSource: unknown) => adapter({}, { authorizeOrder: async () => response({ id: "ORDER-1", status: "COMPLETED", paymentSource }) } as never)
+      .authorizeOrder({ orderId: "ORDER-1", requestId: "setti-op-1" });
+    // Probe P12: the authorization of a card saved on success returns the card's brand, last digits and vault token.
+    expect(await authorized({ card: { brand: "VISA", lastDigits: "0026", attributes: { vault: { id: "CARD-TOKEN", status: "VAULTED" } } } }))
+      .toMatchObject({ kind: "ok", value: { savedPayPal: { kind: "card", status: "VAULTED", tokenId: "CARD-TOKEN", label: "Visa •••• 0026" } } });
+    expect(await authorized({ card: { brand: "MASTER_CARD", lastDigits: "4444", attributes: { vault: { id: "CARD-2", status: "VAULTED" } } } }))
+      .toMatchObject({ value: { savedPayPal: { label: "Master Card •••• 4444" } } });
+    const wallet = await authorized({ paypal: { emailAddress: "buyer@personal.example.com", attributes: { vault: { id: "TOKEN-1", status: "VAULTED" } } } });
+    expect(wallet).toMatchObject({ value: { savedPayPal: { kind: "paypal", tokenId: "TOKEN-1", label: "b•••@personal.example.com" } } });
+    expect(JSON.stringify(wallet)).not.toContain("buyer@");
+    // A card that was not saved is not a saved method.
+    expect(await authorized({ card: { brand: "VISA", lastDigits: "0026" } })).not.toHaveProperty("value.savedPayPal");
+  });
+
+  it("holds with a saved card as a merchant-initiated unscheduled payment", async () => {
+    let sent: unknown;
+    const paypal = adapter({}, { createOrder: async (request: unknown) => { sent = request; return response({ id: "ORDER-3", status: "COMPLETED" }); } } as never);
+    const { referenceId, customId, invoiceId, description, returnUrl, cancelUrl } = checkout;
+    await paypal.createSavedPayPalOrder({ referenceId, customId, invoiceId, description, returnUrl, cancelUrl, requestId: "setti-op-3", paypalTokenId: "CARD-TOKEN", kind: "card", amountCents: 10_000 });
+    expect(sent).toMatchObject({ body: { intent: "AUTHORIZE", paymentSource: { card: { vaultId: "CARD-TOKEN", storedCredential: { paymentInitiator: "MERCHANT", paymentType: "UNSCHEDULED", usage: "SUBSEQUENT" } } } } });
+    expect((sent as { body: { paymentSource: object } }).body.paymentSource).not.toHaveProperty("paypal");
+  });
+
+  it("deletes a saved token through PayPal's vault and reports PayPal's refusal as rejected", async () => {
+    const deleted: string[] = [];
+    const vault = { deletePaymentToken: async (id: string) => { deleted.push(id); return response(undefined, 204); } };
+    const paypal = createSdkPayPal({ payments: {} as PaymentsController, orders: {} as OrdersController, vault: vault as never });
+    expect(await paypal.deleteSavedMethod("CARD-TOKEN")).toMatchObject({ kind: "ok", value: { deleted: true }, trace: { httpStatus: 204 } });
+    expect(deleted).toEqual(["CARD-TOKEN"]);
+
+    const missing = Object.assign(new ApiError({ request: {}, response: { statusCode: 404, headers: {}, body: "" } } as never, "Not found"), {
+      result: { name: "RESOURCE_NOT_FOUND", message: "The specified resource does not exist.", details: [{ issue: "INVALID_RESOURCE_ID" }] },
+    });
+    const gone = createSdkPayPal({ payments: {} as PaymentsController, orders: {} as OrdersController, vault: { deletePaymentToken: async () => { throw missing; } } as never });
+    expect(await gone.deleteSavedMethod("CARD-TOKEN")).toMatchObject({ kind: "rejected", code: "INVALID_RESOURCE_ID", trace: { httpStatus: 404 } });
   });
 });

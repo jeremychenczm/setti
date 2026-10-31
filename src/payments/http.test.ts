@@ -109,7 +109,7 @@ describe("payment HTTP boundaries", () => {
   it("serves the read-only view without a session and never starts a step without one", async () => {
     const response = await getPaymentsResponse(new NextRequest(`${origin}/api/change-orders/${orderId}/payments`), orderId);
     expect(response.status).toBe(200);
-    expect(mock.paymentsWorkspace).toHaveBeenCalledWith(mock.db, null, orderId, undefined, null);
+    expect(mock.paymentsWorkspace).toHaveBeenCalledWith(mock.db, null, orderId, undefined, null, expect.objectContaining({ testCard: expect.any(Boolean) }));
     expect((await postPaymentsResponse(post(authorize, { cookie: null }), orderId)).status).toBe(403);
     expect(mock.startAuthorization).not.toHaveBeenCalled();
   });
@@ -297,7 +297,7 @@ describe("design-services payment HTTP boundaries", () => {
     const get = (account: string) => getServicesPaymentResponse(new NextRequest(`${origin}/api/quotes/willow/services-payment`, { headers: { Cookie: `setti-demo-chat=${sessionId}; setti-demo-account=${account}` } }), "willow");
     expect((await get("emma")).status).toBe(403);
     expect((await get("sofia")).status).toBe(200);
-    expect(mock.servicesPaymentView).toHaveBeenCalledWith(mock.db, sessionId, "willow", expect.objectContaining({ id: "sofia" }), "http-test-client");
+    expect(mock.servicesPaymentView).toHaveBeenCalledWith(mock.db, sessionId, "willow", expect.objectContaining({ id: "sofia" }), "http-test-client", expect.objectContaining({ testCard: expect.any(Boolean) }));
   });
 });
 
@@ -333,7 +333,7 @@ describe("item-holds HTTP boundaries", () => {
 
   it("checks saved holds for either participant and only lets the client leave checkout", async () => {
     for (const account of ["sofia", "jordan"]) expect((await postItemHoldsResponse(holds({ action: "check", operationId }, account), "willow")).status).toBe(200);
-    expect(mock.checkItemHold).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow", operationId);
+    expect(mock.checkItemHold).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow", operationId, expect.any(Function));
     expect((await postItemHoldsResponse(holds({ action: "check", operationId }, "emma"), "willow")).status).toBe(403);
     expect((await postItemHoldsResponse(holds({ action: "cancel", operationId }, "jordan"), "willow")).status).toBe(403);
     expect((await postItemHoldsResponse(holds({ action: "cancel", operationId }, "sofia"), "willow")).status).toBe(200);

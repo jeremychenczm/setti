@@ -4,9 +4,9 @@ import type { ItemHoldView, ItemHoldsView } from "@/payments/item-holds-view";
 import type { ServicesPaymentView } from "@/payments/services-view";
 import { willowGuideStep, type WillowGuideData } from "./willow-guide";
 
-const serviceView = (patch: Partial<ServicesPaymentView> = {}): ServicesPaymentView => ({ projectKey: "willow", basis: { version: 1, orderId: null }, services: [{ itemId: "consultation", label: "Consultation", targetCents: 30_000, capturedCents: 30_000, captures: [] }], dueCents: 0, checkout: null, savedPayPal: true, canPay: false, canFinish: false, canCheck: false, reason: null, paypalClientId: null, ...patch });
-const item = (patch: Partial<ItemHoldView> = {}): ItemHoldView => ({ itemId: "chair", label: "Chair", targetCents: 10_000, heldCents: 10_000, capturedCents: 0, state: "held", operationId: "hold", approvalUrl: null, canCheck: false, canCancel: false, paypalAuthorizationId: "AUTH", expiresAt: null, failureMessage: null, terms: { quantity: 1, unitPriceCents: 10_000, taxCents: 0, freightCents: 0 }, supplier: null, ...patch });
-const holdsView = (patch: Partial<ItemHoldsView> = {}): ItemHoldsView => ({ projectKey: "willow", basis: { version: 1, orderId: null }, items: [item()], toHoldCents: 0, savedPayPal: true, canHold: false, canConfirmSupplier: true, contentHash: "hash", reason: null, ...patch });
+const serviceView = (patch: Partial<ServicesPaymentView> = {}): ServicesPaymentView => ({ projectKey: "willow", basis: { version: 1, orderId: null }, services: [{ itemId: "consultation", label: "Consultation", targetCents: 30_000, capturedCents: 30_000, captures: [] }], dueCents: 0, checkout: null, savedPayPal: true, savedMethod: { kind: "paypal", label: "b•••@personal.example.com", savedAt: "2026-10-30T12:00:00.000Z" }, canRemoveSaved: false, checkoutOptions: null, canPay: false, canFinish: false, canCheck: false, reason: null, paypalClientId: null, ...patch });
+const item = (patch: Partial<ItemHoldView> = {}): ItemHoldView => ({ itemId: "chair", label: "Chair", targetCents: 10_000, heldCents: 10_000, capturedCents: 0, state: "held", operationId: "hold", approvalUrl: null, canCheck: false, canCancel: false, canCheckout: false, paypalAuthorizationId: "AUTH", expiresAt: null, failureMessage: null, terms: { quantity: 1, unitPriceCents: 10_000, taxCents: 0, freightCents: 0 }, supplier: null, ...patch });
+const holdsView = (patch: Partial<ItemHoldsView> = {}): ItemHoldsView => ({ projectKey: "willow", basis: { version: 1, orderId: null }, items: [item()], toHoldCents: 0, savedPayPal: true, savedMethod: { kind: "paypal", label: "b•••@personal.example.com", savedAt: "2026-10-30T12:00:00.000Z" }, canRemoveSaved: false, checkoutOptions: null, canHold: false, canConfirmSupplier: true, contentHash: "hash", reason: null, ...patch });
 function approved(): WillowGuideData {
   return { snapshot: { opening: { ...defaultOpening("willow"), status: "approved", sentAt: "2026-10-24T00:00:00Z", progress: { approved: 2, declined: 1, withdrawn: 0, pending: 25, approvedTotalCents: 40_000 } }, versions: [] }, services: serviceView(), holds: holdsView() };
 }
@@ -61,11 +61,12 @@ describe("Willow first-quote guide", () => {
     expect(willowGuideStep(data, "client")).toMatchObject({ index: 2, title: "Check the existing service payment" });
   });
 
-  it("does not claim a wallet was saved just because the service captures completed", () => {
+  it("asks Sofia to hold each item when no payment method was saved, without charging the services again", () => {
     const data = approved();
     data.services!.savedPayPal = false;
+    data.holds = { ...data.holds!, savedPayPal: false, savedMethod: null, items: data.holds!.items.map((item) => ({ ...item, state: "to_hold", heldCents: 0, canCheckout: true })) };
     const step = willowGuideStep(data, "designer");
-    expect(step).toMatchObject({ index: 2, role: "sofia", title: "Services are recorded as paid; PayPal is not saved" });
+    expect(step).toMatchObject({ index: 3, role: "sofia", title: "Sofia holds each approved item", anchor: "item-holds" });
     expect(step.detail).toContain("does not suggest charging the services again");
   });
 

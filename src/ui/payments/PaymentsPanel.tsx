@@ -3,21 +3,26 @@
 import { ArrowUpRight, CircleDollarSign, LoaderCircle, LockKeyhole, ReceiptText, RefreshCw, ShieldCheck, Truck, X } from "lucide-react";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { FrozenChangeOrder } from "@/pricing/types";
-import type { OperationView, PaymentLineView, PaymentStep, PaymentsWorkspace } from "@/payments/types";
+import type { SavedMethodView } from "@/payments/saved-methods";
+import type { CheckoutView, OperationView, PaymentLineView, PaymentStep, PaymentsWorkspace } from "@/payments/types";
 import { centsText, dateTime, Field, inputClass, money, parseDollars, signedMoney } from "../pricing/common";
 import { emptyPaymentFeedback, feedbackMessage, paymentFeedback, paymentReturnNotice } from "./feedback";
 import { lineProgress, paymentScopeTotals } from "./progress";
 import { PaymentFees } from "./PaymentFees";
+import { PayMethodChooser, SavedMethodCard, savedMethodName } from "./PaymentMethods";
+import { PayPalButtons } from "./PayPalButtons";
 import { useTryReadiness } from "../try/useTryReadiness";
 import { paymentChanged, usePaymentRefresh } from "./usePaymentRefresh";
 
 type LineRef = { itemId: string; side: PaymentLineView["side"] };
 type Action =
-  | ({ action: "authorize" | "capture" | "release" | "refund" } & LineRef)
+  | ({ action: "authorize"; via?: "popup" | "redirect" | "test_card" | "saved"; save?: boolean } & LineRef)
+  | ({ action: "capture" | "release" | "refund" } & LineRef)
   | ({ action: "supplier_order"; quantity: number; unitPriceCents: number; taxCents: number; freightCents: number; inStock: boolean; leadTimeDays: number | null; reference: string; note: string } & LineRef)
   | ({ action: "supplier_credit"; creditCents: number; reference: string; note: string } & LineRef)
   | { action: "check" | "cancel"; operationId: string }
-  | { action: "fees" };
+  | { action: "fees" | "hold_saved" | "remove_saved" };
+type Reply = { workspace: PaymentsWorkspace; redirectUrl: string | null; operationId: string | null; paypalOrderId: string | null };
 
 const kindLabels: Record<OperationView["kind"], string> = { authorize: "Authorization", capture: "Capture", void: "Release hold (void)", refund: "Refund", reauthorize: "Reauthorization" };
 const statusLabels: Record<OperationView["status"], string> = { pending: "In progress", succeeded: "PayPal confirmed", failed: "Not done", unknown: "Outcome unknown · check PayPal" };
@@ -33,7 +38,7 @@ function isWorkspace(value: unknown, orderId: string): value is PaymentsWorkspac
   return !!value && typeof value === "object" && (value as PaymentsWorkspace).orderId === orderId && Array.isArray((value as PaymentsWorkspace).lines);
 }
 
-async function call(orderId: string, body?: Action & { contentHash?: string; revisionContentHash?: string }): Promise<{ workspace: PaymentsWorkspace; redirectUrl: string | null }> {
+async function call(orderId: string, body?: Action & { contentHash?: string; revisionContentHash?: string }): Promise<Reply> {
   const response = await fetch(`/api/change-orders/${encodeURIComponent(orderId)}/payments`, {
     cache: "no-store",
     ...(body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
@@ -43,7 +48,7 @@ async function call(orderId: string, body?: Action & { contentHash?: string; rev
     const failure = json as { error?: string; details?: string[] } | null;
     throw new Error([failure?.error ?? `Request failed (${response.status}).`, ...(failure?.details ?? [])].join(" "));
   }
-  const result = body ? json as { workspace: PaymentsWorkspace; redirectUrl: string | null } : { workspace: json as PaymentsWorkspace, redirectUrl: null };
+  const result: Reply = body ? json as Reply : { workspace: json as PaymentsWorkspace, redirectUrl: null, operationId: null, paypalOrderId: null };
   if (!isWorkspace(result.workspace, orderId)) throw new Error("The server returned incomplete payment records.");
   return result;
 }
@@ -107,8 +112,9 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
     setNotice(paymentReturnNotice(returned));
   }, [load]);
 
-  async function run(action: Action, key: string): Promise<boolean> {
-    if (mutating.current || readiness.blocked) return false;
+  /** Runs one step; returns the server's reply, or null when the step did not start or failed. */
+  async function request(action: Action, key: string): Promise<Reply | null> {
+    if (mutating.current || readiness.blocked) return null;
     mutating.current = true; setBusy(key); dispatchFeedback({ type: "action_started" });
     ++loadSequence.current;
     try {
@@ -117,22 +123,25 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
       setWorkspace(result.workspace);
       onChange?.();
       if (result.redirectUrl) { setBusy("redirect"); window.location.assign(result.redirectUrl); }
-      return true;
+      return result;
     } catch (cause) {
       dispatchFeedback({ type: "action_failed", message: cause instanceof Error ? cause.message : "The payment step could not be started." });
       await load();
-      return false;
+      return null;
     } finally {
       mutating.current = false;
       setBusy((current) => current === "redirect" ? current : null);
       paymentChanged(order.projectKey);
     }
   }
+  const run = async (action: Action, key: string) => !!await request(action, key);
 
   if (!workspace) return <section id="payments" className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><p className="flex items-center gap-2 text-[12px] text-slate-500">{error ?? <><LoaderCircle className="h-4 w-4 animate-spin" />Loading payment records…</>}</p></section>;
   const open = workspace.operations.filter((operation) => operation.status === "pending" || operation.status === "unknown");
   const plan = workspace.plan;
   const disabled = Boolean(busy) || readiness.blocked;
+  const toHold = workspace.lines.flatMap((line) => line.steps.filter((step) => step.kind === "authorize" && step.available));
+  const pay: LinePayment = { checkout: workspace.checkout, savedMethod: workspace.savedMethod, request };
 
   return <section id="payments" aria-labelledby="payments-title" className="mb-5 scroll-mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
     <div className="flex flex-wrap items-center gap-2"><h2 id="payments-title" className="mr-auto flex items-center gap-2 text-[16px] font-semibold"><CircleDollarSign className="h-4.5 w-4.5 text-[var(--primary)]" />Payments · V{workspace.version}</h2><span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-800">PayPal Sandbox · test money</span><button onClick={() => void load()} disabled={Boolean(busy)} className="flex items-center gap-1 text-[11px] text-slate-500 hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Reload</button></div>
@@ -141,18 +150,30 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
     {notice && <div role="status" className="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-[12px] leading-relaxed text-amber-900"><span className="flex-1">{notice.text}</span><button aria-label="Dismiss" onClick={() => setNotice(null)}><X className="h-3.5 w-3.5" /></button></div>}
     {error && <p role="alert" className="mt-4 rounded-lg border border-red-100 bg-red-50 p-3 text-[12px] leading-relaxed text-red-900">{error}</p>}
     {workspace.reason && <p className="mt-4 flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />{workspace.reason}</p>}
+    {workspace.savedMethod && <div className="mt-4 space-y-3">
+      <SavedMethodCard method={workspace.savedMethod} canRemove={workspace.canRemoveSaved} busy={busy === "remove_saved"} disabled={disabled} onRemove={() => void run({ action: "remove_saved" }, "remove_saved")} />
+      {workspace.checkout && toHold.length > 1 && <button type="button" disabled={disabled} onClick={() => void run({ action: "hold_saved" }, "hold_saved")}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:opacity-50">{busy === "hold_saved" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <LockKeyhole className="h-3.5 w-3.5" />}Hold all {toHold.length} new items · {money(toHold.reduce((total, step) => total + step.amountCents, 0))} with {savedMethodName(workspace.savedMethod)}</button>}
+    </div>}
 
     {open.length > 0 && <div className="mt-4 space-y-3">{open.map((operation) => <div key={operation.id} className="rounded-xl border border-amber-200 bg-amber-50/60 p-4 text-[12px] leading-relaxed text-amber-950">
       <p className="font-semibold">{kindLabels[operation.kind]} · {money(operation.amountCents)} · {operation.itemLabel ?? "item"}{operation.version ? ` · V${operation.version}` : ""}</p>
       <p className="mt-1">{operation.status === "unknown" ? "PayPal may or may not have completed this step. Check its status; Setti will not start a replacement." : operation.kind !== "authorize" ? "Waiting to be sent to PayPal again with the same request id." : operation.paypalOrderId ? operation.failureCode === "AUTHORIZATION_PENDING" ? "PayPal is reviewing this authorization. Nothing is held until PayPal creates it." : "Waiting for the client to approve on PayPal." : "Preparing the PayPal checkout."}{operation.failureMessage ? ` ${operation.failureMessage}` : ""}</p>
+      {operation.canContinue && operation.paypalOrderId && operation.kind === "authorize" && workspace.checkout?.paypalClientId && !readiness.blocked && <div className="mt-3 max-w-[380px]">
+        <PayPalButtons clientId={workspace.checkout.paypalClientId} disabled={disabled}
+          createOrder={async () => operation.paypalOrderId!}
+          onApprove={async () => { await run({ action: "check", operationId: operation.id }, `check:${operation.id}`); }}
+          onCancel={async () => { await run({ action: "cancel", operationId: operation.id }, `cancel:${operation.id}`); }}
+          onError={() => { dispatchFeedback({ type: "action_failed", message: "PayPal could not finish this hold. Nothing is held; check this same checkout or try again." }); void load(); }} />
+      </div>}
       {workspace.canReconcile ? <div className="mt-3 flex flex-wrap gap-3">
-        {operation.canContinue && operation.approvalUrl && !readiness.blocked && <a href={operation.approvalUrl} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">Continue to PayPal<ArrowUpRight className="h-3.5 w-3.5" /></a>}
+        {operation.canContinue && operation.approvalUrl && !readiness.blocked && <a href={operation.approvalUrl} className="inline-flex items-center gap-1.5 font-medium underline">Open PayPal in this tab instead<ArrowUpRight className="h-3.5 w-3.5" /></a>}
         {operation.canCheck && <button onClick={() => void run({ action: "check", operationId: operation.id }, `check:${operation.id}`)} disabled={disabled} className="inline-flex items-center gap-1.5 font-semibold underline disabled:opacity-50">{busy === `check:${operation.id}` ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Check PayPal status</button>}
         {operation.canCancel && <button onClick={() => void run({ action: "cancel", operationId: operation.id }, `cancel:${operation.id}`)} disabled={disabled} className="font-medium underline disabled:opacity-50">Leave checkout</button>}
       </div> : null}
     </div>)}</div>}
 
-    {workspace.lines.length > 0 && <><ExecutionOverview workspace={workspace} /><div className="mt-4 space-y-4">{workspace.lines.map((line) => <LineCard key={`${line.side}:${line.itemId}`} line={line} operations={workspace.operations} version={workspace.version} busy={busy} disabled={disabled} canAct={workspace.canAct} canReconcile={workspace.canReconcile} onAction={(action, key) => run({ ...action, itemId: line.itemId, side: line.side } as Action, key)} onCheck={(operationId) => void run({ action: "check", operationId }, `check:${operationId}`)} />)}</div>
+    {workspace.lines.length > 0 && <><ExecutionOverview workspace={workspace} /><div className="mt-4 space-y-4">{workspace.lines.map((line) => <LineCard key={`${line.side}:${line.itemId}`} line={line} operations={workspace.operations} version={workspace.version} busy={busy} disabled={disabled} canAct={workspace.canAct} canReconcile={workspace.canReconcile} pay={pay} onAction={(action, key) => run({ ...action, itemId: line.itemId, side: line.side } as Action, key)} onCheck={(operationId) => void run({ action: "check", operationId }, `check:${operationId}`)} />)}</div>
       <PaymentFees lines={workspace.lines} {...(workspace.canReconcile ? { onRefresh: () => void run({ action: "fees" }, "fees"), refreshing: busy === "fees", disabled } : {})} /></>}
 
     {plan && <>
@@ -174,11 +195,17 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
   </section>;
 }
 
-type LineActionInput = Omit<Extract<Action, { itemId: string }>, "itemId" | "side">;
+/** A line action without its line reference, one variant at a time (so each keeps its own fields). */
+type LineActionInput = Extract<Action, { itemId: string }> extends infer A ? A extends unknown ? Omit<A, "itemId" | "side"> : never : never;
+/** What a line needs to take the client's payment: the payment choices, the saved method and the raw step request. */
+interface LinePayment { checkout: CheckoutView | null; savedMethod: SavedMethodView | null; request: (action: Action, key: string) => Promise<Reply | null> }
 
-function LineCard({ line, operations, version, busy, disabled, canAct, canReconcile, onAction, onCheck }: { line: PaymentLineView; operations: readonly OperationView[]; version: number; busy: string | null; disabled: boolean; canAct: boolean; canReconcile: boolean; onAction: (action: LineActionInput, key: string) => Promise<boolean>; onCheck: (operationId: string) => void }) {
+function LineCard({ line, operations, version, busy, disabled, canAct, canReconcile, pay, onAction, onCheck }: { line: PaymentLineView; operations: readonly OperationView[]; version: number; busy: string | null; disabled: boolean; canAct: boolean; canReconcile: boolean; pay: LinePayment; onAction: (action: LineActionInput, key: string) => Promise<boolean>; onCheck: (operationId: string) => void }) {
   const [confirming, setConfirming] = useState<PaymentStep["kind"] | null>(null);
   const [form, setForm] = useState<"supplier_confirmation" | "supplier_credit" | null>(null);
+  const [choosing, setChoosing] = useState(false);
+  const [save, setSave] = useState(true);
+  const popup = useRef<string | null>(null);
   const retainedCost = line.confirmedTerms?.purpose === "retained_cost";
   const key = (kind: string) => `${kind}:${line.side}:${line.itemId}`;
   const tiles = [
@@ -200,13 +227,33 @@ function LineCard({ line, operations, version, busy, disabled, canAct, canReconc
 
     {line.steps.length > 0 && <div className="mt-3 space-y-2">{line.steps.map((step, index) => <div key={index} className="rounded-lg border border-slate-100 p-3">
       <div className="flex flex-wrap items-center gap-3">
-        {step.available ? <StepButton step={step} retainedCost={retainedCost} busy={busy === key(step.kind) || (step.kind === "authorize" && busy === "redirect")} disabled={disabled} onClick={() => {
-          if (step.kind === "authorize") void onAction({ action: "authorize" }, key(step.kind));
+        {step.available ? <StepButton step={step} savedMethod={pay.savedMethod} retainedCost={retainedCost} busy={busy === key(step.kind) || (step.kind === "authorize" && busy === "redirect")} disabled={disabled} onClick={() => {
+          if (step.kind === "authorize") {
+            if (pay.savedMethod) void onAction({ action: "authorize", via: "saved" }, key(step.kind));
+            else if (pay.checkout) setChoosing(!choosing);
+            else void onAction({ action: "authorize" }, key(step.kind));
+          }
           else if (step.kind === "supplier_confirmation" || step.kind === "supplier_credit") setForm(form === step.kind ? null : step.kind);
           else setConfirming(confirming === step.kind ? null : step.kind);
         }} /> : <span className="rounded-lg bg-slate-100 px-3 py-2 text-[12px] font-medium text-slate-500">{stepLabel(step)}</span>}
         <p className="min-w-[200px] flex-1 text-[11px] leading-relaxed text-slate-500"><strong className="font-medium text-slate-600">{step.actor === "client" ? "Client step" : "Designer step"}.</strong> {step.note}{!canAct ? " Open this version from the owning demo session to act on it." : ""}</p>
       </div>
+      {step.available && canAct && step.kind === "authorize" && choosing && !pay.savedMethod && pay.checkout && <div className="mt-3 rounded-lg bg-[var(--canvas)] p-3">
+        <p className="mb-3 text-[11px] leading-relaxed text-slate-600">Hold {money(step.amountCents)} for {line.label}. PayPal opens in a window over this page; nothing is charged until the supplier confirms.</p>
+        <PayMethodChooser options={pay.checkout} disabled={disabled} testCardBusy={busy === key("test_card")} save={save} onSaveChange={setSave}
+          onTestCard={() => void onAction({ action: "authorize", via: "test_card", save }, key("test_card")).then((ok) => { if (ok) setChoosing(false); })}
+          paypal={{
+            createOrder: async () => {
+              const reply = await pay.request({ action: "authorize", via: "popup", save, itemId: line.itemId, side: line.side }, key(step.kind));
+              if (!reply?.paypalOrderId || !reply.operationId) throw new Error("The PayPal checkout could not start.");
+              popup.current = reply.operationId;
+              return reply.paypalOrderId;
+            },
+            onApprove: async () => { if (popup.current) { onCheck(popup.current); setChoosing(false); } },
+            onCancel: async () => { if (popup.current) await pay.request({ action: "cancel", operationId: popup.current }, `cancel:${popup.current}`); },
+            onError: () => { if (popup.current) onCheck(popup.current); },
+          }} />
+      </div>}
       {step.available && canAct && confirming === step.kind && confirmations[step.kind] && <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg bg-amber-50 p-3 text-[12px] text-amber-950"><span className="flex-1">{confirmations[step.kind]!.text(money(step.amountCents))}</span><button disabled={disabled} onClick={() => void onAction({ action: lineActions[step.kind]! }, key(step.kind)).then((ok) => { if (ok) setConfirming(null); })} className="rounded-lg bg-amber-900 px-3 py-1.5 font-semibold text-white disabled:opacity-50">{confirmations[step.kind]!.button}</button><button onClick={() => setConfirming(null)} className="font-medium underline">Not now</button></div>}
       {step.available && canAct && form === "supplier_confirmation" && step.kind === "supplier_confirmation" && <SupplierOrderForm line={line} disabled={disabled} onSubmit={(input) => onAction({ action: "supplier_order", ...input }, key(step.kind)).then((ok) => { if (ok) setForm(null); })} />}
       {step.available && canAct && form === "supplier_credit" && step.kind === "supplier_credit" && <SupplierCreditForm amountCents={step.amountCents} disabled={disabled} onSubmit={(input) => onAction({ action: "supplier_credit", ...input }, key(step.kind)).then((ok) => { if (ok) setForm(null); })} />}
@@ -218,8 +265,8 @@ function LineCard({ line, operations, version, busy, disabled, canAct, canReconc
   </article>;
 }
 
-function StepButton({ step, retainedCost, busy, disabled, onClick }: { step: PaymentStep; retainedCost: boolean; busy: boolean; disabled: boolean; onClick: () => void }) {
-  const label = step.kind === "authorize" ? `Authorize ${money(step.amountCents)} with PayPal` : step.kind === "supplier_confirmation" ? retainedCost ? "Confirm supplier retained cost (demo)" : "Record supplier confirmation (demo)" : step.kind === "supplier_credit" ? "Record supplier credit (demo)" : stepLabel(step);
+function StepButton({ step, savedMethod, retainedCost, busy, disabled, onClick }: { step: PaymentStep; savedMethod: SavedMethodView | null; retainedCost: boolean; busy: boolean; disabled: boolean; onClick: () => void }) {
+  const label = step.kind === "authorize" ? savedMethod ? `Hold ${money(step.amountCents)} with ${savedMethodName(savedMethod)}` : `Hold ${money(step.amountCents)} · choose how to pay` : step.kind === "supplier_confirmation" ? retainedCost ? "Confirm supplier retained cost (demo)" : "Record supplier confirmation (demo)" : step.kind === "supplier_credit" ? "Record supplier credit (demo)" : stepLabel(step);
   return <button onClick={onClick} disabled={disabled} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:text-slate-400">{busy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}{label}</button>;
 }
 

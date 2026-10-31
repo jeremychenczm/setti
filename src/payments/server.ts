@@ -1,4 +1,4 @@
-import { Client, Environment, OrdersController, PaymentsController } from "@paypal/paypal-server-sdk";
+import { Client, Environment, OrdersController, PaymentsController, VaultController } from "@paypal/paypal-server-sdk";
 import { assertSandbox } from "@/config/paypalEnv";
 import type { PayPalPayments, TestCardApproval } from "./paypal";
 import { createSdkPayPal, createSdkTestCardApproval } from "./paypal-sdk";
@@ -17,7 +17,7 @@ function sandboxClients(): SandboxClients {
       clientCredentialsAuthCredentials: { oAuthClientId: clientId, oAuthClientSecret: clientSecret },
     });
     const orders = new OrdersController(client);
-    holder.settiSandbox = { payments: createSdkPayPal({ orders, payments: new PaymentsController(client) }), testCard: createSdkTestCardApproval(orders) };
+    holder.settiSandbox = { payments: createSdkPayPal({ orders, payments: new PaymentsController(client), vault: new VaultController(client) }), testCard: createSdkTestCardApproval(orders) };
   }
   return holder.settiSandbox;
 }

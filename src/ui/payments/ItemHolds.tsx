@@ -1,21 +1,26 @@
 "use client";
 
 import { Armchair, ArrowUpRight, CheckCircle2, CircleDollarSign, LoaderCircle, LockKeyhole, RefreshCw, Truck, TriangleAlert } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CaseKey } from "@/chat/types";
 import type { ItemHoldView, ItemHoldsView } from "@/payments/item-holds-view";
 import { centsText, dateTime, Field, inputClass, money, parseDollars } from "../pricing/common";
 import { useTryReadiness } from "../try/useTryReadiness";
+import type { CheckoutView } from "@/payments/types";
+import { PayMethodChooser, SavedMethodCard, savedMethodName } from "./PaymentMethods";
 import { paymentChanged, usePaymentRefresh } from "./usePaymentRefresh";
 
 type Terms = NonNullable<ItemHoldView["terms"]>;
 type Body =
-  | { action: "hold" }
+  | { action: "hold" | "remove_saved" }
   | { action: "check" | "cancel"; operationId: string }
+  | { action: "checkout"; itemId: string; via: "popup" | "test_card"; save: boolean }
   | { action: "capture"; itemId: string; contentHash: string }
   | { action: "supplier_order"; itemId: string; contentHash: string; quantity: number; unitPriceCents: number; taxCents: number; freightCents: number; inStock: boolean; leadTimeDays: number | null; reference: string; note: string };
 
-async function request(key: CaseKey, body?: Body): Promise<ItemHoldsView> {
+type Reply = { view: ItemHoldsView; operationId: string | null; paypalOrderId: string | null };
+
+async function request(key: CaseKey, body?: Body): Promise<Reply> {
   const response = await fetch(`/api/quotes/${key}/item-holds`, {
     cache: "no-store",
     ...(body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
@@ -25,12 +30,12 @@ async function request(key: CaseKey, body?: Body): Promise<ItemHoldsView> {
     const failure = json as { error?: string; details?: string[] } | null;
     throw new Error([failure?.error ?? `Request failed (${response.status}).`, ...(failure?.details ?? [])].join(" "));
   }
-  return body ? (json as { view: ItemHoldsView }).view : json as ItemHoldsView;
+  return body ? json as Reply : { view: json as ItemHoldsView, operationId: null, paypalOrderId: null };
 }
 
 /**
  * The approved furniture of the project's current agreement, each with its own
- * PayPal hold placed with the client's saved PayPal. The button explicitly
+ * PayPal hold placed with the client's saved payment method. The button explicitly
  * starts the holds and also retries items whose hold failed. On V1 the designer
  * records each supplier's confirmation here and then captures the item.
  */
@@ -42,19 +47,21 @@ export function ItemHolds({ projectKey, orderId }: { projectKey: CaseKey; orderI
   const [confirming, setConfirming] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    try { setView(await request(projectKey)); setError(null); }
+    try { setView((await request(projectKey)).view); setError(null); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "The item holds could not be loaded."); }
   }, [projectKey]);
   usePaymentRefresh(projectKey, load);
   useEffect(() => { void load(); }, [load, readiness.blocked]);
 
-  const run = useCallback(async (label: string, body: Body): Promise<boolean> => {
-    if (readiness.blocked) return false;
+  /** Runs one step; returns the server's reply, or null when it did not start or failed. */
+  const send = useCallback(async (label: string, body: Body): Promise<Reply | null> => {
+    if (readiness.blocked) return null;
     setBusy(label); setError(null);
-    try { setView(await request(projectKey, body)); return true; }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "The step did not finish. Reload to see what PayPal recorded."); void load(); return false; }
+    try { const reply = await request(projectKey, body); setView(reply.view); return reply; }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "The step did not finish. Reload to see what PayPal recorded."); void load(); return null; }
     finally { setBusy(null); paymentChanged(projectKey); }
   }, [projectKey, load, readiness.blocked]);
+  const run = useCallback(async (label: string, body: Body) => !!await send(label, body), [send]);
 
   if (!view?.basis || view.basis.orderId !== orderId || !view.items.length) return null;
   const covered = view.items.filter((line) => line.state === "held" || line.state === "confirmed" || line.state === "captured").length;
@@ -64,31 +71,37 @@ export function ItemHolds({ projectKey, orderId }: { projectKey: CaseKey; orderI
   return <section id="item-holds" aria-labelledby="item-holds-title" className="mt-6 rounded-xl border border-[var(--line)] bg-white p-5">
     <div className="flex flex-wrap items-center gap-2">
       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-brand-700"><Armchair className="h-4 w-4" /></span>
-      <div className="mr-auto"><h2 id="item-holds-title" className="text-[13px] font-semibold">Approved items · V{view.basis.version}</h2><p className="text-[11px] text-[var(--muted)]">Each item gets its own hold with saved PayPal. If PayPal needs the client, the same order continues through checkout.</p></div>
+      <div className="mr-auto"><h2 id="item-holds-title" className="text-[13px] font-semibold">Approved items · V{view.basis.version}</h2><p className="text-[11px] text-[var(--muted)]">{view.savedMethod ? "Each item gets its own hold with the saved payment method. If PayPal needs the client, the same order continues on PayPal." : "Each item gets its own PayPal hold, paid with PayPal or a card."}</p></div>
       <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${covered === view.items.length ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{covered} of {view.items.length} held</span>
     </div>
-    <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">A hold reserves the item&apos;s amount on the client&apos;s PayPal. Nothing is charged until the supplier confirms the item on the approved terms; a hold lasts up to 29 days.</p>
+    <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">A hold reserves the item&apos;s amount on the client&apos;s payment method. Nothing is charged until the supplier confirms the item on the approved terms; a hold lasts up to 29 days.</p>
+    {view.savedMethod && <div className="mt-3"><SavedMethodCard method={view.savedMethod} canRemove={view.canRemoveSaved} busy={busy === "remove"} disabled={!!busy || readiness.blocked} onRemove={() => void run("remove", { action: "remove_saved" })} /></div>}
     {(readiness.pending || Boolean(readiness.blocked && readiness.error)) && <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-[12px] leading-relaxed text-amber-900">{readiness.notice ?? readiness.error}</p>}
-    <div className="mt-3 max-h-[480px] overflow-y-auto"><table className="w-full border-collapse text-[12px]"><tbody>{view.items.map((line) => <ItemRow key={line.itemId} line={line}
-      designer={view.canConfirmSupplier} busy={busy} blocked={readiness.blocked} open={confirming === line.itemId}
+    <div className="mt-3 max-h-[640px] overflow-y-auto"><table className="w-full border-collapse text-[12px]"><tbody>{view.items.map((line) => <ItemRow key={line.itemId} line={line}
+      designer={view.canConfirmSupplier} busy={busy} blocked={readiness.blocked} open={confirming === line.itemId} checkout={view.checkoutOptions} send={send}
       onCheck={() => { if (line.operationId) void run(`check:${line.itemId}`, { action: "check", operationId: line.operationId }); }}
       onCancel={() => { if (line.operationId) void run(`cancel:${line.itemId}`, { action: "cancel", operationId: line.operationId }); }}
       onConfirm={() => setConfirming(confirming === line.itemId ? null : line.itemId)}
       onRecord={async (order) => { if (await run(`supplier:${line.itemId}`, { action: "supplier_order", itemId: line.itemId, contentHash, ...order })) setConfirming(null); }}
       onCapture={() => void run(`capture:${line.itemId}`, { action: "capture", itemId: line.itemId, contentHash })} />)}</tbody></table></div>
     {view.canHold && view.toHoldCents > 0 && <button type="button" disabled={!!busy || readiness.blocked} onClick={() => void run("hold", { action: "hold" })}
-      className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3 py-2 text-[12px] font-medium text-[var(--on-primary)] disabled:opacity-50">{busy === "hold" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <LockKeyhole className="h-3.5 w-3.5" />}{failed ? "Retry the items that were not held" : `Hold ${money(view.toHoldCents)} with saved PayPal`}</button>}
+      className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3 py-2 text-[12px] font-medium text-[var(--on-primary)] disabled:opacity-50">{busy === "hold" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <LockKeyhole className="h-3.5 w-3.5" />}{failed ? "Retry the items that were not held" : `Hold ${money(view.toHoldCents)} with ${view.savedMethod ? savedMethodName(view.savedMethod) : "the saved method"}`}</button>}
     {busy === "hold" && <p role="status" className="mt-3 flex items-center gap-1.5 text-[11px] text-[var(--muted)]"><LoaderCircle className="h-3 w-3 animate-spin" />Holding each approved item on PayPal…</p>}
     {view.reason && !busy && <p className="mt-3 text-[11px] text-[var(--muted)]">{view.reason}</p>}
     {error && <p role="alert" className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[12px] text-red-800">{error}</p>}
   </section>;
 }
 
-function ItemRow({ line, designer, busy, blocked, open, onConfirm, onRecord, onCapture, onCheck, onCancel }: {
+function ItemRow({ line, designer, busy, blocked, open, checkout, send, onConfirm, onRecord, onCapture, onCheck, onCancel }: {
   line: ItemHoldView; designer: boolean; busy: string | null; blocked: boolean; open: boolean;
+  checkout: CheckoutView | null; send: (label: string, body: Body) => Promise<Reply | null>;
   onConfirm: () => void; onRecord: (order: SupplierOrder) => Promise<void>; onCapture: () => void;
   onCheck: () => void; onCancel: () => void;
 }) {
+  const [choosing, setChoosing] = useState(false);
+  const [save, setSave] = useState(true);
+  const popup = useRef<string | null>(null);
+  const paying = line.canCheckout && !!checkout;
   const status = {
     captured: <span className="inline-flex items-center gap-1 text-emerald-700"><CheckCircle2 className="h-3.5 w-3.5" />Captured</span>,
     confirmed: <span className="inline-flex items-center gap-1 text-emerald-700"><Truck className="h-3.5 w-3.5" />Supplier confirmed · {line.supplier?.reference}</span>,
@@ -103,7 +116,9 @@ function ItemRow({ line, designer, busy, blocked, open, onConfirm, onRecord, onC
     ? <button type="button" disabled={!!busy || blocked} onClick={onConfirm} className="ml-2 rounded-md border border-[var(--line)] px-2 py-1 text-[11px] font-medium hover:bg-[var(--canvas)] disabled:opacity-50">{open ? "Close" : "Supplier confirmed…"}</button>
     : designer && line.state === "confirmed"
       ? <button type="button" disabled={!!busy || blocked} onClick={onCapture} className="ml-2 inline-flex items-center gap-1 rounded-md bg-[var(--primary-fill)] px-2 py-1 text-[11px] font-medium text-[var(--on-primary)] disabled:opacity-50">{busy === `capture:${line.itemId}` ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <CircleDollarSign className="h-3 w-3" />}Capture {money(line.heldCents)}</button>
-      : null;
+      : paying
+        ? <button type="button" disabled={!!busy || blocked} onClick={() => setChoosing(!choosing)} className="ml-2 inline-flex items-center gap-1 rounded-md bg-[var(--primary-fill)] px-2 py-1 text-[11px] font-medium text-[var(--on-primary)] disabled:opacity-50"><LockKeyhole className="h-3 w-3" />{choosing ? "Close" : `Hold ${money(line.targetCents - line.heldCents - line.capturedCents)}`}</button>
+        : null;
   return <>
     <tr className="border-t border-[var(--line)] first:border-t-0">
       <td className="py-2 pr-3">{line.label}{line.failureMessage && <p className="mt-0.5 text-[10px] text-amber-800">{line.failureMessage}</p>}
@@ -117,6 +132,22 @@ function ItemRow({ line, designer, busy, blocked, open, onConfirm, onRecord, onC
       <td className="py-2 text-right text-[11px] whitespace-nowrap">{status}{action}</td>
     </tr>
     {open && line.terms && <tr><td colSpan={3} className="pb-3"><SupplierForm terms={line.terms} busy={blocked || busy === `supplier:${line.itemId}`} onRecord={onRecord} /></td></tr>}
+    {paying && choosing && <tr><td colSpan={3} className="pb-3"><div className="rounded-lg bg-[var(--canvas)] p-3">
+      <p className="mb-3 text-[11px] leading-relaxed text-slate-600">Hold {money(line.targetCents - line.heldCents - line.capturedCents)} for {line.label}. PayPal opens in a window over this page; nothing is charged until the supplier confirms.</p>
+      <PayMethodChooser options={checkout!} disabled={!!busy || blocked} testCardBusy={busy === `test_card:${line.itemId}`} save={save} onSaveChange={setSave}
+        onTestCard={() => void send(`test_card:${line.itemId}`, { action: "checkout", itemId: line.itemId, via: "test_card", save }).then((reply) => { if (reply) setChoosing(false); })}
+        paypal={{
+          createOrder: async () => {
+            const reply = await send(`checkout:${line.itemId}`, { action: "checkout", itemId: line.itemId, via: "popup", save });
+            if (!reply?.paypalOrderId || !reply.operationId) throw new Error("The PayPal checkout could not start.");
+            popup.current = reply.operationId;
+            return reply.paypalOrderId;
+          },
+          onApprove: async () => { if (popup.current) { await send(`check:${line.itemId}`, { action: "check", operationId: popup.current }); setChoosing(false); } },
+          onCancel: async () => { if (popup.current) await send(`cancel:${line.itemId}`, { action: "cancel", operationId: popup.current }); },
+          onError: () => { if (popup.current) void send(`check:${line.itemId}`, { action: "check", operationId: popup.current }); },
+        }} />
+    </div></td></tr>}
   </>;
 }
 

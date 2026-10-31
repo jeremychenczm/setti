@@ -232,6 +232,13 @@
       "when": 1793386970639,
       "tag": "0032_studio_threads",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1793425808410,
+      "tag": "0033_saved_method_kinds",
+      "breakpoints": true
     }
   ]
 }

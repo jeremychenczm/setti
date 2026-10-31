@@ -66,8 +66,8 @@ describe.skipIf(!testDatabaseUrl)("holds placed with saved PayPal", () => {
     const holds = await handle.db.select().from(paypalAuthorizations).where(eq(paypalAuthorizations.operationId, pending.id));
     expect(holds).toEqual([expect.objectContaining({ amountCents: 27_188, status: "created", changeOrderId: third.id, paypalAuthorizationId: held.paypalResourceId })]);
     const messages = (await createChatStore(handle.db).getCase(session, "willow")).messages.map((message) => message.text);
-    expect(messages).toContainEqual(expect.stringMatching(/543\.75 USD is held.*The client saved PayPal for this project's later holds\.$/));
-    expect(messages.at(-1)).toMatch(/authorization recorded with the client's saved PayPal for V3 .*271\.88 USD is held/);
+    expect(messages).toContainEqual(expect.stringMatching(/543\.75 USD is held.*The client saved b•••@personal\.example\.com for this project's later holds\.$/));
+    expect(messages.at(-1)).toMatch(/authorization recorded with the client's saved payment method for V3 .*271\.88 USD is held/);
   });
 
   it("keeps the saved token out of operations, call evidence, the payments page and the chat", async () => {

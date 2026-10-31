@@ -22,7 +22,7 @@ function confirmed(): MapleGuideData {
     projectKey: "maple", orderId: "visitor-v3", version: 3, current: true, canAct: true, canReconcile: true, reason: null, environment: "sandbox",
     plan: { orderId: "visitor-v3", contentHash: "hash", basedOnVersion: 2, version: 3, quoteDeltaCents: 6_000, factsAsOf: at, status: "preview", executable: false, current: { heldCents: 0, capturedCents: 140_000, refundedCents: 24_000 }, money: { newAuthorizationCents: 0, releaseCents: 0, chargeCents: 0, refundCents: 0 }, lines: [], actions: [], blockers: [], notices: [] },
     lines: [line(), line({ side: "proposed", businessItemId: "desk", label: "Desk", targetCents: 110_000, capturedCents: 110_000, releasedCents: 0 }), line({ itemId: "rug", businessItemId: "rug", label: "Wool rug", change: "remove", targetCents: 6_000, capturedCents: 30_000, refundedCents: 24_000, releasedCents: 0 })],
-    others: { lineCount: 1, targetCents: 40_000 }, operations: [operation()],
+    others: { lineCount: 1, targetCents: 40_000 }, operations: [operation()], savedMethod: null, canRemoveSaved: false, checkout: null,
   };
   data.payments = payments;
   return data;

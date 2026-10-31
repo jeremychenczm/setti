@@ -72,7 +72,7 @@ describe.skipIf(!testDatabaseUrl)("design services: one hold, one capture per se
     expect(hold).toMatchObject({ itemId: null, amountCents: SERVICES_CENTS, operationId: checkout.id });
     expect(await handle.db.select().from(savedPaymentMethods)).toHaveLength(1);
     expect((await createChatStore(handle.db).getCase(session, "willow")).messages.at(-1)?.text)
-      .toMatch(/authorization recorded for V1 · Design services: 4530\.00 USD is held .*Each design service is charged from it next\. The client saved PayPal/);
+      .toMatch(/authorization recorded for V1 · Design services: 4530\.00 USD is held .*Each design service is charged from it next\. The client saved b•••@personal\.example\.com/);
 
     const charged = await charge();
     expect(charged).toHaveLength(6);

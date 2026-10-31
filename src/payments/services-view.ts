@@ -8,13 +8,14 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { canOpenProject, type DemoAccount } from "../accounts/demo";
 import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
-import { items, savedPaymentMethods } from "../db/schema";
+import { items } from "../db/schema";
 import { PaymentActionError } from "./binding";
 import { recordedSettlement } from "./fee-evidence";
 import type { PaymentOperation } from "./operations";
+import { activeSavedMethod, savedMethodView, type SavedMethodView } from "./saved-methods";
 import { paypalCalls } from "./schema";
 import { lockPaymentBasis } from "./services";
-import type { RecordedSettlement } from "./types";
+import type { CheckoutView, DemoCheckout, RecordedSettlement } from "./types";
 
 export interface ServiceChargeView {
   /** The quote line id. */
@@ -35,6 +36,11 @@ export interface ServicesPaymentView {
   /** The latest design-services checkout. */
   checkout: { operationId: string; status: PaymentOperation["status"]; paypalOrderId: string | null; approvalUrl: string | null; authorized: boolean; failureMessage: string | null } | null;
   savedPayPal: boolean;
+  /** The project's active saved payment method, as the client recognises it. */
+  savedMethod: SavedMethodView | null;
+  canRemoveSaved: boolean;
+  /** How the client can pay, only when this viewer can pay. */
+  checkoutOptions: CheckoutView | null;
   /** The client may start (or resume) the PayPal checkout. */
   canPay: boolean;
   /** The design services are held but not all captured yet. */
@@ -46,8 +52,8 @@ export interface ServicesPaymentView {
   paypalClientId: string | null;
 }
 
-export async function servicesPaymentView(db: Db, sessionId: string | null, key: CaseKey, account: DemoAccount | null, paypalClientId: string | null): Promise<ServicesPaymentView> {
-  const empty = (reason: string): ServicesPaymentView => ({ projectKey: key, basis: null, services: [], dueCents: 0, checkout: null, savedPayPal: false, canPay: false, canFinish: false, canCheck: false, reason, paypalClientId: null });
+export async function servicesPaymentView(db: Db, sessionId: string | null, key: CaseKey, account: DemoAccount | null, paypalClientId: string | null, demo: Omit<DemoCheckout, "paypalClientId"> = { testCard: false, sandboxBuyer: null }): Promise<ServicesPaymentView> {
+  const empty = (reason: string): ServicesPaymentView => ({ projectKey: key, basis: null, services: [], dueCents: 0, checkout: null, savedPayPal: false, savedMethod: null, canRemoveSaved: false, checkoutOptions: null, canPay: false, canFinish: false, canCheck: false, reason, paypalClientId: null });
   if (!sessionId) return empty("Open this project from the browser that owns the demo case.");
   let basis;
   try { basis = await db.transaction((tx) => lockPaymentBasis(tx, sessionId, key)); }
@@ -74,7 +80,7 @@ export async function servicesPaymentView(db: Db, sessionId: string | null, key:
   const participant = !!account && canOpenProject(account, key);
   const pendingCapture = !!hold && ledger.captures.some((capture) => capture.authorizationId === hold.id && capture.status === "pending");
   const canFinish = participant && !!hold && (hold.status === "created" || hold.status === "partially_captured") && capturedFromHold < hold.amountCents;
-  const [saved] = await db.select({ id: savedPaymentMethods.id }).from(savedPaymentMethods).where(eq(savedPaymentMethods.projectId, basis.projectId));
+  const saved = savedMethodView(await activeSavedMethod(db, basis.projectId));
 
   const client = account?.role === "client" && account.projectKey === key;
   const canCheck = participant && !!latest && (latest.status === "pending" || latest.status === "unknown" || pendingCapture);
@@ -91,6 +97,8 @@ export async function servicesPaymentView(db: Db, sessionId: string | null, key:
   return {
     projectKey: key, basis: { version: basis.version, orderId: basis.orderId }, services, dueCents,
     checkout: latest ? { operationId: latest.id, status: latest.status, paypalOrderId: latest.paypalOrderId, approvalUrl: client && latest.status === "pending" && !latest.paypalResourceId ? latest.approvalUrl : null, authorized: latest.status === "succeeded", failureMessage: latest.failureMessage } : null,
-    savedPayPal: !!saved, canPay, canFinish, canCheck, reason, paypalClientId: canPay ? paypalClientId : null,
+    savedPayPal: !!saved, savedMethod: saved, canRemoveSaved: client && !!saved,
+    checkoutOptions: canPay ? { paypalClientId, ...demo, canSave: !saved } : null,
+    canPay, canFinish, canCheck, reason, paypalClientId: canPay ? paypalClientId : null,
   };
 }

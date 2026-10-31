@@ -6,17 +6,18 @@
  * Whether the buyer approved is always read from PayPal (the order status),
  * never taken from the browser coming back, and a hold is recorded only from a
  * verified receipt: the operation's order, its custom id, the exact amount in
- * USD and a usable status. A checkout may also save the buyer's PayPal for the
- * project's later holds; the token PayPal returns is stored with the hold.
+ * USD and a usable status. A checkout may also save the buyer's PayPal or card
+ * for the project's later holds; the token PayPal returns is stored with the hold.
  */
 import { eq } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { paymentOperations, paypalAuthorizations, savedPaymentMethods } from "../db/schema";
+import { paymentOperations, paypalAuthorizations, projects, savedPaymentMethods } from "../db/schema";
 import { HONOR_PERIOD_DAYS } from "../money/authorization";
 import { noteInCase } from "./notes";
 import { claimOperation, recordCall, recordFailure, updateOperation, type PaymentOperation } from "./operations";
 import type { AuthorizationReceipt, OrderReceipt, PayPalPayments, PayPalResult, SavedPayPalReceipt } from "./paypal";
 import { formatCents, holdStatus, verifyAuthorization, type VerifiedAuthorization } from "./receipts";
+import { activeSavedMethod } from "./saved-methods";
 
 const DAY_MS = 86_400_000;
 
@@ -236,14 +237,21 @@ async function recordHold(db: Db, operation: PaymentOperation, hold: VerifiedAut
     const [done] = await tx.update(paymentOperations)
       .set({ status: "succeeded", paypalResourceId: hold.paypalAuthorizationId, failureCode: null, failureMessage: null, updatedAt: new Date() })
       .where(eq(paymentOperations.id, operation.id)).returning();
-    // A project keeps the first PayPal it saved; the database accepts one only from this succeeded checkout.
-    const stored = operation.savePaymentMethod && saved?.status === "VAULTED" && saved.tokenId
-      ? await tx.insert(savedPaymentMethods).values({ projectId: operation.projectId, sourceOperationId: operation.id, paypalTokenId: saved.tokenId }).onConflictDoNothing().returning({ id: savedPaymentMethods.id })
-      : [];
+    // A project keeps one active saved method; the database accepts one only from this succeeded checkout.
+    // Locking the project first lets concurrent checkouts see each other's save.
+    let stored: { label: string | null }[] = [];
+    if (operation.savePaymentMethod && saved?.status === "VAULTED" && saved.tokenId) {
+      await tx.select({ id: projects.id }).from(projects).where(eq(projects.id, operation.projectId)).for("update");
+      if (!await activeSavedMethod(tx, operation.projectId)) {
+        stored = await tx.insert(savedPaymentMethods).values({
+          projectId: operation.projectId, sourceOperationId: operation.id, paypalTokenId: saved.tokenId, kind: saved.kind ?? "paypal", label: saved.label ?? null,
+        }).onConflictDoNothing().returning({ label: savedPaymentMethods.label });
+      }
+    }
     if (!existing) {
-      const how = operation.savedMethodId ? " with the client's saved PayPal" : "";
+      const how = operation.savedMethodId ? " with the client's saved payment method" : "";
       const next = operation.servicesHold ? "Each design service is charged from it next." : "Nothing has been charged; capture waits for the supplier confirmation.";
-      const savedNote = stored.length ? " The client saved PayPal for this project's later holds." : "";
+      const savedNote = stored.length ? ` The client saved ${stored[0].label ?? (saved?.kind === "card" ? "a card" : "PayPal")} for this project's later holds.` : "";
       await noteInCase(tx, operation, ({ version, itemName }) => `PayPal Sandbox authorization recorded${how} for V${version} · ${itemName}: ${formatCents(operation.amountCents)} USD is held (authorization ${hold.paypalAuthorizationId}, order ${operation.paypalOrderId}). ${next}${savedNote}`);
     }
     return done;

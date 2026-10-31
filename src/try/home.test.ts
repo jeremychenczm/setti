@@ -31,7 +31,7 @@ describe.skipIf(!testDatabaseUrl)("living-and-dining durable scenario", () => {
   beforeAll(async () => { handle = await openTestDb(); });
   beforeEach(async () => { await truncate(handle.db, "projects", "chat_cases", "try_seeds"); paypal = new FakePayPal(); });
   afterAll(() => handle?.pool.end());
-  const deps = (): TryDeps => ({ db: handle.db, paypal, links, perHour: 30, testCard: (id) => paypal.confirmWithTestCard(id) });
+  const deps = (): TryDeps => ({ db: handle.db, paypal, links, perHour: 30, testCard: (id, options) => paypal.confirmWithTestCard(id, options) });
   async function start(scenario: typeof HOME_SCENARIO | typeof MAPLE_SCENARIO = HOME_SCENARIO) {
     const result = await startTry(deps(), null, { scenario });
     if (result.kind === "limited") throw new Error("Expected scenario run");

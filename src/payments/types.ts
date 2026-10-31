@@ -1,6 +1,7 @@
 import type { FundingPlan } from "@/approval/funding";
 import type { CaseKey } from "@/chat/types";
 import type { SettlementView } from "./fees";
+import type { SavedMethodView } from "./saved-methods";
 
 export type RecordedSettlement = SettlementView & { observedAt: string | null };
 
@@ -137,6 +138,21 @@ export interface OperationView {
   calls: CallView[];
 }
 
+/** Demo payment choices the server offers where the client pays. A PayPal client id is public. */
+export interface DemoCheckout {
+  /** PayPal JS SDK client id for the PayPal and Pay Later window. */
+  paypalClientId: string | null;
+  /** The server may approve the order with PayPal's documented Sandbox test card. */
+  testCard: boolean;
+  /** The Sandbox buyer login shown next to the PayPal window, from the server's environment. */
+  sandboxBuyer: { email: string; password: string } | null;
+}
+
+/** How the client can pay at this step: the demo choices, and whether this payment may also save the method. */
+export interface CheckoutView extends DemoCheckout {
+  canSave: boolean;
+}
+
 export interface PaymentsWorkspace {
   projectKey: CaseKey;
   orderId: string;
@@ -154,4 +170,10 @@ export interface PaymentsWorkspace {
   /** Lines outside this change's payment scope; Setti shows them but runs no money step for them here. */
   others: { lineCount: number; targetCents: number };
   operations: OperationView[];
+  /** The project's active saved payment method, as the client recognises it. */
+  savedMethod: SavedMethodView | null;
+  /** The project's client may remove the saved method. */
+  canRemoveSaved: boolean;
+  /** Present only for the project's client on the current version. */
+  checkout: CheckoutView | null;
 }

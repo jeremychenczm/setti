@@ -43,12 +43,17 @@ export interface CreateOrderCommand {
   savePayPal?: { description: string };
 }
 
-/** An AUTHORIZE order paid with saved PayPal: no buyer approves it. */
+/** What the client saved in PayPal's vault: a PayPal account (including Pay Later) or a card. */
+export type SavedMethodKind = "paypal" | "card";
+
+/** An AUTHORIZE order paid with a saved payment method: no buyer approves it. */
 export interface SavedPayPalOrderCommand {
   /** Sent as PayPal-Request-Id; the same for every attempt of one operation. */
   requestId: string;
-  /** The saved PayPal token. A secret: never put it in a log or a receipt. */
+  /** The saved vault token. A secret: never put it in a log or a receipt. */
   paypalTokenId: string;
+  /** Whether the token is a PayPal account or a card; PayPal expects each under its own payment source. */
+  kind: SavedMethodKind;
   amountCents: number;
   referenceId: string;
   customId: string;
@@ -59,12 +64,15 @@ export interface SavedPayPalOrderCommand {
   cancelUrl?: string;
 }
 
-/** What PayPal reported about saving the buyer's PayPal on an order. */
+/** What PayPal reported about saving the buyer's payment method (PayPal or a card) on an order. */
 export interface SavedPayPalReceipt {
   /** VAULTED once saved; APPROVED or CREATED before. */
   status?: string;
-  /** The saved PayPal token. A secret: never put it in a log or call evidence. */
+  /** The saved vault token. A secret: never put it in a log or call evidence. */
   tokenId?: string;
+  kind?: SavedMethodKind;
+  /** A masked label the client recognises, such as "Visa •••• 0026" or "s•••@example.com". */
+  label?: string;
 }
 
 export interface AuthorizeOrderCommand {
@@ -93,7 +101,7 @@ export interface OrderReceipt extends ReportedMoney {
   authorization?: AuthorizationReceipt;
   /** Refunds PayPal lists on the order; used to find a refund whose answer was lost. */
   refunds?: RefundReceipt[];
-  /** Present when the order asked PayPal to save the buyer's PayPal. */
+  /** Present when the order asked PayPal to save the buyer's PayPal or card. */
   savedPayPal?: SavedPayPalReceipt;
 }
 
@@ -160,8 +168,10 @@ export type PayPalFailure = Exclude<PayPalResult<never>, { kind: "ok" }>;
 export interface PayPalPayments {
   /** Creates an AUTHORIZE order the buyer then approves on PayPal. */
   createOrder(command: CreateOrderCommand): Promise<PayPalResult<OrderReceipt>>;
-  /** Creates an AUTHORIZE order paid with saved PayPal; PayPal authorizes it at once, with no buyer. */
+  /** Creates an AUTHORIZE order paid with a saved payment method; PayPal authorizes it at once, with no buyer. */
   createSavedPayPalOrder(command: SavedPayPalOrderCommand): Promise<PayPalResult<OrderReceipt>>;
+  /** Deletes a saved vault token; holds already placed with it are not affected. */
+  deleteSavedMethod(paypalTokenId: string): Promise<PayPalResult<{ deleted: true }>>;
   getOrder(orderId: string): Promise<PayPalResult<OrderReceipt>>;
   /** Authorizes an approved order; the new authorization is on the returned order. */
   authorizeOrder(command: AuthorizeOrderCommand): Promise<PayPalResult<OrderReceipt>>;
@@ -175,10 +185,12 @@ export interface PayPalPayments {
 }
 
 /**
- * Approves an order with PayPal's Sandbox test card instead of a buyer on PayPal.
- * Only /try uses it, to seed real holds; the money executors never receive it.
+ * Approves an order with PayPal's Sandbox test card instead of a buyer on PayPal,
+ * optionally saving the card for the project's later holds. Only demo paths use
+ * it (/try preparation and the Sandbox test-card button); the money executors
+ * never receive it.
  */
-export type TestCardApproval = (paypalOrderId: string) => Promise<PayPalResult<OrderReceipt>>;
+export type TestCardApproval = (paypalOrderId: string, options?: { save?: boolean }) => Promise<PayPalResult<OrderReceipt>>;
 
 /** Network error codes that mean the request never reached PayPal. */
 const NOT_SENT = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN"]);

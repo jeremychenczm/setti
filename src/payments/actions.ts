@@ -8,6 +8,7 @@
 import { eq } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { items, paymentOperations, paypalCaptures, paypalRefunds } from "../db/schema";
+import { activeSavedMethod } from "./saved-methods";
 import { openingQuotes } from "../opening/schema";
 import type { ProjectLedger } from "../approval/store";
 import { changeOrders, pricingCases } from "../pricing/schema";
@@ -46,7 +47,11 @@ export async function checkoutDetails(db: Pick<Db, "select">, operation: Payment
  * Client step: hold the confirmed amount a furniture line still needs. Returns
  * the operation; while it waits for the buyer, its approval link leads to PayPal.
  */
-export async function startAuthorization(db: Db, paypal: PayPalPayments, sessionId: string, orderId: string, input: LineRef & ShownVersion, links: LinkBuilder): Promise<PaymentOperation> {
+/**
+ * `via: "saved"` holds with the project's saved payment method, with no PayPal window;
+ * otherwise a checkout starts, which also saves the method when the client agrees (`save`).
+ */
+export async function startAuthorization(db: Db, paypal: PayPalPayments, sessionId: string, orderId: string, input: LineRef & ShownVersion, links: LinkBuilder, options: { via?: "checkout" | "saved"; save?: boolean } = {}): Promise<PaymentOperation> {
   const operation = await db.transaction(async (tx) => {
     const version = await lockConfirmedVersion(tx, sessionId, orderId, input);
     const itemId = businessItem(version, input);
@@ -66,8 +71,13 @@ export async function startAuthorization(db: Db, paypal: PayPalPayments, session
       if (covered) return covered;
     }
     if (!action || line?.category !== "furniture") throw new PaymentActionError("NOT_AVAILABLE", `This line needs no new authorization under V${version.order.version}.`);
+    const saved = await activeSavedMethod(tx, version.projectId);
+    if (options.via === "saved" && !saved) throw new PaymentActionError("NOT_AVAILABLE", "The client has no saved payment method for this project. Pay with PayPal or a card instead.");
     const prefix = `authorize:${version.order.id}:${itemId}:`;
-    return insertOperation(tx, { businessKey: `${prefix}${attempt(ledger, "authorize", prefix)}`, projectId: version.projectId, kind: "authorize", amountCents: action.amountCents, binding: version.bind(itemId) });
+    return insertOperation(tx, {
+      businessKey: `${prefix}${attempt(ledger, "authorize", prefix)}`, projectId: version.projectId, kind: "authorize", amountCents: action.amountCents, binding: version.bind(itemId),
+      ...(options.via === "saved" ? { savedMethodId: saved!.id } : { savePaymentMethod: !!options.save && !saved }),
+    });
   });
   return operation.savedMethodId
     ? executeSavedHold(db, paypal, operation.id, await checkoutDetails(db, operation), links(operation.id))

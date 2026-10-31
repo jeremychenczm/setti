@@ -39,9 +39,9 @@ export async function executeSavedHold(db: Db, paypal: PayPalPayments, operation
 
   // The post-claim existing-order return above handles a concurrent create before this claim.
   // Only an operation still lacking an order reaches this idempotent create.
-  const [method] = await db.select({ paypalTokenId: savedPaymentMethods.paypalTokenId }).from(savedPaymentMethods).where(eq(savedPaymentMethods.id, operation.savedMethodId));
+  const [method] = await db.select({ paypalTokenId: savedPaymentMethods.paypalTokenId, kind: savedPaymentMethods.kind }).from(savedPaymentMethods).where(eq(savedPaymentMethods.id, operation.savedMethodId));
   const found = await paypal.createSavedPayPalOrder({
-    requestId: operation.requestId, paypalTokenId: method.paypalTokenId, amountCents: operation.amountCents, referenceId: operation.itemId!,
+    requestId: operation.requestId, paypalTokenId: method.paypalTokenId, kind: method.kind === "card" ? "card" : "paypal", amountCents: operation.amountCents, referenceId: operation.itemId!,
     customId: operation.id, invoiceId: `setti-${operation.id}`, description: details.description, ...links,
   });
   await logOrder(db, operation, "create_order", operation.requestId, found);

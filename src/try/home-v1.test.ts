@@ -29,7 +29,7 @@ describe.skipIf(!testDatabaseUrl)("instant living-and-dining V1 workspace", () =
   beforeAll(async () => { handle = await openTestDb(); });
   beforeEach(async () => { await truncate(handle.db, "projects", "chat_cases", "try_seeds"); paypal = new FakePayPal(); });
   afterAll(() => handle?.pool.end());
-  const deps = (): TryDeps => ({ db: handle.db, paypal, links, perHour: 30, testCard: (id) => paypal.confirmWithTestCard(id) });
+  const deps = (): TryDeps => ({ db: handle.db, paypal, links, perHour: 30, testCard: (id, options) => paypal.confirmWithTestCard(id, options) });
   async function start() {
     const run = await startTry(deps(), null, { scenario: HOME_SCENARIO });
     if (run.kind === "limited") throw new Error("Expected a local project");
@@ -71,7 +71,10 @@ describe.skipIf(!testDatabaseUrl)("instant living-and-dining V1 workspace", () =
     expect(ledger.authorizations).toHaveLength(6);
     expect(ledger.authorizations.reduce((sum, hold) => sum + hold.amountCents, 0)).toBe(773_000);
     expect(ledger.captures.map((capture) => capture.amountCents).sort((a, b) => a - b)).toEqual([100_000, 120_000]);
-    expect(await servicesPaymentView(handle.db, run.session, "maple", accountOrDefault("emma"), "test-client-id")).toMatchObject({ basis: { version: 1, orderId: null }, dueCents: 0, canPay: false, savedPayPal: false });
+    // Emma paid the V1 design fee with the Sandbox test card and saved it for the project's later holds.
+    expect(await servicesPaymentView(handle.db, run.session, "maple", accountOrDefault("emma"), "test-client-id")).toMatchObject({
+      basis: { version: 1, orderId: null }, dueCents: 0, canPay: false, savedPayPal: true, savedMethod: { kind: "card", label: "Visa •••• 0026" }, canRemoveSaved: true,
+    });
     expect(ledger.operations.every((operation) => operation.changeOrderId === null && operation.revisionId === bridge.baselineRevisionId)).toBe(true);
     const chat = await createChatStore(handle.db).getCase(run.session, "maple");
     expect(chat.quote?.version).toBe(1);

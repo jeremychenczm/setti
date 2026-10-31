@@ -68,16 +68,24 @@ function refuse(code: string, message: string): PayPalResult<never> {
 }
 
 const EXPIRED = refuse("AUTHORIZATION_EXPIRED", "The requested action could not be performed, semantically incorrect, or failed business validation.");
+/** Probe P12 (2026-10-31): a hold with a deleted token was refused like this in two of three runs; once PayPal still accepted it. */
+const DELETED_TOKEN: PayPalResult<never> = { kind: "rejected", code: "PERMISSION_DENIED", message: "Authorization failed due to insufficient permissions.", trace: { httpStatus: 403 } };
 
-interface FakeOrder { receipt: OrderReceipt; approved: boolean; authorizationId?: string; savePayPal?: boolean }
+interface FakeOrder { receipt: OrderReceipt; approved: boolean; authorizationId?: string; savePayPal?: boolean; paidWithCard?: boolean; saveCard?: boolean }
 type WriteCommand = CaptureCommand | VoidCommand | RefundCommand | CreateOrderCommand | SavedPayPalOrderCommand | AuthorizeOrderCommand;
 interface FakeHold { receipt: AuthorizationReceipt; capturedCents: number }
 
 export class FakePayPal implements PayPalPayments {
   /** Write calls, in order, with the command PayPal received. */
   readonly calls: WriteCommand[] = [];
-  /** Saved PayPal tokens this fake handed out, in order. */
+  /** Saved vault tokens (PayPal or card) this fake handed out, in order. */
   readonly savedTokens: string[] = [];
+  /** Saved tokens the client removed; PayPal refuses holds with them (probe P12). */
+  readonly deletedTokens = new Set<string>();
+  /** Delete requests for saved tokens, in order. */
+  readonly deletes: string[] = [];
+  /** When set, PayPal cannot be reached to delete a saved token. */
+  deletesUnavailable = false;
   /** Read calls, in order. */
   readonly reads: string[] = [];
   private readonly plan: FakeBehaviour[] = [];
@@ -106,11 +114,14 @@ export class FakePayPal implements PayPalPayments {
     order.receipt = { ...order.receipt, status: "APPROVED" };
   }
 
-  /** The server confirms the order with the Sandbox test card, as /try does. */
-  readonly confirmWithTestCard = async (orderId: string): Promise<PayPalResult<OrderReceipt>> => {
-    if (!this.orders.has(orderId)) return refuse("RESOURCE_NOT_FOUND", "The specified resource does not exist.");
+  /** The server confirms the order with the Sandbox test card, as /try does, optionally saving the card. */
+  readonly confirmWithTestCard = async (orderId: string, options?: { save?: boolean }): Promise<PayPalResult<OrderReceipt>> => {
+    const order = this.orders.get(orderId);
+    if (!order) return refuse("RESOURCE_NOT_FOUND", "The specified resource does not exist.");
     this.approve(orderId);
-    return { kind: "ok", value: this.orders.get(orderId)!.receipt, trace: { httpStatus: 200 } };
+    order.paidWithCard = true;
+    order.saveCard = !!options?.save;
+    return { kind: "ok", value: order.receipt, trace: { httpStatus: 200 } };
   };
 
   /** The hold PayPal keeps for an authorization id, if this fake created it. */
@@ -133,6 +144,7 @@ export class FakePayPal implements PayPalPayments {
   async createSavedPayPalOrder(command: SavedPayPalOrderCommand): Promise<PayPalResult<OrderReceipt>> {
     return this.write(command, `saved-order:${command.requestId}`, (behaviour) => {
       if (!this.savedTokens.includes(command.paypalTokenId)) throw new Error("The fake never saved this PayPal token");
+      if (this.deletedTokens.has(command.paypalTokenId)) return DELETED_TOKEN;
       const orderId = `${recordedSavedHold.response!.id.slice(0, 10)}${String(this.nextId++).padStart(7, "0")}`;
       if (behaviour === "answer-payer-action") {
         const receipt: OrderReceipt = { orderId, status: "PAYER_ACTION_REQUIRED", ...usd(command.amountCents), customId: command.customId, approvalUrl: `https://www.sandbox.paypal.com/checkoutnow?token=${orderId}` };
@@ -178,13 +190,27 @@ export class FakePayPal implements PayPalPayments {
       order.authorizationId = authorizationId;
       this.holds.set(authorizationId, { receipt: auth, capturedCents: 0 });
       order.receipt = { ...order.receipt, status: "COMPLETED", authorization: auth };
-      if (order.savePayPal && !order.receipt.savedPayPal && behaviour !== "answer-unsaved") {
-        const tokenId = `FAKE-SAVED-PAYPAL-${this.nextId++}`;
-        this.savedTokens.push(tokenId);
-        order.receipt.savedPayPal = { status: recordedSaving.response.paymentSource.paypal.attributes.vault.status, tokenId };
+      // A card confirmation pays with the card: only the card can be saved then (probe P12), never the PayPal wallet.
+      if (order.paidWithCard ? order.saveCard : order.savePayPal) {
+        if (!order.receipt.savedPayPal && behaviour !== "answer-unsaved") {
+          const tokenId = `FAKE-SAVED-${order.paidWithCard ? "CARD" : "PAYPAL"}-${this.nextId++}`;
+          this.savedTokens.push(tokenId);
+          order.receipt.savedPayPal = order.paidWithCard
+            ? { status: "VAULTED", tokenId, kind: "card", label: "Visa •••• 0026" }
+            : { status: recordedSaving.response.paymentSource.paypal.attributes.vault.status, tokenId, kind: "paypal", label: "b•••@personal.example.com" };
+        }
       }
       return behaviour === "answer-minimal" ? { orderId: command.orderId, status: "COMPLETED" } : order.receipt;
     });
+  }
+
+  async deleteSavedMethod(paypalTokenId: string): Promise<PayPalResult<{ deleted: true }>> {
+    this.deletes.push(paypalTokenId);
+    if (this.deletesUnavailable) return TIMEOUT;
+    if (!this.savedTokens.includes(paypalTokenId)) return { kind: "rejected", code: "RESOURCE_NOT_FOUND", message: "The specified resource does not exist.", trace: { httpStatus: 404 } };
+    // Probe P12: deleting an already deleted token also answers 204.
+    this.deletedTokens.add(paypalTokenId);
+    return { kind: "ok", value: { deleted: true }, trace: { httpStatus: 204 } };
   }
 
   async getAuthorization(id: string): Promise<PayPalResult<AuthorizationReceipt>> {

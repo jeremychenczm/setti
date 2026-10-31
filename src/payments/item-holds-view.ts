@@ -7,9 +7,11 @@ import { eq } from "drizzle-orm";
 import type { DemoAccount } from "../accounts/demo";
 import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
-import { items, revisionLines, savedPaymentMethods } from "../db/schema";
+import { items, revisionLines } from "../db/schema";
 import { PaymentActionError } from "./binding";
+import { activeSavedMethod, savedMethodView, type SavedMethodView } from "./saved-methods";
 import { lockPaymentBasis } from "./services";
+import type { CheckoutView, DemoCheckout } from "./types";
 
 export interface ItemHoldView {
   /** The quote line id. */
@@ -24,6 +26,8 @@ export interface ItemHoldView {
   approvalUrl: string | null;
   canCheck: boolean;
   canCancel: boolean;
+  /** With no saved method, the client may hold this item alone through PayPal or the Sandbox test card (V1 only). */
+  canCheckout: boolean;
   paypalAuthorizationId: string | null;
   expiresAt: string | null;
   failureMessage: string | null;
@@ -40,7 +44,12 @@ export interface ItemHoldsView {
   /** Approved furniture not held or captured yet. */
   toHoldCents: number;
   savedPayPal: boolean;
-  /** Either account of the project may hold the rest with the client's saved PayPal. */
+  /** The project's active saved payment method, as the client recognises it. */
+  savedMethod: SavedMethodView | null;
+  canRemoveSaved: boolean;
+  /** How the client can pay for one item at a time; present only while some item can be held that way. */
+  checkoutOptions: CheckoutView | null;
+  /** Either account of the project may hold the rest with the client's saved payment method. */
   canHold: boolean;
   /** On V1 the designer records supplier confirmations and captures here; a change order has its own payments panel. */
   canConfirmSupplier: boolean;
@@ -49,8 +58,8 @@ export interface ItemHoldsView {
   reason: string | null;
 }
 
-export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseKey, account: DemoAccount | null): Promise<ItemHoldsView> {
-  const empty = (reason: string): ItemHoldsView => ({ projectKey: key, basis: null, items: [], toHoldCents: 0, savedPayPal: false, canHold: false, canConfirmSupplier: false, contentHash: null, reason });
+export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseKey, account: DemoAccount | null, demo: DemoCheckout | null = null): Promise<ItemHoldsView> {
+  const empty = (reason: string): ItemHoldsView => ({ projectKey: key, basis: null, items: [], toHoldCents: 0, savedPayPal: false, savedMethod: null, canRemoveSaved: false, checkoutOptions: null, canHold: false, canConfirmSupplier: false, contentHash: null, reason });
   if (!sessionId) return empty("Open this project from the browser that owns the demo case.");
   let basis;
   try { basis = await db.transaction((tx) => lockPaymentBasis(tx, sessionId, key)); }
@@ -66,6 +75,7 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
   const member = !!account && (account.role === "designer" || account.projectKey === key);
   const client = member && account?.role === "client";
   const kinds = new Map((await db.select({ id: items.id, kind: items.kind }).from(items).where(eq(items.projectId, basis.projectId))).map((row) => [row.id, row.kind]));
+  const saved = savedMethodView(await activeSavedMethod(db, basis.projectId));
   // On V1 the approved terms are the V1 revision's lines; a change order's page shows its own.
   const v1Terms = basis.orderId ? new Map() : new Map((await db.select().from(revisionLines).where(eq(revisionLines.revisionId, basis.key)))
     .map((row) => [row.itemId, { quantity: row.quantity, unitPriceCents: row.unitPriceCents, taxCents: row.taxCents, freightCents: row.freightCents }]));
@@ -92,8 +102,9 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
       itemId: line.itemId, label: line.label, targetCents: line.targetCents, heldCents: line.heldCents, capturedCents: line.capturedCents - line.refundedCents, state,
       operationId: displayedOperation?.id ?? null,
       approvalUrl: !manualReview && client && state === "awaiting_client" ? displayedOperation?.approvalUrl ?? null : null,
-      canCheck: member && !!displayedOperation?.savedMethodId && ["holding", "awaiting_client", "unknown"].includes(state),
+      canCheck: member && !!displayedOperation && ["holding", "awaiting_client", "unknown"].includes(state),
       canCancel: !manualReview && client && state === "awaiting_client",
+      canCheckout: false,
       paypalAuthorizationId: hold?.paypalAuthorizationId ?? null, expiresAt: hold?.expiresAt?.toISOString() ?? null,
       failureMessage: ["failed", "awaiting_client", "unknown"].includes(state) ? displayedOperation?.failureMessage ?? null : null,
       terms: v1Terms.get(businessId) ?? null,
@@ -101,16 +112,20 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
     }];
   });
   const toHoldCents = lines.reduce((total, line) => total + Math.max(line.targetCents - line.heldCents - line.capturedCents, 0), 0);
-  const [saved] = await db.select({ id: savedPaymentMethods.id }).from(savedPaymentMethods).where(eq(savedPaymentMethods.projectId, basis.projectId));
   const waiting = lines.some((line) => ["holding", "awaiting_client", "unknown"].includes(line.state));
   const canHold = member && !!saved && toHoldCents > 0 && !waiting && plan.status !== "blocked" && manualReviews.length === 0;
+  // Change orders take each item's payment on their own payments panel; V1 takes it here.
+  const oneByOne = client && !saved && !basis.orderId && !waiting && plan.status !== "blocked" && manualReviews.length === 0;
+  for (const line of lines) line.canCheckout = oneByOne && (line.state === "to_hold" || line.state === "failed");
   const reason = manualReviews.length ? manualReviews[0].failureMessage ?? "Legacy PayPal orders require manual review before this project can place any further holds."
     : !lines.length ? "The client has not approved a furniture item yet."
     : toHoldCents === 0 ? null
-      : !saved ? "Items are held with the PayPal the client saves when paying the design services."
+      : !saved ? client ? "Hold each item with PayPal or a card below. Saving the method lets the studio hold the rest without another window."
+        : "No payment method is saved. The client holds each item with PayPal or a card, or saves a method for the studio to use."
         : !member ? "Only the project's client or designer can hold items."
           : waiting ? "An item hold is still open. Continue or check that same PayPal order before starting more holds."
             : null;
   const canConfirmSupplier = account?.role === "designer" && !basis.orderId;
-  return { projectKey: key, basis: { version: basis.version, orderId: basis.orderId }, items: lines, toHoldCents, savedPayPal: !!saved, canHold, canConfirmSupplier, contentHash: basis.contentHash, reason };
+  return { projectKey: key, basis: { version: basis.version, orderId: basis.orderId }, items: lines, toHoldCents, savedPayPal: !!saved, savedMethod: saved, canRemoveSaved: client && !!saved,
+    checkoutOptions: demo && lines.some((line) => line.canCheckout) ? { ...demo, canSave: true } : null, canHold, canConfirmSupplier, contentHash: basis.contentHash, reason };
 }

@@ -12,12 +12,15 @@ import { cancelPayment, checkPayment, operationPage, returnFromPayPal, startAuth
 import { cancelCheckout, completeAuthorization } from "./authorize";
 import { PaymentActionError } from "./binding";
 import { PaymentOperationError } from "./operations";
-import { sandboxPayPal } from "./server";
+import { sandboxPayPal, sandboxTestCard } from "./server";
+import { removeCaseSavedMethod } from "./saved-methods";
+import { approveCheckoutWithTestCard } from "./test-card";
+import type { DemoCheckout } from "./types";
 import { callbackState, validCallbackState } from "./callback-state";
 import { recordOpeningSupplierOrder, recordSupplierCredit, recordSupplierOrder } from "./supplier";
 import { paymentsWorkspace } from "./workspace";
 import { refreshRecordedFees } from "./fee-refresh";
-import { cancelItemHold, checkItemHold, holdApprovedItems } from "./item-holds";
+import { cancelItemHold, checkItemHold, holdApprovedItems, startItemCheckout } from "./item-holds";
 import { itemHoldsView } from "./item-holds-view";
 import { chargeServices, checkServicesCheckout, lockPaymentBasis, startServicesCheckout } from "./services";
 import { servicesPaymentView } from "./services-view";
@@ -27,8 +30,12 @@ const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
 const line = { itemId: z.string().min(1).max(300), side: z.enum(["baseline", "proposed"]), contentHash: hash, revisionContentHash: hash };
 const cents = z.number().int().min(0).max(2_000_000_000);
+/** How the client pays: PayPal in a popup window, a full-page PayPal redirect (fallback), the Sandbox test card, or the saved method. */
+const via = z.enum(["popup", "redirect", "test_card", "saved"]);
 const actionSchema = z.discriminatedUnion("action", [
-  z.strictObject({ action: z.literal("authorize"), ...line }),
+  z.strictObject({ action: z.literal("authorize"), ...line, via: via.optional(), save: z.boolean().optional() }),
+  z.strictObject({ action: z.literal("hold_saved") }),
+  z.strictObject({ action: z.literal("remove_saved") }),
   z.strictObject({ action: z.literal("capture"), ...line }),
   z.strictObject({ action: z.literal("release"), ...line }),
   z.strictObject({ action: z.literal("refund"), ...line }),
@@ -42,7 +49,9 @@ const actionSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("fees") }),
 ]);
 const servicesSchema = z.discriminatedUnion("action", [
-  z.strictObject({ action: z.literal("checkout") }),
+  z.strictObject({ action: z.literal("checkout"), save: z.boolean().optional() }),
+  z.strictObject({ action: z.literal("test_card"), save: z.boolean().optional() }),
+  z.strictObject({ action: z.literal("remove_saved") }),
   z.strictObject({ action: z.literal("approve"), operationId: uuid }),
   z.strictObject({ action: z.literal("cancel"), operationId: uuid }),
   z.strictObject({ action: z.literal("check"), operationId: uuid }),
@@ -50,6 +59,8 @@ const servicesSchema = z.discriminatedUnion("action", [
 ]);
 const holdSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("hold") }),
+  z.strictObject({ action: z.literal("remove_saved") }),
+  z.strictObject({ action: z.literal("checkout"), itemId: z.string().min(1).max(300), via: z.enum(["popup", "test_card"]), save: z.boolean().optional() }),
   z.strictObject({
     action: z.literal("supplier_order"), itemId: z.string().min(1).max(300), contentHash: hash, quantity: z.number().int().min(1).max(10_000), unitPriceCents: cents, taxCents: cents, freightCents: cents,
     inStock: z.boolean(), leadTimeDays: z.number().int().min(0).max(3_650).nullable(), reference: z.string().trim().min(1).max(200), note: z.string().trim().max(1_000),
@@ -123,7 +134,7 @@ export async function getPaymentsResponse(req: NextRequest, id: string) {
   if (!uuid.safeParse(id).success) return NextResponse.json({ code: "NOT_FOUND", error: "This change order could not be found." }, { status: 404, headers });
   try {
     const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
-    const workspace = await paymentsWorkspace(db(), session(req), id, undefined, account);
+    const workspace = await paymentsWorkspace(db(), session(req), id, undefined, account, demoCheckout());
     if (workspace && account && !canOpenProject(account, workspace.projectKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
     return workspace ? refreshDemoCookies(NextResponse.json(workspace, { headers }), req) : NextResponse.json({ code: "NOT_FOUND", error: "This change order could not be found." }, { status: 404, headers });
   } catch (error) { return fail(error); }
@@ -143,21 +154,33 @@ export async function postPaymentsResponse(req: NextRequest, id: string) {
     const preparing = await pendingPreparation(sessionId, workspace.projectKey);
     if (preparing) return preparing;
     const client = account.role === "client" && account.projectKey === workspace.projectKey;
-    if (input.action === "authorize" && !client) return NextResponse.json({ code: "FORBIDDEN", error: "Only this project's client can approve a PayPal checkout." }, { status: 403, headers });
+    if (["authorize", "hold_saved", "remove_saved"].includes(input.action) && !client) return NextResponse.json({ code: "FORBIDDEN", error: "Only this project's client pays or changes the saved payment method." }, { status: 403, headers });
+    if (input.action === "authorize" && input.via === "test_card" && !demoCheckout().testCard) return NextResponse.json({ code: "FORBIDDEN", error: "The Sandbox test card is turned off on this server." }, { status: 403, headers });
     if (["capture", "release", "refund", "supplier_order", "supplier_credit"].includes(input.action) && account.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "Only the designer records supplier confirmations, captures, releases and refunds." }, { status: 403, headers });
     if (input.action === "check" || input.action === "cancel") {
       const operation = workspace.operations.find((entry) => entry.id === input.operationId);
       if (!operation) return NextResponse.json({ code: "NOT_FOUND", error: "This payment step does not belong to this project." }, { status: 404, headers });
       if ((input.action === "check" && operation.kind !== "authorize" && account.role !== "designer") || (input.action === "cancel" && !client)) return NextResponse.json({ code: "FORBIDDEN", error: "Switch to the account responsible for this payment step." }, { status: 403, headers });
     }
-    let operationId: string | null = null, redirectUrl: string | null = null;
+    let operationId: string | null = null, redirectUrl: string | null = null, paypalOrderId: string | null = null;
     switch (input.action) {
       case "authorize": {
-        const operation = await startAuthorization(db(), sandboxPayPal(), sessionId, id, input, paypalLinks(req));
+        const how = input.via ?? "redirect";
+        let operation = await startAuthorization(db(), sandboxPayPal(), sessionId, id, input, paypalLinks(req), { via: how === "saved" ? "saved" : "checkout", save: input.save });
+        if (how === "test_card" && !operation.savedMethodId) operation = (await approveCheckoutWithTestCard(db(), sandboxPayPal(), sandboxTestCard(), operation)).operation;
         operationId = operation.id;
-        redirectUrl = operation.status === "pending" && !operation.paypalResourceId ? operation.approvalUrl : null;
+        const awaitingBuyer = operation.status === "pending" && !operation.paypalResourceId && !operation.savedMethodId;
+        paypalOrderId = awaitingBuyer ? operation.paypalOrderId : null;
+        redirectUrl = awaitingBuyer && how === "redirect" ? operation.approvalUrl : null;
         break;
       }
+      case "hold_saved":
+        if (!workspace.current) return NextResponse.json({ code: "STALE_VERSION", error: "Hold items from the latest confirmed version." }, { status: 409, headers });
+        await holdApprovedItems(db(), sandboxPayPal(), sessionId, workspace.projectKey, paypalLinks(req));
+        break;
+      case "remove_saved":
+        await removeCaseSavedMethod(db(), sandboxPayPal(), sessionId, workspace.projectKey);
+        break;
       case "capture":
         operationId = (await startCapture(db(), sandboxPayPal(), sessionId, id, input))[0]?.id ?? null;
         break;
@@ -183,7 +206,7 @@ export async function postPaymentsResponse(req: NextRequest, id: string) {
         await refreshRecordedFees(db(), sandboxPayPal(), sessionId, id);
         break;
     }
-    return refreshDemoCookies(NextResponse.json({ workspace: await paymentsWorkspace(db(), sessionId, id, undefined, account), operationId, redirectUrl }, { headers }), req);
+    return refreshDemoCookies(NextResponse.json({ workspace: await paymentsWorkspace(db(), sessionId, id, undefined, account, demoCheckout()), operationId, redirectUrl, paypalOrderId }, { headers }), req);
   } catch (error) { return fail(error); }
 }
 
@@ -220,8 +243,19 @@ function paypalClientId(): string | null {
   try { return assertSandbox().clientId; } catch { return null; }
 }
 
+/**
+ * The demo payment choices: PayPal's documented Sandbox test card (unless
+ * SETTI_DEMO_TEST_CARD=off) and the Sandbox buyer login, shown next to the PayPal
+ * window when SANDBOX_BUYER_EMAIL and SANDBOX_BUYER_PASSWORD are set.
+ */
+function demoCheckout(): DemoCheckout {
+  const email = process.env.SANDBOX_BUYER_EMAIL?.trim(), password = process.env.SANDBOX_BUYER_PASSWORD?.trim();
+  return { paypalClientId: paypalClientId(), testCard: process.env.SETTI_DEMO_TEST_CARD?.trim().toLowerCase() !== "off", sandboxBuyer: email && password ? { email, password } : null };
+}
+
 function servicesView(req: NextRequest, key: CaseKey, sessionId = session(req)) {
-  return servicesPaymentView(db(), sessionId, key, findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value), paypalClientId());
+  const { paypalClientId: clientId, ...demo } = demoCheckout();
+  return servicesPaymentView(db(), sessionId, key, findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value), clientId, demo);
 }
 
 /** The design-services payment of the project's current agreement. */
@@ -250,15 +284,26 @@ export async function postServicesPaymentResponse(req: NextRequest, rawKey: stri
     const preparing = await pendingPreparation(sessionId, rawKey);
     if (preparing) return preparing;
     if (input.action !== "charge" && input.action !== "check" && !client) return NextResponse.json({ code: "FORBIDDEN", error: "Only the client pays the design services. Switch to the client's account first." }, { status: 403, headers });
+    if (input.action === "test_card" && !demoCheckout().testCard) return NextResponse.json({ code: "FORBIDDEN", error: "The Sandbox test card is turned off on this server." }, { status: 403, headers });
     const paypal = sandboxPayPal();
     let paypalOrderId: string | null = null, operationId: string | null = null;
     switch (input.action) {
       case "checkout": {
-        const operation = await startServicesCheckout(db(), paypal, sessionId, rawKey, paypalLinks(req));
+        const operation = await startServicesCheckout(db(), paypal, sessionId, rawKey, paypalLinks(req), { save: input.save });
         operationId = operation.id;
         paypalOrderId = operation.status === "pending" && !operation.paypalResourceId ? operation.paypalOrderId : null;
         break;
       }
+      case "test_card": {
+        const started = await startServicesCheckout(db(), paypal, sessionId, rawKey, paypalLinks(req), { save: input.save });
+        const { operation, state } = await approveCheckoutWithTestCard(db(), paypal, sandboxTestCard(), started);
+        operationId = operation.id;
+        if (state === "authorized") await chargeServices(db(), paypal, sessionId, rawKey);
+        break;
+      }
+      case "remove_saved":
+        await removeCaseSavedMethod(db(), paypal, sessionId, rawKey);
+        break;
       case "approve": {
         await servicesOperation(sessionId, rawKey, input.operationId);
         const { state } = await completeAuthorization(db(), paypal, input.operationId);
@@ -284,7 +329,7 @@ export async function postServicesPaymentResponse(req: NextRequest, rawKey: stri
 }
 
 function holdsView(req: NextRequest, key: CaseKey, sessionId = session(req)) {
-  return itemHoldsView(db(), sessionId, key, findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value));
+  return itemHoldsView(db(), sessionId, key, findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value), demoCheckout());
 }
 
 /** The approved furniture items of the project's current agreement and their PayPal holds. */
@@ -311,8 +356,9 @@ export async function postItemHoldsResponse(req: NextRequest, rawKey: string) {
     const preparing = await pendingPreparation(sessionId, rawKey);
     if (preparing) return preparing;
     if ((input.action === "supplier_order" || input.action === "capture") && account.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "Only the designer records supplier confirmations and captures." }, { status: 403, headers });
-    if (input.action === "cancel" && account.role !== "client") return NextResponse.json({ code: "FORBIDDEN", error: "Only the client leaves a PayPal checkout." }, { status: 403, headers });
-    let attempted = 0;
+    if ((input.action === "cancel" || input.action === "remove_saved" || input.action === "checkout") && (account.role !== "client" || account.projectKey !== rawKey)) return NextResponse.json({ code: "FORBIDDEN", error: "Only the client pays, leaves a PayPal checkout or removes the saved payment method." }, { status: 403, headers });
+    if (input.action === "checkout" && input.via === "test_card" && !demoCheckout().testCard) return NextResponse.json({ code: "FORBIDDEN", error: "The Sandbox test card is turned off on this server." }, { status: 403, headers });
+    let attempted = 0, operationId: string | null = null, paypalOrderId: string | null = null;
     switch (input.action) {
       case "hold":
         attempted = (await holdApprovedItems(db(), sandboxPayPal(), sessionId, rawKey, paypalLinks(req))).length;
@@ -324,13 +370,23 @@ export async function postItemHoldsResponse(req: NextRequest, rawKey: string) {
         attempted = (await startOpeningCapture(db(), sandboxPayPal(), sessionId, rawKey, input)).length;
         break;
       case "check":
-        await checkItemHold(db(), sandboxPayPal(), sessionId, rawKey, input.operationId);
+        await checkItemHold(db(), sandboxPayPal(), sessionId, rawKey, input.operationId, paypalLinks(req));
         break;
+      case "checkout": {
+        let operation = await startItemCheckout(db(), sandboxPayPal(), sessionId, rawKey, input.itemId, paypalLinks(req), { save: input.save });
+        if (input.via === "test_card") operation = (await approveCheckoutWithTestCard(db(), sandboxPayPal(), sandboxTestCard(), operation)).operation;
+        operationId = operation.id;
+        paypalOrderId = operation.status === "pending" && !operation.paypalResourceId ? operation.paypalOrderId : null;
+        break;
+      }
       case "cancel":
         await cancelItemHold(db(), sandboxPayPal(), sessionId, rawKey, input.operationId);
         break;
+      case "remove_saved":
+        await removeCaseSavedMethod(db(), sandboxPayPal(), sessionId, rawKey);
+        break;
     }
-    return refreshDemoCookies(NextResponse.json({ view: await holdsView(req, rawKey, sessionId), attempted }, { headers }), req);
+    return refreshDemoCookies(NextResponse.json({ view: await holdsView(req, rawKey, sessionId), attempted, operationId, paypalOrderId }, { headers }), req);
   } catch (error) { return fail(error); }
 }
 

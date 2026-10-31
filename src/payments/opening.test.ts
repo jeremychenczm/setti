@@ -84,7 +84,7 @@ describe.skipIf(!testDatabaseUrl)("payments for a V1 signed line by line", () =>
     expect(checkout).toMatchObject({ changeOrderId: null, revisionId: version.revisionId, contentHash: version.contentHash });
     const [hold] = await handle.db.select().from(paypalAuthorizations).where(eq(paypalAuthorizations.operationId, checkout.id));
     expect(hold).toMatchObject({ changeOrderId: null, amountCents: checkout.amountCents, status: "created" });
-    expect(await lastMessage()).toMatch(/authorization recorded for V1 · .*is held.*The client saved PayPal for this project's later holds\.$/);
+    expect(await lastMessage()).toMatch(/authorization recorded for V1 · .*is held.*The client saved b•••@personal\.example\.com for this project's later holds\.$/);
 
     const desk = plan.lines.find((line) => line.itemId === DESK)!;
     expect(desk.heldCents).toBe(checkout.amountCents);
@@ -96,7 +96,7 @@ describe.skipIf(!testDatabaseUrl)("payments for a V1 signed line by line", () =>
     const [method] = await handle.db.select().from(savedPaymentMethods);
     const pending = await writeHold(RUG, { savedMethodId: method.id });
     expect(await executeSavedHold(handle.db, paypal, pending.id, details)).toMatchObject({ status: "succeeded", approvalUrl: null });
-    expect(await lastMessage()).toMatch(/authorization recorded with the client's saved PayPal for V1 · /);
+    expect(await lastMessage()).toMatch(/authorization recorded with the client's saved payment method for V1 · /);
   });
 
   describe("database rules", () => {

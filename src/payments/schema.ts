@@ -50,23 +50,39 @@ export const supplierEvents = pgTable("supplier_events", {
 ]);
 
 /**
- * PayPal the client saved for this project during a checkout, so Setti can
- * place later holds without sending the client to PayPal again. One per
- * project, never changed or deleted. The token is a server-side secret: it is
- * never logged, kept as call evidence or sent to a browser.
+ * A payment method the client saved in PayPal's vault for this project during a
+ * checkout (a PayPal account or a card), so Setti can place later holds without
+ * sending the client to PayPal again. At most one is active per project; the
+ * client may remove it (see savedPaymentMethodRemovals) and save another later.
+ * Never changed or deleted. The token is a server-side secret: it is never
+ * logged, kept as call evidence or sent to a browser.
  */
 export const savedPaymentMethods = pgTable("saved_payment_methods", {
   id: uuid("id").primaryKey().defaultRandom(),
   projectId: uuid("project_id").notNull().references(() => projects.id),
-  /** The checkout in which the client agreed to save PayPal. */
+  /** The checkout in which the client agreed to save the payment method. */
   sourceOperationId: uuid("source_operation_id").notNull().unique().references(() => paymentOperations.id),
   /** PayPal's vault payment token. */
   paypalTokenId: text("paypal_token_id").notNull().unique(),
+  /** `paypal` for a PayPal account (including Pay Later), `card` for a debit or credit card. */
+  kind: text("kind").notNull().default("paypal"),
+  /** What the client recognises it by, such as "Visa •••• 0026"; never a full card number or email. */
+  label: text("label"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
-  unique("saved_payment_methods_one_per_project").on(t.projectId),
   check("saved_payment_methods_token", sql`length(btrim(${t.paypalTokenId})) > 0`),
+  check("saved_payment_methods_kind", sql`${t.kind} in ('paypal', 'card')`),
 ]);
+
+/**
+ * The client removed a saved payment method: PayPal deleted the token first,
+ * then this record stops Setti from using it. A record: never changed or deleted.
+ */
+export const savedPaymentMethodRemovals = pgTable("saved_payment_method_removals", {
+  methodId: uuid("method_id").primaryKey().references(() => savedPaymentMethods.id),
+  projectId: uuid("project_id").notNull().references(() => projects.id),
+  removedAt: timestamp("removed_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /**
  * How a design-services hold is split across the approved service lines it pays

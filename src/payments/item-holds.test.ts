@@ -45,7 +45,7 @@ describe.skipIf(!testDatabaseUrl)("holding approved items with saved PayPal", ()
 
   it("holds every approved item with saved PayPal, each for its own line, with no checkout", async () => {
     await signOpeningForTest(handle.db, session, "willow");
-    expect(await view()).toMatchObject({ savedPayPal: false, canHold: false, reason: expect.stringMatching(/PayPal the client saves when paying the design services/) });
+    expect(await view()).toMatchObject({ savedPayPal: false, canHold: false, reason: expect.stringMatching(/Hold each item with PayPal or a card below/) });
     await payServices();
     const before = await view();
     expect(before).toMatchObject({ savedPayPal: true, canHold: true, toHoldCents: FURNITURE.reduce((total, line) => total + line.quantity * line.unitPriceCents + line.taxCents + line.freightCents, 0) });
@@ -153,7 +153,7 @@ describe.skipIf(!testDatabaseUrl)("holding approved items with saved PayPal", ()
 
   it("needs saved PayPal and an account of the project", async () => {
     await signOpeningForTest(handle.db, session, "willow");
-    await expect(hold()).rejects.toMatchObject({ code: "NOT_AVAILABLE", message: expect.stringMatching(/Paying the design services saves it/) });
+    await expect(hold()).rejects.toMatchObject({ code: "NOT_AVAILABLE", message: expect.stringMatching(/Paying with PayPal or a card can save one/) });
     await payServices();
     expect(await view(designer)).toMatchObject({ canHold: true });
     expect(await view(otherClient)).toMatchObject({ canHold: false, reason: expect.stringMatching(/Only the project's client or designer/) });
