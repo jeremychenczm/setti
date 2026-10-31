@@ -225,6 +225,13 @@
       "when": 1793323441691,
       "tag": "0031_ready_living_dining_seed",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1793386970639,
+      "tag": "0032_studio_threads",
+      "breakpoints": true
     }
   ]
 }

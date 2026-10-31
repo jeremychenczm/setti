@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:examples": "vitest run --config vitest.examples.config.mts",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "probe": "tsx",

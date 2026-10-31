@@ -301,3 +301,4 @@ export { changeOrderDecisions } from "../approval/schema";
 export { paypalCalls, savedPaymentMethods, servicesHoldLines, supplierEvents } from "../payments/schema";
 export { trySeeds } from "../try/schema";
 export { openingQuotes, openingWithdrawals } from "../opening/schema";
+export { studioThreads } from "../studio/schema";

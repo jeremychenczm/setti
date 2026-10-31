@@ -2,15 +2,15 @@ import type { CaseKey } from "@/chat/types";
 import type { Person } from "../demo-data";
 import { Avatar } from "./primitives";
 
-export interface ProjectChat {
-  key: CaseKey;
+export interface ProjectChat<Key extends string = CaseKey> {
+  key: Key;
   title: string;
   subtitle: string;
   /** The other person in the chat: the client for the designer, the designer for a client. */
   counterpart: Person;
 }
 
-export function ConversationList({ projects, activeId, onOpen }: { projects: ProjectChat[]; activeId: CaseKey; onOpen: (key: CaseKey) => void }) {
+export function ConversationList<Key extends string>({ projects, activeId, onOpen }: { projects: ProjectChat<Key>[]; activeId: Key; onOpen: (key: Key) => void }) {
   return (
     <section className="flex w-[300px] shrink-0 flex-col rounded-xl bg-white shadow-sm">
       <h2 className="px-4 pb-2 pt-3 text-base font-semibold">Chats</h2>
@@ -19,6 +19,7 @@ export function ConversationList({ projects, activeId, onOpen }: { projects: Pro
           <button
             key={project.key}
             onClick={() => onOpen(project.key)}
+            aria-current={project.key === activeId ? "page" : undefined}
             className={`flex w-full gap-3 rounded-lg px-2 py-2.5 text-left ${project.key === activeId ? "bg-[var(--primary-soft)]" : "hover:bg-[var(--canvas)]"}`}
           >
             <Avatar person={project.counterpart} />
