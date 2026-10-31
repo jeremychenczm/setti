@@ -6,6 +6,7 @@ import type { AccountId } from "@/accounts/demo";
 import type { CaseSnapshot } from "@/chat/types";
 import type { ItemHoldsView } from "@/payments/item-holds-view";
 import type { ServicesPaymentView } from "@/payments/services-view";
+import { EndDemoButton } from "./EndDemoButton";
 import type { TrySeedNoticeProps } from "./TrySeedNotice";
 import { navigateGuidePage, useGuideAnchor } from "./useGuideAnchor";
 import { WILLOW_GUIDE_STEPS, willowGuideStep, type WillowGuideData } from "./willow-guide";
@@ -19,8 +20,8 @@ async function readJson(path: string, signal: AbortSignal): Promise<unknown> {
 
 /**
  * The opening-quote walkthrough uses the normal signing, wallet and item-payment
- * screens. It shows only where the walkthrough stands and the one next step;
- * the account, demo home and reset live in the sidebar's account menu.
+ * screens. It shows where the walkthrough stands, the one next step and a way
+ * to end the demo; the account and demo home live in the sidebar's account menu.
  */
 export function WillowGuide({ account, onSwitchAccount, onOpenChat, currentView, currentOrderId }: TrySeedNoticeProps) {
   const [data, setData] = useState<WillowGuideData | null>(null);
@@ -87,7 +88,8 @@ export function WillowGuide({ account, onSwitchAccount, onOpenChat, currentView,
 
   const done = (index: number) => index < step.index || (index === step.index && !!step.complete);
   return <aside aria-label="Willow demo guide" className="shrink-0 rounded-xl border border-[var(--primary-line)] bg-[var(--primary-soft)] px-4 py-3 text-[var(--ink)]">
-    <ol aria-label={`Step ${step.index + 1} of ${WILLOW_GUIDE_STEPS.length}`} className="flex flex-wrap items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+    <ol aria-label={`Step ${step.index + 1} of ${WILLOW_GUIDE_STEPS.length}`} className="flex flex-1 flex-wrap items-center gap-1.5">
       {WILLOW_GUIDE_STEPS.map((label, index) => <li key={label} title={label} aria-current={step.index === index ? "step" : undefined} className="flex items-center gap-1.5">
         {index > 0 && <span aria-hidden className={`h-px w-4 sm:w-6 ${index <= step.index ? "bg-[var(--primary)]" : "bg-[var(--primary-line)]"}`} />}
         <span className={`flex h-[18px] w-[18px] items-center justify-center rounded-full text-[9px] font-semibold ${done(index) ? "bg-[var(--primary)] text-white" : index === step.index ? "border-2 border-[var(--primary)] bg-white text-[var(--primary)]" : "border border-[var(--primary-line)] bg-white text-[var(--muted)]"}`}>
@@ -96,6 +98,8 @@ export function WillowGuide({ account, onSwitchAccount, onOpenChat, currentView,
       </li>)}
       <li className="ml-1.5 text-[10px] text-[var(--muted)]">Step {step.index + 1} of {WILLOW_GUIDE_STEPS.length} · {WILLOW_GUIDE_STEPS[step.index]}</li>
     </ol>
+    <EndDemoButton className="rounded-md px-1.5 py-1 text-[10px] font-medium text-brand-700 hover:bg-brand-100" />
+    </div>
     <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
       <div className="min-w-[220px] flex-1">
         <h2 className="text-[13px] font-semibold leading-snug">{step.title}</h2>
