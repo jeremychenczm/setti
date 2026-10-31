@@ -18,7 +18,15 @@ const saveSchema = z.strictObject({
   input: pricingInputSchema,
 });
 const issueSchema = z.strictObject({ reviewId: uuid, expectedVersion: z.number().int().positive() });
-const lineSchema = z.strictObject({ itemId: z.string().min(1).max(300) });
+const cents = z.number().int().min(0).max(2_000_000_000);
+const lineSchema = z.strictObject({
+  itemId: z.string().min(1).max(300),
+  /** What the supplier's order confirmation states, when it differs from the line. */
+  supplier: z.strictObject({
+    reference: z.string().trim().min(1).max(200), quantity: z.number().int().min(1).max(10_000),
+    unitPriceCents: cents, taxCents: cents, freightCents: cents, leadTimeDays: z.number().int().min(0).max(3_650).nullable(),
+  }).optional(),
+});
 const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
 
 /** Pricing is the designer's work in progress; a client account sees the change order once it is issued. */
@@ -109,8 +117,7 @@ export async function postLineChangeResponse(req: NextRequest, rawKey: string) {
   const refusal = clientRefusal(req, session);
   if (refusal) return refusal;
   try {
-    const { itemId } = lineSchema.parse(await boundedJson(req));
-    const { draft } = await startLineChange(pricingDb(), session, rawKey, { itemId });
+    const { draft } = await startLineChange(pricingDb(), session, rawKey, lineSchema.parse(await boundedJson(req)));
     return respond(req, session, { href: `/pricing/${rawKey}`, draftId: draft.id, revision: draft.revision });
   } catch (error) { return failure(req, session, error); }
 }

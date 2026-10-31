@@ -68,6 +68,14 @@ export interface FromV1 {
   reason: string | null;
 }
 
+/** What a supplier's order confirmation states besides the quantity and unit price, which the change's new line carries. */
+export interface SupplierTerms {
+  reference: string;
+  taxCents: number;
+  freightCents: number;
+  leadTimeDays: number | null;
+}
+
 export interface DraftChange {
   action: "quantity" | "remove" | "replace" | "add";
   itemId: string | null;
@@ -80,6 +88,8 @@ export interface DraftChange {
   deltaSubtotalCents: number | null;
   /** Set on a line that comes back from V1, with that line as it was sent. */
   fromV1?: FromV1 & { line: QuoteLine };
+  /** Set when the designer starts the change from a supplier's order confirmation that differs from the line. */
+  supplier?: SupplierTerms;
 }
 
 export interface ChangeDraft {
@@ -103,6 +113,8 @@ export interface ChangeDraft {
   model: string;
   /** The human who requested the proposal; model names do not establish authorship. */
   origin?: HumanActor;
+  /** Set when the draft starts from a supplier's order confirmation: the supplier, and what its confirmation changes. */
+  supplierNotice?: { vendor: string; notice: string };
 }
 
 /** A later quote version the designer sent into the chat, as its card shows it. */

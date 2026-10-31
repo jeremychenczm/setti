@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { ApprovedQuoteLine, ApprovedQuoteReport } from "@/quotes/types";
 import { calculateLineTotals, calculateQuoteTotals, type QuoteTotals } from "../quotes/totals";
 import { quoteFingerprint } from "../quotes/fingerprint";
-import type { CaseMessage, ChangeDraft, DraftChange } from "@/chat/types";
+import type { CaseMessage, ChangeDraft, DraftChange, DraftItem, SupplierTerms } from "@/chat/types";
 import { differences } from "./review-diff";
 import { HOME_REVIEW_TERMS, homePricingEvidence } from "@/demo/home-evidence";
 import type { ChangeSource, FinalQuoteLine, PricingChangeInput, PricingDocumentBody, PricingInput, PricingItem, PricingPreview, ReviewedChange } from "./types";
@@ -44,8 +44,34 @@ export const pricingInputSchema = z.strictObject({
 });
 
 /** A draft the designer wrote is the studio's proposal; one drafted from the chat is the client's request. */
-export function draftSource(draft: Pick<ChangeDraft, "model" | "origin">): ChangeSource {
+export function draftSource(draft: Pick<ChangeDraft, "model" | "origin" | "supplierNotice">): ChangeSource {
+  if (draft.supplierNotice) return { kind: "vendor", ...draft.supplierNotice };
   return { kind: draft.origin ?? (draft.model === "designer" ? "designer" : "client"), vendor: "", notice: "" };
+}
+
+const usd = (value: number) => (value / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+
+/** What a supplier's order confirmation states for a line. */
+export interface SupplierConfirmation extends SupplierTerms {
+  quantity: number;
+  unitPriceCents: number;
+}
+
+/** Where the supplier's confirmation differs from the approved line, as the client reads it; empty when it matches. */
+export function supplierDifferences(line: Pick<ApprovedQuoteLine, "quantity" | "unitPriceCents" | "taxCents" | "freightCents">, supplier: SupplierConfirmation): string[] {
+  return [
+    supplier.quantity !== line.quantity && `quantity ${line.quantity} → ${supplier.quantity}`,
+    supplier.unitPriceCents !== line.unitPriceCents && `unit price ${usd(line.unitPriceCents)} → ${usd(supplier.unitPriceCents)}`,
+    supplier.taxCents !== line.taxCents && `tax ${usd(line.taxCents)} → ${usd(supplier.taxCents)}`,
+    supplier.freightCents !== line.freightCents && `delivery ${usd(line.freightCents)} → ${usd(supplier.freightCents)}`,
+  ].filter((entry): entry is string => !!entry);
+}
+
+const SUPPLIER_TERMS = "Each line started from a supplier's order confirmation follows that confirmation's quantity, unit price, tax and delivery. Every other line keeps its approved scope and price.";
+
+function supplierEvidence(after: DraftItem, supplier: SupplierTerms): string {
+  const lead = supplier.leadTimeDays === null ? "" : `, lead time ${supplier.leadTimeDays} days`;
+  return `Supplier order confirmation ${supplier.reference}${after.vendor ? ` from ${after.vendor}` : ""}: ${after.quantity} × ${usd(after.unitPriceCents ?? 0)}, tax ${usd(supplier.taxCents)}, delivery ${usd(supplier.freightCents)}${lead}. Entered by the designer from the supplier's confirmation.`;
 }
 
 export class PricingValidationError extends Error {
@@ -124,6 +150,8 @@ export function createPricingInput(quote: ApprovedQuoteReport, draft: ChangeDraf
       const price = after?.unitPriceCents;
       const needsOldHandling = requiresOldItemHandling(change, previous);
       const suggestion = evidence[index];
+      // A change started from a supplier's order confirmation carries what the supplier confirmed.
+      const supplier = change.supplier;
       return {
         key: `change-${index}`, action: change.action, itemId: change.itemId,
         after: after ? {
@@ -139,8 +167,9 @@ export function createPricingInput(quote: ApprovedQuoteReport, draft: ChangeDraf
           customMade: change.action === "quantity" ? previous?.customMade ?? false : false,
           leadTimeDays: change.action === "quantity" ? previous?.leadTimeDays ?? null : null,
           ...suggestion?.after,
+          ...(supplier ? { taxCents: supplier.taxCents, freightCents: supplier.freightCents, leadTimeDays: supplier.leadTimeDays ?? previous?.leadTimeDays ?? null } : {}),
         } : null,
-        priceEvidence: suggestion?.priceEvidence ?? product?.priceEvidence ?? (change.action === "quantity" && previous ? JSON.stringify({ source: previous.source, sku: previous.sku, unitPriceCents: previous.unitPriceCents, unitLabel: previous.unitLabel ?? null }) : ""),
+        priceEvidence: supplier && after ? supplierEvidence(after, supplier) : suggestion?.priceEvidence ?? product?.priceEvidence ?? (change.action === "quantity" && previous ? JSON.stringify({ source: previous.source, sku: previous.sku, unitPriceCents: previous.unitPriceCents, unitLabel: previous.unitLabel ?? null }) : ""),
         confirmed: false,
         oldItemHandling: suggestion?.oldItemHandling ?? (needsOldHandling ? "pending" : "not_applicable"),
         oldItemCostCents: suggestion?.oldItemCostCents ?? (needsOldHandling ? null : 0),
@@ -148,7 +177,7 @@ export function createPricingInput(quote: ApprovedQuoteReport, draft: ChangeDraf
       };
     }),
     issues: draft.unresolved.map((label, index) => ({ id: `issue-${index}`, label, resolved: false, note: "" })),
-    terms: sourced ? HOME_REVIEW_TERMS : "", reviewNotes: sourced ? "Pricing suggestions reference Setti's local fictional supplier documents, not uploaded files or live supplier/payment confirmations. Every line and open issue still needs the designer's explicit check." : "", source: draftSource(draft),
+    terms: sourced ? HOME_REVIEW_TERMS : draft.changes.some((change) => change.supplier) ? SUPPLIER_TERMS : "", reviewNotes: sourced ? "Pricing suggestions reference Setti's local fictional supplier documents, not uploaded files or live supplier/payment confirmations. Every line and open issue still needs the designer's explicit check." : "", source: draftSource(draft),
   };
 }
 

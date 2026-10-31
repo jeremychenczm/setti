@@ -14,13 +14,14 @@ import { chargeServices, startServicesCheckout } from "../payments/services";
 import { FakePayPal } from "../payments/testing/fake-paypal";
 import { links } from "../payments/testing/flows";
 import { paymentsWorkspace } from "../payments/workspace";
-import { createPricingInput, previewPricing } from "./calculation";
+import { createPricingInput, previewPricing, type SupplierConfirmation } from "./calculation";
 import { startLineChange } from "./line-change";
 import { createPricingStore } from "./store";
 import type { ChangeSource, FrozenChangeOrder } from "./types";
 
 const DESK = "willow-desk", RUG = "willow-area-rug", SOFA = "willow-sofa";
 const desk = caseDocument("willow").lines.find((line) => line.itemId === DESK)!;
+const rug = caseDocument("willow").lines.find((line) => line.itemId === RUG)!;
 const NOTICE: ChangeSource = { kind: "vendor", vendor: "Quillmark Office", notice: "From November 1 the writing desk is $129.99 (was $109.99) because of a lumber surcharge." };
 
 describe.skipIf(!testDatabaseUrl)("the designer changes an approved line", () => {
@@ -36,6 +37,9 @@ describe.skipIf(!testDatabaseUrl)("the designer changes an approved line", () =>
   afterAll(() => handle?.pool.end());
 
   const change = (itemId = DESK) => startLineChange(handle.db, session, "willow", { itemId });
+  /** The desk's supplier confirms it at a higher price. */
+  const confirmation = (overrides: Partial<SupplierConfirmation> = {}): SupplierConfirmation => ({ reference: "QO-4471", quantity: desk.quantity, unitPriceCents: 12_999, taxCents: 1_137, freightCents: desk.freightCents, leadTimeDays: 21, ...overrides });
+  const fromSupplier = (supplier: SupplierConfirmation, itemId = DESK) => startLineChange(handle.db, session, "willow", { itemId, supplier });
 
   /** The designer reprices the desk from the supplier's notice and issues the version; the client confirms it unless told not to. */
   async function reprice(source: ChangeSource = NOTICE, confirm = true): Promise<FrozenChangeOrder> {
@@ -87,6 +91,59 @@ describe.skipIf(!testDatabaseUrl)("the designer changes an approved line", () =>
     const input = createPricingInput(quote, draft);
     input.source = { kind: "vendor", vendor: " ", notice: "" };
     expect(previewPricing(quote, draft, input).problems).toContain("Name the supplier and enter what its notice says, so the client sees why the price changed.");
+  });
+
+  it("starts a version from a supplier confirmation that differs, with what the supplier confirmed filled in", async () => {
+    await signOpeningForTest(handle.db, session, "willow");
+    const { draft } = await fromSupplier(confirmation());
+    expect(draft).toMatchObject({ title: "Updated supplier terms", changes: [{
+      action: "quantity", itemId: DESK, after: { quantity: desk.quantity, unitPriceCents: 12_999 }, deltaSubtotalCents: desk.quantity * (12_999 - desk.unitPriceCents),
+      supplier: { reference: "QO-4471", taxCents: 1_137, freightCents: desk.freightCents, leadTimeDays: 21 },
+    }] });
+    expect(draft.supplierNotice).toEqual({ vendor: desk.vendor, notice: expect.stringContaining(`${desk.vendor} order confirmation QO-4471 for ${desk.name}: unit price `) });
+
+    const quote = (await createChatStore(handle.db).getCase(session, "willow")).quote!;
+    const input = createPricingInput(quote, draft);
+    expect(input.source).toEqual({ kind: "vendor", ...draft.supplierNotice });
+    expect(input.terms).toMatch(/follows that confirmation's quantity, unit price, tax and delivery/);
+    expect(input.changes).toEqual([expect.objectContaining({ confirmed: false, priceEvidence: expect.stringMatching(/^Supplier order confirmation QO-4471 from /), after: expect.objectContaining({ unitPriceCents: 12_999, taxCents: 1_137, freightCents: desk.freightCents, leadTimeDays: 21 }) })]);
+
+    // The designer only confirms the line; the supplier's notice goes to the client as the reason.
+    const pricing = createPricingStore(handle.db);
+    input.changes = input.changes.map((entry) => ({ ...entry, confirmed: true }));
+    const saved = await pricing.saveReview(session, "willow", { sourceDraftId: draft.id, sourceDraftRevision: draft.revision, expectedVersion: null, input });
+    const { order } = await pricing.issueReview(session, "willow", { reviewId: saved.review!.id, expectedVersion: saved.review!.version });
+    expect(order.source).toEqual({ kind: "vendor", ...draft.supplierNotice });
+    expect(order.lines.find((line) => line.itemId === DESK)).toMatchObject({ unitPriceCents: 12_999, taxCents: 1_137, leadTimeDays: 21 });
+  });
+
+  it("refuses a confirmation that matches the line, and opens the started change when asked again", async () => {
+    await signOpeningForTest(handle.db, session, "willow");
+    const same = confirmation({ unitPriceCents: desk.unitPriceCents, taxCents: desk.taxCents, leadTimeDays: 30 });
+    await expect(fromSupplier(same)).rejects.toMatchObject({ code: "INVALID_INPUT", message: expect.stringMatching(/Save the supplier confirmation/) });
+    const { draft } = await fromSupplier(confirmation());
+    expect((await fromSupplier(confirmation())).draft).toEqual(draft);
+    expect((await change()).draft).toEqual(draft);
+    await expect(fromSupplier(confirmation({ unitPriceCents: 13_999 }))).rejects.toMatchObject({ code: "PRICING_CONFLICT" });
+  });
+
+  it("adds a second supplier's confirmation to the same notice", async () => {
+    await signOpeningForTest(handle.db, session, "willow");
+    await fromSupplier(confirmation());
+    const { draft } = await fromSupplier({ reference: "ST-88", quantity: rug.quantity, unitPriceCents: rug.unitPriceCents, taxCents: rug.taxCents, freightCents: rug.freightCents + 2_500, leadTimeDays: null }, RUG);
+    expect(draft.changes.map((entry) => entry.itemId)).toEqual([DESK, RUG]);
+    expect(draft.supplierNotice!.vendor).toBe(`${desk.vendor}, ${rug.vendor}`);
+    expect(draft.supplierNotice!.notice.split("\n")).toEqual([expect.stringContaining("QO-4471"), `${rug.vendor} order confirmation ST-88 for ${rug.name}: delivery $${(rug.freightCents / 100).toFixed(2)} → $${((rug.freightCents + 2_500) / 100).toFixed(2)}.`]);
+  });
+
+  it("keeps a studio draft's reason when a supplier confirmation joins it", async () => {
+    await signOpeningForTest(handle.db, session, "willow");
+    await change(RUG);
+    const { draft } = await fromSupplier(confirmation());
+    expect(draft.supplierNotice).toBeUndefined();
+    const input = createPricingInput((await createChatStore(handle.db).getCase(session, "willow")).quote!, draft);
+    expect(input.source).toEqual({ kind: "designer", vendor: "", notice: "" });
+    expect(input.changes[1].priceEvidence).toMatch(/^Supplier order confirmation QO-4471/);
   });
 
   it("shows the supplier's notice to the client and holds the extra amount on saved PayPal once confirmed", async () => {

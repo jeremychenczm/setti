@@ -151,8 +151,8 @@ describe("designer line changes", () => {
     vi.clearAllMocks();
     mock.startLineChange.mockResolvedValue({ draft: { id: "draft-1", revision: 2 } });
   });
-  const change = (account: string) => new NextRequest("http://localhost:3002/api/pricing/willow/change-line", {
-    method: "POST", body: JSON.stringify({ itemId: "willow-desk" }),
+  const change = (account: string, body: unknown = { itemId: "willow-desk" }) => new NextRequest("http://localhost:3002/api/pricing/willow/change-line", {
+    method: "POST", body: JSON.stringify(body),
     headers: { "Content-Type": "application/json", Origin: "http://localhost:3002", Cookie: `setti-demo-chat=${randomUUID()}; setti-demo-account=${account}` },
   });
 
@@ -163,5 +163,15 @@ describe("designer line changes", () => {
     expect(await response.json()).toEqual({ href: "/pricing/willow", draftId: "draft-1", revision: 2 });
     expect(mock.startLineChange.mock.calls[0][2]).toBe("willow");
     expect(mock.startLineChange.mock.calls[0][3]).toEqual({ itemId: "willow-desk" });
+  });
+
+  it("passes on what the supplier confirmed, and refuses malformed terms", async () => {
+    const supplier = { reference: " QO-4471 ", quantity: 1, unitPriceCents: 12_999, taxCents: 1_137, freightCents: 0, leadTimeDays: null };
+    expect((await postLineChangeResponse(change("jordan", { itemId: "willow-desk", supplier }), "willow")).status).toBe(200);
+    expect(mock.startLineChange.mock.calls[0][3]).toEqual({ itemId: "willow-desk", supplier: { ...supplier, reference: "QO-4471" } });
+    for (const bad of [{ ...supplier, reference: " " }, { ...supplier, quantity: 0 }, { ...supplier, taxCents: 1.5 }, { ...supplier, inStock: true }]) {
+      expect((await postLineChangeResponse(change("jordan", { itemId: "willow-desk", supplier: bad }), "willow")).status).toBe(400);
+    }
+    expect(mock.startLineChange).toHaveBeenCalledTimes(1);
   });
 });
