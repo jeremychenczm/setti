@@ -43,10 +43,15 @@ export const pricingInputSchema = z.strictObject({
   source: z.strictObject({ kind: z.enum(["client", "designer", "vendor"]), vendor: text(300), notice: text(10_000) }).optional(),
 });
 
-/** A draft the designer wrote is the studio's proposal; one drafted from the chat is the client's request. */
-export function draftSource(draft: Pick<ChangeDraft, "model" | "origin" | "supplierNotice">): ChangeSource {
+/** A draft follows a supplier's notice, or otherwise the conversation with the client, whoever wrote it. */
+export function draftSource(draft: Pick<ChangeDraft, "supplierNotice">): ChangeSource {
   if (draft.supplierNotice) return { kind: "vendor", ...draft.supplierNotice };
-  return { kind: draft.origin ?? (draft.model === "designer" ? "designer" : "client"), vendor: "", notice: "" };
+  return { kind: "client", vendor: "", notice: "" };
+}
+
+/** How a version's source reads; versions frozen with the old "designer" source read as the client conversation. */
+export function changeSourceLabel(source: Pick<ChangeSource, "kind">): string {
+  return source.kind === "vendor" ? "Supplier notice" : "Client conversation";
 }
 
 const usd = (value: number) => (value / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
@@ -381,6 +386,7 @@ export function prepareChangeOrder(quote: ApprovedQuoteReport, draft: ChangeDraf
   });
 }
 
+/** Reviews saved before the merge may still say "designer"; new versions freeze it as the client conversation. */
 function frozenSource(source: ChangeSource): ChangeSource {
-  return source.kind === "vendor" ? { kind: "vendor", vendor: source.vendor.trim(), notice: source.notice.trim() } : { kind: source.kind, vendor: "", notice: "" };
+  return source.kind === "vendor" ? { kind: "vendor", vendor: source.vendor.trim(), notice: source.notice.trim() } : { kind: "client", vendor: "", notice: "" };
 }

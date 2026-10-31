@@ -53,9 +53,11 @@ export interface PricingIssue {
 }
 
 /**
- * Why a version changes the agreement. The client asked in the chat, the studio
- * proposes it, or a supplier's notice changed a price or term; the client
- * confirms the version either way before any money moves.
+ * Why a version changes the agreement: it came out of the conversation with the
+ * client ("client"), or a supplier's notice changed a price or term ("vendor");
+ * the client confirms the version either way before any money moves.
+ * "designer" is only read: versions frozen before the client's requests and the
+ * studio's proposals became one "client conversation" source still carry it.
  */
 export interface ChangeSource {
   kind: "client" | "designer" | "vendor";

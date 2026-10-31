@@ -73,7 +73,7 @@ describe.skipIf(!testDatabaseUrl)("the designer changes an approved line", () =>
     expect(draft.changes[0].before).toEqual(draft.changes[0].after);
     expect((await change()).draft.changes).toHaveLength(1);
     expect((await change(RUG)).draft.changes.map((entry) => entry.itemId)).toEqual([DESK, RUG]);
-    expect(createPricingInput((await createChatStore(handle.db).getCase(session, "willow")).quote!, (await change()).draft).source).toEqual({ kind: "designer", vendor: "", notice: "" });
+    expect(createPricingInput((await createChatStore(handle.db).getCase(session, "willow")).quote!, (await change()).draft).source).toEqual({ kind: "client", vendor: "", notice: "" });
   });
 
   it("refuses lines outside the agreement and projects with nothing approved", async () => {
@@ -142,7 +142,7 @@ describe.skipIf(!testDatabaseUrl)("the designer changes an approved line", () =>
     const { draft } = await fromSupplier(confirmation());
     expect(draft.supplierNotice).toBeUndefined();
     const input = createPricingInput((await createChatStore(handle.db).getCase(session, "willow")).quote!, draft);
-    expect(input.source).toEqual({ kind: "designer", vendor: "", notice: "" });
+    expect(input.source).toEqual({ kind: "client", vendor: "", notice: "" });
     expect(input.changes[1].priceEvidence).toMatch(/^Supplier order confirmation QO-4471/);
   });
 
@@ -171,8 +171,9 @@ describe.skipIf(!testDatabaseUrl)("the designer changes an approved line", () =>
 
   it("changes a line of the latest confirmed version, not V1, once V1 was replaced", async () => {
     await signOpeningForTest(handle.db, session, "willow");
+    // A review saved before the merge may still say "designer"; the version freezes it as the client conversation.
     const v2 = await reprice({ kind: "designer", vendor: "", notice: "" });
-    expect(v2.source).toEqual({ kind: "designer", vendor: "", notice: "" });
+    expect(v2.source).toEqual({ kind: "client", vendor: "", notice: "" });
     const { draft } = await change(RUG);
     expect(draft).toMatchObject({ basedOnVersion: 2, changes: [{ itemId: RUG }] });
     const [order] = await handle.db.select().from(paymentOperations).where(eq(paymentOperations.changeOrderId, v2.id));

@@ -154,7 +154,7 @@ describe.skipIf(!testDatabaseUrl)("living-and-dining durable scenario", () => {
       sourceDraftId: draft.id, sourceDraftRevision: draft.revision, expectedVersion: workspace.review?.version ?? null, input,
     });
     const { order } = await pricing.issueReview(run.session, "maple", { reviewId: saved.review!.id, expectedVersion: saved.review!.version });
-    expect(order).toMatchObject({ version: 3, totals: { totalCents: 567_000 }, deltaTotalCents: -206_000, source: { kind: "designer" } });
+    expect(order).toMatchObject({ version: 3, totals: { totalCents: 567_000 }, deltaTotalCents: -206_000, source: { kind: "client" } });
     expect((await paymentsWorkspace(handle.db, run.session, order.id))?.plan).toBeNull();
     await createApprovalStore(handle.db).decide(run.session, order.id, {
       decision: "approved", contentHash: order.contentHash, revisionContentHash: order.revisionContentHash,

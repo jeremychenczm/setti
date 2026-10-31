@@ -3,7 +3,7 @@ import { buildDraft } from "@/ai/draft";
 import { modelContext } from "@/ai/model";
 import type { AiOutput } from "@/ai/output";
 import type { CaseMessage, ChangeDraft } from "@/chat/types";
-import { createPricingInput, draftSource, prepareChangeOrder, previewPricing } from "@/pricing/calculation";
+import { changeSourceLabel, createPricingInput, draftSource, prepareChangeOrder, previewPricing } from "@/pricing/calculation";
 import { HOME_APPROVED_QUOTE, HOME_DESIGNER_REQUEST, HOME_DISCUSSION, HOME_SUPPLIER_NOTES } from "./living-dining";
 import { HOME_EVIDENCE_PAGE, HOME_PRODUCT_IDS, homePricingEvidence, isHomeQuote } from "./home-evidence";
 import { createReviewInput } from "@/ui/pricing/demo-review";
@@ -58,12 +58,12 @@ describe("local supplier evidence for the living-and-dining proposal", () => {
     expect(pages[0].url).toMatch(/^local:/);
   });
 
-  it("calculates five changes, retains the exact sources and identifies the designer as proposal origin", () => {
+  it("calculates five changes, retains the exact sources and identifies the designer as author of a client-conversation change", () => {
     const draft = makeDraft();
     expect(draft.changes).toHaveLength(5);
     expect(draft.deltaSubtotalCents).toBe(-230_000); // Goods/service subtotal before the separate retained return cost.
     expect(draft.origin).toBe("designer");
-    expect(draftSource(draft).kind).toBe("designer");
+    expect(draftSource(draft).kind).toBe("client");
     expect(draft.sources[0].text).toBe(HOME_SUPPLIER_NOTES);
     expect(draft.changes.find((change) => change.itemId === "coffee-table")?.after).toMatchObject({ quantity: 2, unitPriceCents: 18_000, sku: "DEMO-LD-SIDE-40" });
     expect(draft.changes.find((change) => change.itemId === "dining-table")?.after?.specification).toContain("110 cm");
@@ -88,7 +88,7 @@ describe("local supplier evidence for the living-and-dining proposal", () => {
     const body = prepareChangeOrder(HOME_APPROVED_QUOTE, draft, input, homeMessages());
     expect(body.totals.totalCents).toBe(567_000);
     expect(body.deltaTotalCents).toBe(-206_000);
-    expect(body.source?.kind).toBe("designer");
+    expect(body.source?.kind).toBe("client");
     expect(body.lines.find((line) => line.itemId === "design")).toMatchObject({ origin: "unchanged", unitPriceCents: 100_000 });
     expect(body.lines.find((line) => line.origin === "old_item_cost")?.unitPriceCents).toBe(24_000);
     expect(body.sources[0].text).toBe(HOME_SUPPLIER_NOTES);
@@ -133,7 +133,12 @@ describe("local supplier evidence for the living-and-dining proposal", () => {
   it("retains profile detection after sideboard removal without treating the legacy chair/rug project as home", () => {
     expect(isHomeQuote({ projectId: "maple", lines: HOME_APPROVED_QUOTE.lines.filter((line) => line.itemId !== "sideboard") })).toBe(true);
     expect(isHomeQuote({ projectId: "maple", lines: HOME_APPROVED_QUOTE.lines.map((line) => ({ ...line, itemId: `legacy-${line.itemId}` })) })).toBe(false);
-    expect(draftSource({ model: "designer" }).kind).toBe("designer");
-    expect(draftSource({ model: "legacy-ai" }).kind).toBe("client");
+  });
+
+  it("treats every change as the client conversation unless a supplier's notice started it", () => {
+    expect(draftSource({}).kind).toBe("client");
+    expect(draftSource({ supplierNotice: { vendor: "Quillmark Office", notice: "Desk is $129.99." } })).toEqual({ kind: "vendor", vendor: "Quillmark Office", notice: "Desk is $129.99." });
+    // Versions frozen before the merge still say "designer" and read the same as the client conversation.
+    expect((["client", "designer", "vendor"] as const).map((kind) => changeSourceLabel({ kind }))).toEqual(["Client conversation", "Client conversation", "Supplier notice"]);
   });
 });
