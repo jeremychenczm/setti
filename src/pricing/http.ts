@@ -65,7 +65,7 @@ function failure(req: NextRequest, session: string, error: unknown) {
   if (error instanceof z.ZodError) return respond(req, session, { code: "INVALID_REQUEST", error: "Some pricing fields are invalid. Check the amounts, quantities and version." }, 400);
   if (error instanceof PricingValidationError) return respond(req, session, { code: "PRICING_NOT_READY", error: error.message, problems: error.problems }, 422);
   if (error instanceof PricingStoreError) {
-    const statuses: Record<string, number> = { PRICING_CONFLICT: 409, PRICING_STALE_SOURCE: 409, PRICING_BUSY: 409, PRICING_NOT_FOUND: 404, PRICING_NOT_READY: 422, INVALID_INPUT: 400 };
+    const statuses: Record<string, number> = { PREPARATION_PENDING: 409, PRICING_CONFLICT: 409, PRICING_STALE_SOURCE: 409, PRICING_BUSY: 409, PRICING_NOT_FOUND: 404, PRICING_NOT_READY: 422, INVALID_INPUT: 400 };
     return respond(req, session, { code: error.code, error: error.message, problems: error.problems }, statuses[error.code] ?? 400);
   }
   return respond(req, session, { code: "STORAGE_UNAVAILABLE", error: "Pricing storage is unavailable. Check the database and migrations." }, 503);

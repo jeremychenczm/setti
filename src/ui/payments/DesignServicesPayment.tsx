@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CaseKey } from "@/chat/types";
 import type { ServiceChargeView, ServicesPaymentView } from "@/payments/services-view";
 import { money } from "../pricing/common";
+import { useTryReadiness } from "../try/useTryReadiness";
+import { paymentChanged, usePaymentRefresh } from "./usePaymentRefresh";
 
 type Body = { action: "checkout" | "charge" } | { action: "approve" | "cancel" | "check"; operationId: string };
 interface Reply { view: ServicesPaymentView; operationId: string | null; paypalOrderId: string | null }
@@ -28,7 +30,8 @@ async function request(key: CaseKey, body?: Body): Promise<Reply> {
  * that agreement's page: the quote while V1 stands (`orderId` null), otherwise
  * the latest confirmed version.
  */
-export function DesignServicesPayment({ projectKey, orderId, onPaid }: { projectKey: CaseKey; orderId: string | null; onPaid?: () => void }) {
+export function DesignServicesPayment({ projectKey, orderId }: { projectKey: CaseKey; orderId: string | null }) {
+  const readiness = useTryReadiness(projectKey);
   const [view, setView] = useState<ServicesPaymentView | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,21 +42,22 @@ export function DesignServicesPayment({ projectKey, orderId, onPaid }: { project
     try { setView((await request(projectKey)).view); setError(null); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "The design-services payment could not be loaded."); }
   }, [projectKey]);
-  useEffect(() => { void load(); }, [load]);
+  usePaymentRefresh(projectKey, load);
+  useEffect(() => { void load(); }, [load, readiness.blocked]);
 
   async function run(label: string, body: Body, done?: (view: ServicesPaymentView) => string | null): Promise<Reply | null> {
+    if (readiness.blocked) return null;
     setBusy(label); setError(null); setNotice(null);
     try {
       const reply = await request(projectKey, body);
       setView(reply.view);
       setNotice(done?.(reply.view) ?? null);
-      if ((body.action === "approve" || body.action === "charge" || body.action === "check") && reply.view.dueCents === 0) onPaid?.();
       return reply;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The payment step did not finish. Reload to see what PayPal recorded.");
       void load();
       return null;
-    } finally { setBusy(null); }
+    } finally { setBusy(null); paymentChanged(projectKey); }
   }
 
   if (!view?.basis || view.basis.orderId !== orderId) return null;
@@ -66,16 +70,17 @@ export function DesignServicesPayment({ projectKey, orderId, onPaid }: { project
   return <section id="design-services" aria-labelledby="design-services-title" className="mt-6 rounded-xl border border-[var(--line)] bg-white p-5">
     <div className="flex flex-wrap items-center gap-2">
       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-50 text-violet-700"><Palette className="h-4 w-4" /></span>
-      <div className="mr-auto"><h2 id="design-services-title" className="text-[13px] font-semibold">Design services · V{view.basis.version}</h2><p className="text-[11px] text-[var(--muted)]">Lee Studio&apos;s own services you approved, charged now in one PayPal checkout</p></div>
+      <div className="mr-auto"><h2 id="design-services-title" className="text-[13px] font-semibold">Design services · V{view.basis.version}</h2><p className="text-[11px] text-[var(--muted)]">{charged ? 'Already paid · no additional design fee is due for this version' : "Lee Studio’s approved services, paid in one PayPal checkout"}</p></div>
       <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${charged ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{charged ? "Paid" : `${money(view.dueCents)} due`}</span>
     </div>
     <table className="mt-4 w-full border-collapse text-[12px]"><tbody>{view.services.map((line) => <ServiceRow key={line.itemId} line={line} />)}</tbody>
       <tfoot><tr className="border-t border-[var(--line)]"><td className="pt-2.5 font-medium">Design services total</td><td className="pt-2.5 text-right font-semibold tabular-nums">{money(totalCents)}</td><td /></tr></tfoot>
     </table>
     <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">PayPal holds the total once, then Setti captures each service separately, so each service keeps its own PayPal record. Furniture is not charged here: it is held later and captured only after the supplier confirms it.</p>
+    {(readiness.pending || Boolean(readiness.blocked && readiness.error)) && <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-[12px] leading-relaxed text-amber-900">{readiness.notice ?? readiness.error}</p>}
 
-    {view.canPay && view.paypalClientId && <div className="mt-4 max-w-[360px]">
-      <PayPalButtons clientId={view.paypalClientId} disabled={!!busy}
+    {view.canPay && view.paypalClientId && !readiness.blocked && <div className="mt-4 max-w-[360px]">
+      <PayPalButtons clientId={view.paypalClientId} disabled={!!busy || readiness.blocked}
         createOrder={async () => {
           const reply = await run("checkout", { action: "checkout" });
           if (!reply?.paypalOrderId || !reply.operationId) throw new Error("The PayPal checkout could not start.");
@@ -94,12 +99,12 @@ export function DesignServicesPayment({ projectKey, orderId, onPaid }: { project
       {!view.savedPayPal && <p className="mt-2 text-[10px] leading-relaxed text-[var(--muted)]">Paying also saves PayPal for this project, which you approve on PayPal, so the studio can hold each approved item later without another checkout.</p>}
     </div>}
     {view.canCheck && view.checkout && <div className="mt-4 flex flex-wrap items-center gap-3">
-      <button type="button" disabled={!!busy} onClick={() => void run("check", { action: "check", operationId: view.checkout!.operationId }, (next) => next.dueCents === 0 ? "Paid. The original PayPal checkout was recovered and each service was captured." : next.canFinish ? "PayPal confirmed the hold. Finish charging the services below." : next.canPay ? "The original checkout is ready. Continue on PayPal to approve it." : "PayPal has not confirmed the outcome yet. Check this same checkout again.")}
+      <button type="button" disabled={!!busy || readiness.blocked} onClick={() => void run("check", { action: "check", operationId: view.checkout!.operationId }, (next) => next.dueCents === 0 ? "Paid. The original PayPal checkout was recovered and each service was captured." : next.canFinish ? "PayPal confirmed the hold. Finish charging the services below." : next.canPay ? "The original checkout is ready. Continue on PayPal to approve it." : "PayPal has not confirmed the outcome yet. Check this same checkout again.")}
         className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-3 py-2 text-[12px] font-medium disabled:opacity-50">{busy === "check" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Check PayPal status</button>
-      {view.checkout.approvalUrl && !busy && <a href={view.checkout.approvalUrl} className="text-[12px] font-medium text-[var(--primary)] underline">Continue on PayPal</a>}
+      {view.checkout.approvalUrl && !busy && !readiness.blocked && <a href={view.checkout.approvalUrl} className="text-[12px] font-medium text-[var(--primary)] underline">Continue on PayPal</a>}
     </div>}
-    {view.canFinish && <button type="button" disabled={!!busy} onClick={() => void run("charge", { action: "charge" }, (next) => next.dueCents === 0 ? "Paid. Each design service was captured on PayPal." : null)}
-      className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-2 text-[12px] font-medium text-white disabled:opacity-50">{busy === "charge" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Finish charging the design services</button>}
+    {view.canFinish && <button type="button" disabled={!!busy || readiness.blocked} onClick={() => void run("charge", { action: "charge" }, (next) => next.dueCents === 0 ? "Paid. Each design service was captured on PayPal." : null)}
+      className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3 py-2 text-[12px] font-medium text-[var(--on-primary)] disabled:opacity-50">{busy === "charge" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Finish charging the design services</button>}
     {busy && busy !== "charge" && busy !== "check" && <p role="status" className="mt-3 flex items-center gap-1.5 text-[11px] text-[var(--muted)]"><LoaderCircle className="h-3 w-3 animate-spin" />{busy === "approve" ? "Confirming with PayPal and capturing each service…" : "Working with PayPal…"}</p>}
     {view.reason && !view.canPay && !view.canFinish && <p className="mt-3 text-[11px] text-[var(--muted)]">{view.reason}</p>}
     {view.checkout?.failureMessage && !charged && <p className="mt-3 text-[11px] text-amber-800">{view.checkout.failureMessage}</p>}

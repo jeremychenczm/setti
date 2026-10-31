@@ -10,6 +10,7 @@ const mock = vi.hoisted(() => ({
   returnFromPayPal: vi.fn(), operationPage: vi.fn(), paymentsWorkspace: vi.fn(), recordSupplierOrder: vi.fn(), recordSupplierCredit: vi.fn(),
   startServicesCheckout: vi.fn(), checkServicesCheckout: vi.fn(), chargeServices: vi.fn(), lockPaymentBasis: vi.fn(), servicesPaymentView: vi.fn(), completeAuthorization: vi.fn(), cancelCheckout: vi.fn(),
   holdApprovedItems: vi.fn(), checkItemHold: vi.fn(), cancelItemHold: vi.fn(), itemHoldsView: vi.fn(),
+  paymentPreparationPending: vi.fn(),
   db: { transaction: (work: (tx: object) => unknown) => work({}) },
 }));
 vi.mock("./actions", () => ({
@@ -24,6 +25,7 @@ vi.mock("./item-holds", () => ({ holdApprovedItems: mock.holdApprovedItems, chec
 vi.mock("./item-holds-view", () => ({ itemHoldsView: mock.itemHoldsView }));
 vi.mock("./authorize", () => ({ completeAuthorization: mock.completeAuthorization, cancelCheckout: mock.cancelCheckout }));
 vi.mock("./server", () => ({ sandboxPayPal: () => ({}) }));
+vi.mock("../try/preparation", () => ({ paymentPreparationPending: mock.paymentPreparationPending, PREPARATION_MESSAGE: "The starting payments are being prepared." }));
 vi.mock("@/db/client", () => ({ createDb: () => ({ db: mock.db, pool: {} }) }));
 
 const orderId = randomUUID(), sessionId = randomUUID(), operationId = randomUUID();
@@ -41,6 +43,7 @@ function post(body: unknown, options: { cookie?: string | null; account?: string
 describe("payment HTTP boundaries", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mock.paymentPreparationPending.mockResolvedValue(false);
     vi.stubEnv("PAYPAL_ENV", "sandbox");
     vi.stubEnv("PAYPAL_CLIENT_ID", "http-test-client");
     vi.stubEnv("PAYPAL_CLIENT_SECRET", "http-test-secret");
@@ -50,6 +53,37 @@ describe("payment HTTP boundaries", () => {
     mock.cancelPayment.mockResolvedValue({ id: operationId });
   });
   afterEach(() => vi.unstubAllEnvs());
+
+  it("keeps new Maple payment writes unavailable while prepared V1 payments are running", async () => {
+    mock.paymentsWorkspace.mockResolvedValue({ orderId, projectKey: "maple", version: 2, lines: [], operations: [] });
+    mock.paymentPreparationPending.mockResolvedValue(true);
+    const response = await postPaymentsResponse(post(authorize, { account: "emma" }), orderId);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: "PREPARATION_PENDING" });
+    expect(mock.startAuthorization).not.toHaveBeenCalled();
+  });
+
+  it("also blocks direct V1 service and furniture checkout endpoints until preparation is ready", async () => {
+    mock.paymentPreparationPending.mockResolvedValue(true);
+    const services = await postServicesPaymentResponse(post({ action: "checkout" }, { account: "emma" }), "maple");
+    const items = await postItemHoldsResponse(post({ action: "hold" }, { account: "emma" }), "maple");
+    expect(services.status).toBe(409);
+    expect(items.status).toBe(409);
+    expect(await services.json()).toMatchObject({ code: "PREPARATION_PENDING" });
+    expect(await items.json()).toMatchObject({ code: "PREPARATION_PENDING" });
+    expect(mock.startServicesCheckout).not.toHaveBeenCalled();
+    expect(mock.holdApprovedItems).not.toHaveBeenCalled();
+  });
+
+  it("keeps V1 payment views readable during preparation", async () => {
+    mock.paymentPreparationPending.mockResolvedValue(true);
+    mock.itemHoldsView.mockResolvedValue({ projectKey: "maple", lines: [] });
+    mock.servicesPaymentView.mockResolvedValue({ projectKey: "maple", lines: [] });
+    const req = new NextRequest(`${origin}/api/quotes/maple/item-holds`, { headers: { Cookie: `setti-demo-chat=${sessionId}; setti-demo-account=emma` } });
+    expect((await getItemHoldsResponse(req, "maple")).status).toBe(200);
+    expect((await getServicesPaymentResponse(req, "maple")).status).toBe(200);
+    expect(mock.paymentPreparationPending).not.toHaveBeenCalled();
+  });
 
   it.each(["127.0.0.1:3002", "localhost:3002"])("uses the actual %s browser authority for payment writes and PayPal callbacks", async (host) => {
     const req = post(authorize, { origin: "http://" + host });

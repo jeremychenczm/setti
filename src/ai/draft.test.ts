@@ -35,8 +35,8 @@ describe("server-validated change drafts", () => {
     expect(draft.status).toBe("needs_designer_review");
     expect(draft.basedOnQuoteFingerprint).toBe(quoteFingerprint(willowApprovedQuote));
     expect(draft.deltaSubtotalCents).toBe(18000);
-    expect(draft.unresolved.join(" ")).toContain("whether the old item was purchased");
-    expect(draft.unresolved.join(" ")).toContain("Tax, delivery");
+    expect(draft.unresolved.join(" ")).not.toContain("whether the old item was purchased");
+    expect(draft.unresolved.join(" ")).not.toContain("Tax, delivery");
     expect(JSON.stringify(willowApprovedQuote)).toBe(original);
     expect(draft.sources[0].text).toBe("");
   });

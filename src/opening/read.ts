@@ -30,8 +30,10 @@ export interface OpeningRead extends Omit<QuoteView, "projectKey"> {
 }
 
 export async function readOpening(db: Reader, row: { id: string; projectKey: CaseKey }): Promise<OpeningRead> {
-  const quote = preapprovedQuote(row.projectKey);
-  if (quote) {
+  const [bridge] = await db.select().from(pricingCases).where(eq(pricingCases.caseId, row.id));
+  const [sent] = await db.select().from(openingQuotes).where(eq(openingQuotes.caseId, row.id));
+  const quote = bridge?.baselineQuote ?? preapprovedQuote(row.projectKey);
+  if (quote && !sent) {
     const document = withoutApproval(quote);
     const lines = Object.fromEntries(document.lines.map((line) => [line.itemId, { state: "approved", note: null, decidedAt: quote.approvedAt, by: quote.approvedBy, questions: 0 } satisfies OpeningLine]));
     return {
@@ -40,7 +42,6 @@ export async function readOpening(db: Reader, row: { id: string; projectKey: Cas
     };
   }
 
-  const [sent] = await db.select().from(openingQuotes).where(eq(openingQuotes.caseId, row.id));
   if (!sent) {
     const document = caseDocument(row.projectKey);
     const lines = Object.fromEntries(document.lines.map((line) => [line.itemId, pendingLine()]));
@@ -48,7 +49,6 @@ export async function readOpening(db: Reader, row: { id: string; projectKey: Cas
   }
 
   const document = sent.document;
-  const [bridge] = await db.select().from(pricingCases).where(eq(pricingCases.caseId, row.id));
   const [revision] = bridge ? await db.select().from(revisions).where(eq(revisions.id, bridge.baselineRevisionId)) : [];
   const revisionRows = revision ? await db.select().from(revisionLines).where(eq(revisionLines.revisionId, revision.id)) : [];
   const lineByItem = new Map(revisionRows.map((line) => [line.itemId, line.id]));

@@ -101,6 +101,8 @@ export interface ChangeDraft {
   createdAt: string;
   updatedAt: string;
   model: string;
+  /** The human who requested the proposal; model names do not establish authorship. */
+  origin?: HumanActor;
 }
 
 /** A later quote version the designer sent into the chat, as its card shows it. */

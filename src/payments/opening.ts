@@ -39,10 +39,10 @@ export interface OpeningVersion {
 /** Locks the case and loads its open V1. `shown` is the V1 hash the caller saw, when it acts on what it showed. */
 export async function lockOpeningVersion(tx: Tx, sessionId: string, key: CaseKey, shown: { contentHash: string } | null): Promise<OpeningVersion> {
   if (!UUID.test(sessionId)) throw new PaymentActionError("FORBIDDEN", "Open this project from the browser that owns the demo case.");
-  if (!sentFromChat(key)) throw new PaymentActionError("NOT_FOUND", "This project's quote was approved before Setti. Payments start from its confirmed versions.");
   const [row] = await tx.select().from(chatCases).where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, key))).for("update");
   const read = row ? await readOpening(tx, row) : null;
   const [bridge] = row ? await tx.select().from(pricingCases).where(eq(pricingCases.caseId, row.id)) : [];
+  if (!sentFromChat(key) && !bridge?.baselineQuote) throw new PaymentActionError("NOT_FOUND", "This project's quote was approved before Setti. Payments start from its confirmed versions.");
   if (!row || !read?.revision || !read.opening.contentHash || !bridge) throw new PaymentActionError("NOT_FOUND", "Quote V1 has not been sent in this demo project yet.");
   const [revision] = await tx.select().from(revisions).where(eq(revisions.id, read.revision.id)).for("share");
   if (revision.status !== "sent") throw new PaymentActionError("STALE_VERSION", "A newer version replaced quote V1. Start payment steps from that version.");

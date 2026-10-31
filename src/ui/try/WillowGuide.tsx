@@ -11,6 +11,7 @@ import { money } from "../pricing/common";
 import type { TrySeedNoticeProps } from "./TrySeedNotice";
 import { navigateGuidePage, useGuideAnchor } from "./useGuideAnchor";
 import { WILLOW_GUIDE_STEPS, willowGuideStep, type WillowGuideData } from "./willow-guide";
+import { EndDemoButton } from "./EndDemoButton";
 
 async function readJson(path: string, signal: AbortSignal): Promise<unknown> {
   const response = await fetch(path, { cache: "no-store", signal });
@@ -94,11 +95,12 @@ export function WillowGuide({ account, onSwitchAccount, onOpenChat, currentView,
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       <p className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] font-semibold text-violet-950"><FileText className="h-3.5 w-3.5 shrink-0" />Willow Residence · from the first quote</p>
       <Link href="/try" className="text-[10px] font-medium text-violet-700 underline underline-offset-2">Demo home</Link>
+      <EndDemoButton className="rounded-md px-1.5 py-1 text-[10px] font-medium text-violet-700 hover:bg-violet-100" />
       <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-100 bg-white px-2.5 py-1 text-[10px]"><UserRound className="h-3 w-3" />You are {account.name} · {account.role === "designer" ? "Designer" : "Client"}</span>
       <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} aria-controls={detailsId} className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium text-violet-700 hover:bg-violet-100">{expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}{expanded ? "Hide details" : "Show steps and status"}</button>
       <button type="button" onClick={() => void refresh(true)} disabled={loading} aria-label="Refresh Willow guide from saved records" className="rounded-md p-1 text-violet-700 hover:bg-violet-100 disabled:opacity-50">{loading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}</button>
     </div>
-    <div className="mt-2 flex flex-wrap items-center gap-3"><h2 className="min-w-0 flex-1 text-[12px] font-semibold text-slate-900"><span className="mr-1.5 font-normal text-slate-500">{step.index + 1}/{WILLOW_GUIDE_STEPS.length}</span>{step.title}</h2><button type="button" onClick={continueGuide} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-2 text-[11px] font-semibold text-white hover:bg-blue-600">{action}<ArrowRight className="h-3 w-3" /></button></div>
+    <div className="mt-2 flex flex-wrap items-center gap-3"><h2 className="min-w-0 flex-1 text-[12px] font-semibold text-slate-900"><span className="mr-1.5 font-normal text-slate-500">{step.index + 1}/{WILLOW_GUIDE_STEPS.length}</span>{step.title}</h2><button type="button" onClick={continueGuide} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3 py-2 text-[11px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">{action}<ArrowRight className="h-3 w-3" /></button></div>
     <div id={detailsId} hidden={!expanded} className="mt-2 max-h-[28dvh] overflow-y-auto pr-1">
       <ol aria-label="Willow progress from saved records" className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-500">{WILLOW_GUIDE_STEPS.map((label, index) => <li key={label} aria-current={step.index === index ? "step" : undefined} className={`flex items-center gap-1 ${step.index === index ? "font-semibold text-violet-800" : ""}`}>{index < step.index || (index === step.index && step.complete) ? <Check className="h-3 w-3 text-emerald-700" /> : <span>{index + 1}.</span>}{label}</li>)}</ol>
       <p className="mt-2 max-w-4xl text-[11px] leading-relaxed">{step.detail}</p>

@@ -6,6 +6,7 @@ import { aiConfigured, callChangeModel } from "@/ai/model";
 import { buildDraft } from "@/ai/draft";
 import { readProductPage } from "@/ai/product-page";
 import { buildMoneyAnswer, hasUnsupportedMoneyClaim, isMoneyQuestion } from "@/ai/money-answer";
+import { HOME_EVIDENCE_PAGE, isHomeQuote } from "@/demo/home-evidence";
 
 export function messageUrls(text: string): string[] {
   const matches = text.match(/https?:\/\/[^\s<>"'，。！？；、）》）\u3000]+/gu) ?? [];
@@ -67,11 +68,18 @@ export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKe
       try { return await deps.readPage(url); }
       catch (error) { return failedPage(url, error instanceof Error ? error.message : "Could not read the product page."); }
     }));
+    if (isHomeQuote(quote) && !moneyQuestion) pages.push(HOME_EVIDENCE_PAGE());
     const result = await deps.callModel({ quote, messages, pages, current: state.draft, triggerId: messageId, moneyContext });
     if (result.output.intent === "money") {
       if (!moneyContext || result.output.changes.length || !result.output.money) throw new Error("Missing money evidence");
       const generated = buildMoneyAnswer(moneyContext, result.output.money.factIds);
       return await store.completeAi(sessionId, key, messageId, runId, { ...generated, model: result.model });
+    }
+    if (isHomeQuote(quote) && trigger.actor !== "designer" && ["draft", "cancel"].includes(result.output.intent)) {
+      return await store.completeAi(sessionId, key, messageId, runId, {
+        text: /[\u3400-\u9fff]/u.test(trigger.text) ? "已保留你的讨论。由 Jordan 汇总变更、核价并发送修订报价后，你再正式确认。此消息没有创建或撤销设计师的报价草稿，也未执行付款。" : "Your discussion is saved. Jordan prepares and checks the revised proposal before sending it for your formal confirmation. This message did not create or cancel the studio's draft or execute a payment.",
+        model: "system",
+      });
     }
     if (result.output.money != null || (moneyQuestion && result.output.intent !== "clarify") || (["answer", "clarify"].includes(result.output.intent) && hasUnsupportedMoneyClaim(result.output.message))) throw new Error("Ungrounded financial answer");
     if (deferPages && urls.length > 4 && result.output.intent === "draft") throw new Error("This test version reads at most 4 different product links per project. Your message is saved; no links or chat history were dropped.");

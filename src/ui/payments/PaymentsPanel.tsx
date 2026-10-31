@@ -8,6 +8,8 @@ import { centsText, dateTime, Field, inputClass, money, parseDollars, signedMone
 import { emptyPaymentFeedback, feedbackMessage, paymentFeedback, paymentReturnNotice } from "./feedback";
 import { lineProgress, paymentScopeTotals } from "./progress";
 import { PaymentFees } from "./PaymentFees";
+import { useTryReadiness } from "../try/useTryReadiness";
+import { paymentChanged, usePaymentRefresh } from "./usePaymentRefresh";
 
 type LineRef = { itemId: string; side: PaymentLineView["side"] };
 type Action =
@@ -50,13 +52,13 @@ function lineState(line: PaymentLineView, operations: readonly OperationView[]):
   return lineProgress(line, operations).next;
 }
 
-const progressTones = { waiting: "bg-amber-50 text-amber-800", ready: "bg-blue-50 text-blue-800", settled: "bg-emerald-50 text-emerald-800" };
+const progressTones = { waiting: "bg-amber-50 text-amber-800", ready: "bg-brand-50 text-brand-800", settled: "bg-emerald-50 text-emerald-800" };
 const lineAnchor = (line: Pick<PaymentLineView, "side" | "itemId">) => `payment-line-${line.side}-${line.itemId}`;
 
 function ExecutionOverview({ workspace }: { workspace: PaymentsWorkspace }) {
   const totals = paymentScopeTotals(workspace.lines);
   const quoteDelta = workspace.plan?.quoteDeltaCents;
-  return <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50/30 p-4" aria-labelledby="execution-overview-title">
+  return <div className="mt-4 rounded-xl border border-brand-100 bg-brand-50/30 p-4" aria-labelledby="execution-overview-title">
     <h3 id="execution-overview-title" className="text-[13px] font-semibold text-slate-900">One confirmed version · independent item progress</h3>
     <p className="mt-1.5 text-[11px] leading-relaxed text-slate-600">Each row below belongs to V{workspace.version}. Completing a new purchase does not complete the release or refund for another item. The quote budget change is separate from money held, captured or returned.</p>
     <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">{[
@@ -64,28 +66,36 @@ function ExecutionOverview({ workspace }: { workspace: PaymentsWorkspace }) {
       { label: "Held now · shown items", amount: totals.heldCents },
       { label: "Captured · shown items", amount: totals.capturedCents },
       { label: "Refunded · shown items", amount: totals.refundedCents },
-      { label: "Released · shown items", amount: totals.releasedCents },
+      { label: "Actually released · shown items", amount: totals.releasedCents },
     ].map((tile) => <div key={tile.label} className="rounded-lg bg-white p-2.5"><p className="text-[10px] text-slate-500">{tile.label}</p><p className="mt-0.5 text-[15px] font-semibold tabular-nums">{tile.amount === null ? "Unavailable" : tile.signed ? signedMoney(tile.amount) : money(tile.amount)}</p></div>)}</div>
     <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[660px] border-collapse text-left text-[11px]"><thead><tr className="text-slate-500"><th className="py-2 pr-3 font-medium">Item in V{workspace.version}</th><th className="py-2 pr-3 font-medium">Recorded progress</th><th className="py-2 pr-3 font-medium">Net captured</th><th className="py-2 font-medium">Next dependency</th></tr></thead><tbody>{workspace.lines.map((line) => {
       const progress = lineProgress(line, workspace.operations);
-      return <tr key={`${line.side}:${line.itemId}`} className="border-t border-blue-100 align-top"><td className="py-2.5 pr-3"><a href={`#${encodeURIComponent(lineAnchor(line))}`} className="font-semibold text-slate-800 underline decoration-slate-300 underline-offset-2">{line.label}</a><p className="mt-0.5 text-[10px] text-slate-500">{roleLabel(line)}</p></td><td className="py-2.5 pr-3"><span className={`inline-block rounded-full px-2 py-1 text-[10px] font-medium ${progressTones[progress.tone]}`}>{progress.label}</span></td><td className="py-2.5 pr-3 tabular-nums">{money(line.capturedCents - line.refundedCents)}<p className="mt-0.5 text-[10px] text-slate-500">Target {money(line.targetCents)}</p></td><td className="max-w-[260px] py-2.5 leading-relaxed text-slate-600">{progress.next}</td></tr>;
+      return <tr key={`${line.side}:${line.itemId}`} className="border-t border-brand-100 align-top"><td className="py-2.5 pr-3"><a href={`#${encodeURIComponent(lineAnchor(line))}`} className="font-semibold text-slate-800 underline decoration-slate-300 underline-offset-2">{line.label}</a><p className="mt-0.5 text-[10px] text-slate-500">{roleLabel(line)}</p></td><td className="py-2.5 pr-3"><span className={`inline-block rounded-full px-2 py-1 text-[10px] font-medium ${progressTones[progress.tone]}`}>{progress.label}</span></td><td className="py-2.5 pr-3 tabular-nums">{money(line.capturedCents - line.refundedCents)}<p className="mt-0.5 text-[10px] text-slate-500">Target {money(line.targetCents)}</p></td><td className="max-w-[260px] py-2.5 leading-relaxed text-slate-600">{progress.next}</td></tr>;
     })}</tbody></table></div>
     <p className="mt-2 text-[10px] leading-relaxed text-slate-500">Net captured = completed captures minus completed refunds. Pending results do not count as settled money. Check any open PayPal operations before continuing.</p>
   </div>;
 }
 
 export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; onChange?: () => void }) {
+  const readiness = useTryReadiness(order.projectKey);
   const [workspace, setWorkspace] = useState<PaymentsWorkspace | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [feedback, dispatchFeedback] = useReducer(paymentFeedback, emptyPaymentFeedback);
   const error = feedbackMessage(feedback);
   const [notice, setNotice] = useState<ReturnType<typeof paymentReturnNotice>>(null);
   const mutating = useRef(false);
+  const loadSequence = useRef(0);
 
   const load = useCallback(async () => {
-    try { setWorkspace((await call(order.id)).workspace); dispatchFeedback({ type: "records_loaded" }); }
-    catch (cause) { dispatchFeedback({ type: "records_failed", message: cause instanceof Error ? cause.message : "Payment records could not be loaded." }); }
+    const sequence = ++loadSequence.current;
+    try {
+      const next = (await call(order.id)).workspace;
+      if (sequence !== loadSequence.current) return;
+      setWorkspace(next); dispatchFeedback({ type: "records_loaded" });
+    }
+    catch (cause) { if (sequence === loadSequence.current) dispatchFeedback({ type: "records_failed", message: cause instanceof Error ? cause.message : "Payment records could not be loaded." }); }
   }, [order.id]);
+  usePaymentRefresh(order.projectKey, load);
 
   useEffect(() => {
     dispatchFeedback({ type: "action_started" });
@@ -98,10 +108,12 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
   }, [load]);
 
   async function run(action: Action, key: string): Promise<boolean> {
-    if (mutating.current) return false;
+    if (mutating.current || readiness.blocked) return false;
     mutating.current = true; setBusy(key); dispatchFeedback({ type: "action_started" });
+    ++loadSequence.current;
     try {
       const result = await call(order.id, { ...action, ...("itemId" in action ? { contentHash: order.contentHash, revisionContentHash: order.revisionContentHash } : {}) });
+      ++loadSequence.current;
       setWorkspace(result.workspace);
       onChange?.();
       if (result.redirectUrl) { setBusy("redirect"); window.location.assign(result.redirectUrl); }
@@ -113,17 +125,19 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
     } finally {
       mutating.current = false;
       setBusy((current) => current === "redirect" ? current : null);
+      paymentChanged(order.projectKey);
     }
   }
 
   if (!workspace) return <section id="payments" className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><p className="flex items-center gap-2 text-[12px] text-slate-500">{error ?? <><LoaderCircle className="h-4 w-4 animate-spin" />Loading payment records…</>}</p></section>;
   const open = workspace.operations.filter((operation) => operation.status === "pending" || operation.status === "unknown");
   const plan = workspace.plan;
-  const disabled = Boolean(busy);
+  const disabled = Boolean(busy) || readiness.blocked;
 
   return <section id="payments" aria-labelledby="payments-title" className="mb-5 scroll-mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-    <div className="flex flex-wrap items-center gap-2"><h2 id="payments-title" className="mr-auto flex items-center gap-2 text-[16px] font-semibold"><CircleDollarSign className="h-4.5 w-4.5 text-[var(--primary)]" />Payments · V{workspace.version}</h2><span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-800">PayPal Sandbox · test money</span><button onClick={() => void load()} disabled={disabled} className="flex items-center gap-1 text-[11px] text-slate-500 hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Reload</button></div>
+    <div className="flex flex-wrap items-center gap-2"><h2 id="payments-title" className="mr-auto flex items-center gap-2 text-[16px] font-semibold"><CircleDollarSign className="h-4.5 w-4.5 text-[var(--primary)]" />Payments · V{workspace.version}</h2><span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-800">PayPal Sandbox · test money</span><button onClick={() => void load()} disabled={Boolean(busy)} className="flex items-center gap-1 text-[11px] text-slate-500 hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Reload</button></div>
     <p className="mt-2 text-[12px] leading-relaxed text-slate-600">Confirmed targets come from V{workspace.version}; held, captured, refunded and released amounts come from recorded PayPal receipts, including earlier versions of the same item. A step runs only when you start it, and a result counts only after PayPal confirms it.</p>
+    {(readiness.pending || Boolean(readiness.blocked && readiness.error)) && <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-[12px] leading-relaxed text-amber-900">{readiness.notice ?? readiness.error}</p>}
     {notice && <div role="status" className="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-[12px] leading-relaxed text-amber-900"><span className="flex-1">{notice.text}</span><button aria-label="Dismiss" onClick={() => setNotice(null)}><X className="h-3.5 w-3.5" /></button></div>}
     {error && <p role="alert" className="mt-4 rounded-lg border border-red-100 bg-red-50 p-3 text-[12px] leading-relaxed text-red-900">{error}</p>}
     {workspace.reason && <p className="mt-4 flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />{workspace.reason}</p>}
@@ -132,7 +146,7 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
       <p className="font-semibold">{kindLabels[operation.kind]} · {money(operation.amountCents)} · {operation.itemLabel ?? "item"}{operation.version ? ` · V${operation.version}` : ""}</p>
       <p className="mt-1">{operation.status === "unknown" ? "PayPal may or may not have completed this step. Check its status; Setti will not start a replacement." : operation.kind !== "authorize" ? "Waiting to be sent to PayPal again with the same request id." : operation.paypalOrderId ? operation.failureCode === "AUTHORIZATION_PENDING" ? "PayPal is reviewing this authorization. Nothing is held until PayPal creates it." : "Waiting for the client to approve on PayPal." : "Preparing the PayPal checkout."}{operation.failureMessage ? ` ${operation.failureMessage}` : ""}</p>
       {workspace.canReconcile ? <div className="mt-3 flex flex-wrap gap-3">
-        {operation.canContinue && operation.approvalUrl && <a href={operation.approvalUrl} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 py-2 text-[12px] font-semibold text-white hover:bg-blue-600">Continue to PayPal<ArrowUpRight className="h-3.5 w-3.5" /></a>}
+        {operation.canContinue && operation.approvalUrl && !readiness.blocked && <a href={operation.approvalUrl} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">Continue to PayPal<ArrowUpRight className="h-3.5 w-3.5" /></a>}
         {operation.canCheck && <button onClick={() => void run({ action: "check", operationId: operation.id }, `check:${operation.id}`)} disabled={disabled} className="inline-flex items-center gap-1.5 font-semibold underline disabled:opacity-50">{busy === `check:${operation.id}` ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Check PayPal status</button>}
         {operation.canCancel && <button onClick={() => void run({ action: "cancel", operationId: operation.id }, `cancel:${operation.id}`)} disabled={disabled} className="font-medium underline disabled:opacity-50">Leave checkout</button>}
       </div> : null}
@@ -145,8 +159,8 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
       {workspace.others.lineCount > 0 && <p className="mt-4 rounded-lg bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600">{workspace.others.lineCount} other quote lines ({money(workspace.others.targetCents)}) are outside this change. Setti shows their amounts but runs no payment step for them in this demo; they are not authorized or paid.</p>}
       {plan.status === "blocked" && plan.blockers.length > 0 && <div className="mt-4 rounded-lg border border-red-100 bg-red-50 p-3 text-[12px] leading-relaxed text-red-900"><p className="font-semibold">New payment steps wait until these are resolved</p><ul className="mt-2 list-disc space-y-1 pl-4">{plan.blockers.map((blocker, index) => <li key={index}>{blocker}</li>)}</ul></div>}
       <details className="mt-4 rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer text-[12px] font-medium">Whole-quote funding preview · every line</summary>
-        <p className="mt-2 text-[11px] leading-relaxed text-slate-500">If every line of V{plan.version} were funded through Setti. Funding facts checked {dateTime(plan.factsAsOf)} PT.</p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[{ label: "New authorization", amount: plan.money.newAuthorizationCents }, { label: "Release authorization", amount: plan.money.releaseCents }, { label: "Planned capture / charge", amount: plan.money.chargeCents }, { label: "Planned refund", amount: plan.money.refundCents }].map((tile) => <div key={tile.label} className="rounded-lg bg-slate-50 p-3"><p className="text-[10px] text-slate-500">{tile.label}</p><p className="mt-1 text-[16px] font-semibold tabular-nums">{tile.amount === null ? "Unavailable" : money(tile.amount)}</p></div>)}</div>
+        <p className="mt-2 text-[11px] leading-relaxed text-slate-500">This is the remaining plan, not a list of completed payments. Each action affects only its own item. If every line of V{plan.version} were funded through Setti. Funding facts checked {dateTime(plan.factsAsOf)} PT.</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{[{ label: "Planned new authorization", amount: plan.money.newAuthorizationCents }, { label: "Planned hold release", amount: plan.money.releaseCents }, { label: "Planned capture / charge", amount: plan.money.chargeCents }, { label: "Planned refund", amount: plan.money.refundCents }].map((tile) => <div key={tile.label} className="rounded-lg bg-slate-50 p-3"><p className="text-[10px] text-slate-500">{tile.label}</p><p className="mt-1 text-[16px] font-semibold tabular-nums">{tile.amount === null ? "Unavailable" : money(tile.amount)}</p></div>)}</div>
         {plan.notices.length > 0 && <ul className="mt-3 list-disc space-y-1 pl-4 text-[11px] leading-relaxed text-slate-500">{plan.notices.map((item, index) => <li key={index}>{item}</li>)}</ul>}
       </details>
     </>}
@@ -172,17 +186,17 @@ function LineCard({ line, operations, version, busy, disabled, canAct, canReconc
     { label: "Authorized (held)", amount: line.heldCents },
     { label: "Captured", amount: line.capturedCents },
     { label: "Refunded", amount: line.refundedCents },
-    { label: "Released hold", amount: line.releasedCents },
+    { label: "Actually released hold", amount: line.releasedCents },
   ];
   const pending = line.captures.find((capture) => capture.status === "pending")?.operationId ?? line.refunds.find((refund) => refund.status === "pending")?.operationId ?? null;
   const progress = lineProgress(line, operations);
   return <article id={lineAnchor(line)} className="scroll-mt-5 rounded-xl border border-slate-200 p-4">
     <div className="flex flex-wrap items-center gap-2"><h3 className="mr-auto text-[14px] font-semibold">{line.label}</h3><span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${progressTones[progress.tone]}`}>{progress.label}</span><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">{roleLabel(line)}</span></div>
     <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">{tiles.map((tile) => <div key={tile.label} className="rounded-lg bg-slate-50 p-2.5"><p className="text-[10px] text-slate-500">{tile.label}</p><p className="mt-0.5 text-[15px] font-semibold tabular-nums">{money(tile.amount)}</p></div>)}</div>
-    <p className="mt-3 flex items-start gap-1.5 text-[12px] leading-relaxed text-slate-700"><ShieldCheck className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${progress.tone === "settled" ? "text-emerald-600" : progress.tone === "waiting" ? "text-amber-600" : "text-blue-600"}`} />{lineState(line, operations)}</p>
+    <p className="mt-3 flex items-start gap-1.5 text-[12px] leading-relaxed text-slate-700"><ShieldCheck className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${progress.tone === "settled" ? "text-emerald-600" : progress.tone === "waiting" ? "text-amber-600" : "text-brand-600"}`} />{lineState(line, operations)}</p>
     {canReconcile && pending && operations.find((operation) => operation.id === pending)?.canCheck && <button onClick={() => onCheck(pending)} disabled={disabled} className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-amber-900 underline disabled:opacity-50"><RefreshCw className="h-3.5 w-3.5" />Check the pending PayPal result</button>}
 
-    {line.supplierEvents.length > 0 && <ul className="mt-3 space-y-1.5">{line.supplierEvents.map((event) => <li key={event.id} className="flex items-start gap-2 rounded-lg bg-blue-50/60 p-2.5 text-[11px] leading-relaxed text-blue-950"><Truck className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span><strong className="font-semibold">{event.kind === "order_confirmed" ? retainedCost ? "Supplier confirmed the retained cost" : "Supplier confirmed the order" : "Supplier credited the return"}</strong> · demo record entered by the designer · {dateTime(event.createdAt)} PT<br />{event.kind === "order_confirmed" ? retainedCost ? `Retained cost ${money(event.totalCents)} total, including applicable tax and delivery` : `${event.quantity} × ${money(event.unitPriceCents)} + tax ${money(event.taxCents)} + delivery ${money(event.freightCents)} = ${money(event.totalCents)} · in stock${event.leadTimeDays !== null ? ` · lead time ${event.leadTimeDays} days` : ""}` : `Credit ${money(event.totalCents)}`} · reference {event.reference}{event.note ? ` · ${event.note}` : ""}</span></li>)}</ul>}
+    {line.supplierEvents.length > 0 && <ul className="mt-3 space-y-1.5">{line.supplierEvents.map((event) => <li key={event.id} className="flex items-start gap-2 rounded-lg bg-brand-50/60 p-2.5 text-[11px] leading-relaxed text-brand-950"><Truck className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span><strong className="font-semibold">{event.kind === "order_confirmed" ? retainedCost ? "Supplier confirmed the retained cost" : "Supplier confirmed the order" : "Supplier credited the return"}</strong> · demo record entered by the designer · {dateTime(event.createdAt)} PT<br />{event.kind === "order_confirmed" ? retainedCost ? `Retained cost ${money(event.totalCents)} total, including applicable tax and delivery` : `${event.quantity} × ${money(event.unitPriceCents)} + tax ${money(event.taxCents)} + delivery ${money(event.freightCents)} = ${money(event.totalCents)} · in stock${event.leadTimeDays !== null ? ` · lead time ${event.leadTimeDays} days` : ""}` : `Credit ${money(event.totalCents)}`} · reference {event.reference}{event.note ? ` · ${event.note}` : ""}</span></li>)}</ul>}
 
     {line.steps.length > 0 && <div className="mt-3 space-y-2">{line.steps.map((step, index) => <div key={index} className="rounded-lg border border-slate-100 p-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -193,9 +207,9 @@ function LineCard({ line, operations, version, busy, disabled, canAct, canReconc
         }} /> : <span className="rounded-lg bg-slate-100 px-3 py-2 text-[12px] font-medium text-slate-500">{stepLabel(step)}</span>}
         <p className="min-w-[200px] flex-1 text-[11px] leading-relaxed text-slate-500"><strong className="font-medium text-slate-600">{step.actor === "client" ? "Client step" : "Designer step"}.</strong> {step.note}{!canAct ? " Open this version from the owning demo session to act on it." : ""}</p>
       </div>
-      {confirming === step.kind && confirmations[step.kind] && <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg bg-amber-50 p-3 text-[12px] text-amber-950"><span className="flex-1">{confirmations[step.kind]!.text(money(step.amountCents))}</span><button disabled={disabled} onClick={() => void onAction({ action: lineActions[step.kind]! }, key(step.kind)).then((ok) => { if (ok) setConfirming(null); })} className="rounded-lg bg-amber-900 px-3 py-1.5 font-semibold text-white disabled:opacity-50">{confirmations[step.kind]!.button}</button><button onClick={() => setConfirming(null)} className="font-medium underline">Not now</button></div>}
-      {form === "supplier_confirmation" && step.kind === "supplier_confirmation" && <SupplierOrderForm line={line} disabled={disabled} onSubmit={(input) => onAction({ action: "supplier_order", ...input }, key(step.kind)).then((ok) => { if (ok) setForm(null); })} />}
-      {form === "supplier_credit" && step.kind === "supplier_credit" && <SupplierCreditForm amountCents={step.amountCents} disabled={disabled} onSubmit={(input) => onAction({ action: "supplier_credit", ...input }, key(step.kind)).then((ok) => { if (ok) setForm(null); })} />}
+      {step.available && canAct && confirming === step.kind && confirmations[step.kind] && <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg bg-amber-50 p-3 text-[12px] text-amber-950"><span className="flex-1">{confirmations[step.kind]!.text(money(step.amountCents))}</span><button disabled={disabled} onClick={() => void onAction({ action: lineActions[step.kind]! }, key(step.kind)).then((ok) => { if (ok) setConfirming(null); })} className="rounded-lg bg-amber-900 px-3 py-1.5 font-semibold text-white disabled:opacity-50">{confirmations[step.kind]!.button}</button><button onClick={() => setConfirming(null)} className="font-medium underline">Not now</button></div>}
+      {step.available && canAct && form === "supplier_confirmation" && step.kind === "supplier_confirmation" && <SupplierOrderForm line={line} disabled={disabled} onSubmit={(input) => onAction({ action: "supplier_order", ...input }, key(step.kind)).then((ok) => { if (ok) setForm(null); })} />}
+      {step.available && canAct && form === "supplier_credit" && step.kind === "supplier_credit" && <SupplierCreditForm amountCents={step.amountCents} disabled={disabled} onSubmit={(input) => onAction({ action: "supplier_credit", ...input }, key(step.kind)).then((ok) => { if (ok) setForm(null); })} />}
     </div>)}</div>}
 
     {line.holds.length > 0 && <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[620px] border-collapse text-left text-[11px]"><thead><tr className="text-slate-400"><th className="py-1 pr-2 font-medium">PayPal authorization · order</th><th className="py-1 pr-2 font-medium">Amount</th><th className="py-1 pr-2 font-medium">Status</th><th className="py-1 pr-2 font-medium">Created for</th><th className="py-1 font-medium">Honor period · expires</th></tr></thead><tbody>{line.holds.map((hold) => <tr key={hold.id} className="border-t border-slate-100 align-top"><td className="py-1.5 pr-2 font-mono">{hold.paypalAuthorizationId}<br /><span className="text-slate-400">{hold.paypalOrderId}</span></td><td className="py-1.5 pr-2 tabular-nums">{money(hold.amountCents)}{hold.capturedCents ? <><br /><span className="text-slate-500">captured {money(hold.capturedCents)}</span></> : null}</td><td className="py-1.5 pr-2">{hold.status}{hold.heldCents ? ` · ${money(hold.heldCents)} held` : ""}{hold.releasedCents ? ` · ${money(hold.releasedCents)} released` : ""}</td><td className="py-1.5 pr-2">{hold.version ? `V${hold.version}` : "—"}</td><td className="py-1.5">{hold.honorExpiresAt ? dateTime(hold.honorExpiresAt) : "—"}<br /><span className="text-slate-400">{hold.expiresAt ? dateTime(hold.expiresAt) : "not reported"}</span></td></tr>)}</tbody></table></div>}
@@ -206,7 +220,7 @@ function LineCard({ line, operations, version, busy, disabled, canAct, canReconc
 
 function StepButton({ step, retainedCost, busy, disabled, onClick }: { step: PaymentStep; retainedCost: boolean; busy: boolean; disabled: boolean; onClick: () => void }) {
   const label = step.kind === "authorize" ? `Authorize ${money(step.amountCents)} with PayPal` : step.kind === "supplier_confirmation" ? retainedCost ? "Confirm supplier retained cost (demo)" : "Record supplier confirmation (demo)" : step.kind === "supplier_credit" ? "Record supplier credit (demo)" : stepLabel(step);
-  return <button onClick={onClick} disabled={disabled} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-blue-600 disabled:bg-slate-200 disabled:text-slate-400">{busy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}{label}</button>;
+  return <button onClick={onClick} disabled={disabled} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:text-slate-400">{busy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}{label}</button>;
 }
 
 function SupplierOrderForm({ line, disabled, onSubmit }: { line: PaymentLineView; disabled: boolean; onSubmit: (input: { quantity: number; unitPriceCents: number; taxCents: number; freightCents: number; inStock: boolean; leadTimeDays: number | null; reference: string; note: string }) => void }) {

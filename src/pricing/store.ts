@@ -20,6 +20,7 @@ import type { FrozenChangeOrder, PricingReview, PricingStore, PricingWorkspace }
 import { freezeRevision, insertBaseline } from "./bridge";
 import { changeOrderContentHash, itemMappingKey } from "./document";
 import { PricingStoreError } from "./errors";
+import { paymentPreparationPending, PREPARATION_MESSAGE } from "../try/preparation";
 export { changeOrderContentHash } from "./document";
 export { PricingStoreError } from "./errors";
 
@@ -125,6 +126,7 @@ async function businessBridge(tx: Transaction, caseId: string, quote: ApprovedQu
       return { ...existing, baselineRevisionId: accepted.revisionId };
     }
     const [firstOrder] = await tx.select({ document: changeOrders.document }).from(changeOrders).where(eq(changeOrders.caseId, caseId)).orderBy(asc(changeOrders.issuedAt)).limit(1);
+    if (!firstOrder && existing.baselineQuote && quoteFingerprint(existing.baselineQuote) === quoteFingerprint(quote)) return existing;
     // A V1 sent from the chat created the project when it was sent; the client's approved lines are its baseline.
     if (!firstOrder && (await tx.select({ caseId: openingQuotes.caseId }).from(openingQuotes).where(eq(openingQuotes.caseId, caseId))).length) return existing;
     if (!firstOrder || firstOrder.document.baselineFingerprint !== quoteFingerprint(quote)) {
@@ -188,6 +190,7 @@ export function createPricingStore(db: Db): PricingStore {
 
     issueReview(sessionId, key, command) {
       return withinCase(sessionId, key, async (tx, row, quote) => {
+        if (key === "maple" && await paymentPreparationPending(tx, sessionId)) throw new PricingStoreError("PREPARATION_PENDING", PREPARATION_MESSAGE);
         if (!UUID.test(command.reviewId) || !Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 1) throw new PricingStoreError("INVALID_INPUT", "A saved pricing review and version are required.");
         const review = await currentReview(tx, row.id);
         if (!review || review.id !== command.reviewId) throw new PricingStoreError("PRICING_NOT_FOUND", "The review does not belong to this case.");

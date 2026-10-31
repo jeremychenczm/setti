@@ -31,7 +31,7 @@ export function MoneyAnswerCard({ answer }: { answer: MoneyAnswer }) {
             if (!source) return null;
             const href = evidenceHref(source.href);
             const label = <><Link2 className="mt-0.5 h-3 w-3 shrink-0" /><span className="min-w-0 break-all">{source.label}</span></>;
-            return <li key={id} className="text-[10px] leading-relaxed">{href ? <a href={href} target="_blank" rel="noreferrer" title={source.recordedAt ? recordedTime(source.recordedAt) : undefined} className="inline-flex max-w-full items-start gap-1 text-[var(--primary)] underline decoration-blue-200 underline-offset-2 hover:decoration-blue-500">{label}</a> : <span className="inline-flex max-w-full items-start gap-1 text-slate-500">{label}</span>}</li>;
+            return <li key={id} className="text-[10px] leading-relaxed">{href ? <a href={href} target="_blank" rel="noreferrer" title={source.recordedAt ? recordedTime(source.recordedAt) : undefined} className="inline-flex max-w-full items-start gap-1 text-[var(--primary)] underline decoration-brand-200 underline-offset-2 hover:decoration-brand-500">{label}</a> : <span className="inline-flex max-w-full items-start gap-1 text-slate-500">{label}</span>}</li>;
           })}
         </ul>
       </li>)}

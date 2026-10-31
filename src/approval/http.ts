@@ -3,7 +3,6 @@ import { z } from "zod";
 import { ACCOUNT_COOKIE, accountOrDefault, clientOf } from "@/accounts/demo";
 import type { CaseKey } from "@/chat/types";
 import { isSameOriginRequest } from "@/http/origin";
-import { holdItemsAfterConfirmation } from "@/payments/http";
 import { approvalStore } from "./server";
 import { ApprovalStoreError } from "./store";
 import type { ApprovalWorkspace } from "./types";
@@ -55,7 +54,7 @@ function fail(error: unknown) {
   if (error instanceof HttpError) return NextResponse.json({ code: "INVALID_REQUEST", error: error.message }, { status: error.status, headers });
   if (error instanceof z.ZodError) return NextResponse.json({ code: "INVALID_REQUEST", error: "Check the version, the whole-order confirmation option, the client name and the note." }, { status: 400, headers });
   if (error instanceof ApprovalStoreError) {
-    const statuses: Record<string, number> = { FORBIDDEN: 403, NOT_FOUND: 404, INVALID_INPUT: 400, CONTENT_CHANGED: 409, DECISION_CONFLICT: 409, CASE_BUSY: 409, STALE_VERSION: 409 };
+    const statuses: Record<string, number> = { PREPARATION_PENDING: 409, FORBIDDEN: 403, NOT_FOUND: 404, INVALID_INPUT: 400, CONTENT_CHANGED: 409, DECISION_CONFLICT: 409, CASE_BUSY: 409, STALE_VERSION: 409 };
     return NextResponse.json({ code: error.code, error: error.message }, { status: statuses[error.code] ?? 400, headers });
   }
   return NextResponse.json({ code: "STORAGE_UNAVAILABLE", error: "The client decision cannot be read or saved right now. Check the saved state, then try again." }, { status: 503, headers });
@@ -80,7 +79,6 @@ export async function postApprovalResponse(req: NextRequest, id: string) {
     const refusal = notTheClient(req, current.view.order.projectKey);
     if (refusal) return NextResponse.json({ code: "FORBIDDEN", error: refusal }, { status: 403, headers });
     const decided = await approvalStore().decide(sessionId, id, input);
-    if (decided.view.decision?.decision === "approved") await holdItemsAfterConfirmation(sessionId, current.view.order.projectKey, req);
     return NextResponse.json(asViewer(req, decided), { headers });
   } catch (error) { return fail(error); }
 }

@@ -119,7 +119,9 @@ export function carryOverReview(quote: ApprovedQuoteReport, proposed: PricingInp
 
   const issues = latest.issues.map((issue) => {
     const answered = saved.issues.find((entry) => entry.label === issue.label);
-    return answered ? { ...issue, resolved: answered.resolved, note: answered.note } : issue;
+    const suggestion = proposed.issues.find((entry) => entry.label === issue.label);
+    const obsoletePlaceholder = answered?.note.startsWith("Suggested source for designer verification:") && answered.note === suggestion?.note && !issue.note;
+    return answered && !obsoletePlaceholder ? { ...issue, resolved: answered.resolved, note: answered.note } : issue;
   });
   return {
     ...result,

@@ -54,14 +54,21 @@ describe.skipIf(!testDatabaseUrl)("additional authorization after a confirmed ch
     const after = await chairLine(six, DEMO_ACCOUNTS[0]);
     expect(after).toMatchObject({ targetCents: 81_563, heldCents: 81_563, capturedCents: 0, holds: [expect.objectContaining({ version: v2.version }), expect.objectContaining({ version: six.version })] });
     expect(after.steps.map((step) => [step.kind, step.amountCents, step.available])).toEqual([["supplier_confirmation", 81_563, true], ["capture", 81_563, false]]);
-    await expect(startAuthorization(handle.db, paypal, session, six.id, { itemId: CHAIR, side: "baseline", ...shown(six) }, links)).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
+    // A stale authorize click returns the covering receipt; it creates no order and no hold.
+    const calls = paypal.calls.length;
+    await expect(startAuthorization(handle.db, paypal, session, six.id, { itemId: CHAIR, side: "baseline", ...shown(six) }, links)).resolves.toMatchObject({ id: topUp.id, status: "succeeded" });
+    expect(paypal.calls).toHaveLength(calls);
+    expect(await handle.db.select().from(paypalAuthorizations)).toHaveLength(2);
   });
 
   it("starts nothing at a newer version's amount until the client confirms it", async () => {
     const waiting = await confirmChange(handle.db, session, "willow", { action: "quantity", itemId: CHAIR, quantity: 6, after: { taxCents: 6_563 } }, false);
     await expect(startAuthorization(handle.db, paypal, session, waiting.id, { itemId: CHAIR, side: "baseline", ...shown(waiting) }, links)).rejects.toMatchObject({ code: "NOT_CONFIRMED" });
-    // The confirmed V2 is still fully held, so there is nothing to authorize there either.
-    await expect(startAuthorization(handle.db, paypal, session, v2.id, { itemId: CHAIR, side: "proposed", ...shown(v2) }, links)).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
+    // The confirmed V2 is still fully held: a repeated click returns its receipt and starts nothing.
+    const calls = paypal.calls.length;
+    await expect(startAuthorization(handle.db, paypal, session, v2.id, { itemId: CHAIR, side: "proposed", ...shown(v2) }, links)).resolves.toMatchObject({ changeOrderId: v2.id, amountCents: 54_375, status: "succeeded" });
+    expect(paypal.calls).toHaveLength(calls);
+    expect(await handle.db.select().from(paypalAuthorizations)).toHaveLength(1);
   });
 
   it("recalculates from the full target when the original hold has expired", async () => {

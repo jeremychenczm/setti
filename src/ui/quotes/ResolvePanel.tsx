@@ -28,7 +28,7 @@ export function ResolvePanel({ items, onSelect, onOpenChat, onRevise }: { items:
             {item.line.note && <span className="min-w-0 flex-1 truncate text-slate-600">&ldquo;{item.line.note}&rdquo;</span>}
             {item.line.questions > 0 && <button onClick={onOpenChat} className="flex items-center gap-1 text-[var(--primary)] hover:underline"><MessageCircleQuestion className="h-3.5 w-3.5" />{item.line.questions} in chat</button>}
             <span className="ml-auto flex gap-2">
-              {item.line.state === "declined" && <button onClick={() => onRevise(item)} className="rounded-md bg-[var(--primary)] px-2.5 py-1 font-medium text-white hover:bg-blue-600">Revise</button>}
+              {item.line.state === "declined" && <button onClick={() => onRevise(item)} className="rounded-md bg-[var(--primary-fill)] px-2.5 py-1 font-medium text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">Revise</button>}
               <button onClick={() => onSelect(item.itemId)} className="rounded-md border border-[var(--line)] px-2.5 py-1 font-medium hover:bg-slate-50">{item.line.state === "declined" ? "Drop…" : "Withdraw…"}</button>
             </span>
           </li>

@@ -3,7 +3,8 @@ import { boolean, check, index, integer, jsonb, pgTable, text, timestamp, uuid }
 import { changeOrders } from "../pricing/schema";
 
 export type TrySeedStatus = "seeding" | "ready" | "failed";
-export type TryStageId = "quote" | "chair_hold" | "rug_hold" | "supplier" | "rug_capture" | "fees";
+export type TryStageId = "quote" | "chair_hold" | "rug_hold" | "supplier" | "rug_capture" | "fees"
+  | "design_services" | "sofa_hold" | "coffee_table_hold" | "dining_table_hold" | "dining_chairs_hold" | "sideboard_hold" | "sideboard_supplier" | "sideboard_capture" | "discussion";
 export interface TryStage {
   id: TryStageId;
   label: string;
@@ -27,14 +28,14 @@ export const trySeeds = pgTable("try_seeds", {
   leaseId: uuid("lease_id"),
   leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
   recoverable: boolean("recoverable").notNull().default(true),
-  /** The confirmed version whose payments were seeded. */
+  /** Legacy prepared change order; null for the genuine opening-V1 scenario. */
   changeOrderId: uuid("change_order_id").references(() => changeOrders.id),
   error: text("error"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   check("try_seeds_status_valid", sql`${t.status} IN ('seeding', 'ready', 'failed')`),
-  check("try_seeds_ready_has_order", sql`${t.status} <> 'ready' OR ${t.changeOrderId} IS NOT NULL`),
+  check("try_seeds_ready_has_order", sql`${t.status} <> 'ready' OR ${t.changeOrderId} IS NOT NULL OR (${t.scenario} = 'maple-living-dining-v3' AND ${t.scenarioVersion} = 3)`),
   check("try_seeds_scenario_version_positive", sql`${t.scenarioVersion} > 0`),
   check("try_seeds_lease_complete", sql`(${t.leaseId} IS NULL) = (${t.leaseExpiresAt} IS NULL)`),
   index("try_seeds_created_at").on(t.createdAt),

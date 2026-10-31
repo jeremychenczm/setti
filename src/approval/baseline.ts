@@ -3,17 +3,16 @@ import type { Db } from "../db/client";
 import { revisions } from "../db/schema";
 import { caseDocument, preapprovedQuote } from "../chat/cases";
 import type { CaseKey } from "../chat/types";
-import { changeOrders } from "../pricing/schema";
+import { changeOrders, pricingCases } from "../pricing/schema";
 import type { FrozenChangeOrder } from "../pricing/types";
 import { approvedBaseline, readOpening } from "../opening/read";
-import type { ApprovedQuoteLine, ApprovedQuoteReport } from "../quotes/types";
+import type { ApprovedQuoteLine, ApprovedQuoteReport, QuoteDocument } from "../quotes/types";
 import { changeOrderDecisions } from "./schema";
 
 type ConfirmedBy = Pick<typeof changeOrderDecisions.$inferSelect, "clientName" | "signature" | "decidedAt">;
 
 /** Restore the complete signed snapshot, including unchanged and old-item cost lines. */
-export function approvedQuoteFromOrder(order: FrozenChangeOrder, decision: ConfirmedBy): ApprovedQuoteReport {
-  const original = caseDocument(order.projectKey);
+export function approvedQuoteFromOrder(order: FrozenChangeOrder, decision: ConfirmedBy, original: QuoteDocument = caseDocument(order.projectKey)): ApprovedQuoteReport {
   const approvedAt = decision.decidedAt.toISOString();
   const approval = { status: "approved" as const, approvedBy: decision.clientName, approvedAt, signature: decision.signature, isDemo: true as const };
   const lines: ApprovedQuoteLine[] = order.lines.map((line) => {
@@ -59,6 +58,7 @@ export async function currentCaseQuote(db: Pick<Db, "select">, caseId: string, k
     .innerJoin(changeOrderDecisions, and(eq(changeOrderDecisions.orderId, changeOrders.id), eq(changeOrderDecisions.revisionId, revisions.id)))
     .where(and(eq(changeOrders.caseId, caseId), eq(changeOrderDecisions.decision, "approved")))
     .orderBy(desc(revisions.number)).limit(1);
-  if (approved) return approvedQuoteFromOrder(approved.document, approved);
-  return preapprovedQuote(key) ?? approvedBaseline(await readOpening(db, { id: caseId, projectKey: key }));
+  const [bridge] = await db.select({ quote: pricingCases.baselineQuote }).from(pricingCases).where(eq(pricingCases.caseId, caseId));
+  if (approved) return approvedQuoteFromOrder(approved.document, approved, bridge?.quote ?? caseDocument(key));
+  return bridge?.quote ?? preapprovedQuote(key) ?? approvedBaseline(await readOpening(db, { id: caseId, projectKey: key }));
 }

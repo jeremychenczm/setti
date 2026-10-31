@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { paymentPreparationPending, PREPARATION_MESSAGE } from "../try/preparation";
 import { z } from "zod";
 import { ACCOUNT_COOKIE, canOpenProject, findAccount } from "@/accounts/demo";
 import { isCaseKey } from "@/chat/cases";
@@ -103,6 +104,11 @@ const statuses: Record<string, number> = {
   PLAN_BLOCKED: 409, NOT_AVAILABLE: 409, OPERATION_REFUSED: 409, IDEMPOTENCY_CONFLICT: 409, SUPPLIER_TERMS_CHANGED: 409,
 };
 
+async function pendingPreparation(sessionId: string, key: CaseKey) {
+  return key === "maple" && await paymentPreparationPending(db(), sessionId)
+    ? NextResponse.json({ code: "PREPARATION_PENDING", error: PREPARATION_MESSAGE }, { status: 409, headers }) : null;
+}
+
 function fail(error: unknown) {
   if (error instanceof HttpError) return NextResponse.json({ code: "INVALID_REQUEST", error: error.message }, { status: error.status, headers });
   if (error instanceof z.ZodError) return NextResponse.json({ code: "INVALID_REQUEST", error: "Check the payment step, line and version." }, { status: 400, headers });
@@ -134,6 +140,8 @@ export async function postPaymentsResponse(req: NextRequest, id: string) {
     const workspace = await paymentsWorkspace(db(), sessionId, id, undefined, account);
     if (!workspace) return NextResponse.json({ code: "NOT_FOUND", error: "This change order could not be found." }, { status: 404, headers });
     if (!canOpenProject(account, workspace.projectKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
+    const preparing = await pendingPreparation(sessionId, workspace.projectKey);
+    if (preparing) return preparing;
     const client = account.role === "client" && account.projectKey === workspace.projectKey;
     if (input.action === "authorize" && !client) return NextResponse.json({ code: "FORBIDDEN", error: "Only this project's client can approve a PayPal checkout." }, { status: 403, headers });
     if (["capture", "release", "refund", "supplier_order", "supplier_credit"].includes(input.action) && account.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "Only the designer records supplier confirmations, captures, releases and refunds." }, { status: 403, headers });
@@ -239,6 +247,8 @@ export async function postServicesPaymentResponse(req: NextRequest, rawKey: stri
     const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
     const client = account?.role === "client" && canOpenProject(account, rawKey);
     if (!account || !canOpenProject(account, rawKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
+    const preparing = await pendingPreparation(sessionId, rawKey);
+    if (preparing) return preparing;
     if (input.action !== "charge" && input.action !== "check" && !client) return NextResponse.json({ code: "FORBIDDEN", error: "Only the client pays the design services. Switch to the client's account first." }, { status: 403, headers });
     const paypal = sandboxPayPal();
     let paypalOrderId: string | null = null, operationId: string | null = null;
@@ -298,6 +308,8 @@ export async function postItemHoldsResponse(req: NextRequest, rawKey: string) {
     const input = holdSchema.parse(await boundedJson(req));
     const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
     if (!account || !canOpenProject(account, rawKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
+    const preparing = await pendingPreparation(sessionId, rawKey);
+    if (preparing) return preparing;
     if ((input.action === "supplier_order" || input.action === "capture") && account.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "Only the designer records supplier confirmations and captures." }, { status: 403, headers });
     if (input.action === "cancel" && account.role !== "client") return NextResponse.json({ code: "FORBIDDEN", error: "Only the client leaves a PayPal checkout." }, { status: 403, headers });
     let attempted = 0;
@@ -320,16 +332,6 @@ export async function postItemHoldsResponse(req: NextRequest, rawKey: string) {
     }
     return refreshDemoCookies(NextResponse.json({ view: await holdsView(req, rawKey, sessionId), attempted }, { headers }), req);
   } catch (error) { return fail(error); }
-}
-
-/**
- * Once the client confirms a new version, its new holds go on the client's saved
- * PayPal right away. Best effort: with no saved PayPal, or if PayPal does not
- * answer, the items stay "to hold" and either account can hold them from the page.
- */
-export async function holdItemsAfterConfirmation(sessionId: string, key: CaseKey, req?: NextRequest): Promise<void> {
-  try { await holdApprovedItems(db(), sandboxPayPal(), sessionId, key, req ? paypalLinks(req) : undefined); }
-  catch { /* the item list shows what is still to hold */ }
 }
 
 /** The design-services checkout must belong to this session's project. */

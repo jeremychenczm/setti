@@ -18,7 +18,7 @@ export function useGuideAnchor(enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
     const target = window.location.hash.slice(1);
-    if (!GUIDE_ANCHORS.has(target) && !/^payment-line-(?:baseline|proposed)-[\w:-]+$/.test(target)) return;
+    if (!GUIDE_ANCHORS.has(target) && !/^payment-line-(?:baseline|proposed)-[\w:-]+$/.test(target) && !/^case-message-[\w-]+$/.test(target)) return;
     const scroll = () => {
       const element = document.getElementById(target);
       if (!element) return false;

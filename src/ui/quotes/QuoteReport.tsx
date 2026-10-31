@@ -20,17 +20,17 @@ type CategoryFilter = "all" | "furniture" | "service";
 
 const modules = [AllCommunityModule];
 const quoteTheme = themeQuartz.withParams({
-  accentColor: "#0877ff",
+  accentColor: "#b27a26",
   backgroundColor: "#ffffff",
-  foregroundColor: "#1f2329",
-  borderColor: "#ebedf0",
-  headerBackgroundColor: "#f8fafc",
-  headerTextColor: "#64748b",
+  foregroundColor: "#30362d",
+  borderColor: "#e7e5db",
+  headerBackgroundColor: "#f7f6f2",
+  headerTextColor: "#7b7f73",
   fontFamily: "inherit",
   fontSize: 13,
   headerFontSize: 11,
-  rowHoverColor: "#f8faff",
-  selectedRowBackgroundColor: "#eef5ff",
+  rowHoverColor: "#fffaf0",
+  selectedRowBackgroundColor: "#fff1d6",
   wrapperBorder: false,
 });
 
@@ -39,7 +39,7 @@ function ItemCell({ data }: ICellRendererParams<QuoteRow>) {
   const Icon = data.category === "service" ? Palette : Armchair;
   return (
     <div className="flex h-full items-center gap-3">
-      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${data.category === "service" ? "bg-blue-50 text-blue-500" : "bg-stone-100 text-stone-500"}`}>
+      <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${data.category === "service" ? "bg-brand-50 text-brand-500" : "bg-stone-100 text-stone-500"}`}>
         <Icon className="h-5 w-5" strokeWidth={1.5} />
       </span>
       <div className="min-w-0 leading-relaxed">
@@ -271,10 +271,10 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
             <div className="flex items-center gap-2"><h2 className="text-[14px] font-semibold">Quote details</h2><span className="rounded-full bg-[var(--canvas)] px-2 py-0.5 text-[11px] text-[var(--muted)]">{totals.lineCount} items</span></div>
             <button onClick={downloadCsv} title="Download all items in the quote, including filtered items" className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-3 py-2 text-[12px] font-medium hover:bg-[var(--canvas)]"><Download className="h-3.5 w-3.5" />Download CSV</button>
           </div>
-          {supplierCount > 1 && <p className="mb-3 rounded-lg bg-blue-50 px-3 py-2.5 text-[11px] leading-relaxed text-blue-800">{supplierLines.length} items from {supplierCount} fictional supplier quotes + {estimateCount} simulated service estimates. Tax and delivery are test assumptions; select Details for the supplier quote, price note and return terms of each line.</p>}
+          {supplierCount > 1 && <p className="mb-3 rounded-lg bg-brand-50 px-3 py-2.5 text-[11px] leading-relaxed text-brand-800">{supplierLines.length} items from {supplierCount} fictional supplier quotes + {estimateCount} simulated service estimates. Tax and delivery are test assumptions; select Details for the supplier quote, price note and return terms of each line.</p>}
           {resolveItems.length > 0 && <ResolvePanel items={resolveItems} onSelect={setSelectedId} onOpenChat={onOpenChat} onRevise={(item) => void revise(item.itemId)} />}
           {actionError && <p role="alert" className="mb-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2.5 text-[12px] text-red-800">{actionError}</p>}
-          {reviewing && <p className="mb-3 rounded-lg border border-blue-100 bg-white px-3 py-2.5 text-[12px] leading-relaxed text-slate-600"><strong className="font-medium text-[var(--ink)]">Review each line.</strong> Select a line to approve or decline it, or to ask about it. Tick several lines to approve or decline them together. Lines you leave undecided can be signed later.</p>}
+          {reviewing && <p className="mb-3 rounded-lg border border-brand-100 bg-white px-3 py-2.5 text-[12px] leading-relaxed text-slate-600"><strong className="font-medium text-[var(--ink)]">Review each line.</strong> Select a line to approve or decline it, or to ask about it. Tick several lines to approve or decline them together. Lines you leave undecided can be signed later.</p>}
           {notice && <p role="status" className="mb-3 rounded-lg bg-emerald-50 px-3 py-2.5 text-[12px] text-emerald-800">{notice}</p>}
           <div className="overflow-hidden rounded-xl border border-[var(--line)]">
             <div className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] px-4 py-3">
@@ -314,7 +314,7 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
                 overlayNoRowsTemplate="<span>No matching items. Clear your search or select another category.</span>"
               />
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] bg-slate-50/60 px-4 py-3 text-[11px] text-[var(--muted)]"><span aria-live="polite">Showing {visibleCount} of {totals.lineCount} items · Filters do not change the quote total</span><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-[var(--primary)]" />AG Grid Community</span></div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] bg-slate-50/60 px-4 py-3 text-[11px] text-[var(--muted)]"><span aria-live="polite">Showing {visibleCount} of {totals.lineCount} items · Filters do not change the quote total</span><span className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-[var(--primary-fill)]" />AG Grid Community</span></div>
           </div>
 
           {selected && <LineDetails key={selected.itemId} line={selected} onClose={() => setSelectedId(null)}>
@@ -383,8 +383,8 @@ function Amount({ label, value, strong }: { label: string; value: number; strong
 
 function LineDetails({ line, onClose, children }: { line: QuoteRow; onClose: () => void; children?: ReactNode }) {
   return (
-    <div id="quote-line-details" className="mt-4 scroll-mt-6 rounded-xl border border-blue-100 bg-blue-50/30 p-5">
-      <div className="mb-4 flex items-center gap-2"><ArrowUpRight className="h-4 w-4 text-[var(--primary)]" /><h2 className="text-[13px] font-semibold">{line.name}</h2><span className="text-[10px] text-[var(--muted)]">Item details</span><button onClick={onClose} aria-label="Close item details" className="ml-auto rounded-md p-1 hover:bg-blue-100"><X className="h-3.5 w-3.5" /></button></div>
+    <div id="quote-line-details" className="mt-4 scroll-mt-6 rounded-xl border border-brand-100 bg-brand-50/30 p-5">
+      <div className="mb-4 flex items-center gap-2"><ArrowUpRight className="h-4 w-4 text-[var(--primary)]" /><h2 className="text-[13px] font-semibold">{line.name}</h2><span className="text-[10px] text-[var(--muted)]">Item details</span><button onClick={onClose} aria-label="Close item details" className="ml-auto rounded-md p-1 hover:bg-brand-100"><X className="h-3.5 w-3.5" /></button></div>
       <div className="grid gap-5 text-[12px] lg:grid-cols-3">
         <div><div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Specification</div><p className="leading-relaxed">{line.specification}</p><p className="mt-2 text-[11px] text-[var(--muted)]">{line.sku} · {line.room} · Priced per {line.unitLabel ?? "each"}</p><p className="mt-1 text-[11px] text-[var(--muted)]">{line.leadTimeDays === null ? line.category === "service" ? "Service · no product delivery" : "Stock and lead time to be confirmed" : `Estimated lead time: ${line.leadTimeDays / 7} weeks (sample)`}</p></div>
         <div><div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Return & cancellation terms</div><p className="leading-relaxed">{line.returnPolicy}</p><p className="mt-2 text-[11px] text-[var(--muted)]">{line.customMade ? "Custom-made" : "Not custom-made"} · {line.nonReturnable === null ? "Return eligibility to be confirmed" : line.nonReturnable ? "Non-returnable" : "See the agreed terms"}</p>{line.source.returnPolicyUrl && <a href={line.source.returnPolicyUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[11px] text-[var(--primary)] hover:underline">Supplier return policy<ArrowUpRight className="h-3 w-3" /></a>}</div>

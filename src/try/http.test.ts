@@ -6,6 +6,7 @@ import { getTryResponse, postTryResponse } from "./http";
 const mock = vi.hoisted(() => ({
   startTry: vi.fn(), readTrySeed: vi.fn(), readTryRuns: vi.fn(), prepareTry: vi.fn(), resumeTry: vi.fn(), openWillowWorkspace: vi.fn(),
   sandboxPayPal: vi.fn(() => ({})), sandboxTestCard: vi.fn(() => async () => ({ kind: "ok", value: {} })),
+  createDb: vi.fn(() => ({ db: {}, pool: {} })),
 }));
 vi.mock("./service", () => ({
   MAPLE_SCENARIO: "maple-mixed-change-v1", TRY_PROJECT_HREF: "/chats/maple",
@@ -13,7 +14,7 @@ vi.mock("./service", () => ({
   prepareTry: mock.prepareTry, resumeTry: mock.resumeTry, openWillowWorkspace: mock.openWillowWorkspace,
 }));
 vi.mock("@/payments/server", () => ({ sandboxPayPal: mock.sandboxPayPal, sandboxTestCard: mock.sandboxTestCard }));
-vi.mock("@/db/client", () => ({ createDb: () => ({ db: {}, pool: {} }) }));
+vi.mock("@/db/client", () => ({ createDb: mock.createDb }));
 const origin = "http://localhost:3002";
 const visitor = randomUUID(), session = randomUUID(), oldRun = randomUUID(), orderId = randomUUID();
 const seed = {
@@ -32,12 +33,60 @@ function post(body?: unknown, options: { origin?: string; session?: string; visi
 describe("/try HTTP boundaries", () => {
   beforeEach(() => {
     vi.clearAllMocks(); vi.unstubAllEnvs();
+    mock.createDb.mockReset().mockReturnValue({ db: {}, pool: {} });
+    delete (globalThis as typeof globalThis & { settiChatDatabase?: unknown }).settiChatDatabase;
     mock.startTry.mockResolvedValue({ kind: "started", session, visitorId: visitor, seed, reused: false });
     mock.readTrySeed.mockResolvedValue(seed);
     mock.readTryRuns.mockResolvedValue([]);
     mock.prepareTry.mockResolvedValue({ kind: "progress", seed });
     mock.resumeTry.mockResolvedValue(seed);
     mock.openWillowWorkspace.mockResolvedValue(session);
+  });
+
+  it.each(["http:", "https:"])("ends a demo over %s by expiring only its three browser cookies without storage or payment work", async (protocol) => {
+    const req = new NextRequest(protocol + "//localhost:3002/api/try", {
+      method: "POST", body: JSON.stringify({ action: "end" }),
+      headers: { Origin: protocol + "//localhost:3002", "Content-Type": "application/json",
+        Cookie: "setti-demo-chat=" + session + "; setti-try-visitor=" + visitor + "; setti-demo-account=emma" },
+    });
+    const response = await postTryResponse(req);
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ reset: true, href: "/try" });
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.cookies.getAll()).toHaveLength(3);
+    for (const name of ["setti-demo-chat", "setti-try-visitor", "setti-demo-account"]) {
+      expect(response.cookies.get(name)).toMatchObject({ value: "", path: "/", sameSite: "lax", maxAge: 0,
+        expires: new Date(0), secure: protocol === "https:", httpOnly: name !== "setti-demo-account" });
+      expect(response.cookies.get(name)?.domain).toBeUndefined();
+    }
+    for (const fn of Object.values(mock)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("can end an empty browser session even when storage is unavailable", async () => {
+    mock.createDb.mockImplementation(() => { throw new Error("Storage unavailable"); });
+    const response = await postTryResponse(post({ action: "end" }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ reset: true, href: "/try" });
+    expect(response.cookies.getAll()).toHaveLength(3);
+    for (const fn of Object.values(mock)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("rejects foreign, null and missing Origins before ending a demo", async () => {
+    for (const requestOrigin of ["https://attacker.example", "null", null]) {
+      const req = post({ action: "end" }, { session, visitor });
+      if (requestOrigin === null) req.headers.delete("origin"); else req.headers.set("origin", requestOrigin);
+      const response = await postTryResponse(req);
+      expect(response.status).toBe(403);
+      expect(response.cookies.getAll()).toHaveLength(0);
+    }
+    for (const fn of Object.values(mock)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("rejects extra fields on an end command without expiring any cookie", async () => {
+    const response = await postTryResponse(post({ action: "end", runId: session }, { session, visitor }));
+    expect(response.status).toBe(400);
+    expect(response.cookies.getAll()).toHaveLength(0);
+    for (const fn of Object.values(mock)) expect(fn).not.toHaveBeenCalled();
   });
 
   it.each(["127.0.0.1:3002", "localhost:3002"])("accepts the browser's actual %s Host instead of Next's normalized authority", async (host) => {
@@ -68,6 +117,18 @@ describe("/try HTTP boundaries", () => {
     }
     expect(mock.sandboxPayPal).not.toHaveBeenCalled();
     expect(mock.sandboxTestCard).not.toHaveBeenCalled();
+    expect(mock.prepareTry).not.toHaveBeenCalled();
+  });
+
+  it("accepts the living-and-dining scenario explicitly without changing the legacy empty command", async () => {
+    expect((await postTryResponse(post({ action: "start", scenario: "maple-living-dining-v2" }))).status).toBe(202);
+    expect(mock.startTry).toHaveBeenLastCalledWith(expect.anything(), null, expect.objectContaining({ scenario: "maple-living-dining-v2" }));
+    await postTryResponse(post());
+    expect(mock.startTry.mock.calls[1][2]).not.toHaveProperty("scenario");
+    expect((await postTryResponse(post({ action: "start", scenario: "maple-living-dining-v3" }))).status).toBe(202);
+    expect(mock.startTry).toHaveBeenLastCalledWith(expect.anything(), null, expect.objectContaining({ scenario: "maple-living-dining-v3" }));
+    expect((await postTryResponse(post({ action: "start", scenario: "maple-living-dining-v4" }))).status).toBe(400);
+    expect(mock.sandboxPayPal).not.toHaveBeenCalled();
     expect(mock.prepareTry).not.toHaveBeenCalled();
   });
 

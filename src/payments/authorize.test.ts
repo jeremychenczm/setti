@@ -167,7 +167,9 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     expect((await checkPayment(handle.db, paypal, session, v2.id, checkout.id, links)).status).toBe("succeeded");
     expect(await holds()).toHaveLength(1);
     expect((await holds())[0]).toMatchObject({ operationId: checkout.id, amountCents: 54_375 });
-    await expect(start()).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
+    const calls = paypal.calls.length;
+    expect(await start()).toMatchObject({ id: checkout.id, status: "succeeded" });
+    expect(paypal.calls).toHaveLength(calls);
     expect(await handle.db.select().from(paymentOperations)).toHaveLength(1);
   });
 

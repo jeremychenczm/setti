@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { SandboxGuardError } from "@/config/paypalEnv";
 import { createDb } from "@/db/client";
+import { HOME_LEGACY_SCENARIO, HOME_SCENARIO } from "@/demo/living-dining";
 import { isSameOriginRequest } from "@/http/origin";
+import { ACCOUNT_COOKIE } from "@/accounts/demo";
 import { DEMO_SESSION_COOKIE as SESSION_COOKIE, DEMO_VISITOR_COOKIE as VISITOR_COOKIE, privateDemoCookieOptions } from "@/accounts/cookie-policy";
 import { refreshDemoCookies } from "@/http/demo-cookies";
 import { paypalLinks } from "@/payments/http";
@@ -13,10 +15,11 @@ import { MAPLE_SCENARIO, TRY_PROJECT_HREF, openWillowWorkspace, prepareTry, read
 const uuid = z.uuid();
 const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
 const startSchema = z.union([
-  z.strictObject({ action: z.literal("start").optional(), scenario: z.literal("maple-mixed-change-v1").optional(), restart: z.boolean().optional() }),
+  z.strictObject({ action: z.literal("start").optional(), scenario: z.enum(["maple-mixed-change-v1", HOME_LEGACY_SCENARIO, HOME_SCENARIO]).optional(), restart: z.boolean().optional() }),
   z.strictObject({ action: z.literal("prepare"), runId: uuid }),
   z.strictObject({ action: z.literal("resume"), runId: uuid }),
   z.strictObject({ action: z.literal("workspace"), scenario: z.literal("willow-first-payment-v1") }),
+  z.strictObject({ action: z.literal("end") }),
 ]);
 const database = globalThis as typeof globalThis & { settiChatDatabase?: ReturnType<typeof createDb> };
 function db() {
@@ -53,6 +56,14 @@ export async function postTryResponse(req: NextRequest) {
   let body: z.infer<typeof startSchema>;
   try { body = startSchema.parse(text ? JSON.parse(text) : {}); }
   catch { return failure("INVALID_REQUEST", "Choose a supported demo action and scenario.", 400); }
+  if (body.action === "end") {
+    const response = NextResponse.json({ reset: true, href: "/try" }, { headers });
+    const options = { ...privateDemoCookieOptions(req.nextUrl.protocol), maxAge: 0, expires: new Date(0) };
+    response.cookies.set(SESSION_COOKIE, "", options);
+    response.cookies.set(VISITOR_COOKIE, "", options);
+    response.cookies.set(ACCOUNT_COOKIE, "", { ...options, httpOnly: false });
+    return response;
+  }
   const current = identity(req, SESSION_COOKIE), visitorId = identity(req, VISITOR_COOKIE);
   try {
     if (body.action === "workspace") {
@@ -71,7 +82,7 @@ export async function postTryResponse(req: NextRequest) {
       const payload = await state(current, visitorId);
       return NextResponse.json({ ...payload, ...(result.kind === "failed" ? { code: "SEED_FAILED", error: result.seed.error } : {}) }, { status: result.kind === "ready" ? 200 : result.kind === "failed" ? 502 : 202, headers });
     }
-    const result = await startTry({ db: db(), perHour: perHour() }, current, { restart: body.restart, visitorId: visitorId ?? randomUUID() });
+    const result = await startTry({ db: db(), perHour: perHour() }, current, { restart: body.restart, visitorId: visitorId ?? randomUUID(), ...(body.scenario ? { scenario: body.scenario } : {}) });
     if (result.kind === "limited") return failure("LIMITED", "The demo has prepared many projects in the last hour. Try again in a few minutes.", 429);
     return retainIdentity(NextResponse.json({ ...await state(result.session, result.visitorId), reused: result.reused }, { status: result.kind === "ready" ? 200 : 202, headers }), req, result.session, result.visitorId);
   } catch (error) {

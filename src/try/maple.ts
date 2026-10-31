@@ -86,24 +86,24 @@ export function mapleRun(session: string, log: (message: string) => void = () =>
 }
 
 /** The designer records the supplier's confirmation of a confirmed line, on its exact terms. */
-export function confirmSupplierOrder(db: Db, run: MapleRun, order: FrozenChangeOrder, itemId: string) {
+export function confirmSupplierOrder(db: Db, run: MapleRun, order: FrozenChangeOrder, itemId: string, side: "baseline" | "proposed" = "proposed") {
   const line = order.lines.find((entry) => entry.itemId === itemId)!;
   return recordSupplierOrder(db, run.session, order.id, {
-    ...ref(itemId, "proposed"), ...shown(order), quantity: line.quantity,
+    ...ref(itemId, side), ...shown(order), quantity: line.quantity,
     unitPriceCents: line.unitPriceCents, taxCents: line.taxCents, freightCents: line.freightCents,
     inStock: true, leadTimeDays: 14, reference: `DEMO-ORDER-${itemId}`, note: "Demo supplier confirmation entered by the designer.",
   });
 }
 
 /** Starts the checkout, has it approved, and finishes the authorization the way PayPal's return does. */
-export async function authorizeItem(options: MapleOptions, run: MapleRun, order: FrozenChangeOrder, itemId: string, label: string) {
+export async function authorizeItem(options: MapleOptions, run: MapleRun, order: FrozenChangeOrder, itemId: string, label: string, side: "baseline" | "proposed" = "proposed") {
   const { db, paypal, links } = options;
-  const prior = await originalOperation(db, run, order, itemId, "authorize");
+  const prior = await originalOperation(db, run, order, itemId, "authorize", side);
   if (prior?.status === "succeeded") { run.record(label, [prior]); return prior; }
   if (prior?.status === "failed") throw new MaplePreparationError(`${label}: PayPal refused this original authorization. It needs review before another hold is attempted.`, false);
   let checkout = prior
     ? await createCheckout(db, paypal, prior, links(prior.id), await checkoutDetails(db, prior))
-    : await startAuthorization(db, paypal, run.session, order.id, { ...ref(itemId, "proposed"), ...shown(order) }, links);
+    : await startAuthorization(db, paypal, run.session, order.id, { ...ref(itemId, side), ...shown(order) }, links);
   if (checkout.status === "failed") throw new MaplePreparationError(`${label}: PayPal refused the original checkout.`, false);
   if (checkout.paypalOrderId && !checkout.approvalUrl) checkout = (await completeAuthorization(db, paypal, checkout.id)).operation;
   if (checkout.status === "succeeded") { run.record(label, [checkout]); return checkout; }
@@ -141,9 +141,9 @@ export async function ensureMapleQuote(db: Db, session: string): Promise<FrozenC
   ], { copy: startCopy });
 }
 
-async function originalOperation(db: Db, run: MapleRun, order: FrozenChangeOrder, itemId: string, kind: "authorize" | "capture") {
+async function originalOperation(db: Db, run: MapleRun, order: FrozenChangeOrder, itemId: string, kind: "authorize" | "capture", side: "baseline" | "proposed" = "proposed") {
   const version = await db.transaction((tx) => lockConfirmedVersion(tx, run.session, order.id, shown(order)));
-  const businessId = businessItem(version, ref(itemId, "proposed"));
+  const businessId = businessItem(version, ref(itemId, side));
   const [operation] = await db.select().from(paymentOperations).where(and(
     eq(paymentOperations.changeOrderId, order.id), eq(paymentOperations.itemId, businessId), eq(paymentOperations.kind, kind),
   )).orderBy(paymentOperations.createdAt).limit(1);
@@ -152,16 +152,21 @@ async function originalOperation(db: Db, run: MapleRun, order: FrozenChangeOrder
 
 /** Resumes the original capture, including pending provider outcomes; never substitutes a new attempt. */
 export async function captureMapleRug(options: MapleOptions, run: MapleRun, initial: FrozenChangeOrder) {
-  const prior = await originalOperation(options.db, run, initial, "rug", "capture");
-  if (prior?.status === "failed") throw new MaplePreparationError("The original rug capture was refused and needs review before another attempt.", false);
+  return capturePreparedItem(options, run, initial, "rug", "rug");
+}
+
+/** The original business operation is reused for every prepared scenario item. */
+export async function capturePreparedItem(options: MapleOptions, run: MapleRun, initial: FrozenChangeOrder, itemId: string, label: string, side: "baseline" | "proposed" = "proposed") {
+  const prior = await originalOperation(options.db, run, initial, itemId, "capture", side);
+  if (prior?.status === "failed") throw new MaplePreparationError(`The original ${label} capture was refused and needs review before another attempt.`, false);
   const operations = prior ? [await executeCapture(options.db, options.paypal, prior.id)]
-    : await startCapture(options.db, options.paypal, run.session, initial.id, { ...ref("rug", "proposed"), ...shown(initial) });
-  run.record("Capture the rug after supplier confirmation", operations);
+    : await startCapture(options.db, options.paypal, run.session, initial.id, { ...ref(itemId, side), ...shown(initial) });
+  run.record(`Capture the ${label} after supplier confirmation`, operations);
   for (const operation of operations) {
-    if (operation.status !== "succeeded") throw new MaplePreparationError("PayPal has not confirmed the original rug capture yet.", operation.status !== "failed");
+    if (operation.status !== "succeeded") throw new MaplePreparationError(`PayPal has not confirmed the original ${label} capture yet.`, operation.status !== "failed");
     const [capture] = await options.db.select().from(paypalCaptures).where(eq(paypalCaptures.operationId, operation.id));
     const current = capture?.status === "pending" ? await refreshCapture(options.db, options.paypal, capture.id) : capture;
-    if (current?.status !== "completed") throw new MaplePreparationError("The original rug capture is still pending or declined.", current?.status !== "declined");
+    if (current?.status !== "completed") throw new MaplePreparationError(`The original ${label} capture is still pending or declined.`, current?.status !== "declined");
   }
   return operations;
 }

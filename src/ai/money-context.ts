@@ -1,12 +1,19 @@
-import { and, desc, eq } from "drizzle-orm";
-import { approvedQuoteFromOrder, currentCaseQuote } from "../approval/baseline";
+import { and, desc, eq, inArray } from "drizzle-orm";
+import { currentCaseQuote } from "../approval/baseline";
+import { ledgerFacts, readLedger, type FundingIdentity, type ProjectLedger } from "../approval/store";
 import { changeOrderDecisions } from "../approval/schema";
 import { chatCases } from "../chat/schema";
 import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
 import { revisions } from "../db/schema";
-import { changeOrders } from "../pricing/schema";
-import { calculateQuoteTotals } from "../quotes/totals";
+import { changeOrders, pricingCases } from "../pricing/schema";
+import { itemMappingKey } from "../pricing/document";
+import { calculateLineTotals, calculateQuoteTotals } from "../quotes/totals";
+import type { ApprovedQuoteReport } from "../quotes/types";
+import { readOpening } from "../opening/read";
+import { paypalCalls } from "../payments/schema";
+import { trySeeds } from "../try/schema";
+import { HOME_SCENARIO } from "../demo/living-dining";
 import type { PaymentLineView, PaymentsWorkspace } from "../payments/types";
 import { paymentsWorkspace } from "../payments/workspace";
 import type { FrozenChangeOrder } from "../pricing/types";
@@ -42,6 +49,19 @@ export async function readCaseMoneyContext(db: Db, sessionId: string, key: CaseK
     if (!approved) {
       const quote = await currentCaseQuote(tx, owned.id, key);
       if (!quote) throw new MoneyContextError("MONEY_EVIDENCE_UNAVAILABLE", "The client has not approved any line of quote V1 yet.");
+      const opening = await readOpening(tx, { id: owned.id, projectKey: key });
+      if (opening.revision && opening.opening.contentHash && opening.document.id === quote.id && quote.version === 1) {
+        const [bridge] = await tx.select().from(pricingCases).where(eq(pricingCases.caseId, owned.id));
+        if (!bridge || quote.lines.some((line) => opening.lines[line.itemId]?.state !== "approved" || opening.decisions.get(line.itemId)?.decision !== "approved")) throw new MoneyContextError("MONEY_EVIDENCE_UNAVAILABLE", "The approved V1 and its signed line decisions could not be verified.");
+        const ledger = await readLedger(tx, bridge.projectId);
+        const operationIds = ledger.operations.map((operation) => operation.id);
+        const calls = operationIds.length ? await tx.select({ createdAt: paypalCalls.createdAt, httpStatus: paypalCalls.httpStatus }).from(paypalCalls).where(inArray(paypalCalls.operationId, operationIds)) : [];
+        const [seed] = await tx.select({ scenario: trySeeds.scenario, status: trySeeds.status }).from(trySeeds).where(eq(trySeeds.sessionId, sessionId));
+        return bounded(openingMoneyContext({ key, quote, ledger, itemMapping: bridge.itemMapping, now,
+          providerRecordedAt: calls.filter((call) => call.httpStatus !== null).map((call) => call.createdAt.toISOString()).sort().at(-1) ?? null,
+          preparationStatus: seed?.scenario === HOME_SCENARIO ? seed.status : undefined,
+        }));
+      }
       const source: MoneySource = { id: "quote", kind: "quote", label: `${quote.projectName} · V${quote.version} demo quote`, href: `/quotes/${key}`, recordedAt: quote.approvedAt };
       return bounded({
         projectKey: key, quoteId: quote.id, version: quote.version, checkedAt: now.toISOString(), providerRecordedAt: null, mode: "recorded_sandbox",
@@ -55,13 +75,108 @@ export async function readCaseMoneyContext(db: Db, sessionId: string, key: CaseK
     if (decision.sessionId !== sessionId || decision.contentHash !== order.contentHash || decision.revisionContentHash !== order.revisionContentHash) {
       throw new MoneyContextError("MONEY_EVIDENCE_UNAVAILABLE", "The approved version and its decision could not be verified.");
     }
-    const quote = approvedQuoteFromOrder(order, decision);
     const workspace = await paymentsWorkspace(tx, sessionId, order.id, now);
     if (!workspace || !workspace.current || !workspace.canAct) {
       throw new MoneyContextError("MONEY_EVIDENCE_UNAVAILABLE", "The current approved payment evidence is unavailable.");
     }
-    return bounded(contextFromWorkspace(key, quote.id, order, decision.decidedAt.toISOString(), workspace, now));
+    return bounded(contextFromWorkspace(key, order.id, order, decision.decidedAt.toISOString(), workspace, now));
   }, { isolationLevel: "repeatable read", accessMode: "read only" });
+}
+
+interface OpeningMoneyInput {
+  key: CaseKey;
+  quote: ApprovedQuoteReport;
+  ledger: ProjectLedger;
+  itemMapping: Readonly<Record<string, string>>;
+  now: Date;
+  providerRecordedAt: string | null;
+  preparationStatus?: "seeding" | "ready" | "failed";
+}
+
+/** A real signed V1 has payment evidence without being a synthetic change order. */
+export function openingMoneyContext({ key, quote, ledger, itemMapping, now, providerRecordedAt, preparationStatus }: OpeningMoneyInput): MoneyContext {
+  const href = `/quotes/${key}`, paymentHref = `${href}#item-holds`;
+  const sources: MoneySource[] = [
+    { id: "quote", kind: "quote", label: `${quote.projectName} · approved V1 quote`, href, recordedAt: quote.approvedAt },
+    { id: "approval", kind: "approval", label: "Client's recorded demo V1 confirmation", href, recordedAt: quote.approvedAt },
+  ];
+  const facts: MoneyFact[] = [
+    fact("quote", `The client-approved scope of V1 totals ${usd(calculateQuoteTotals(quote.lines).totalCents)}. It remains the agreement while any revised proposal is unconfirmed. Quote approval is not a payment receipt.`, ["quote", "approval"]),
+    fact("approval", `Demo client ${quote.approvedBy} confirmed the shown V1 scope at ${quote.approvedAt}. This records agreement, not a payment or a supplier order.`, ["quote", "approval"]),
+  ];
+  const mandatoryFactIds: string[] = [];
+  const preparing = preparationStatus !== undefined && preparationStatus !== "ready";
+  if (preparing) {
+    facts.push(fact("payment-preparation", preparationStatus === "failed"
+      ? "The demo's original payment preparation has stopped before completion. The project and discussion are available, but its intended starting holds and charges are not all established. Resume the same saved preparation; do not treat absent amounts as zero or settled and do not create replacement payments."
+      : "The demo's original payment preparation is still in progress. The project and discussion are available before all starting holds and charges exist. The amounts below describe recorded results so far, not the final prepared history; do not treat absent amounts as zero or settled.", ["quote"]));
+    mandatoryFactIds.push("payment-preparation");
+  }
+  const identities = new Map<string, FundingIdentity>();
+  const mappingBlockers: string[] = [];
+  for (const line of quote.lines) {
+    const businessId = itemMapping[itemMappingKey({ ...line, sourceUrl: line.source.url ?? null })];
+    if (businessId) identities.set(businessId, { itemId: line.itemId, side: "baseline" });
+    else mappingBlockers.push(`The funding identity for ${line.name} is missing.`);
+  }
+  const recorded = ledgerFacts(identities, mappingBlockers, ledger, null, now);
+  const totals = { held: 0, captured: 0, refunded: 0 };
+  for (const line of quote.lines) {
+    const businessId = itemMapping[itemMappingKey({ ...line, sourceUrl: line.source.url ?? null })];
+    const held = recorded.lines.find((entry) => entry.itemId === line.itemId && entry.side === "baseline");
+    const refs = ["quote", "approval"];
+    const holds = ledger.authorizations.filter((entry) => entry.itemId === businessId || (!entry.itemId && ledger.servicesHoldLines.some((split) => split.itemId === businessId && split.operationId === entry.operationId)));
+    const holdIds = new Set(holds.filter((entry) => entry.itemId === businessId).map((entry) => entry.id));
+    const captures = ledger.captures.filter((entry) => entry.itemId === businessId || (entry.authorizationId && holdIds.has(entry.authorizationId)));
+    const captureIds = new Set(captures.map((entry) => entry.id));
+    const refunds = ledger.refunds.filter((entry) => captureIds.has(entry.captureId));
+    function addSource(id: string, label: string, at: Date) {
+      if (!sources.some((source) => source.id === id)) sources.push({ id, kind: "payment", label, href: line.category === "service" ? `${href}#design-services` : paymentHref, recordedAt: at.toISOString() });
+      refs.push(id);
+    }
+    for (const hold of holds) addSource(`hold:${hold.id}`, `PayPal V1 authorization ${hold.paypalAuthorizationId} · ${hold.status}`, hold.createdAt);
+    for (const capture of captures) addSource(`capture:${capture.id}`, `PayPal V1 capture ${capture.paypalCaptureId} · ${capture.status}`, capture.createdAt);
+    for (const refund of refunds) addSource(`refund:${refund.id}`, `PayPal V1 refund ${refund.paypalRefundId} · ${refund.status}`, refund.createdAt);
+    for (const event of ledger.supplierEvents.filter((entry) => entry.itemId === businessId)) {
+      const id = `supplier:${event.id}`;
+      sources.push({ id, kind: "supplier", label: `Demo V1 supplier ${event.kind} · ${event.reference}`, href: paymentHref, recordedAt: event.createdAt.toISOString() });
+      refs.push(id);
+      facts.push(fact(id, `${line.name}: a demo supplier ${event.kind === "credit_confirmed" ? "credit" : "confirmation"} for ${usd(event.totalCents)} was recorded by the designer. This is not a supplier integration or a PayPal receipt.`, [id, "quote"]));
+    }
+    const operations = ledger.operations.filter((entry) => entry.itemId === businessId || holds.some((hold) => hold.operationId === entry.id));
+    const open = operations.filter((entry) => entry.status === "pending" || entry.status === "unknown");
+    for (const operation of open) {
+      const id = `operation:${operation.id}`;
+      addSource(id, `${operation.kind} · ${operation.status} · ${operation.paypalResourceId ?? operation.paypalOrderId ?? operation.id}`, operation.updatedAt);
+      if (!facts.some((entry) => entry.id === id)) facts.push(fact(id, `${operation.servicesHold ? "The design-services checkout" : line.name} has a V1 ${operation.kind} operation for ${usd(operation.amountCents)} whose outcome is ${operation.status}. Check the original operation; it is not proof that money completed or that a replacement is safe.`, [id]));
+      mandatoryFactIds.push(id);
+    }
+    const heldCents = held?.heldCents ?? 0, capturedCents = held?.capturedCents ?? 0, refundedCents = held?.refundedCents ?? 0;
+    totals.held += heldCents; totals.captured += capturedCents; totals.refunded += refundedCents;
+    const target = calculateLineTotals(line).totalCents;
+    facts.push(fact(`item:baseline:${line.itemId}`, `${line.name} (approved V1): the agreed target is ${usd(target)}; recorded held amount ${usd(heldCents)}, completed captures ${usd(capturedCents)}, completed refunds ${usd(refundedCents)}, net captured ${usd(capturedCents - refundedCents)}. A hold is not a charge, and another item's money does not pay this item.${preparing ? " Preparation is incomplete; these are records so far." : ""}`, refs));
+    const uncertain = open.length > 0 || captures.some((entry) => entry.status === "pending") || refunds.some((entry) => entry.status === "pending");
+    const nextId = `next:baseline:${line.itemId}`;
+    const ordered = ledger.supplierEvents.some((entry) => entry.itemId === businessId && entry.kind === "order_confirmed");
+    const next = uncertain ? "a provider outcome is pending or unknown. Reconcile the same operation before treating funds as completed."
+      : preparing ? "the starting payment preparation is not finished. Missing payment records do not establish a final unpaid or settled balance."
+      : capturedCents - refundedCents >= target ? "recorded net captures cover this agreed V1 target. This is this item's recorded state, not a full-project settlement."
+      : heldCents > 0 ? line.category === "service" ? "the approved service amount is held but not charged yet. Service capture is a separate recorded step." : ordered ? "supplier confirmation is recorded, but the held amount is not captured yet." : "the amount is authorized, not charged; capture waits for this item's supplier confirmation."
+      : `there is no completed recorded payment covering the remaining ${usd(Math.max(0, target - capturedCents + refundedCents))} target. Approval alone does not prove it was paid.`;
+    facts.push(fact(nextId, `${line.name}: ${next}`, refs));
+    if (uncertain) mandatoryFactIds.push(nextId);
+  }
+  if (recorded.blockers?.length) {
+    facts.push(fact("funding-blockers", `Recorded V1 payment evidence has unresolved conditions: ${recorded.blockers.join(" ")} No new executable payment conclusion follows from incomplete results.`, ["quote"]));
+    mandatoryFactIds.push("funding-blockers");
+  }
+  facts.push(fact("scope", `For the approved V1 items only, the recorded totals are held ${usd(totals.held)}, completed captures ${usd(totals.captured)}, completed refunds ${usd(totals.refunded)}, net captured ${usd(totals.captured - totals.refunded)}.${preparing ? " Preparation is incomplete; these are recorded results so far." : ""} These are stored Sandbox records, not a complete settlement or live PayPal balance.`, [...new Set(sources.map((source) => source.id))]));
+  facts.push(fact("record-freshness", `This answer reads stored V1 Sandbox evidence at ${now.toISOString()}; the most recent recorded provider response is ${providerRecordedAt ?? "unavailable"}. No live PayPal query was made for this answer.`, ["quote"]));
+  if (!providerRecordedAt) {
+    facts.push(fact("no-provider-records", "No stored PayPal response has yet been found for this V1. Quote and local preparation records do not establish actual completed payment or a PayPal balance.", ["quote"]));
+    mandatoryFactIds.push("no-provider-records");
+  }
+  return { projectKey: key, quoteId: quote.id, version: 1, checkedAt: now.toISOString(), providerRecordedAt, mode: "recorded_sandbox", facts, sources, mandatoryFactIds: [...new Set(mandatoryFactIds)] };
 }
 
 function fact(id: string, en: string, sourceIds: string[]): MoneyFact {

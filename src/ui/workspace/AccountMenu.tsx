@@ -5,12 +5,13 @@ import { useRef, useState } from "react";
 import { DEMO_ACCOUNTS, type AccountId, type DemoAccount } from "@/accounts/demo";
 import { useDismiss } from "../useDismiss";
 import { Avatar } from "./primitives";
+import { EndDemoButton } from "../try/EndDemoButton";
 
 /**
  * The signed-in demo account and the menu that switches it. `compact` shows only
  * the avatar, for the chat header on screens without the sidebar.
  */
-export function AccountMenu({ account, onSwitch, compact = false }: { account: DemoAccount; onSwitch: (id: AccountId) => void; compact?: boolean }) {
+export function AccountMenu({ account, onSwitch, compact = false, placement = "below" }: { account: DemoAccount; onSwitch: (id: AccountId) => void; compact?: boolean; placement?: "above" | "below" }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   useDismiss(root, open, setOpen);
@@ -22,7 +23,7 @@ export function AccountMenu({ account, onSwitch, compact = false }: { account: D
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Signed in as ${account.name}. Switch account`}
-        className={compact ? "rounded-full ring-offset-2 hover:ring-2 hover:ring-blue-100" : "flex w-full items-center gap-2 rounded-lg px-1 py-1 text-left hover:bg-white/70"}
+        className={compact ? "rounded-full ring-offset-2 hover:ring-2 hover:ring-brand-100" : "flex w-full items-center gap-2 rounded-lg px-1 py-1 text-left hover:bg-white/70"}
       >
         <Avatar person={account} size="sm" />
         {!compact && <>
@@ -34,7 +35,7 @@ export function AccountMenu({ account, onSwitch, compact = false }: { account: D
         </>}
       </button>
       {open && (
-        <div role="menu" aria-label="Switch account" className={`absolute z-30 w-64 rounded-xl border border-[var(--line)] bg-white p-1.5 shadow-lg ${compact ? "right-0 top-full mt-2" : "bottom-full left-0 mb-2"}`}>
+        <div role="menu" aria-label="Switch account" className={`absolute z-30 w-64 rounded-xl border border-[var(--line)] bg-white p-1.5 shadow-lg ${compact && placement !== "above" ? "right-0 top-full mt-2" : "bottom-full left-0 mb-2"}`}>
           <div className="px-2 pb-1.5 pt-1 text-[10px] font-medium uppercase tracking-wider text-[var(--muted)]">Switch account · demo</div>
           {DEMO_ACCOUNTS.map((option) => (
             <button
@@ -53,6 +54,9 @@ export function AccountMenu({ account, onSwitch, compact = false }: { account: D
             </button>
           ))}
           <p className="px-2 pb-1 pt-1.5 text-[10px] leading-relaxed text-[var(--muted)]">No login in this demo. The account decides who sends messages and what you can see.</p>
+          <div className="mt-1 border-t border-[var(--line)] pt-1">
+            <EndDemoButton menuItem className="w-full rounded-lg px-2 py-2 text-left text-[12px] text-slate-600 hover:bg-[var(--canvas)]" />
+          </div>
         </div>
       )}
     </div>

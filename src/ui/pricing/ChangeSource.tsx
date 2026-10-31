@@ -15,7 +15,7 @@ export function ChangeSourceFields({ value, disabled, onChange }: { value: Chang
     <h2 className="mb-1 text-[14px] font-semibold">Why this version</h2>
     <p className="mb-3 text-[11px] leading-relaxed text-slate-500">Shown to the client with the version. Whatever the reason, the client confirms the new version before any money moves.</p>
     <fieldset disabled={disabled}>
-      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Why this version">{options.map((option) => <label key={option.kind} className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-[12px] ${value.kind === option.kind ? "border-blue-300 bg-blue-50" : "border-slate-200"}`}>
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Why this version">{options.map((option) => <label key={option.kind} className={`flex cursor-pointer items-start gap-2 rounded-lg border px-3 py-2 text-[12px] ${value.kind === option.kind ? "border-brand-300 bg-brand-50" : "border-slate-200"}`}>
         <input type="radio" name="change-source" className="mt-0.5" checked={value.kind === option.kind} onChange={() => onChange({ ...value, kind: option.kind })} />
         <span><span className="block font-medium">{option.label}</span><span className="block text-[10px] text-slate-500">{option.hint}</span></span>
       </label>)}</div>

@@ -211,6 +211,20 @@
       "when": 1792894288356,
       "tag": "0029_durable_try_preparation",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1793307031096,
+      "tag": "0030_living_dining_baseline",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793323441691,
+      "tag": "0031_ready_living_dining_seed",
+      "breakpoints": true
     }
   ]
 }

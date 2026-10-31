@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CaseKey } from "@/chat/types";
-import { createPricingInput } from "@/pricing/calculation";
+import { createReviewInput } from "./demo-review";
 import type { CarryOverConflict, ReviewCarryOver } from "@/pricing/carry-over";
 import { quoteFingerprint } from "@/quotes/fingerprint";
 import type { ChangeOrderView, IssuePricingInput, PricingInput, PricingWorkspace, SavePricingInput } from "@/pricing/types";
@@ -75,7 +75,7 @@ export function usePricingWorkspace(projectKey: CaseKey) {
     const carried = state.carryOver && state.sourceDraft ? state.carryOver : null;
     let nextInput = carried ? structuredClone(carried.input) : state.review ? structuredClone(state.review.input) : null;
     if (!nextInput && state.sourceDraft && (!state.sourceDraft.basedOnQuoteFingerprint || state.sourceDraft.basedOnQuoteFingerprint === quoteFingerprint(state.quote))) {
-      try { nextInput = createPricingInput(state.quote, state.sourceDraft); }
+      try { nextInput = createReviewInput(state.quote, state.sourceDraft); }
       catch (cause) { setError(`${cause instanceof Error ? cause.message : "The AI draft no longer matches the original quote."} Return to the chat and ask @AI to prepare a new draft.`); }
     }
     setInput(nextInput);
@@ -121,7 +121,7 @@ export function usePricingWorkspace(projectKey: CaseKey) {
       setError("The AI draft was prepared against a different original quote. Return to the chat and ask @AI for a new draft before pricing it.");
       return;
     }
-    try { setInput(createPricingInput(workspace.quote, workspace.sourceDraft)); }
+    try { setInput(createReviewInput(workspace.quote, workspace.sourceDraft)); }
     catch (cause) {
       setError(`${cause instanceof Error ? cause.message : "This draft cannot be repriced against the current quote."} Return to the chat and ask @AI to prepare a new draft.`);
       return;

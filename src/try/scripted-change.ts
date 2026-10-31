@@ -56,12 +56,13 @@ const testCopy = (names: string[], changes: ScriptedChange[]): ScriptedCopy => (
 /** Several changes share one draft, frozen document, approval and set of version hashes. */
 export async function confirmScriptedChanges(
   db: Db, session: string, key: CaseKey, changes: ScriptedChange[],
-  { confirm = true, copy = {} }: { confirm?: boolean; copy?: Partial<ScriptedCopy> } = {},
+  { confirm = true, copy = {}, actor = "client", expectedBaseline }: { confirm?: boolean; copy?: Partial<ScriptedCopy>; actor?: "client" | "designer"; expectedBaseline?: { id: string; version: number } } = {},
 ): Promise<FrozenChangeOrder> {
   if (!changes.length) throw new Error("Expected at least one scripted change");
   const chat = createChatStore(db), pricing = createPricingStore(db);
   const state = await chat.getCase(session, key);
   const quote = state.quote!;
+  if (expectedBaseline && (quote.id !== expectedBaseline.id || quote.version !== expectedBaseline.version)) throw new Error("The prepared baseline advanced before its historical version was created. Resume the saved version.");
   const lines = changes.map((change) => {
     const line = quote.lines.find((entry) => entry.itemId === change.itemId);
     if (!line) throw new Error(`Unknown scripted item: ${change.itemId}`);
@@ -69,7 +70,7 @@ export async function confirmScriptedChanges(
   });
   const words = { ...testCopy(lines.map((line) => line.name), changes), ...copy };
   const id = randomUUID();
-  await chat.appendMessage(session, key, { id, actor: "client", text: `@AI ${words.request}` });
+  await chat.appendMessage(session, key, { id, actor, text: `@AI ${words.request}` });
   const run = await chat.beginAi(session, key, id);
   if (run.status !== "started") throw new Error("Expected an AI run");
   const result = buildDraft({

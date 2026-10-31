@@ -5,9 +5,23 @@ import { lockConfirmedVersion, PaymentActionError } from "./binding";
 import { settlementDetails } from "./fees";
 import { recordCall } from "./operations";
 import type { CaptureReceipt, PayPalPayments, PayPalResult, RefundReceipt } from "./paypal";
+import { lockOpeningVersion } from "./opening";
+import type { CaseKey } from "../chat/types";
 
 type Resource = { kind: "capture" | "refund"; id: string; operationId: string; amountCents: number };
 type FeeReader = Pick<PayPalPayments, "getCapture" | "getRefund">;
+
+/** Read seller amounts for captures that belong to a signed opening V1. */
+export async function refreshOpeningRecordedFees(db: Db, paypal: FeeReader, sessionId: string, key: CaseKey): Promise<void> {
+  const resources = await db.transaction(async (tx): Promise<Resource[]> => {
+    const version = await lockOpeningVersion(tx, sessionId, key, null);
+    const ledger = await readLedger(tx, version.projectId);
+    const ids = new Set(version.approved.map((entry) => entry.itemId));
+    const holds = new Set(ledger.authorizations.filter((hold) => hold.itemId && ids.has(hold.itemId)).map((hold) => hold.id));
+    return ledger.captures.flatMap((capture) => capture.authorizationId && holds.has(capture.authorizationId) && capture.status === "completed" && capture.operationId ? [{ kind: "capture" as const, id: capture.paypalCaptureId, operationId: capture.operationId, amountCents: capture.amountCents }] : []);
+  });
+  for (const resource of resources) await recordFeeObservation(db, resource, await paypal.getCapture(resource.id));
+}
 
 export async function refreshRecordedFees(db: Db, paypal: FeeReader, sessionId: string, orderId: string): Promise<void> {
   const resources = await db.transaction(async (tx): Promise<Resource[]> => {

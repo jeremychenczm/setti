@@ -5,8 +5,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { FromV1 } from "@/chat/types";
 import type { FieldChange } from "@/pricing/review-diff";
 
-export const pricingTheme = themeQuartz.withParams({ accentColor: "#0877ff", backgroundColor: "#ffffff", foregroundColor: "#1f2329", borderColor: "#ebedf0", headerBackgroundColor: "#f8fafc", fontFamily: "inherit", fontSize: 12, headerFontSize: 11, wrapperBorder: false });
-export const inputClass = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] text-slate-800 outline-none focus:border-blue-400 disabled:bg-slate-50 disabled:text-slate-400";
+export const pricingTheme = themeQuartz.withParams({ accentColor: "#b27a26", backgroundColor: "#ffffff", foregroundColor: "#30362d", borderColor: "#e7e5db", headerBackgroundColor: "#f7f6f2", fontFamily: "inherit", fontSize: 12, headerFontSize: 11, wrapperBorder: false });
+export const inputClass = "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-[12px] text-slate-800 outline-none focus:border-brand-400 disabled:bg-slate-50 disabled:text-slate-400";
 
 export function money(value: number | null): string {
   return value === null ? "Not yet priced" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value / 100);

@@ -15,6 +15,8 @@ import { pricingCases } from "../pricing/schema";
 import type { FrozenChangeOrder, PricingItem } from "../pricing/types";
 import { readCaseMoneyContext } from "./money-context";
 import type { MoneyContext } from "./money-types";
+import { HOME_SCENARIO } from "../demo/living-dining";
+import { prepareTry, startTry, type TryDeps } from "../try/service";
 
 function product(name: string, sku: string, unitPriceCents: number): Partial<PricingItem> {
   return { name, vendor: "Demo supplier", sku, specification: name, quantity: 1, unitLabel: "each", currency: "USD", unitPriceCents, taxCents: 0, freightCents: 0, returnable: true, returnPolicy: "Demo terms checked by the designer." };
@@ -26,7 +28,7 @@ describe.skipIf(!testDatabaseUrl)("read-only case money evidence", () => {
   let paypal: FakePayPal;
   beforeAll(async () => { handle = await openTestDb(); });
   beforeEach(async () => {
-    await truncate(handle.db, "projects", "chat_cases");
+    await truncate(handle.db, "projects", "chat_cases", "try_seeds");
     session = randomUUID();
     paypal = new FakePayPal();
   });
@@ -97,6 +99,40 @@ describe.skipIf(!testDatabaseUrl)("read-only case money evidence", () => {
     expect(text(context, "no-payment-records")).toContain("do not assume they are zero or paid");
     expect(await storedState()).toEqual(before);
     expectSources(context);
+  });
+
+  it("reads a real approved V1's original payments and preserves the early-opening preparation state", async () => {
+    const deps: TryDeps = { db: handle.db, paypal, links, perHour: 30, testCard: (id) => paypal.confirmWithTestCard(id) };
+    const start = await startTry(deps, null, { scenario: HOME_SCENARIO });
+    if (start.kind === "limited") throw new Error("Expected a new V1 run");
+    session = start.session;
+    const beforePreparation = await read();
+    expect(beforePreparation).toMatchObject({ version: 1, providerRecordedAt: null });
+    expect(beforePreparation.mandatoryFactIds).toContain("payment-preparation");
+    expect(text(beforePreparation, "payment-preparation")).toContain("still in progress");
+    expect(paypal.calls).toHaveLength(0);
+    let seed = start.seed;
+    for (let attempt = 0; seed.status !== "ready" && attempt < 20; attempt++) {
+      const prepared = await prepareTry(deps, session, session);
+      if (prepared.kind === "not_found") throw new Error("Missing prepared V1");
+      if (prepared.kind === "failed") throw new Error(prepared.seed.error ?? "Preparation failed");
+      seed = prepared.seed;
+    }
+    expect(seed.status).toBe("ready");
+    const beforeRead = await storedState(), providerCalls = paypal.calls.length, providerReads = paypal.reads.length;
+    const context = await read();
+    expect(context).toMatchObject({ version: 1, quoteId: beforePreparation.quoteId });
+    expect(context.mandatoryFactIds).not.toContain("payment-preparation");
+    expect(text(context, "item:baseline:sofa")).toContain("recorded held amount $2,400.00");
+    expect(text(context, "item:baseline:sideboard")).toContain("completed captures $1,200.00");
+    // Preparation also captures the $1,000 V1 design fee alongside the $1,200 sideboard.
+    expect(text(context, "scope")).toMatch(/held \$5,530\.00, completed captures \$2,200\.00/);
+    expect(text(context, "next:baseline:design")).toContain("recorded net captures cover this agreed V1 target");
+    expect(context.providerRecordedAt).not.toBeNull();
+    expect(context.sources.some((source) => source.kind === "payment" && source.href === "/quotes/maple#item-holds")).toBe(true);
+    expect(context.sources.every((source) => !source.href.startsWith("/change-orders/"))).toBe(true);
+    expect([paypal.calls.length, paypal.reads.length]).toEqual([providerCalls, providerReads]);
+    expect(await storedState()).toEqual(beforeRead);
   });
 
   it("only reads the owned case and ignores a newer unapproved proposal", async () => {

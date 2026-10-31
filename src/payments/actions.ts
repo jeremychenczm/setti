@@ -59,6 +59,12 @@ export async function startAuthorization(db: Db, paypal: PayPalPayments, session
     if (funding.status === "blocked") throw new PaymentActionError("PLAN_BLOCKED", "Resolve the funding blockers before starting a payment step.", funding.blockers);
     const action = funding.actions.find((entry) => entry.kind === "new_authorization" && entry.itemId === input.itemId && entry.side === input.side);
     const line = funding.lines.find((entry) => entry.itemId === input.itemId && entry.side === input.side);
+    if (!action && line?.category === "furniture" && line.targetCents > 0 && line.heldCents + line.capturedCents - line.refundedCents >= line.targetCents) {
+      // A stale button can arrive after another checkout already covered this
+      // version. Return that receipt instead of creating money or an error.
+      const covered = ledger.operations.find((entry) => entry.kind === "authorize" && entry.itemId === itemId && entry.changeOrderId === version.order.id && entry.status === "succeeded");
+      if (covered) return covered;
+    }
     if (!action || line?.category !== "furniture") throw new PaymentActionError("NOT_AVAILABLE", `This line needs no new authorization under V${version.order.version}.`);
     const prefix = `authorize:${version.order.id}:${itemId}:`;
     return insertOperation(tx, { businessKey: `${prefix}${attempt(ledger, "authorize", prefix)}`, projectId: version.projectId, kind: "authorize", amountCents: action.amountCents, binding: version.bind(itemId) });

@@ -38,6 +38,16 @@ function savedReview(edit: (input: ReturnType<typeof createPricingInput>) => voi
 }
 
 describe("carrying a saved pricing review onto a newer draft", () => {
+  it("drops an untouched internal placeholder while retaining a designer's actual verification", () => {
+    const earlier = structuredClone(proposed);
+    earlier.issues[0].note = "Suggested source for designer verification: local fictional HOME_SUPPLIER_NOTES";
+    const saved = structuredClone(earlier);
+    saved.issues[0].resolved = true;
+    const latest = createPricingInput(quote, first);
+    expect(carryOverReview(quote, earlier, saved, latest).input.issues[0]).toMatchObject({ resolved: false, note: "" });
+    saved.issues[0].note += ". Supplier confirmed the delivery date.";
+    expect(carryOverReview(quote, earlier, saved, latest).input.issues[0]).toMatchObject({ resolved: true, note: saved.issues[0].note });
+  });
   it("keeps the designer's edits where the draft did not move, and takes the draft's updates where the designer did not edit", () => {
     const saved = savedReview((input) => {
       input.changes[0].after = { ...input.changes[0].after!, unitPriceCents: 8_888 };

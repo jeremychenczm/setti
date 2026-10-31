@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CaseMessage, ChangeDraft, SentVersion } from "@/chat/types";
 import type { OperationView, PaymentLineView, PaymentsWorkspace } from "@/payments/types";
+import { HOME_DISCUSSION, HOME_LEGACY_SCENARIO, HOME_SCENARIO } from "@/demo/living-dining";
 import { mapleChangeLines, mapleGuideStep, type MapleGuideData } from "./maple-guide";
 
 const at = "2026-10-24T12:00:00Z";
@@ -48,7 +49,7 @@ describe("Maple demo guide from saved records", () => {
     const step = mapleGuideStep(data, "designer");
     expect(step).toMatchObject({ index: 1, role: "jordan", destination: "pricing", anchor: "pricing-source-status", title: "Adopt the latest draft before reviewing its prices" });
     expect(step.detail).toContain("Re-price from the latest draft");
-    expect(step.detail).toContain("before loading the Maple sample materials");
+    expect(step.detail).toContain("before checking the rows");
     expect(step.detail).toContain("does not confirm prices or send a client version");
   });
 
@@ -92,7 +93,7 @@ describe("Maple demo guide from saved records", () => {
   });
 
   it("asks for an explanation only after the independent item money is settled", () => {
-    expect(mapleGuideStep(confirmed(), "client")).toMatchObject({ index: 4, role: "emma", destination: "chat", complete: false });
+    expect(mapleGuideStep(confirmed(), "client")).toMatchObject({ index: 4, role: "emma", destination: "chat", complete: false, chatAction: "ask-payments" });
   });
 
   it("requires an evidence answer at least as fresh as the stored payment operations", () => {
@@ -100,18 +101,101 @@ describe("Maple demo guide from saved records", () => {
     data.snapshot.messages = [message({ actor: "assistant", moneyAnswer: { quoteId: "visitor-v3", version: 3, checkedAt: "2026-10-23T12:00:00Z", providerRecordedAt: at, mode: "recorded_sandbox", facts: [], sources: [] } })];
     expect(mapleGuideStep(data, "designer").complete).toBe(false);
     data.snapshot.messages[0].moneyAnswer!.checkedAt = at;
-    expect(mapleGuideStep(data, "designer").complete).toBe(true);
+    expect(mapleGuideStep(data, "designer")).toMatchObject({ complete: true, action: "View payment explanation", anchor: `case-message-${data.snapshot.messages[0].id}` });
+    expect(mapleGuideStep(data, "designer").chatAction).toBeUndefined();
   });
 
   it("keeps the completed money step visible while the AI prepares the evidence reply", () => {
     const data = confirmed();
     data.snapshot.activeMessageId = "money-question";
     expect(mapleGuideStep(data, "client")).toMatchObject({ index: 4, title: "The AI is preparing the payment explanation" });
+    expect(mapleGuideStep(data, "client").chatAction).toBeUndefined();
   });
 
   it("guides the client to an uncovered replacement authorization", () => {
     const data = confirmed();
     data.payments!.lines[1].capturedCents = 0;
     expect(mapleGuideStep(data, "designer")).toMatchObject({ index: 3, role: "emma" });
+  });
+});
+
+describe("living-and-dining demo guide", () => {
+  function homeInitial(): MapleGuideData {
+    const data = initial();
+    data.scenario = HOME_SCENARIO;
+    data.seedOrderId = null;
+    data.snapshot.draft = null;
+    data.snapshot.messages = HOME_DISCUSSION.map((entry, index) => message({ id: `discussion-${index}`, actor: entry.actor, text: entry.text }));
+    data.snapshot.versions = [];
+    return data;
+  }
+
+  it("starts with Jordan's AI request after the saved discussion, whichever role opened the project", () => {
+    for (const currentRole of ["designer", "client"] as const) {
+      const step = mapleGuideStep(homeInitial(), currentRole);
+      expect(step).toMatchObject({ index: 0, role: "jordan", destination: "chat", action: "Continue the discussion", title: "From the discussion to a revised quote" });
+      expect(step.detail).toContain("Prepare the revised quote in Jordan's chat");
+      expect(step.complete).toBeUndefined();
+    }
+  });
+
+  it("keeps the prepared approved V2 and its scripted draft out of visitor confirmation and payment progress", () => {
+    const data = homeInitial();
+    data.scenario = HOME_LEGACY_SCENARIO;
+    data.seedOrderId = "seed-v2";
+    data.snapshot.versions = [version({ title: "Prepared living-and-dining baseline", changeCount: 0, totalCents: 773_000 })];
+    data.snapshot.draft = { ...draft(), title: "Prepared living-and-dining baseline" };
+    data.payments = confirmed().payments;
+    data.payments!.orderId = "seed-v2";
+    data.payments!.version = 2;
+    const step = mapleGuideStep(data, "designer");
+    expect(step).toMatchObject({ index: 0, role: "jordan", destination: "chat" });
+    expect(step.orderId).toBeUndefined();
+    expect(step.complete).toBeUndefined();
+    // Only a later version issued for the visitor enters Emma's confirmation step.
+    data.snapshot.versions!.push(version({ id: "home-visitor-v3", version: 3, fromCurrentDraft: true, status: "awaiting_client_confirmation" }));
+    expect(mapleGuideStep(data, "designer")).toMatchObject({ index: 2, role: "emma", destination: "order", orderId: "home-visitor-v3" });
+  });
+
+  it("moves a new AI draft, including its client-redacted state, to Jordan's five-change pricing review", () => {
+    const data = homeInitial();
+    data.snapshot.draft = { ...draft(), origin: "designer", title: "Living-and-dining revision" };
+    const step = mapleGuideStep(data, "designer");
+    expect(step).toMatchObject({ index: 1, role: "jordan", destination: "pricing", action: "Review pricing", title: "Jordan reviews the AI's five proposed changes" });
+    expect(step.detail).toContain("sample supplier documents");
+    expect(step.detail).toContain("all five changes, the sideboard return cost and the unchanged design fee");
+    expect(step.complete).toBeUndefined();
+    data.snapshot.draft = null;
+    data.snapshot.draftPreparing = true;
+    expect(mapleGuideStep(data, "client")).toMatchObject({ index: 1, role: "jordan", destination: "pricing", title: "Jordan reviews the AI's five proposed changes" });
+  });
+
+  it("preserves the client-led chair-and-rug request and generic pricing review for legacy runs", () => {
+    const data = initial();
+    data.scenario = "maple-mixed-change-v1";
+    const step = mapleGuideStep(data, "designer");
+    expect(step).toMatchObject({ index: 0, role: "emma", destination: "chat", title: "Emma asks for one change affecting two items" });
+    expect(step.detail).toContain("replace the lounge chair with a desk and return the rug");
+    expect(step.detail).not.toContain("living and dining");
+    data.snapshot.versions![0].fromCurrentDraft = false;
+    const pricing = mapleGuideStep(data, "designer");
+    expect(pricing).toMatchObject({ index: 1, role: "jordan", destination: "pricing", title: "Jordan checks the proposed change" });
+    expect(pricing.detail).not.toContain("sideboard");
+  });
+
+  it("treats the first issued V2 as the client's new agreement after an approved V1", () => {
+    const data = homeInitial();
+    data.snapshot.versions = [version({ id: "visitor-v2", version: 2, basedOnVersion: 1, status: "awaiting_client_confirmation" })];
+    expect(mapleGuideStep(data, "designer")).toMatchObject({ index: 2, role: "emma", orderId: "visitor-v2", action: "Review and confirm V2" });
+  });
+
+  it("allows pricing review during background setup without asking to send the version yet", () => {
+    const data = homeInitial();
+    data.preparationPending = true;
+    data.snapshot.draft = { ...draft(), basedOnQuoteId: "v1", basedOnVersion: 1, origin: "designer" };
+    const step = mapleGuideStep(data, "designer");
+    expect(step).toMatchObject({ index: 1, destination: "pricing", action: "Review pricing" });
+    expect(step.detail).toContain("You can save the review now");
+    expect(step.detail).toContain("when the starting payment records are ready");
   });
 });

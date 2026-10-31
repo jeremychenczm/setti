@@ -1,8 +1,9 @@
 import type { MoneyAnswer, MoneyContext } from "./money-types";
-import { aiTask } from "./intent";
+import { aiTask, isExplicitDraftRequest } from "./intent";
 
 /** A hint for deferring irrelevant product reads and protecting clearly read-only questions. */
 export function isMoneyQuestion(text: string): boolean {
+  if (isExplicitDraftRequest(text)) return false;
   const task = aiTask(text);
   const leadingExplanation = /^(?:(?:please|kindly)\s+)?(?:why|how|what|where|which|when|explain|show|tell|check|summari[sz]e|status)\b|^(?:(?:请|麻烦|帮我|帮忙|请帮我|请你)\s*)*(?:为什么|为何|怎么|怎样|解释|说明|核对|查询|查一下|查看|看看|看一下|总结)/iu;
   const englishChange = /^(?:(?:please|kindly)\s+)?(?:(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)|(?:(?:i|we)\s+(?:want|would\s+like)\s+(?:you\s+)?to\s+)|(?:let['’]s\s+))?(?:(?:do\s+not|don't)\s+)?(?:replace|swap|change|increase|decrease|remove|return|cancel|add|keep|withdraw|revert)\b/iu;

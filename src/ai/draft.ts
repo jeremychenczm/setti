@@ -3,6 +3,7 @@ import type { ApprovedQuoteLine, ApprovedQuoteReport } from "@/quotes/types";
 import type { CaseMessage, ChangeDraft, DraftChange, DraftItem, ProductPage } from "@/chat/types";
 import { aiOutputSchema } from "./output";
 import { quoteFingerprint } from "@/quotes/fingerprint";
+import { homeProductMatches, isHomeQuote } from "@/demo/home-evidence";
 
 export class InvalidAiOutputError extends Error {}
 
@@ -76,6 +77,7 @@ export function buildDraft(input: {
       const candidate = change.productOptionId ? options.get(change.productOptionId) : null;
       if (change.productOptionId && !candidate) throw new InvalidAiOutputError("Product source does not exist");
       if (candidate) {
+        if (isHomeQuote(quote) && !homeProductMatches(change.itemId, candidate.product.id)) throw new InvalidAiOutputError("The supplier product is for a different original item");
         const product = candidate.product;
         after = {
           name: product.name, brand: product.brand, vendor: product.seller,
@@ -103,11 +105,9 @@ export function buildDraft(input: {
     const deltaSubtotalCents = beforeSubtotalCents === null || afterSubtotalCents === null ? null : afterSubtotalCents - beforeSubtotalCents;
     if (deltaSubtotalCents !== null && !Number.isSafeInteger(deltaSubtotalCents)) throw new InvalidAiOutputError("Unsafe delta");
     if (after && afterSubtotalCents === null) unresolved.push(`${after.name}: currency, pricing unit or price needs confirmation; the difference is not calculated yet.`);
-    if (change.action === "replace" || change.action === "remove") unresolved.push(`${before!.name}: confirm whether the old item was purchased, whether it must be returned, and the handling cost.`);
     return { action: change.action, itemId: change.itemId, before, after, productOptionId: change.productOptionId, sourceMessageIds, beforeSubtotalCents, afterSubtotalCents, deltaSubtotalCents };
   });
   for (const page of pages.filter((page) => page.error)) unresolved.push(`Could not read product link ${page.url}. ${page.error}`);
-  unresolved.push("Tax, delivery and other charges need designer verification. This is only a pre-tax preview of the goods and services difference.");
   const now = input.now ?? new Date().toISOString();
   const current = input.current;
   if (current && (current.projectKey !== quote.projectId || current.basedOnQuoteId !== quote.id || current.basedOnVersion !== quote.version)) {
@@ -125,9 +125,10 @@ export function buildDraft(input: {
       revision: (current?.revision ?? 0) + 1, status: "needs_designer_review",
       title: output.title || "Change draft", summary: output.message, changes,
       sourceMessageIds: [...new Set(changes.flatMap((change) => change.sourceMessageIds))],
-      sources: pages.map((page) => ({ ...page, text: "" })),
+      sources: pages.map((page) => ({ ...page, text: page.url.startsWith("local:") ? page.text : "" })),
       unresolved: [...new Set(unresolved)], constraints: [...new Set(output.constraints)],
       deltaSubtotalCents: delta, createdAt: current?.createdAt ?? now, updatedAt: now, model: input.model,
+      origin: input.messages.find((message) => message.id === input.triggerId)!.actor as "client" | "designer",
     },
   };
 }

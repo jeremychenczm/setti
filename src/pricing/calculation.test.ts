@@ -180,10 +180,17 @@ describe("pricing review calculation", () => {
     expect(() => prepareChangeOrder(q, d, input, messages())).toThrow(PricingValidationError);
   });
 
-  it("needs row confirmation, issue notes, price evidence and terms even when totals are known", () => {
+  it("needs row confirmation, resolved issues, price evidence and terms even when totals are known", () => {
     const q = quote(); const d = draft();
-    const changes = [(input: PricingInput) => { input.changes[0].confirmed = false; }, (input: PricingInput) => { input.changes[0].priceEvidence = ""; }, (input: PricingInput) => { input.issues[0].note = ""; }, (input: PricingInput) => { input.issues[0].resolved = false; }, (input: PricingInput) => { input.terms = ""; }, (input: PricingInput) => { input.changes[0].oldItemNote = ""; }];
+    const changes = [(input: PricingInput) => { input.changes[0].confirmed = false; }, (input: PricingInput) => { input.changes[0].priceEvidence = ""; }, (input: PricingInput) => { input.issues[0].resolved = false; }, (input: PricingInput) => { input.terms = ""; }, (input: PricingInput) => { input.changes[0].oldItemNote = ""; }];
     for (const modify of changes) { const input = ready(q, d); modify(input); expect(previewPricing(q, d, input)).toMatchObject({ ready: false, proposedTotals: { totalCents: 85_600 } }); }
+  });
+
+  it("accepts an empty optional note after an issue is reviewed and preserves it in the frozen quote", () => {
+    const q = quote(), d = draft(), input = ready(q, d);
+    input.issues.forEach((issue) => { issue.note = ""; });
+    expect(previewPricing(q, d, input).ready).toBe(true);
+    expect(prepareChangeOrder(q, d, input, messages()).issues.every((issue) => issue.note === "")).toBe(true);
   });
 
   it("does not mistake explicitly reviewed zero tax/delivery/fee for missing values", () => {

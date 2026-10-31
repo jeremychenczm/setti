@@ -1,10 +1,12 @@
 "use client";
 
 import { Check, ClipboardCheck, LoaderCircle, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CaseKey, CaseMessage, ChangeDraft } from "@/chat/types";
 import { reviewSummary, type CarriedSummary, type ReviewLine, type ReviewSummary } from "@/pricing/review-diff";
 import type { PricingWorkspace } from "@/pricing/types";
+import { createPricingInput, previewPricing } from "@/pricing/calculation";
+import { isHomeQuote } from "@/demo/home-evidence";
 import { FromV1Note } from "../pricing/common";
 import { DraftCard } from "./DraftCard";
 
@@ -43,28 +45,41 @@ const usd = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency
 export function ReviewPanel({ projectKey, draft, messages, onSourceMessage, canPrice }: { projectKey: CaseKey; draft: ChangeDraft; messages: CaseMessage[]; onSourceMessage: (id: string) => void; canPrice: boolean }) {
   const [summary, setSummary] = useState<ReviewSummary | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  const [estimate, setEstimate] = useState<{ baseline: number; total: number; difference: number; retained: number } | null>(null);
+  const requestSequence = useRef(0);
   const pricingHref = `/pricing/${projectKey}`;
 
   const load = useCallback(async () => {
+    const requestId = ++requestSequence.current;
     try {
       const response = await fetch(`/api/pricing/${projectKey}`, { cache: "no-store" });
       const body = await response.json().catch(() => null);
+      if (requestId !== requestSequence.current) return;
       if (!response.ok) throw new Error(body?.error ?? "The pricing review could not be loaded.");
       setError(null);
-      setSummary(reviewSummary(body as PricingWorkspace));
+      const workspace = body as PricingWorkspace;
+      setSummary(reviewSummary(workspace));
+      setEstimate(null);
+      if (isHomeQuote(workspace.quote) && workspace.sourceDraft?.id === draft.id && workspace.sourceDraft.revision === draft.revision) {
+        const proposed = createPricingInput(workspace.quote, workspace.sourceDraft);
+        const preview = previewPricing(workspace.quote, workspace.sourceDraft, proposed);
+        if (preview.proposedTotals && preview.deltaTotalCents !== null) setEstimate({ baseline: preview.baselineTotals.totalCents, total: preview.proposedTotals.totalCents, difference: preview.deltaTotalCents, retained: proposed.changes.reduce((sum, change) => sum + (change.oldItemCostCents ?? 0), 0) });
+      }
     } catch (cause) {
+      if (requestId !== requestSequence.current) return;
       setSummary(null);
+      setEstimate(null);
       setError(cause instanceof Error ? cause.message : "The pricing review could not be loaded.");
     }
-  }, [projectKey]);
+  }, [projectKey, draft.id, draft.revision]);
 
-  useEffect(() => { void load(); }, [load, draft.id, draft.revision]);
+  useEffect(() => { const sequence = requestSequence; void load(); return () => { sequence.current++; }; }, [load]);
 
   if (summary === undefined) return <div role="status" className="flex items-center gap-2 p-4 text-[12px] text-[var(--muted)]"><LoaderCircle className="h-4 w-4 animate-spin" />Loading the pricing review…</div>;
   const draftCard = <DraftCard draft={draft} messages={messages} onSourceMessage={onSourceMessage} pricingHref={pricingHref} canPrice={canPrice} />;
   if (!summary || summary.stale) {
     return <>
-      <p className="mx-4 mt-4 rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-600">{summary?.stale ? "The draft changed after your last saved pricing review. Re-price it from the latest draft on the pricing page." : "Not priced yet. Once you save a pricing review, this panel shows what you changed, line by line."}</p>
+      {estimate ? <div className="mx-4 mt-4 rounded-xl border border-stone-200 bg-stone-50 p-3.5"><p className="text-[11px] font-semibold text-stone-700">Proposed estimate · needs your review</p><p className="mt-1.5 text-[15px] font-semibold text-stone-900">{usd(estimate.baseline)} → {usd(estimate.total)} <span className="text-[12px] font-medium text-stone-600">({signed(estimate.difference)})</span></p><p className="mt-2 text-[11px] leading-relaxed text-stone-600">Calculated from the AI-selected source products and sample terms, including {usd(estimate.retained)} in retained old-item costs. This is the proposed agreement total; payment actions are planned separately.</p><p className="mt-2 text-[11px] text-stone-600">Open Review pricing, adopt this draft if prompted, and review the preselected demo checks before sending it to Emma.</p></div> : <p className="mx-4 mt-4 rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-600">{summary?.stale ? "The draft changed after your last saved pricing review. Re-price it from the latest draft on the pricing page." : "Not priced yet. Once you save a pricing review, this panel shows what you changed, line by line."}</p>}
       {error && <p role="alert" className="mx-4 mt-2 rounded-lg bg-red-50 px-3 py-2 text-[11px] text-red-800">{error}</p>}
       {draftCard}
     </>;
@@ -88,7 +103,7 @@ export function ReviewPanel({ projectKey, draft, messages, onSourceMessage, canP
         {summary.lines.map((line, index) => (
           <li key={line.key} className="rounded-xl border border-[var(--line)] p-3">
             <div className="mb-1.5 flex items-start gap-2">
-              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-blue-50 text-[11px] font-semibold text-[var(--primary)]">{index + 1}</span>
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-50 text-[11px] font-semibold text-[var(--primary)]">{index + 1}</span>
               <span className="min-w-0 flex-1"><span className="block font-semibold">{line.name}</span><span className="text-[11px] text-[var(--muted)]">{line.kind === "carried" ? line.changes.length ? "Carried over from V1, with changes" : "Carried over from V1, unchanged" : KIND_LABELS[line.kind]}</span></span>
               {line.needsChoice ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">Needs your choice</span> : line.confirmed ? <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-700"><Check className="h-3.5 w-3.5" />Checked</span> : <span className="text-[11px] text-amber-700">Not checked</span>}
             </div>
@@ -103,7 +118,7 @@ export function ReviewPanel({ projectKey, draft, messages, onSourceMessage, canP
         ))}
       </ol>
 
-      {canPrice && <a href={pricingHref} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2.5 text-[12px] font-medium text-white hover:bg-blue-600"><ClipboardCheck className="h-4 w-4" />Continue pricing</a>}
+      {canPrice && <a href={pricingHref} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-lg bg-[var(--primary-fill)] px-4 py-2.5 text-[12px] font-medium text-[var(--on-primary)] hover:bg-[var(--primary-hover)]"><ClipboardCheck className="h-4 w-4" />Continue pricing</a>}
       <p className="text-[10px] leading-relaxed text-[var(--muted)]">{summary.carried ? "Nothing here is saved on the updated draft yet. Open the pricing page to check it and save." : "Only saved changes appear here. Reload after saving on the pricing page."}</p>
       <details className="rounded-xl border border-dashed border-[var(--line)]"><summary className="cursor-pointer px-3 py-2 text-[11px] font-medium text-slate-600">The draft as first proposed</summary>{draftCard}</details>
     </article>

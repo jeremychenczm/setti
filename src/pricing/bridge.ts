@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { items, projects, revisionLines, revisions } from "../db/schema";
 import { hashRevision } from "../quotes/hash";
-import type { QuoteDocument } from "../quotes/types";
+import type { ApprovedQuoteReport, QuoteDocument } from "../quotes/types";
 import { itemMappingKey } from "./document";
 import { PricingStoreError } from "./errors";
 import { pricingCases } from "./schema";
@@ -37,7 +37,7 @@ export interface Baseline {
  * revision. Approving it is the caller's decision: Maple imports its demo
  * approval, Willow waits for the client's signed line decisions.
  */
-export async function insertBaseline(tx: Transaction, caseId: string, quote: QuoteDocument): Promise<Baseline> {
+export async function insertBaseline(tx: Transaction, caseId: string, quote: QuoteDocument, baselineQuote: ApprovedQuoteReport | null = null): Promise<Baseline> {
   const [project] = await tx.insert(projects).values({ name: `${quote.projectName} (demo pricing)`, space: quote.room, clientName: quote.clientName, currency: "USD" }).returning();
   const [revision] = await tx.insert(revisions).values({ projectId: project.id, number: quote.version }).returning();
   const itemMapping: Record<string, string> = {};
@@ -53,6 +53,6 @@ export async function insertBaseline(tx: Transaction, caseId: string, quote: Quo
     lineIds.set(line.itemId, savedLine.id);
   }
   const revisionHash = await freezeRevision(tx, revision.id);
-  const [bridge] = await tx.insert(pricingCases).values({ caseId, projectId: project.id, baselineRevisionId: revision.id, baselineQuoteId: quote.id, itemMapping }).returning();
+  const [bridge] = await tx.insert(pricingCases).values({ caseId, projectId: project.id, baselineRevisionId: revision.id, baselineQuoteId: quote.id, baselineQuote, itemMapping }).returning();
   return { bridge, revisionHash, lineIds };
 }

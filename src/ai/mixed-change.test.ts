@@ -51,8 +51,8 @@ describe("one draft for multiple original items", () => {
     // Equal product subtotals do not imply a no-op or a settled payment.
     expect(draft.deltaSubtotalCents).toBe(0);
     expect(draft.status).toBe("needs_designer_review");
-    expect(draft.unresolved.join(" ")).toContain("Lounge chair");
-    expect(draft.unresolved.join(" ")).toContain("Wool rug");
+    // Open questions come from the model only; old-item handling is still required in the pricing review.
+    expect(draft.unresolved).toEqual([]);
     expect(data.quote).toEqual(before);
   });
 

@@ -28,7 +28,7 @@ const total = (actions: FundingAction[], kind: FundingAction["kind"]) => actions
 function ActionRows({ actions }: { actions: FundingAction[] }) {
   return <div className="overflow-x-auto"><table className="w-full min-w-[580px] border-collapse text-left text-[11px]">
     <thead><tr className="text-slate-500"><th className="py-2 pr-3 font-medium">Item</th><th className="py-2 pr-3 font-medium">Planned action</th><th className="py-2 pr-3 text-right font-medium">Amount</th><th className="py-2 pl-3 font-medium">Before it can happen</th></tr></thead>
-    <tbody>{actions.map((action, index) => <tr key={`${identity(action)}:${action.kind}:${index}`} className="border-t border-blue-100 align-top">
+    <tbody>{actions.map((action, index) => <tr key={`${identity(action)}:${action.kind}:${index}`} className="border-t border-brand-100 align-top">
       <td className="py-2.5 pr-3 font-medium text-slate-800">{action.label}<span className="mt-0.5 block text-[10px] font-normal text-slate-500">{action.side === "proposed" ? "New item" : "Existing item"}</span></td>
       <td className="py-2.5 pr-3">{labels[action.kind]}</td>
       <td className="whitespace-nowrap py-2.5 pr-3 text-right font-semibold tabular-nums">{money(action.amountCents)}</td>
@@ -62,8 +62,8 @@ export function FundingImpactPreview({ order, plan, status, canView }: FundingIm
   const changedActions = plan.actions.filter((action) => changed.has(identity(action)));
   const otherActions = plan.actions.filter((action) => !changed.has(identity(action)));
 
-  return <section className="mb-5 rounded-xl border border-blue-100 bg-white p-5 shadow-sm sm:p-6" aria-labelledby={headingId}>
-    <div className="flex flex-wrap items-center justify-between gap-2"><h2 id={headingId} className="text-[16px] font-semibold">{heading} · V{order.version}</h2><span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-700">Plan only · no payment executed here</span></div>
+  return <section className="mb-5 rounded-xl border border-brand-100 bg-white p-5 shadow-sm sm:p-6" aria-labelledby={headingId}>
+    <div className="flex flex-wrap items-center justify-between gap-2"><h2 id={headingId} className="text-[16px] font-semibold">{heading} · V{order.version}</h2><span className="rounded-full bg-brand-50 px-2.5 py-1 text-[10px] font-semibold text-brand-700">Plan only · no payment executed here</span></div>
     <p className="mt-2 text-[12px] leading-relaxed text-slate-600">The whole-quote budget changes by <strong className="font-semibold text-slate-900">{signedMoney(plan.quoteDeltaCents)}</strong> from V{plan.basedOnVersion}. This difference is not the amount to pay now. Each item&apos;s authorization, capture, release and refund is a separate step.</p>
     <p className="mt-2 text-[10px] text-slate-500">Saved funding records read <time dateTime={plan.factsAsOf}>{dateTime(plan.factsAsOf)} PT</time>. This preview does not query PayPal live.{status === "approved" ? " Amounts below are the remaining steps in the current saved records, not a snapshot taken at approval." : " Actual steps are checked again when started after confirmation."}</p>
     {plan.status === "not_authorized" && <p className="mt-3 rounded-lg bg-amber-50 p-3 text-[11px] leading-relaxed text-amber-900">No PayPal funding records are saved for this project. Existing quote approvals do not count as payments.</p>}
@@ -73,7 +73,7 @@ export function FundingImpactPreview({ order, plan, status, canView }: FundingIm
       {plan.blockers.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-4">{plan.blockers.map((blocker, index) => <li key={index}>{blocker}</li>)}</ul>}
     </div> : <>
       <h3 className="mt-4 text-[12px] font-semibold text-slate-800">Payment impact of changed items</h3>
-      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">{kinds.map((kind) => <div key={kind} className="rounded-lg bg-blue-50/60 p-3"><p className="text-[10px] text-slate-500">{labels[kind]}</p><p className="mt-1 text-[19px] font-semibold tabular-nums text-slate-900">{money(total(changedActions, kind))}</p></div>)}</div>
+      <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">{kinds.map((kind) => <div key={kind} className="rounded-lg bg-brand-50/60 p-3"><p className="text-[10px] text-slate-500">{labels[kind]}</p><p className="mt-1 text-[19px] font-semibold tabular-nums text-slate-900">{money(total(changedActions, kind))}</p></div>)}</div>
       <p className="mt-2 text-[11px] leading-relaxed text-slate-500">An authorization holds funds; it is not a charge. Releasing a hold is not a refund. These amounts are not combined into one net payment.</p>
       {changedActions.length > 0 ? <div className="mt-2"><ActionRows actions={changedActions} /></div> : <p className="mt-3 text-[12px] text-slate-600">No additional payment steps are calculated for the changed items from these saved records.</p>}
 

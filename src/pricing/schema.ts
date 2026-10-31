@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, foreignKey, integer, jsonb, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { chatCases, chatMessages } from "../chat/schema";
 import { projects, revisions } from "../db/schema";
+import type { ApprovedQuoteReport } from "../quotes/types";
 import type { DraftProposal, FrozenChangeOrder, PricingInput } from "./types";
 
 /** A demo chat case acquires a separate business project only when a review is issued. */
@@ -10,6 +11,8 @@ export const pricingCases = pgTable("pricing_cases", {
   projectId: uuid("project_id").notNull().unique().references(() => projects.id),
   baselineRevisionId: uuid("baseline_revision_id").notNull().references(() => revisions.id),
   baselineQuoteId: text("baseline_quote_id").notNull(),
+  /** Imported demo agreement for this case; null retains the original legacy fixture. */
+  baselineQuote: jsonb("baseline_quote").$type<ApprovedQuoteReport>(),
   itemMapping: jsonb("item_mapping").$type<Record<string, string>>().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -4,6 +4,7 @@ import { calculateLineTotals, calculateQuoteTotals, type QuoteTotals } from "../
 import { quoteFingerprint } from "../quotes/fingerprint";
 import type { CaseMessage, ChangeDraft, DraftChange } from "@/chat/types";
 import { differences } from "./review-diff";
+import { HOME_REVIEW_TERMS, homePricingEvidence } from "@/demo/home-evidence";
 import type { ChangeSource, FinalQuoteLine, PricingChangeInput, PricingDocumentBody, PricingInput, PricingItem, PricingPreview, ReviewedChange } from "./types";
 
 const MAX_CENTS = 2_000_000_000;
@@ -43,8 +44,8 @@ export const pricingInputSchema = z.strictObject({
 });
 
 /** A draft the designer wrote is the studio's proposal; one drafted from the chat is the client's request. */
-export function draftSource(draft: Pick<ChangeDraft, "model">): ChangeSource {
-  return { kind: draft.model === "designer" ? "designer" : "client", vendor: "", notice: "" };
+export function draftSource(draft: Pick<ChangeDraft, "model" | "origin">): ChangeSource {
+  return { kind: draft.origin ?? (draft.model === "designer" ? "designer" : "client"), vendor: "", notice: "" };
 }
 
 export class PricingValidationError extends Error {
@@ -108,6 +109,8 @@ function v1PricingChange(key: string, change: DraftChange): PricingChangeInput {
 
 export function createPricingInput(quote: ApprovedQuoteReport, draft: ChangeDraft): PricingInput {
   const old = baseline(quote, draft);
+  const evidence = draft.changes.map((change) => homePricingEvidence(quote, change, draft.sources));
+  const sourced = evidence.length > 0 && evidence.every((entry) => entry !== null);
   return {
     baselineFingerprint: quoteFingerprint(quote),
     title: draft.title,
@@ -120,6 +123,7 @@ export function createPricingInput(quote: ApprovedQuoteReport, draft: ChangeDraf
       const after = change.after;
       const price = after?.unitPriceCents;
       const needsOldHandling = requiresOldItemHandling(change, previous);
+      const suggestion = evidence[index];
       return {
         key: `change-${index}`, action: change.action, itemId: change.itemId,
         after: after ? {
@@ -128,22 +132,23 @@ export function createPricingInput(quote: ApprovedQuoteReport, draft: ChangeDraf
           quantity: after.quantity, unitLabel: after.unitLabel ?? "", currency: after.currency,
           unitPriceCents: price !== null && price !== undefined && Number.isSafeInteger(price) && price >= 0 && price <= MAX_CENTS ? price : null,
           taxCents: null, freightCents: null,
-          sourceUrl: source?.url ?? (change.action === "quantity" ? previous?.source.url ?? null : null),
+          sourceUrl: source?.url.startsWith("local:") ? null : source?.url ?? (change.action === "quantity" ? previous?.source.url ?? null : null),
           returnPolicy: change.action === "quantity" ? previous?.returnPolicy ?? "" : "",
           returnable: change.action === "quantity" && previous?.nonReturnable !== null && previous?.nonReturnable !== undefined ? !previous.nonReturnable : null,
           restockingFeeBps: change.action === "quantity" ? previous?.restockingFeeBps ?? null : null,
           customMade: change.action === "quantity" ? previous?.customMade ?? false : false,
           leadTimeDays: change.action === "quantity" ? previous?.leadTimeDays ?? null : null,
+          ...suggestion?.after,
         } : null,
-        priceEvidence: product?.priceEvidence ?? (change.action === "quantity" && previous ? JSON.stringify({ source: previous.source, sku: previous.sku, unitPriceCents: previous.unitPriceCents, unitLabel: previous.unitLabel ?? null }) : ""),
+        priceEvidence: suggestion?.priceEvidence ?? product?.priceEvidence ?? (change.action === "quantity" && previous ? JSON.stringify({ source: previous.source, sku: previous.sku, unitPriceCents: previous.unitPriceCents, unitLabel: previous.unitLabel ?? null }) : ""),
         confirmed: false,
-        oldItemHandling: needsOldHandling ? "pending" : "not_applicable",
-        oldItemCostCents: needsOldHandling ? null : 0,
-        oldItemNote: "",
+        oldItemHandling: suggestion?.oldItemHandling ?? (needsOldHandling ? "pending" : "not_applicable"),
+        oldItemCostCents: suggestion?.oldItemCostCents ?? (needsOldHandling ? null : 0),
+        oldItemNote: suggestion?.oldItemNote ?? "",
       };
     }),
     issues: draft.unresolved.map((label, index) => ({ id: `issue-${index}`, label, resolved: false, note: "" })),
-    terms: "", reviewNotes: "", source: draftSource(draft),
+    terms: sourced ? HOME_REVIEW_TERMS : "", reviewNotes: sourced ? "Pricing suggestions reference Setti's local fictional supplier documents, not uploaded files or live supplier/payment confirmations. Every line and open issue still needs the designer's explicit check." : "", source: draftSource(draft),
   };
 }
 
@@ -300,7 +305,7 @@ export function previewPricing(quote: ApprovedQuoteReport, draft: ChangeDraft, v
       if (change.oldItemHandling === "retained" && change.oldItemCostCents !== null && change.oldItemCostCents < retainedMinimum) problems.push(change.action === "quantity" ? `${label}: keeping the reduced quantity costs at least its original unit prices in total. Verify the related tax and delivery in the notes.` : `${label}: keeping the old item costs at least its full original line total, including the original tax and delivery.`);
     }
   }
-  for (const issue of input.issues) if (!issue.resolved || !issue.note.trim()) problems.push(`${issue.label}: mark it resolved and enter a verification note.`);
+  for (const issue of input.issues) if (!issue.resolved) problems.push(`${issue.label}: mark it resolved before issuing.`);
   const lines = assembledLines(quote, draft, input);
   let proposedTotals: QuoteTotals | null = null;
   let deltaTotalCents: number | null = null;

@@ -47,7 +47,7 @@ export function SendQuoteDialog({ quote, clientName, onClose, onSend, onViewQuot
     <div role="dialog" aria-modal="true" aria-labelledby="send-quote-title" className="fixed inset-0 z-40 flex items-end justify-center bg-slate-900/30 p-3 sm:items-center" onMouseDown={(event) => { if (event.target === event.currentTarget && !sending) onClose(); }}>
       <div className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
         <header className="flex items-start gap-3 border-b border-[var(--line)] px-5 py-4">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[var(--primary)]"><FileText className="h-4.5 w-4.5" /></span>
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-[var(--primary)]"><FileText className="h-4.5 w-4.5" /></span>
           <div className="min-w-0 flex-1"><h2 id="send-quote-title" className="text-[15px] font-semibold">Send quote V{quote.version}</h2><p className="mt-0.5 text-[12px] text-[var(--muted)]">To {clientName} · {quote.projectName}</p></div>
           <button onClick={onClose} disabled={sending} aria-label="Close" className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--canvas)] disabled:opacity-50"><X className="h-4 w-4" /></button>
         </header>
@@ -67,7 +67,7 @@ export function SendQuoteDialog({ quote, clientName, onClose, onSend, onViewQuot
 
           <label className="block">
             <span className="mb-1.5 block text-[12px] font-medium">Message to {firstName}</span>
-            <textarea value={text} onChange={(event) => setText(event.target.value)} disabled={sending} rows={4} className="w-full resize-y rounded-xl border border-[var(--line)] px-3 py-2.5 text-[13px] leading-relaxed outline-none focus:border-blue-200 disabled:opacity-60" />
+            <textarea value={text} onChange={(event) => setText(event.target.value)} disabled={sending} rows={4} className="w-full resize-y rounded-xl border border-[var(--line)] px-3 py-2.5 text-[13px] leading-relaxed outline-none focus:border-brand-200 disabled:opacity-60" />
             {tooLong && <span className="mt-1 block text-[11px] text-red-600">Keep the message under {QUOTE_MESSAGE_MAX.toLocaleString("en-US")} characters.</span>}
           </label>
 
@@ -77,7 +77,7 @@ export function SendQuoteDialog({ quote, clientName, onClose, onSend, onViewQuot
 
         <footer className="flex justify-end gap-2 border-t border-[var(--line)] px-5 py-3">
           <button onClick={onClose} disabled={sending} className="rounded-lg px-3.5 py-2 text-[12px] font-medium text-slate-600 hover:bg-[var(--canvas)] disabled:opacity-50">Cancel</button>
-          <button onClick={() => void send()} disabled={sending || !text.trim() || tooLong} className="flex items-center gap-1.5 rounded-lg bg-[var(--primary)] px-4 py-2 text-[12px] font-semibold text-white hover:bg-blue-600 disabled:bg-slate-200 disabled:text-slate-400">{sending ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <SendHorizontal className="h-3.5 w-3.5" />}{error ? "Retry sending" : "Send quote"}</button>
+          <button onClick={() => void send()} disabled={sending || !text.trim() || tooLong} className="flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-4 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:text-slate-400">{sending ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <SendHorizontal className="h-3.5 w-3.5" />}{error ? "Retry sending" : "Send quote"}</button>
         </footer>
       </div>
     </div>
