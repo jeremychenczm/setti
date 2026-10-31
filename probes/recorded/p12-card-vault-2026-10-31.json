@@ -1,0 +1,828 @@
+{
+  "probe": "p12-card-vault",
+  "recordedAt": "2026-10-31T06:13:54.273Z",
+  "environment": "sandbox",
+  "notes": [
+    "A: confirm APPROVED, authorization CREATED, vault VAULTED (token returned).",
+    "D: read-back vault VAULTED with token, card VISA 0026.",
+    "C: order COMPLETED, authorization CREATED.",
+    "E: over-capture COMPLETED.",
+    "F: token source card VISA 0026.",
+    "G: hold after delete COMPLETED (not refused).",
+    "G: second delete accepted (204)."
+  ],
+  "steps": [
+    {
+      "step": "A create order as the app does",
+      "request": {
+        "amountCents": 12300
+      },
+      "ok": true,
+      "startedAt": "2026-10-31T06:13:38.594Z",
+      "durationMs": 914,
+      "statusCode": 200,
+      "debugId": "f498919de7a61",
+      "response": {
+        "id": "2N185053XN662254A",
+        "paymentSource": {
+          "paypal": {}
+        },
+        "intent": "AUTHORIZE",
+        "purchaseUnits": [
+          {
+            "referenceId": "p12-a",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "123.00"
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "customId": "p12-a-b23aa7f8",
+            "invoiceId": "p12-a-b23aa7f8"
+          }
+        ],
+        "status": "PAYER_ACTION_REQUIRED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/2N185053XN662254A",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://www.sandbox.paypal.com/checkoutnow?token=2N185053XN662254A",
+            "rel": "payer-action",
+            "method": "GET"
+          }
+        ]
+      }
+    },
+    {
+      "step": "A confirm with the test card, saved on success",
+      "request": {
+        "orderId": "2N185053XN662254A",
+        "card": "[test card]"
+      },
+      "ok": true,
+      "startedAt": "2026-10-31T06:13:39.508Z",
+      "durationMs": 1292,
+      "statusCode": 200,
+      "debugId": "f364742442fff",
+      "response": {
+        "id": "2N185053XN662254A",
+        "paymentSource": {
+          "card": {
+            "name": "Setti Sandbox Test",
+            "lastDigits": "0026",
+            "brand": "VISA",
+            "availableNetworks": [
+              "VISA"
+            ],
+            "type": "CREDIT",
+            "expiry": "2030-12",
+            "binDetails": {
+              "bin": "401200",
+              "binCountryCode": "US"
+            }
+          }
+        },
+        "intent": "AUTHORIZE",
+        "purchaseUnits": [
+          {
+            "referenceId": "p12-a",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "123.00"
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "customId": "p12-a-b23aa7f8",
+            "invoiceId": "p12-a-b23aa7f8"
+          }
+        ],
+        "status": "APPROVED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/2N185053XN662254A",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/2N185053XN662254A/authorize",
+            "rel": "authorize",
+            "method": "POST"
+          }
+        ]
+      }
+    },
+    {
+      "step": "A authorize the confirmed order",
+      "request": {
+        "orderId": "2N185053XN662254A"
+      },
+      "ok": true,
+      "startedAt": "2026-10-31T06:13:40.800Z",
+      "durationMs": 2105,
+      "statusCode": 201,
+      "debugId": "f3681655c9ed9",
+      "response": {
+        "createTime": "2026-10-31T06:13:41Z",
+        "updateTime": "2026-10-31T06:13:41Z",
+        "id": "2N185053XN662254A",
+        "paymentSource": {
+          "card": {
+            "name": "Setti Sandbox Test",
+            "lastDigits": "0026",
+            "brand": "VISA",
+            "availableNetworks": [
+              "VISA"
+            ],
+            "type": "CREDIT",
+            "attributes": {
+              "vault": {
+                "id": "[redacted]",
+                "status": "VAULTED",
+                "links": [
+                  {
+                    "href": "https://api.sandbox.paypal.com/v3/vault/payment-tokens/[redacted]",
+                    "rel": "self",
+                    "method": "GET"
+                  },
+                  {
+                    "href": "https://api.sandbox.paypal.com/v3/vault/payment-tokens/[redacted]",
+                    "rel": "delete",
+                    "method": "DELETE"
+                  },
+                  {
+                    "href": "https://api.sandbox.paypal.com/v2/checkout/orders/2N185053XN662254A",
+                    "rel": "up",
+                    "method": "GET"
+                  }
+                ],
+                "customer": "[redacted]"
+              }
+            },
+            "expiry": "2030-12",
+            "binDetails": {
+              "bin": "401200",
+              "binCountryCode": "US"
+            }
+          }
+        },
+        "intent": "AUTHORIZE",
+        "purchaseUnits": [
+          {
+            "referenceId": "p12-a",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "123.00"
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "customId": "p12-a-b23aa7f8",
+            "invoiceId": "p12-a-b23aa7f8",
+            "softDescriptor": "TEST SE8H4",
+            "payments": {
+              "authorizations": [
+                {
+                  "status": "CREATED",
+                  "id": "6G3133149W719920N",
+                  "amount": {
+                    "currencyCode": "USD",
+                    "value": "123.00"
+                  },
+                  "invoiceId": "p12-a-b23aa7f8",
+                  "customId": "p12-a-b23aa7f8",
+                  "networkTransactionReference": {
+                    "id": "907725901743014",
+                    "network": "VISA"
+                  },
+                  "sellerProtection": {
+                    "status": "NOT_ELIGIBLE"
+                  },
+                  "expirationTime": "2026-11-29T06:13:41Z",
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/6G3133149W719920N",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/6G3133149W719920N/capture",
+                      "rel": "capture",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/6G3133149W719920N/void",
+                      "rel": "void",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/6G3133149W719920N/reauthorize",
+                      "rel": "reauthorize",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/2N185053XN662254A",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "createTime": "2026-10-31T06:13:41Z",
+                  "updateTime": "2026-10-31T06:13:41Z",
+                  "processorResponse": {
+                    "avsCode": "Y",
+                    "cvvCode": "S",
+                    "responseCode": "0000"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "status": "COMPLETED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/2N185053XN662254A",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      }
+    },
+    {
+      "step": "D read order A back",
+      "request": {
+        "orderId": "2N185053XN662254A"
+      },
+      "ok": true,
+      "startedAt": "2026-10-31T06:13:42.905Z",
+      "durationMs": 557,
+      "statusCode": 200,
+      "debugId": "f6048758e987e",
+      "response": {
+        "createTime": "2026-10-31T06:13:41Z",
+        "updateTime": "2026-10-31T06:13:41Z",
+        "id": "2N185053XN662254A",
+        "paymentSource": {
+          "card": {
+            "name": "Setti Sandbox Test",
+            "lastDigits": "0026",
+            "brand": "VISA",
+            "availableNetworks": [
+              "VISA"
+            ],
+            "type": "CREDIT",
+            "attributes": {
+              "vault": {
+                "id": "[redacted]",
+                "status": "VAULTED",
+                "links": [
+                  {
+                    "href": "https://api.sandbox.paypal.com/v3/vault/payment-tokens/[redacted]",
+                    "rel": "self",
+                    "method": "GET"
+                  },
+                  {
+                    "href": "https://api.sandbox.paypal.com/v3/vault/payment-tokens/[redacted]",
+                    "rel": "delete",
+                    "method": "DELETE"
+                  },
+                  {
+                    "href": "https://api.sandbox.paypal.com/v2/checkout/orders/2N185053XN662254A",
+                    "rel": "up",
+                    "method": "GET"
+                  }
+                ],
+                "customer": "[redacted]"
+              }
+            },
+            "expiry": "2030-12",
+            "binDetails": {
+              "bin": "401200",
+              "binCountryCode": "US"
+            }
+          }
+        },
+        "intent": "AUTHORIZE",
+        "purchaseUnits": [
+          {
+            "referenceId": "p12-a",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "123.00",
+              "breakdown": {}
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "customId": "p12-a-b23aa7f8",
+            "invoiceId": "p12-a-b23aa7f8",
+            "softDescriptor": "TEST SE8H4",
+            "payments": {
+              "authorizations": [
+                {
+                  "status": "CREATED",
+                  "id": "6G3133149W719920N",
+                  "amount": {
+                    "currencyCode": "USD",
+                    "value": "123.00"
+                  },
+                  "invoiceId": "p12-a-b23aa7f8",
+                  "customId": "p12-a-b23aa7f8",
+                  "networkTransactionReference": {
+                    "id": "907725901743014",
+                    "network": "VISA"
+                  },
+                  "sellerProtection": {
+                    "status": "NOT_ELIGIBLE"
+                  },
+                  "expirationTime": "2026-11-29T06:13:41Z",
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/6G3133149W719920N",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/6G3133149W719920N/capture",
+                      "rel": "capture",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/6G3133149W719920N/void",
+                      "rel": "void",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/6G3133149W719920N/reauthorize",
+                      "rel": "reauthorize",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/2N185053XN662254A",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "createTime": "2026-10-31T06:13:41Z",
+                  "updateTime": "2026-10-31T06:13:41Z",
+                  "processorResponse": {
+                    "avsCode": "Y",
+                    "cvvCode": "S",
+                    "responseCode": "0000"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "status": "COMPLETED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/2N185053XN662254A",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      }
+    },
+    {
+      "step": "C hold $100.00 with the saved card",
+      "request": {
+        "amountCents": 10000,
+        "vaultId": "[redacted]"
+      },
+      "ok": true,
+      "startedAt": "2026-10-31T06:13:43.462Z",
+      "durationMs": 2891,
+      "statusCode": 201,
+      "debugId": "f604875d3acf9",
+      "response": {
+        "createTime": "2026-10-31T06:13:45Z",
+        "updateTime": "2026-10-31T06:13:45Z",
+        "id": "8P571226X9041291W",
+        "paymentSource": {
+          "card": {
+            "name": "Setti Sandbox Test",
+            "lastDigits": "0026",
+            "brand": "VISA",
+            "availableNetworks": [
+              "VISA"
+            ],
+            "type": "CREDIT",
+            "expiry": "2030-12",
+            "binDetails": {
+              "bin": "401200",
+              "binCountryCode": "US"
+            }
+          }
+        },
+        "intent": "AUTHORIZE",
+        "purchaseUnits": [
+          {
+            "referenceId": "p12-c",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "100.00"
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "customId": "p12-c-b23aa7f8",
+            "invoiceId": "p12-c-b23aa7f8",
+            "softDescriptor": "TEST SE8H4",
+            "payments": {
+              "authorizations": [
+                {
+                  "status": "CREATED",
+                  "id": "19G168513C185790K",
+                  "amount": {
+                    "currencyCode": "USD",
+                    "value": "100.00"
+                  },
+                  "invoiceId": "p12-c-b23aa7f8",
+                  "customId": "p12-c-b23aa7f8",
+                  "networkTransactionReference": {
+                    "id": "570657358734941",
+                    "network": "VISA"
+                  },
+                  "sellerProtection": {
+                    "status": "NOT_ELIGIBLE"
+                  },
+                  "expirationTime": "2026-11-29T06:13:45Z",
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/19G168513C185790K",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/19G168513C185790K/capture",
+                      "rel": "capture",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/19G168513C185790K/void",
+                      "rel": "void",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/19G168513C185790K/reauthorize",
+                      "rel": "reauthorize",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/8P571226X9041291W",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "createTime": "2026-10-31T06:13:45Z",
+                  "updateTime": "2026-10-31T06:13:45Z",
+                  "processorResponse": {
+                    "avsCode": "Y",
+                    "cvvCode": "M",
+                    "responseCode": "0000"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "status": "COMPLETED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/8P571226X9041291W",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      }
+    },
+    {
+      "step": "E capture $115.00 from the $100.00 card hold",
+      "request": {
+        "authorizationId": "19G168513C185790K",
+        "amountCents": 11500
+      },
+      "ok": true,
+      "startedAt": "2026-10-31T06:13:46.353Z",
+      "durationMs": 1680,
+      "statusCode": 201,
+      "debugId": "f3529716e8288",
+      "response": {
+        "status": "COMPLETED",
+        "id": "7HM64543HJ8842743",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "115.00"
+        },
+        "invoiceId": "p12-c-b23aa7f8",
+        "customId": "p12-c-b23aa7f8",
+        "networkTransactionReference": {
+          "id": "570657358734941",
+          "network": "VISA"
+        },
+        "sellerProtection": {
+          "status": "NOT_ELIGIBLE"
+        },
+        "finalCapture": true,
+        "sellerReceivableBreakdown": {
+          "grossAmount": {
+            "currencyCode": "USD",
+            "value": "115.00"
+          },
+          "paypalFee": {
+            "currencyCode": "USD",
+            "value": "5.02"
+          },
+          "netAmount": {
+            "currencyCode": "USD",
+            "value": "109.98"
+          },
+          "exchangeRate": {}
+        },
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/7HM64543HJ8842743",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/captures/7HM64543HJ8842743/refund",
+            "rel": "refund",
+            "method": "POST"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/19G168513C185790K",
+            "rel": "up",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-31T06:13:47Z",
+        "updateTime": "2026-10-31T06:13:47Z"
+      }
+    },
+    {
+      "step": "F read the payment token",
+      "request": {
+        "id": "[token]"
+      },
+      "ok": true,
+      "startedAt": "2026-10-31T06:13:48.033Z",
+      "durationMs": 184,
+      "statusCode": 200,
+      "debugId": "f2588838ee171",
+      "response": {
+        "id": "[redacted]",
+        "customer": "[redacted]",
+        "paymentSource": {
+          "card": {
+            "name": "Setti Sandbox Test",
+            "lastDigits": "0026",
+            "brand": "VISA",
+            "expiry": "2030-12",
+            "verificationStatus": "VERIFIED",
+            "verification": {
+              "amount": {
+                "currencyCode": "USD",
+                "value": "0.00"
+              },
+              "processorResponse": {
+                "avsCode": "Y",
+                "cvvCode": "S"
+              }
+            },
+            "networkTransactionReference": {
+              "id": "907725901743014",
+              "network": "VISA",
+              "time": "2026-10-30T23:13:41Z"
+            }
+          }
+        },
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v3/vault/payment-tokens/[redacted]",
+            "rel": "self",
+            "method": "GET"
+          },
+          {
+            "href": "https://api.sandbox.paypal.com/v3/vault/payment-tokens/[redacted]",
+            "rel": "delete",
+            "method": "DELETE"
+          }
+        ]
+      }
+    },
+    {
+      "step": "G delete the payment token",
+      "request": {
+        "id": "[token]"
+      },
+      "ok": true,
+      "startedAt": "2026-10-31T06:13:48.217Z",
+      "durationMs": 246,
+      "statusCode": 204,
+      "debugId": "f258883502468"
+    },
+    {
+      "step": "G hold with the deleted token",
+      "request": {
+        "amountCents": 5000,
+        "vaultId": "[redacted]"
+      },
+      "ok": true,
+      "startedAt": "2026-10-31T06:13:48.463Z",
+      "durationMs": 3304,
+      "statusCode": 201,
+      "debugId": "f25888312e443",
+      "response": {
+        "createTime": "2026-10-31T06:13:50Z",
+        "updateTime": "2026-10-31T06:13:50Z",
+        "id": "1N088833Y6661772D",
+        "paymentSource": {
+          "card": {
+            "name": "Setti Sandbox Test",
+            "lastDigits": "0026",
+            "brand": "VISA",
+            "availableNetworks": [
+              "VISA"
+            ],
+            "type": "CREDIT",
+            "expiry": "2030-12",
+            "binDetails": {
+              "bin": "401200",
+              "binCountryCode": "US"
+            }
+          }
+        },
+        "intent": "AUTHORIZE",
+        "purchaseUnits": [
+          {
+            "referenceId": "p12-g",
+            "amount": {
+              "currencyCode": "USD",
+              "value": "50.00"
+            },
+            "payee": {
+              "emailAddress": "[redacted]",
+              "merchantId": "ZXK85KF9DE8H4"
+            },
+            "customId": "p12-g-b23aa7f8",
+            "invoiceId": "p12-g-b23aa7f8",
+            "softDescriptor": "TEST SE8H4",
+            "payments": {
+              "authorizations": [
+                {
+                  "status": "CREATED",
+                  "id": "9TK19730KL015902F",
+                  "amount": {
+                    "currencyCode": "USD",
+                    "value": "50.00"
+                  },
+                  "invoiceId": "p12-g-b23aa7f8",
+                  "customId": "p12-g-b23aa7f8",
+                  "networkTransactionReference": {
+                    "id": "490200796341673",
+                    "network": "VISA"
+                  },
+                  "sellerProtection": {
+                    "status": "NOT_ELIGIBLE"
+                  },
+                  "expirationTime": "2026-11-29T06:13:50Z",
+                  "links": [
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/9TK19730KL015902F",
+                      "rel": "self",
+                      "method": "GET"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/9TK19730KL015902F/capture",
+                      "rel": "capture",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/9TK19730KL015902F/void",
+                      "rel": "void",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/9TK19730KL015902F/reauthorize",
+                      "rel": "reauthorize",
+                      "method": "POST"
+                    },
+                    {
+                      "href": "https://api.sandbox.paypal.com/v2/checkout/orders/1N088833Y6661772D",
+                      "rel": "up",
+                      "method": "GET"
+                    }
+                  ],
+                  "createTime": "2026-10-31T06:13:50Z",
+                  "updateTime": "2026-10-31T06:13:50Z",
+                  "processorResponse": {
+                    "avsCode": "Y",
+                    "cvvCode": "M",
+                    "responseCode": "0000"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "status": "COMPLETED",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/checkout/orders/1N088833Y6661772D",
+            "rel": "self",
+            "method": "GET"
+          }
+        ]
+      }
+    },
+    {
+      "step": "G delete the payment token again",
+      "request": {
+        "id": "[token]"
+      },
+      "ok": true,
+      "startedAt": "2026-10-31T06:13:51.767Z",
+      "durationMs": 1062,
+      "statusCode": 204,
+      "debugId": "f7037842fa450"
+    },
+    {
+      "step": "void a probe hold",
+      "request": {
+        "authorizationId": "6G3133149W719920N"
+      },
+      "ok": true,
+      "startedAt": "2026-10-31T06:13:52.829Z",
+      "durationMs": 668,
+      "statusCode": 200,
+      "debugId": "f607968a1b131",
+      "response": {
+        "status": "VOIDED",
+        "id": "6G3133149W719920N",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "123.00"
+        },
+        "invoiceId": "p12-a-b23aa7f8",
+        "sellerProtection": {
+          "status": "NOT_ELIGIBLE"
+        },
+        "expirationTime": "2026-11-28T22:13:41-08:00",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/6G3133149W719920N",
+            "rel": "self",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-30T23:13:41-07:00",
+        "updateTime": "2026-10-30T23:13:53-07:00"
+      }
+    },
+    {
+      "step": "void a probe hold",
+      "request": {
+        "authorizationId": "9TK19730KL015902F"
+      },
+      "ok": true,
+      "startedAt": "2026-10-31T06:13:53.497Z",
+      "durationMs": 775,
+      "statusCode": 200,
+      "debugId": "f6333795610e8",
+      "response": {
+        "status": "VOIDED",
+        "id": "9TK19730KL015902F",
+        "amount": {
+          "currencyCode": "USD",
+          "value": "50.00"
+        },
+        "invoiceId": "p12-g-b23aa7f8",
+        "sellerProtection": {
+          "status": "NOT_ELIGIBLE"
+        },
+        "expirationTime": "2026-11-28T22:13:50-08:00",
+        "links": [
+          {
+            "href": "https://api.sandbox.paypal.com/v2/payments/authorizations/9TK19730KL015902F",
+            "rel": "self",
+            "method": "GET"
+          }
+        ],
+        "createTime": "2026-10-30T23:13:50-07:00",
+        "updateTime": "2026-10-30T23:13:54-07:00"
+      }
+    }
+  ]
+}

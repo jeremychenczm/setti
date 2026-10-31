@@ -33,6 +33,7 @@ pick which one a probe uses.
 | P8 `p8-pay-later-authorize.ts` | Whether an AUTHORIZE order works when the buyer chooses Pay Later | `[--amount 200]` | yes | - |
 | P9 `p9-void-after-partial.ts` | Partial capture, void the rest, read the authorization back to see which amount PayPal reports | `--auth <label>` | no | - |
 | P10 `p10-test-card-approval.ts` | Approves an order from the server with a Sandbox test card: confirms the app's own order with the card and authorizes it, and creates an order with the card as its payment source. Voids both holds | `[--card 4012000033330026]` | no | - |
+| P12 `p12-card-vault.ts` | Saves the test card in the vault while confirming the app's own order, reads it back, holds a new amount with the saved card (merchant-initiated, no buyer), captures 115% of a card hold, reads and deletes the token, then holds with the deleted token and deletes it again. Voids every open hold | - | no | - |
 
 ### Suggested order
 
