@@ -1,17 +1,14 @@
 "use client";
 
-import { ArrowRight, Check, ChevronDown, ChevronUp, FileText, LoaderCircle, RefreshCw, UserRound } from "lucide-react";
-import Link from "next/link";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { ArrowRight, Check } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AccountId } from "@/accounts/demo";
 import type { CaseSnapshot } from "@/chat/types";
 import type { ItemHoldsView } from "@/payments/item-holds-view";
 import type { ServicesPaymentView } from "@/payments/services-view";
-import { money } from "../pricing/common";
 import type { TrySeedNoticeProps } from "./TrySeedNotice";
 import { navigateGuidePage, useGuideAnchor } from "./useGuideAnchor";
 import { WILLOW_GUIDE_STEPS, willowGuideStep, type WillowGuideData } from "./willow-guide";
-import { EndDemoButton } from "./EndDemoButton";
 
 async function readJson(path: string, signal: AbortSignal): Promise<unknown> {
   const response = await fetch(path, { cache: "no-store", signal });
@@ -20,24 +17,24 @@ async function readJson(path: string, signal: AbortSignal): Promise<unknown> {
   return body;
 }
 
-/** The opening-quote walkthrough uses the normal signing, wallet and item-payment screens. */
+/**
+ * The opening-quote walkthrough uses the normal signing, wallet and item-payment
+ * screens. It shows only where the walkthrough stands and the one next step;
+ * the account, demo home and reset live in the sidebar's account menu.
+ */
 export function WillowGuide({ account, onSwitchAccount, onOpenChat, currentView, currentOrderId }: TrySeedNoticeProps) {
   const [data, setData] = useState<WillowGuideData | null>(null);
   const [viewerId, setViewerId] = useState<AccountId | null>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const detailsId = useId();
   const request = useRef<AbortController | null>(null);
   const busy = useRef(false);
   useGuideAnchor(data !== null);
 
-  const refresh = useCallback(async (manual = false) => {
+  const refresh = useCallback(async () => {
     if (busy.current) return;
     busy.current = true;
     const controller = new AbortController();
     request.current = controller;
-    if (manual) setLoading(true);
     try {
       const workspace = await readJson("/api/try", controller.signal) as { hasWorkspace?: boolean } | null;
       if (!workspace?.hasWorkspace) { setData(null); setError(null); return; }
@@ -56,7 +53,7 @@ export function WillowGuide({ account, onSwitchAccount, onOpenChat, currentView,
     } catch {
       if (!controller.signal.aborted) setError("The guide could not refresh. Your existing decisions and payments are not changed by this check.");
     } finally {
-      if (request.current === controller) { busy.current = false; setLoading(false); }
+      if (request.current === controller) busy.current = false;
     }
   }, [account.id]);
 
@@ -75,9 +72,6 @@ export function WillowGuide({ account, onSwitchAccount, onOpenChat, currentView,
   const sameQuote = step.destination === "quote" && currentView === "quotes" && !switchNeeded;
   const sameOrder = step.destination === "order" && currentView === "change-order" && currentOrderId === step.orderId && !switchNeeded;
   const action = switchNeeded ? `Continue as ${nextName}` : sameQuote || sameOrder ? step.anchor === "client-decision-title" ? "Go to client review below" : step.anchor ? "Go to the payment section below" : step.action : step.action;
-  const progress = data.snapshot.opening.progress;
-  const capturedItems = data.holds?.items.filter((item) => item.state === "captured").length ?? 0;
-  const coveredItems = data.holds?.items.filter((item) => ["captured", "confirmed", "held"].includes(item.state)).length ?? 0;
 
   function continueGuide() {
     if (switchNeeded) onSwitchAccount(step.role);
@@ -91,25 +85,23 @@ export function WillowGuide({ account, onSwitchAccount, onOpenChat, currentView,
     navigateGuidePage(`${path}${step.anchor ? `#${step.anchor}` : ""}`, switchNeeded);
   }
 
-  return <aside aria-label="Willow demo guide" className="shrink-0 rounded-xl border border-violet-100 bg-violet-50/60 px-4 py-3 text-slate-700">
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <p className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] font-semibold text-violet-950"><FileText className="h-3.5 w-3.5 shrink-0" />Willow Residence · from the first quote</p>
-      <Link href="/try" className="text-[10px] font-medium text-violet-700 underline underline-offset-2">Demo home</Link>
-      <EndDemoButton className="rounded-md px-1.5 py-1 text-[10px] font-medium text-violet-700 hover:bg-violet-100" />
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-100 bg-white px-2.5 py-1 text-[10px]"><UserRound className="h-3 w-3" />You are {account.name} · {account.role === "designer" ? "Designer" : "Client"}</span>
-      <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} aria-controls={detailsId} className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium text-violet-700 hover:bg-violet-100">{expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}{expanded ? "Hide details" : "Show steps and status"}</button>
-      <button type="button" onClick={() => void refresh(true)} disabled={loading} aria-label="Refresh Willow guide from saved records" className="rounded-md p-1 text-violet-700 hover:bg-violet-100 disabled:opacity-50">{loading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}</button>
-    </div>
-    <div className="mt-2 flex flex-wrap items-center gap-3"><h2 className="min-w-0 flex-1 text-[12px] font-semibold text-slate-900"><span className="mr-1.5 font-normal text-slate-500">{step.index + 1}/{WILLOW_GUIDE_STEPS.length}</span>{step.title}</h2><button type="button" onClick={continueGuide} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3 py-2 text-[11px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">{action}<ArrowRight className="h-3 w-3" /></button></div>
-    <div id={detailsId} hidden={!expanded} className="mt-2 max-h-[28dvh] overflow-y-auto pr-1">
-      <ol aria-label="Willow progress from saved records" className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-500">{WILLOW_GUIDE_STEPS.map((label, index) => <li key={label} aria-current={step.index === index ? "step" : undefined} className={`flex items-center gap-1 ${step.index === index ? "font-semibold text-violet-800" : ""}`}>{index < step.index || (index === step.index && step.complete) ? <Check className="h-3 w-3 text-emerald-700" /> : <span>{index + 1}.</span>}{label}</li>)}</ol>
-      <p className="mt-2 max-w-4xl text-[11px] leading-relaxed">{step.detail}</p>
-      <dl className="mt-3 grid gap-2 text-[10px] sm:grid-cols-3">
-        <div className="rounded-lg border border-violet-100 bg-white p-2.5"><dt className="font-semibold text-slate-800">Saved V1 decisions</dt><dd className="mt-1">{progress.approved} approved · {progress.declined} declined · {progress.pending} undecided</dd></div>
-        <div className="rounded-lg border border-violet-100 bg-white p-2.5"><dt className="font-semibold text-slate-800">Approved service payments</dt><dd className="mt-1">{data.services?.services.length ? `${money(data.services.dueCents)} not yet completed` : "No approved service payment loaded"}</dd><dd className="mt-1">{data.services?.savedPayPal ? "Saved PayPal recorded" : "Saved PayPal not recorded"}</dd></div>
-        <div className="rounded-lg border border-violet-100 bg-white p-2.5"><dt className="font-semibold text-slate-800">Approved furniture</dt><dd className="mt-1">{data.holds ? `${coveredItems} of ${data.holds.items.length} held or captured · ${capturedItems} captured` : "Item payment records not loaded"}</dd></div>
-      </dl>
-      <p className="mt-3 text-[10px] leading-relaxed text-slate-500">Prepared demo materials: the 28-line quote, suppliers, products and prices are fictional. Your signatures and new PayPal Sandbox actions are taken through the normal screens, not pre-filled by this guide. Supplier confirmations are designer-entered demo records. Sandbox payments move no real money. You can start with a few lines; there is no requirement to approve the whole quote.</p>
+  const done = (index: number) => index < step.index || (index === step.index && !!step.complete);
+  return <aside aria-label="Willow demo guide" className="shrink-0 rounded-xl border border-[var(--primary-line)] bg-[var(--primary-soft)] px-4 py-3 text-[var(--ink)]">
+    <ol aria-label={`Step ${step.index + 1} of ${WILLOW_GUIDE_STEPS.length}`} className="flex flex-wrap items-center gap-1.5">
+      {WILLOW_GUIDE_STEPS.map((label, index) => <li key={label} title={label} aria-current={step.index === index ? "step" : undefined} className="flex items-center gap-1.5">
+        {index > 0 && <span aria-hidden className={`h-px w-4 sm:w-6 ${index <= step.index ? "bg-[var(--primary)]" : "bg-[var(--primary-line)]"}`} />}
+        <span className={`flex h-[18px] w-[18px] items-center justify-center rounded-full text-[9px] font-semibold ${done(index) ? "bg-[var(--primary)] text-white" : index === step.index ? "border-2 border-[var(--primary)] bg-white text-[var(--primary)]" : "border border-[var(--primary-line)] bg-white text-[var(--muted)]"}`}>
+          {done(index) ? <Check className="h-2.5 w-2.5" /> : index + 1}<span className="sr-only">{label}</span>
+        </span>
+      </li>)}
+      <li className="ml-1.5 text-[10px] text-[var(--muted)]">Step {step.index + 1} of {WILLOW_GUIDE_STEPS.length} · {WILLOW_GUIDE_STEPS[step.index]}</li>
+    </ol>
+    <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="min-w-[220px] flex-1">
+        <h2 className="text-[13px] font-semibold leading-snug">{step.title}</h2>
+        <p title={step.detail} className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-slate-600">{step.detail}</p>
+      </div>
+      <button type="button" onClick={continueGuide} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">{action}<ArrowRight className="h-3.5 w-3.5" /></button>
     </div>
     {error && <p role="status" className="mt-2 text-[10px] leading-relaxed text-amber-800">{error}</p>}
   </aside>;

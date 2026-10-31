@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, ChevronsUpDown } from "lucide-react";
+import Link from "next/link";
 import { useRef, useState } from "react";
 import { DEMO_ACCOUNTS, type AccountId, type DemoAccount } from "@/accounts/demo";
 import { useDismiss } from "../useDismiss";
@@ -55,6 +56,7 @@ export function AccountMenu({ account, onSwitch, compact = false, placement = "b
           ))}
           <p className="px-2 pb-1 pt-1.5 text-[10px] leading-relaxed text-[var(--muted)]">No login in this demo. The account decides who sends messages and what you can see.</p>
           <div className="mt-1 border-t border-[var(--line)] pt-1">
+            <Link href="/try" role="menuitem" className="block w-full rounded-lg px-2 py-2 text-left text-[12px] text-slate-600 hover:bg-[var(--canvas)]">Demo home</Link>
             <EndDemoButton menuItem className="w-full rounded-lg px-2 py-2 text-left text-[12px] text-slate-600 hover:bg-[var(--canvas)]" />
           </div>
         </div>
