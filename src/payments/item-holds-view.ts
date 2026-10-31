@@ -31,8 +31,10 @@ export interface ItemHoldView {
   paypalAuthorizationId: string | null;
   expiresAt: string | null;
   failureMessage: string | null;
+  /** Who supplies the item. */
+  vendor: string | null;
   /** The terms the client approved, which the supplier's confirmation must match (V1 lines only). */
-  terms: { quantity: number; unitPriceCents: number; taxCents: number; freightCents: number } | null;
+  terms: { quantity: number; unitPriceCents: number; taxCents: number; freightCents: number; leadTimeDays: number | null } | null;
   /** The supplier's order confirmation recorded for this version (demo, entered by the designer). */
   supplier: { reference: string; totalCents: number; leadTimeDays: number | null } | null;
 }
@@ -74,11 +76,13 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
     && (operation.status === "pending" || operation.status === "unknown"));
   const member = !!account && (account.role === "designer" || account.projectKey === key);
   const client = member && account?.role === "client";
-  const kinds = new Map((await db.select({ id: items.id, kind: items.kind }).from(items).where(eq(items.projectId, basis.projectId))).map((row) => [row.id, row.kind]));
+  const projectItems = await db.select({ id: items.id, kind: items.kind, vendor: items.vendor }).from(items).where(eq(items.projectId, basis.projectId));
+  const kinds = new Map(projectItems.map((row) => [row.id, row.kind]));
+  const vendors = new Map(projectItems.map((row) => [row.id, row.vendor]));
   const saved = savedMethodView(await activeSavedMethod(db, basis.projectId));
   // On V1 the approved terms are the V1 revision's lines; a change order's page shows its own.
   const v1Terms = basis.orderId ? new Map() : new Map((await db.select().from(revisionLines).where(eq(revisionLines.revisionId, basis.key)))
-    .map((row) => [row.itemId, { quantity: row.quantity, unitPriceCents: row.unitPriceCents, taxCents: row.taxCents, freightCents: row.freightCents }]));
+    .map((row) => [row.itemId, { quantity: row.quantity, unitPriceCents: row.unitPriceCents, taxCents: row.taxCents, freightCents: row.freightCents, leadTimeDays: row.leadTimeDays }]));
   const now = Date.now();
   const lines = plan.lines.flatMap((line): ItemHoldView[] => {
     const businessId = basis.businessItem(line);
@@ -107,6 +111,7 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
       canCheckout: false,
       paypalAuthorizationId: hold?.paypalAuthorizationId ?? null, expiresAt: hold?.expiresAt?.toISOString() ?? null,
       failureMessage: ["failed", "awaiting_client", "unknown"].includes(state) ? displayedOperation?.failureMessage ?? null : null,
+      vendor: vendors.get(businessId) ?? null,
       terms: v1Terms.get(businessId) ?? null,
       supplier: event ? { reference: event.reference, totalCents: event.totalCents, leadTimeDays: event.leadTimeDays } : null,
     }];
