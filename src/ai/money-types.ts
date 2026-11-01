@@ -31,6 +31,27 @@ export interface MoneyContext {
   mandatoryFactIds?: string[];
 }
 
+/** One sentence of Setti's written answer and the recorded facts it rests on. */
+export interface MoneyAnswerSentence {
+  text: string;
+  factIds: string[];
+}
+
+/** One item's line in the answer: what happened to it, and the amount that matters. */
+export interface MoneyAnswerRow {
+  label: string;
+  status: string;
+  amount: string | null;
+  factIds: string[];
+}
+
+/** Setti's answer as it chose to lay it out: the conclusion, item lines when several items matter, then short notes. */
+export interface MoneyAnswerBody {
+  summary: MoneyAnswerSentence;
+  rows: MoneyAnswerRow[];
+  notes: MoneyAnswerSentence[];
+}
+
 /** Stored with the reply so a later transaction cannot rewrite an earlier answer. */
 export interface MoneyAnswer {
   quoteId: string;
@@ -40,4 +61,8 @@ export interface MoneyAnswer {
   mode: "recorded_sandbox";
   facts: MoneyFact[];
   sources: MoneySource[];
+  /** Setti's verified answer; absent when the recorded facts are shown on their own. */
+  answer?: MoneyAnswerBody;
+  /** Setti chose to show the cited records because the person asked for the evidence. */
+  showEvidence?: boolean;
 }

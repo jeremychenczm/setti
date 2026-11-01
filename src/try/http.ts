@@ -3,19 +3,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { SandboxGuardError } from "@/config/paypalEnv";
 import { createDb } from "@/db/client";
-import { HOME_LEGACY_SCENARIO, HOME_SCENARIO } from "@/demo/living-dining";
+import { HOME_SCENARIO } from "@/demo/living-dining";
 import { isSameOriginRequest } from "@/http/origin";
 import { ACCOUNT_COOKIE } from "@/accounts/demo";
 import { DEMO_SESSION_COOKIE as SESSION_COOKIE, DEMO_VISITOR_COOKIE as VISITOR_COOKIE, privateDemoCookieOptions } from "@/accounts/cookie-policy";
 import { refreshDemoCookies } from "@/http/demo-cookies";
 import { paypalLinks } from "@/payments/http";
 import { sandboxPayPal, sandboxTestCard } from "@/payments/server";
-import { MAPLE_SCENARIO, TRY_PROJECT_HREF, openWillowWorkspace, prepareTry, readTryRuns, readTrySeed, resumeTry, startTry } from "./service";
+import { TRY_PROJECT_HREF, openWillowWorkspace, prepareTry, readTryRuns, readTrySeed, resumeTry, startTry } from "./service";
 
 const uuid = z.uuid();
 const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
+// Only the current walkthrough starts. Retired scenarios wrote scripted "@AI" exchanges, so they stay out of the product.
 const startSchema = z.union([
-  z.strictObject({ action: z.literal("start").optional(), scenario: z.enum(["maple-mixed-change-v1", HOME_LEGACY_SCENARIO, HOME_SCENARIO]).optional(), restart: z.boolean().optional() }),
+  z.strictObject({ action: z.literal("start").optional(), scenario: z.literal(HOME_SCENARIO).optional(), restart: z.boolean().optional() }),
   z.strictObject({ action: z.literal("prepare"), runId: uuid }),
   z.strictObject({ action: z.literal("resume"), runId: uuid }),
   z.strictObject({ action: z.literal("workspace"), scenario: z.literal("willow-first-payment-v1") }),
@@ -43,7 +44,7 @@ function retainIdentity(response: NextResponse, req: NextRequest, session: strin
 }
 async function state(session: string | null, visitorId: string | null, href = TRY_PROJECT_HREF) {
   const [seed, previousRuns] = await Promise.all([readTrySeed(db(), session), readTryRuns(db(), visitorId, session)]);
-  return { seed, href, previousRuns, hasWorkspace: !!session, scenario: seed?.scenario ?? MAPLE_SCENARIO };
+  return { seed, href, previousRuns, hasWorkspace: !!session, scenario: seed?.scenario ?? HOME_SCENARIO };
 }
 export async function getTryResponse(req: NextRequest) {
   try { return refreshDemoCookies(NextResponse.json(await state(identity(req, SESSION_COOKIE), identity(req, VISITOR_COOKIE)), { headers }), req); }
@@ -77,12 +78,14 @@ export async function postTryResponse(req: NextRequest) {
     }
     if (body.action === "prepare") {
       if (!current || current !== body.runId) return failure("FORBIDDEN", "Resume this private run before preparing it.", 403);
+      const saved = await readTrySeed(db(), current);
+      if (saved && saved.scenario !== HOME_SCENARIO) return failure("RETIRED", "This older walkthrough can no longer be prepared. Start the current walkthrough from /try.", 410);
       const result = await prepareTry({ db: db(), paypal: sandboxPayPal(), testCard: sandboxTestCard(), links: paypalLinks(req), perHour: perHour() }, current, body.runId);
       if (result.kind === "not_found") return failure("NOT_FOUND", "This preparation run could not be found.", 404);
       const payload = await state(current, visitorId);
       return NextResponse.json({ ...payload, ...(result.kind === "failed" ? { code: "SEED_FAILED", error: result.seed.error } : {}) }, { status: result.kind === "ready" ? 200 : result.kind === "failed" ? 502 : 202, headers });
     }
-    const result = await startTry({ db: db(), perHour: perHour() }, current, { restart: body.restart, visitorId: visitorId ?? randomUUID(), ...(body.scenario ? { scenario: body.scenario } : {}) });
+    const result = await startTry({ db: db(), perHour: perHour() }, current, { restart: body.restart, visitorId: visitorId ?? randomUUID(), scenario: HOME_SCENARIO });
     if (result.kind === "limited") return failure("LIMITED", "The demo has prepared many projects in the last hour. Try again in a few minutes.", 429);
     return retainIdentity(NextResponse.json({ ...await state(result.session, result.visitorId), reused: result.reused }, { status: result.kind === "ready" ? 200 : 202, headers }), req, result.session, result.visitorId);
   } catch (error) {

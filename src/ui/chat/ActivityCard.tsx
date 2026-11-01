@@ -22,7 +22,7 @@ export function ActivityCard({ records, highlightedId }: { records: CaseMessage[
     <time dateTime={record.createdAt} className="text-[10px] text-[var(--muted)]">{timeLabel(record.createdAt)}</time>
   </div>;
 
-  if (records.length === 1) return <div className="flex items-start gap-2.5 rounded-xl border border-[var(--line)] bg-white px-3.5 py-2.5">{icon}<div className="min-w-0 flex-1">{row(latest)}</div></div>;
+  if (records.length === 1) return <div className="flex items-start gap-2.5 rounded-xl border border-[var(--line)] bg-white px-3.5 py-2.5">{icon}<div className="min-w-0 flex-1"><div className="mb-0.5 text-[10px] font-medium text-[var(--muted)]">Project activity</div>{row(latest)}</div></div>;
 
   return <details ref={details} className="group rounded-xl border border-[var(--line)] bg-white">
     <summary className="flex cursor-pointer list-none items-center gap-2.5 px-3.5 py-2.5 [&::-webkit-details-marker]:hidden">

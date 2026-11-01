@@ -137,7 +137,7 @@ describe.skipIf(!testDatabaseUrl)("living-and-dining durable scenario", () => {
     const proposed = await runCaseAi(chat, run.session, "maple", requestId, {
       configured: () => true,
       callModel: async (context) => {
-        expect(context.quote.id).toBe(ready.changeOrderId);
+        expect(context.quote?.id).toBe(ready.changeOrderId);
         expect(context.messages.filter((message) => message.model === "demo-scenario-discussion")).toHaveLength(HOME_DISCUSSION.length);
         expect(context.pages.flatMap((page) => page.products.map((product) => product.id))).toEqual(Object.values(HOME_PRODUCT_IDS));
         return { output, model: "stub-living-dining-model" };

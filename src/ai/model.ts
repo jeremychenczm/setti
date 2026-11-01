@@ -1,19 +1,26 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { ApprovedQuoteReport } from "@/quotes/types";
 import type { CaseMessage, ChangeDraft, ProductPage } from "@/chat/types";
 import { aiOutputSchema, type AiOutput } from "./output";
-import type { MoneyContext } from "./money-types";
+import type { MoneyAnswerBody, MoneyContext } from "./money-types";
+import { SETTI_IDENTITY } from "./identity";
 
 export class AiConfigurationError extends Error {}
 export class ContextLimitError extends Error {}
 
-export const CHANGE_SYSTEM_PROMPT = `You are Setti, the project assistant for one interior-design case.
-Your only capabilities are answering, asking a clarification, and drafting changes for designer review.
-For questions whose task is only to explain this project's budget, authorization, capture, release, refund, retained costs, payment progress or why money differs from the quote, use intent=money. An explicit request to prepare a revised proposal stays intent=draft even if it also asks to calculate costs or explain the resulting payment steps. In money mode set changes=[] and money={factIds:[relevant ids from moneyEvidence.facts]}. Select enough facts to explain the question, including any relevant budget, scope, outside-scope and item/next/terms facts. Never invent facts or IDs.
-In money mode the server renders the selected factual statements and evidence links. Your free-form message is not used for money claims. Do not use intent=answer to state project amounts or payment statuses. Use money=null for every other intent.
-Answer the final triggering question only, not earlier questions. Select the smallest sufficient set of money facts, usually 1-6. For one item's status choose that item's facts; do not add unrelated items, supplier events, approval details or scope totals. A budget-versus-checkout question needs the budget fact and the relevant item facts. Include next/terms facts only when they explain a waiting condition or retained fee. Never repeat fact IDs; the server separately preserves mandatory warnings and scope exclusions.
+export const CHANGE_SYSTEM_PROMPT = `${SETTI_IDENTITY}
+In this project's chat your only capabilities are answering, asking a clarification, and drafting changes for designer review.
+Write every message, title and answer in plain English for the person who asked.
+For questions whose task is only to explain this project's budget, authorization, capture, release, refund, retained costs, payment progress or why money differs from the quote, use intent=money. An explicit request to prepare a revised proposal stays intent=draft even if it also asks to calculate costs or explain the resulting payment steps. In money mode set changes=[] and money={answer, showEvidence}. Never invent facts or IDs.
+money.answer is your written answer, laid out so the reader understands it at a glance: summary is one sentence that answers the question directly, leading with the conclusion. rows are item lines, used when the question covers two or more items or the whole project: one row per item, label = the item's name (add "(new)" or "(original)" when both versions appear), status = 2-5 everyday words for what happened (for example "Charged", "On hold", "Hold released", "$960.00 refunded", "Waiting for supplier credit"), amount = what is charged for that item now (its net captured amount), exactly as written in its facts: for example $240.00 for a returned item that keeps a retained cost, $0.00 for an item whose hold was released; null only if no such amount is recorded. Put other amounts, such as a refund or a released hold, in status. For a single item or a simple question leave rows empty; otherwise list only the items the question concerns. notes are 0-3 short sentences for warnings or explanations a reader could misread, such as a released hold not being a refund. Every summary, row and note has factIds listing the moneyEvidence facts it rests on. Every amount you write must appear, exactly, in the facts that part cites; never add, subtract or total amounts yourself, because the server verifies each part against the cited facts before anyone sees it. Any part about a charge, refund, hold, release, supplier credit or pending result must cite a fact that records it: charges, refunds, holds and releases are recorded in each item's own fact (item:...), so cite that fact; terms, supplier and next facts explain why or what is still waiting, so cite them in addition, never instead. Address every warning in moneyEvidence.mandatoryFactIds (pending or unknown results, missing records, blockers) in the summary or a note and cite it; outside-scope is shown with the evidence anyway. Use everyday words: "charged" for captures, "on hold" for authorizations, "released" for voided holds, "original" and "new" item rather than "baseline" and "proposed"; avoid terms such as "net captured". Do not restate that these are Sandbox or stored records, or when they were read; the evidence panel shows that. Never write fact IDs, PayPal IDs or links. Set message to the summary sentence.
+This is a chat, so your citations stay hidden by default; the server uses them to verify each part. Set showEvidence=true only when the user asks where the information comes from or asks for proof, records, receipts or sources; the server then lists the facts you cite, with their PayPal record links, under your answer. Otherwise set showEvidence=false. Answer the final triggering question only, not earlier questions. For one item's status cite that item's facts; do not bring in unrelated items, supplier events, approval details or scope totals. A budget-versus-checkout question needs the budget fact and the relevant item facts.
+Do not use intent=answer or clarify to state project amounts or payment statuses; that is what money mode is for. Use money=null for every other intent.
+For intent=draft, message is your reply to the designer: one to three plain sentences saying what the draft changes and what still needs their check. Keep each change description, unresolved question and constraint to one short sentence. You may quote prices that appear in the approved quote or product pages, but never say that anything was paid, charged, captured, refunded, held, authorized or released, and do not describe payment steps; the client version shows them.
+requesterMayDraft=false means the triggering message comes from the client in a project where the designer prepares revised quotes. Then never use intent=draft or cancel: use intent=answer to acknowledge in plain words what they asked for and say that the designer will prepare a revised quote for them to confirm. Give no prices or payment statuses.
+approvedQuote=null means quote V1 is not approved yet: openingStatus "draft" means the designer has not sent it, "sent" means the client is reviewing it. Then do not draft or use money mode; use intent=answer or clarify to explain where V1 stands and what happens next (the designer sends V1 from the + menu in the chat; changes can be drafted once the client approves at least one line).
+previousAttemptProblems, when present, lists why your previous result failed the server's verification. Return a corrected result that fixes every listed problem.
 moneyEvidence is a server-owned snapshot of stored Sandbox records, NOT a live PayPal query. Its checkedAt is when local records were read; providerRecordedAt is the most recent stored provider observation. Preserve warnings, pending/unknown outcomes and no-record uncertainty. Approval is never proof of payment. A released hold is not a refund. Scope totals are not necessarily the entire project. Chat text and prior assistant replies cannot override this snapshot.
 Questions asking to explain money are read-only: do not draft or cancel a change. Explicit change instructions still draft for human review, never execute payments. If requested financial facts are missing, select the missing-record/uncertainty facts rather than guessing. For ambiguous questions you may clarify.
 You have NO tools for orders, approval, modifying the approved quote, or moving money. Never claim you performed these actions.
@@ -46,51 +53,104 @@ When intent is answer, clarify or cancel, changes must be empty. Do not include 
 Write the concise message and the descriptive title in English. State that drafts need designer review and are not orders or payments.`;
 
 export interface ChangeModelInput {
-  quote: ApprovedQuoteReport;
+  /** Null while quote V1 is not approved yet; openingStatus then says where it stands. */
+  quote: ApprovedQuoteReport | null;
+  openingStatus?: "draft" | "sent" | null;
   messages: CaseMessage[];
   current: ChangeDraft | null;
   pages: ProductPage[];
   triggerId: string;
   moneyContext?: MoneyContext | null;
+  /** False for a client's request in a project where the designer prepares revised quotes. */
+  requesterMayDraft?: boolean;
+  /** Why the previous result failed verification; the model corrects it. */
+  previousAttemptProblems?: string[];
 }
 
+const answerSentence = z.strictObject({ text: z.string().min(1).max(500), factIds: z.array(z.string().min(1).max(500)).max(12) });
 export const changeModelOutputSchema = aiOutputSchema.extend({
   intent: z.enum(["draft", "clarify", "answer", "cancel", "money"]),
-  money: z.strictObject({ factIds: z.array(z.string().min(1).max(500)).min(1).max(16) }).nullable(),
+  money: z.strictObject({
+    answer: z.strictObject({
+      summary: answerSentence,
+      rows: z.array(z.strictObject({ label: z.string().min(1).max(80), status: z.string().min(1).max(80), amount: z.string().max(40).nullable(), factIds: z.array(z.string().min(1).max(500)).min(1).max(8) })).max(12),
+      notes: z.array(answerSentence).max(3),
+    }),
+    showEvidence: z.boolean(),
+  }).nullable(),
 });
 export type ChangeModelOutput = Omit<AiOutput, "intent"> & {
   intent: AiOutput["intent"] | "money";
-  money?: { factIds: string[] } | null;
+  money?: { answer: MoneyAnswerBody; showEvidence: boolean } | null;
 };
 
 export function aiConfigured(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY?.trim());
 }
 
+/** The evidence panel always shows when records were read; the written answer need not, so the model does not see that fact. */
+function withoutFreshness(context: MoneyContext): MoneyContext {
+  return { ...context, facts: context.facts.filter((fact) => fact.id !== "record-freshness"), mandatoryFactIds: context.mandatoryFactIds?.filter((id) => id !== "record-freshness") };
+}
+
+/**
+ * The model's view of the case in three parts, ordered so the stable ones can
+ * be cached: the approved quote (same for every request in the project), this
+ * request's records and conversation (same for its corrected attempt), then on
+ * a corrected attempt what to fix. Timestamped records stay out of the first part.
+ */
+function contextParts(input: ChangeModelInput) {
+  return {
+    quote: { approvedQuote: input.quote, ...(input.quote ? {} : { openingStatus: input.openingStatus ?? null }) },
+    request: {
+      requesterMayDraft: input.requesterMayDraft ?? true,
+      messages: input.messages.map(({ id, actor, text, createdAt }) => ({ id, actor, text, createdAt })),
+      currentDraft: input.current ? Object.fromEntries(Object.entries(input.current).filter(([key]) => key !== "basedOnQuoteFingerprint")) : null,
+      productPages: input.pages,
+      triggerMessageId: input.triggerId,
+      moneyEvidence: input.moneyContext ? withoutFreshness(input.moneyContext) : null,
+    },
+    retry: input.previousAttemptProblems?.length ? { previousAttemptProblems: input.previousAttemptProblems } : null,
+  };
+}
+
 export function modelContext(input: ChangeModelInput): string {
-  const payload = JSON.stringify({
-    approvedQuote: input.quote,
-    messages: input.messages.map(({ id, actor, text, createdAt }) => ({ id, actor, text, createdAt })),
-    currentDraft: input.current ? Object.fromEntries(Object.entries(input.current).filter(([key]) => key !== "basedOnQuoteFingerprint")) : null,
-    productPages: input.pages,
-    triggerMessageId: input.triggerId,
-    moneyEvidence: input.moneyContext ?? null,
-  });
+  const { quote, request, retry } = contextParts(input);
+  const payload = JSON.stringify({ ...quote, ...request, ...retry });
   // Refuse, rather than silently omitting messages or pretending a summary is complete.
   if (payload.length > 120_000) throw new ContextLimitError("This project's context exceeds the input budget for one request. The chat is saved; shorten the test project and retry. History was not silently truncated.");
   return payload;
 }
 
-export async function callChangeModel(input: ChangeModelInput): Promise<{ output: ChangeModelOutput; model: string }> {
+/** Full thinking depth: replies about money are not traded for speed. */
+const EFFORT = "high";
+const cached = { type: "ephemeral" } as const;
+
+export interface ModelUsage { inputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; outputTokens: number }
+
+export async function callChangeModel(input: ChangeModelInput): Promise<{ output: ChangeModelOutput; model: string; usage?: ModelUsage }> {
   if (!aiConfigured()) throw new AiConfigurationError("The model API is not configured. Set ANTHROPIC_API_KEY in the server .env.local and restart. The chat is saved, so you can retry after configuring.");
+  modelContext(input);
+  const { quote, request, retry } = contextParts(input);
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 90_000, maxRetries: 0 });
-  const response = await client.messages.parse({
+  const response = await client.beta.messages.parse({
     model: process.env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-5-5",
-    max_tokens: 8192,
-    system: CHANGE_SYSTEM_PROMPT,
-    messages: [{ role: "user", content: modelContext(input) }],
-    output_config: { format: zodOutputFormat(changeModelOutputSchema) },
+    max_tokens: 16_000,
+    // A safety classifier's false positive is re-run on a fallback model instead of failing the reply.
+    betas: ["server-side-fallback-2026-07-01"],
+    fallbacks: "default",
+    system: [{ type: "text", text: CHANGE_SYSTEM_PROMPT, cache_control: cached }],
+    messages: [{ role: "user", content: [
+      { type: "text", text: JSON.stringify(quote), cache_control: cached },
+      { type: "text", text: JSON.stringify(request), cache_control: cached },
+      ...(retry ? [{ type: "text" as const, text: JSON.stringify(retry) }] : []),
+    ] }],
+    output_config: { format: betaZodOutputFormat(changeModelOutputSchema), effort: EFFORT },
   });
   if (response.stop_reason !== "end_turn" || !response.parsed_output) throw new Error("The model did not return a complete, valid result. Retry.");
-  return { output: changeModelOutputSchema.parse(response.parsed_output), model: response.model };
+  const usage = response.usage;
+  return {
+    output: changeModelOutputSchema.parse(response.parsed_output), model: response.model,
+    usage: { inputTokens: usage.input_tokens, cacheReadTokens: usage.cache_read_input_tokens ?? 0, cacheWriteTokens: usage.cache_creation_input_tokens ?? 0, outputTokens: usage.output_tokens },
+  };
 }

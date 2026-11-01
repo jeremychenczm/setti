@@ -4,8 +4,37 @@ import type { CaseMessage, ChangeDraft, DraftChange, DraftItem, ProductPage } fr
 import { aiOutputSchema } from "./output";
 import { quoteFingerprint } from "@/quotes/fingerprint";
 import { homeProductMatches, isHomeQuote } from "@/demo/home-evidence";
+import { calculateLineTotals, calculateQuoteTotals } from "@/quotes/totals";
+import { amountsIn, hasEastAsianScript, hasPaymentStatusClaim } from "./money-answer";
 
 export class InvalidAiOutputError extends Error {}
+
+/** The figures a draft reply may quote: the approved quote's and this draft's own. */
+function draftAmounts(draft: ChangeDraft, quote: ApprovedQuoteReport): Set<number> {
+  const amounts = new Set<number>([calculateQuoteTotals(quote.lines).totalCents]);
+  for (const line of quote.lines) {
+    amounts.add(line.unitPriceCents);
+    amounts.add(line.unitPriceCents * line.quantity);
+    amounts.add(calculateLineTotals(line).totalCents);
+  }
+  for (const change of draft.changes) {
+    for (const item of [change.before, change.after]) if (item?.unitPriceCents != null) amounts.add(item.unitPriceCents);
+    for (const value of [change.beforeSubtotalCents, change.afterSubtotalCents, change.deltaSubtotalCents]) if (value !== null) amounts.add(Math.abs(value));
+  }
+  if (draft.deltaSubtotalCents !== null) amounts.add(Math.abs(draft.deltaSubtotalCents));
+  return amounts;
+}
+
+/** What to fix in Setti's reply to a draft before it is saved: English, prices from the records, no payment results. */
+export function draftReplyProblems(text: string, draft: ChangeDraft, quote: ApprovedQuoteReport): string[] {
+  const problems: string[] = [];
+  if (hasEastAsianScript(text)) problems.push("Write the reply in English.");
+  if (hasPaymentStatusClaim(text)) problems.push("A draft reply cannot say that anything was paid, charged, captured, refunded, held, authorized or released, or describe payment steps.");
+  const allowed = draftAmounts(draft, quote);
+  const unknown = amountsIn(text).filter((amount) => !allowed.has(amount));
+  if (unknown.length) problems.push(`The reply quotes ${unknown.map((cents) => (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })).join(", ")}, which is not a price or difference in the approved quote or this draft. Quote only those figures.`);
+  return problems;
+}
 
 function oldItem(line: ApprovedQuoteLine): DraftItem {
   return {

@@ -1,5 +1,7 @@
+"use client";
+
 import { Link2, ReceiptText } from "lucide-react";
-import type { MoneyAnswer } from "@/ai/money-types";
+import type { MoneyAnswer, MoneyFact } from "@/ai/money-types";
 
 function evidenceHref(value: string): string | null {
   return /^\/quotes\/(?:maple|willow)(?:#[\w.%:~-]+)?$/.test(value)
@@ -13,28 +15,57 @@ function recordedTime(value: string): string {
     : `${date.toLocaleString("en-US", { timeZone: "America/Los_Angeles", dateStyle: "medium", timeStyle: "short" })} PT`;
 }
 
-export function MoneyAnswerCard({ answer }: { answer: MoneyAnswer }) {
+/**
+ * A money reply. Setti's verified answer reads like a chat message, in the
+ * layout it chose (the conclusion, item lines, short notes); every part was
+ * checked against the records it cites, but the citations stay out of the
+ * chat. The records themselves appear only when Setti shows them because the
+ * person asked for the evidence. Without a written answer, the records are the reply.
+ */
+export function MoneyAnswerCard({ answer, messageId }: { answer: MoneyAnswer; messageId: string }) {
+  const body = answer.answer;
   const sources = new Map(answer.sources.map((source) => [source.id, source]));
-  return <section aria-label="Money answer evidence" className="mt-3 rounded-lg border border-amber-200/70 bg-white/80 p-3">
-    <div className="flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-amber-950"><ReceiptText className="h-3.5 w-3.5 shrink-0" /><span>Recorded funds · V{answer.version}</span><span className="ml-auto rounded-full bg-amber-50 px-2 py-0.5 text-[9px] font-medium text-amber-800">PayPal Sandbox</span></div>
-    <p className="mt-1.5 text-[10px] leading-relaxed text-slate-500">Based on the saved records at the time of this answer, not a live PayPal check.</p>
-    <dl className="mt-2 space-y-1 text-[10px] leading-relaxed text-slate-500">
-      <div><dt className="inline">Records read: </dt><dd className="inline"><time dateTime={answer.checkedAt}>{recordedTime(answer.checkedAt)}</time></dd></div>
-      <div><dt className="inline">Latest PayPal record: </dt><dd className="inline">{answer.providerRecordedAt ? <time dateTime={answer.providerRecordedAt}>{recordedTime(answer.providerRecordedAt)}</time> : "No recorded PayPal receipt; the quote does not establish that a payment was made."}</dd></div>
-    </dl>
-    {answer.facts.length ? <ul className="mt-3 space-y-3 border-t border-amber-100 pt-3">
-      {answer.facts.map((fact) => <li key={fact.id}>
-        <p className="whitespace-pre-wrap break-words text-[12px] leading-relaxed text-slate-800">{fact.text.en}</p>
-        <ul aria-label="Sources for this statement" className="mt-1 space-y-1">
-          {[...new Set(fact.sourceIds)].map((id) => {
-            const source = sources.get(id);
-            if (!source) return null;
-            const href = evidenceHref(source.href);
-            const label = <><Link2 className="mt-0.5 h-3 w-3 shrink-0" /><span className="min-w-0 break-all">{source.label}</span></>;
-            return <li key={id} className="text-[10px] leading-relaxed">{href ? <a href={href} target="_blank" rel="noreferrer" title={source.recordedAt ? recordedTime(source.recordedAt) : undefined} className="inline-flex max-w-full items-start gap-1 text-[var(--primary)] underline decoration-brand-200 underline-offset-2 hover:decoration-brand-500">{label}</a> : <span className="inline-flex max-w-full items-start gap-1 text-slate-500">{label}</span>}</li>;
-          })}
-        </ul>
+  const facts: MoneyFact[] = answer.facts;
+
+  const records = <section aria-label="Money answer evidence" className="mt-3 rounded-lg border border-amber-200/70 bg-white/80 p-3">
+    <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-amber-950"><ReceiptText className="h-3.5 w-3.5 shrink-0" /><span>Recorded funds · V{answer.version}</span></div>
+    <p className="text-[10px] leading-relaxed text-slate-500">Saved PayPal Sandbox records read <time dateTime={answer.checkedAt}>{recordedTime(answer.checkedAt)}</time>{answer.providerRecordedAt ? <>; latest PayPal record <time dateTime={answer.providerRecordedAt}>{recordedTime(answer.providerRecordedAt)}</time></> : "; no recorded PayPal receipt"}. Not a live PayPal check.</p>
+    {facts.length ? <ol className="mt-3 space-y-3 border-t border-amber-100 pt-3">
+      {facts.map((fact, index) => <li key={fact.id} id={`money-${messageId}-fact-${index + 1}`} className="flex gap-2">
+        <span className="mt-0.5 flex h-4 min-w-4 shrink-0 items-center justify-center rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-900">{index + 1}</span>
+        <div className="min-w-0">
+          <p className="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-slate-700">{fact.text.en}</p>
+          <ul aria-label="Sources for this statement" className="mt-1 space-y-0.5">
+            {[...new Set(fact.sourceIds)].map((id) => {
+              const source = sources.get(id);
+              if (!source) return null;
+              const href = evidenceHref(source.href);
+              const label = <><Link2 className="mt-0.5 h-3 w-3 shrink-0" /><span className="min-w-0 break-all">{source.label}</span></>;
+              return <li key={id} className="text-[10px] leading-relaxed">{href ? <a href={href} target="_blank" rel="noreferrer" title={source.recordedAt ? recordedTime(source.recordedAt) : undefined} className="inline-flex max-w-full items-start gap-1 text-[var(--primary)] underline decoration-brand-200 underline-offset-2 hover:decoration-brand-500">{label}</a> : <span className="inline-flex max-w-full items-start gap-1 text-slate-500">{label}</span>}</li>;
+            })}
+          </ul>
+        </div>
       </li>)}
-    </ul> : <p className="mt-3 text-[12px] leading-relaxed text-slate-600">The available records do not establish an answer to this money question. Check the project records first.</p>}
+    </ol> : <p className="mt-3 text-[12px] leading-relaxed text-slate-600">The available records do not establish an answer to this money question. Check the project records first.</p>}
   </section>;
+
+  if (!body) return records;
+
+  return <>
+    <p className="break-words text-[13px] font-medium leading-relaxed">{body.summary.text}</p>
+    {body.rows.length > 0 && <table className="mt-2 w-full overflow-hidden rounded-lg bg-white/70 text-[12px]">
+      <thead><tr className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]"><th scope="col" className="py-1.5 pl-3 pr-2 text-left font-medium">Item</th><th scope="col" className="px-2 py-1.5 text-left font-medium">What happened</th><th scope="col" className="py-1.5 pl-2 pr-3 text-right font-medium">Charged now</th></tr></thead>
+      <tbody>
+        {body.rows.map((row, index) => <tr key={index} className="border-t border-amber-100">
+          <td className="py-1.5 pl-3 pr-2 align-baseline font-medium">{row.label}</td>
+          <td className="px-2 py-1.5 align-baseline text-slate-600">{row.status}</td>
+          <td className="whitespace-nowrap py-1.5 pl-2 pr-3 text-right align-baseline font-semibold tabular-nums">{row.amount ?? ""}</td>
+        </tr>)}
+      </tbody>
+    </table>}
+    {body.notes.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-4 text-[12px] leading-relaxed text-slate-700">
+      {body.notes.map((note, index) => <li key={index}>{note.text}</li>)}
+    </ul>}
+    {answer.showEvidence && records}
+  </>;
 }

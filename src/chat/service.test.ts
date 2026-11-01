@@ -21,21 +21,32 @@ function scenario(text = "@AI Change the dining chairs from four to six.") {
 }
 
 describe("AI orchestration", () => {
-  it("answers without a model or draft until the client has an approved V1", async () => {
+  it("lets Setti answer, without a quote to draft against, until the client approves V1", async () => {
     for (const status of ["draft", "sent"] as const) {
       const s = scenario();
       s.state.opening = { ...defaultOpening("willow"), status };
+      const answer = { ...s.modelOutput, intent: "answer" as const, message: "Quote V1 is not approved yet, so there is nothing to change.", title: "", changes: [] };
+      s.deps.callModel.mockResolvedValue({ model: "test-model", output: answer });
       await runCaseAi(s.store, "session", "willow", "request", s.deps);
-      expect(s.deps.callModel).not.toHaveBeenCalled();
-      expect(s.store.completeAi).toHaveBeenCalledWith("session", "willow", "request", "run", { text: expect.stringContaining("Quote V1"), model: "system" });
+      expect(s.deps.callModel).toHaveBeenCalledWith(expect.objectContaining({ quote: null, openingStatus: status, moneyContext: null, pages: [] }));
+      expect(s.store.completeAi).toHaveBeenCalledWith("session", "willow", "request", "run", { text: answer.message, model: "test-model" });
     }
   });
-  it("handles a bare mention without calling a model or requiring a key", async () => {
+  it("does not save a draft before V1 is approved, even if the model returns one twice", async () => {
+    const s = scenario();
+    s.state.opening = { ...defaultOpening("willow"), status: "sent" };
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("did not pass verification");
+    expect(s.deps.callModel).toHaveBeenCalledTimes(2);
+    expect(s.deps.callModel.mock.calls[1][0].previousAttemptProblems.join(" ")).toContain("not approved yet");
+    expect(s.store.completeAi).not.toHaveBeenCalled();
+  });
+  it("asks the model about a bare mention instead of answering with fixed text", async () => {
     const s = scenario("@AI");
-    await runCaseAi(s.store, "session", "willow", "request", { ...s.deps, configured: () => false });
-    expect(s.deps.callModel).not.toHaveBeenCalled();
-    expect(s.deps.readPage).not.toHaveBeenCalled();
-    expect(s.store.completeAi).toHaveBeenCalledWith("session", "willow", "request", "run", expect.objectContaining({ model: "system" }));
+    const clarify = { ...s.modelOutput, intent: "clarify" as const, message: "Should I explain the quote or draft a change?", title: "", changes: [] };
+    s.deps.callModel.mockResolvedValue({ model: "test-model", output: clarify });
+    await runCaseAi(s.store, "session", "willow", "request", s.deps);
+    expect(s.deps.callModel).toHaveBeenCalledOnce();
+    expect(s.store.completeAi).toHaveBeenCalledWith("session", "willow", "request", "run", { text: clarify.message, model: "test-model" });
   });
   it("saves a real failure rather than manufacturing a result when not configured", async () => {
     const s = scenario();
@@ -75,10 +86,19 @@ describe("AI orchestration", () => {
     expect(s.deps.callModel.mock.calls[0][0].pages[0]).toMatchObject({ error: "The page requires sign-in", products: [] });
     expect(s.store.completeAi).toHaveBeenCalledWith("session", "willow", "request", "run", expect.objectContaining({ draft: expect.objectContaining({ deltaSubtotalCents: null }) }));
   });
+  it("reports each stage of a reply, including the corrected attempt", async () => {
+    const s = scenario();
+    const stages: string[] = [];
+    s.store.reportAiStage = vi.fn(async (_session: string, _key: string, _run: string, stage: string) => { stages.push(stage); });
+    s.modelOutput.changes[0].itemId = "foreign-item";
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("did not pass verification");
+    expect(stages).toEqual(["writing", "checking", "rewriting", "checking"]);
+  });
   it("marks invalid model output failed without persisting a draft", async () => {
     const s = scenario();
     s.modelOutput.changes[0].itemId = "foreign-item";
-    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("did not pass verification");
+    expect(s.deps.callModel).toHaveBeenCalledTimes(2);
     expect(s.store.completeAi).not.toHaveBeenCalled();
     expect(s.store.failAi).toHaveBeenCalledOnce();
   });

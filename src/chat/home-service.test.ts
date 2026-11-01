@@ -78,13 +78,14 @@ describe("living-and-dining AI orchestration", () => {
 
   it("still lets the client ask read-only money questions without loading supplier products or editing a draft", async () => {
     const s = fixture("client", "@AI Explain the recorded payments and anything still pending.");
-    Object.assign(s.output, { intent: "money", changes: [], money: { factIds: ["approval"] } });
+    Object.assign(s.output, { intent: "money", changes: [], money: { answer: { summary: { text: "The quote approval on its own does not show that any payment went through.", factIds: ["approval"] }, rows: [], notes: [] }, showEvidence: false } });
     await runCaseAi(s.store, "session", "maple", "request", s.deps);
     expect(s.deps.callModel).toHaveBeenCalledWith(expect.objectContaining({ pages: [], moneyContext: s.context }));
     const result = s.store.completeAi.mock.calls[0][4];
     expect(result).not.toHaveProperty("draft");
     expect(result.moneyAnswer?.facts.map((fact) => fact.id)).toEqual(["approval"]);
     expect(result.moneyAnswer?.facts[0].text.en).toBe("Quote approval does not establish any payment result.");
+    expect(result.text).toBe("The quote approval on its own does not show that any payment went through.");
   });
 
   it("retains the existing client-initiated change flow for the legacy Maple story", async () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildDraft } from "../ai/draft";
 import { modelContext, type ChangeModelOutput } from "../ai/model";
+import { UNVERIFIED_MONEY_TEXT } from "../ai/money-answer";
 import type { MoneyAnswer, MoneyContext } from "../ai/money-types";
 import { approvedForTest } from "../opening/testing";
 import { runCaseAi, type DraftDependencies } from "./service";
@@ -36,7 +37,12 @@ function scenario(text = "@AI Why are the budget and the payment amount differen
     completeAi: vi.fn<ChatStore["completeAi"]>().mockResolvedValue(state), failAi: vi.fn().mockResolvedValue(state),
     readMoneyContext: vi.fn<NonNullable<ChatStore["readMoneyContext"]>>().mockResolvedValue(context),
   } satisfies ChatStore;
-  const output: ChangeModelOutput = { intent: "money", message: "Untrusted model prose must not become a receipt.", title: "Money", changes: [], unresolved: [], constraints: [], money: { factIds: ["budget"] } };
+  const answer = {
+    summary: { text: "The approved budget is not a payment receipt.", factIds: ["budget"] },
+    rows: [],
+    notes: [{ text: "One payment outcome is still unknown, so check it before treating it as complete.", factIds: ["pending"] }],
+  };
+  const output: ChangeModelOutput = { intent: "money", message: "Untrusted model prose must not become a receipt.", title: "Money", changes: [], unresolved: [], constraints: [], money: { answer, showEvidence: false } };
   const deps = { configured: () => true, readPage: vi.fn<DraftDependencies["readPage"]>(), callModel: vi.fn<DraftDependencies["callModel"]>().mockResolvedValue({ output, model: "test-model" }) };
   return { state, store, context, output, deps, quantity };
 }
@@ -52,12 +58,17 @@ describe("grounded money chat orchestration", () => {
     expect(s.store.completeAi).toHaveBeenCalledOnce();
   });
 
-  it("stores trusted facts and mandatory uncertainty without changing the existing draft", async () => {
+  it("saves Setti's verified answer with its facts and mandatory uncertainty, without changing the draft", async () => {
     const s = scenario();
     const previousDraft = structuredClone(s.state.draft);
     s.output.message = "I already refunded $999 and changed the order.";
     await runCaseAi(s.store, "session", "willow", "request", s.deps);
     const saved = s.store.completeAi.mock.calls[0][4];
+    expect(s.deps.callModel).toHaveBeenCalledOnce();
+    expect(saved.model).toBe("test-model");
+    expect(saved.text).toBe("The approved budget is not a payment receipt." + "\n" + "One payment outcome is still unknown, so check it before treating it as complete.");
+    expect(saved.moneyAnswer?.answer).toEqual(s.output.money!.answer);
+    expect(saved.moneyAnswer?.showEvidence).toBe(false);
     expect(saved).not.toHaveProperty("draft");
     expect(s.state.draft).toEqual(previousDraft);
     expect(saved.text).not.toContain("$999");
@@ -68,12 +79,38 @@ describe("grounded money chat orchestration", () => {
     expect(saved.moneyAnswer?.facts[0].text.en).toBe("The approved budget is not a payment receipt.");
   });
 
-  it.each([{ ids: ["foreign-fact"] }, { ids: [] }, { ids: ["budget", "budget"] }])("rejects invalid model-selected evidence $ids", async ({ ids }) => {
+  it.each([{ ids: ["foreign-fact"] }, { ids: [] }])("fails, after one corrected attempt, an answer that cites no fact that exists: $ids", async ({ ids }) => {
     const s = scenario();
-    s.output.money = { factIds: ids };
-    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
+    s.output.money = { answer: { summary: { text: "Here is what the records show.", factIds: ids }, rows: [], notes: [] }, showEvidence: false };
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("did not pass verification");
+    expect(s.deps.callModel).toHaveBeenCalledTimes(2);
     expect(s.store.completeAi).not.toHaveBeenCalled();
     expect(s.store.failAi).toHaveBeenCalledOnce();
+  });
+
+  it("sends an unverified answer back once with what to fix, and saves the corrected answer", async () => {
+    const s = scenario();
+    const wrong: ChangeModelOutput = { ...s.output, money: { answer: { ...s.output.money!.answer, summary: { text: "You were charged $999 so far.", factIds: ["budget"] } }, showEvidence: false } };
+    s.deps.callModel.mockResolvedValueOnce({ output: wrong, model: "test-model" });
+    await runCaseAi(s.store, "session", "willow", "request", s.deps);
+    expect(s.deps.callModel).toHaveBeenCalledTimes(2);
+    const problems = s.deps.callModel.mock.calls[1][0].previousAttemptProblems!;
+    expect(problems.join(" ")).toContain("$999.00");
+    expect(problems.join(" ")).toContain("a charge");
+    const saved = s.store.completeAi.mock.calls[0][4];
+    expect(saved.model).toBe("test-model");
+    expect(saved.text).not.toContain("$999");
+  });
+
+  it("shows only the recorded facts, as a system notice, when the answer fails verification twice", async () => {
+    const s = scenario();
+    s.output.money = { answer: { summary: { text: "Everything is paid in full.", factIds: ["budget"] }, rows: [], notes: [] }, showEvidence: false };
+    await runCaseAi(s.store, "session", "willow", "request", s.deps);
+    expect(s.deps.callModel).toHaveBeenCalledTimes(2);
+    const saved = s.store.completeAi.mock.calls[0][4];
+    expect(saved).toMatchObject({ model: "system", text: UNVERIFIED_MONEY_TEXT });
+    expect(saved.moneyAnswer).not.toHaveProperty("answer");
+    expect(saved.moneyAnswer?.facts.map((fact) => fact.id)).toEqual(["budget", "pending"]);
   });
 
   it("rejects a fact referencing an absent source", async () => {
@@ -86,7 +123,7 @@ describe("grounded money chat orchestration", () => {
   it.each(["answer", "draft", "cancel"] as const)("does not turn a money question into ungrounded %s output", async (intent) => {
     const s = scenario();
     Object.assign(s.output, { intent, message: "Already refunded $999.", money: null });
-    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("did not pass verification");
     expect(s.store.completeAi).not.toHaveBeenCalled();
     expect(s.store.failAi).toHaveBeenCalledOnce();
   });
@@ -102,14 +139,14 @@ describe("grounded money chat orchestration", () => {
   it("does not permit financial claims through clarification prose", async () => {
     const s = scenario();
     Object.assign(s.output, { intent: "clarify", message: "Already refunded $999. Which other payment do you mean?", money: null });
-    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("did not pass verification");
     expect(s.store.completeAi).not.toHaveBeenCalled();
   });
 
   it.each(["The rug was refunded.", "Paid $999.", "The rug has not been refunded.", "The desk is not paid."])("blocks unsupported money claims in a generic answer: %s", async (message) => {
     const s = scenario("@AI What happened to this item?");
     Object.assign(s.output, { intent: "answer", message, money: null });
-    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("did not pass verification");
     expect(s.store.completeAi).not.toHaveBeenCalled();
   });
 
@@ -138,7 +175,9 @@ describe("grounded money chat orchestration", () => {
     s.context.providerRecordedAt = null;
     s.context.facts[1] = { id: "missing", text: { en: "No recorded payment evidence is available; payment status is unknown." }, sourceIds: ["quote"] };
     s.context.mandatoryFactIds = ["missing"];
+    s.output.money!.answer.notes = [{ text: "No payment evidence is recorded yet, so the payment status is unknown.", factIds: ["missing"] }];
     await runCaseAi(s.store, "session", "willow", "request", s.deps);
+    expect(s.store.completeAi.mock.calls[0][4].model).toBe("test-model");
     const saved = s.store.completeAi.mock.calls[0][4].moneyAnswer!;
     expect(saved.providerRecordedAt).toBeNull();
     expect(saved.facts.map((fact) => fact.id)).toContain("missing");
@@ -173,12 +212,14 @@ describe("grounded money chat orchestration", () => {
     { request: "@AI Change the dining chairs from four to six.", message: "Refund of $999 completed. PS: the desk was charged.", title: "Refund completed" },
     // A title in another script never becomes the client version's title.
     { request: "@AI Increase the dining chairs to six.", message: "Quantity draft.", title: "\u4fee\u8ba2\u62a5\u4ef7" },
-  ])("replaces ungrounded draft prose in both the chat reply and saved summary: $message", async ({ request, message, title }) => {
+  ])("keeps the draft but replaces a reply that fails verification twice with a system summary: $message", async ({ request, message, title }) => {
     const s = scenario(request);
     Object.assign(s.output, s.quantity, { message, title, money: null });
     s.output.changes[0].sourceMessageIds = ["request"];
     await runCaseAi(s.store, "session", "willow", "request", s.deps);
+    expect(s.deps.callModel).toHaveBeenCalledTimes(2);
     const saved = s.store.completeAi.mock.calls[0][4];
+    expect(saved.model).toBe("system");
     expect(saved.draft).toMatchObject({ status: "needs_designer_review", revision: s.state.draft!.revision + 1 });
     expect(saved.draft?.summary).toBe(saved.text);
     expect(saved.text).not.toContain(message);
@@ -193,7 +234,7 @@ describe("grounded money chat orchestration", () => {
 
   it.each([
     { request: "@AI Decrease the dining chairs to two and plan the refund for review.", message: "Proposed goods difference: -$160; a $160 refund is planned after client approval, not issued." },
-  ])("keeps a legitimate amount and future refund proposal without accepting its prose as a receipt: $request", async ({ request, message }) => {
+  ])("saves Setti's own draft reply when its amounts match the draft and it states no payment result: $request", async ({ request, message }) => {
     const s = scenario(request);
     Object.assign(s.output, s.quantity, { message, money: null });
     s.output.changes[0].quantity = 2;
@@ -203,14 +244,15 @@ describe("grounded money chat orchestration", () => {
     expect(saved.draft?.changes[0]).toMatchObject({ action: "quantity", after: { quantity: 2, unitPriceCents: 8_000 }, deltaSubtotalCents: -16_000 });
     expect(saved.draft?.deltaSubtotalCents).toBe(-16_000);
     expect(saved.draft?.summary).toBe(saved.text);
-    expect(saved.text).toMatch(/refund plan need verification/u);
+    expect(saved).toMatchObject({ text: message, model: "test-model" });
+    expect(s.deps.callModel).toHaveBeenCalledOnce();
     expect(s.store.failAi).not.toHaveBeenCalled();
   });
 
   it.each(["answer", "clarify"] as const)("still rejects unsupported %s prose for a change request", async (intent) => {
     const s = scenario("@AI Increase the dining chairs to six.");
     Object.assign(s.output, { intent, message: "I refunded $999.", changes: [], money: null });
-    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
+    await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("did not pass verification");
     expect(s.store.completeAi).not.toHaveBeenCalled();
     expect(s.store.failAi).toHaveBeenCalledOnce();
   });

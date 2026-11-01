@@ -18,7 +18,7 @@ vi.mock("@/db/client", () => ({ createDb: mock.createDb }));
 const origin = "http://localhost:3002";
 const visitor = randomUUID(), session = randomUUID(), oldRun = randomUUID(), orderId = randomUUID();
 const seed = {
-  runId: session, scenario: "maple-mixed-change-v1", scenarioVersion: 1, status: "seeding", stage: "chair_hold",
+  runId: session, scenario: "maple-living-dining-v3", scenarioVersion: 3, status: "seeding", stage: "chair_hold",
   stages: [{ id: "quote", label: "Confirm quote", status: "done", operationIds: [] }, { id: "chair_hold", label: "Hold chair", status: "pending", operationIds: [] }],
   busy: false, canResume: true, changeOrderId: orderId, error: null,
   createdAt: "2026-10-24T00:00:00.000Z", updatedAt: "2026-10-24T00:00:00.000Z",
@@ -109,7 +109,7 @@ describe("/try HTTP boundaries", () => {
   });
 
   it("allocates and sets both private cookies before constructing a provider client or preparing money", async () => {
-    const response = await postTryResponse(post({ action: "start", scenario: "maple-mixed-change-v1" }));
+    const response = await postTryResponse(post({ action: "start", scenario: "maple-living-dining-v3" }));
     expect(response.status).toBe(202);
     expect(await response.json()).toMatchObject({ seed, href: "/chats/maple", previousRuns: [], hasWorkspace: true, reused: false });
     for (const [name, value] of [["setti-demo-chat", session], ["setti-try-visitor", visitor]]) {
@@ -120,16 +120,26 @@ describe("/try HTTP boundaries", () => {
     expect(mock.prepareTry).not.toHaveBeenCalled();
   });
 
-  it("accepts the living-and-dining scenario explicitly without changing the legacy empty command", async () => {
-    expect((await postTryResponse(post({ action: "start", scenario: "maple-living-dining-v2" }))).status).toBe(202);
-    expect(mock.startTry).toHaveBeenLastCalledWith(expect.anything(), null, expect.objectContaining({ scenario: "maple-living-dining-v2" }));
+  it("starts only the current walkthrough; retired scenarios with scripted AI exchanges cannot start", async () => {
+    for (const retired of ["maple-mixed-change-v1", "maple-living-dining-v2", "maple-living-dining-v4"]) {
+      expect((await postTryResponse(post({ action: "start", scenario: retired }))).status).toBe(400);
+    }
+    expect(mock.startTry).not.toHaveBeenCalled();
     await postTryResponse(post());
-    expect(mock.startTry.mock.calls[1][2]).not.toHaveProperty("scenario");
+    expect(mock.startTry).toHaveBeenLastCalledWith(expect.anything(), null, expect.objectContaining({ scenario: "maple-living-dining-v3" }));
     expect((await postTryResponse(post({ action: "start", scenario: "maple-living-dining-v3" }))).status).toBe(202);
     expect(mock.startTry).toHaveBeenLastCalledWith(expect.anything(), null, expect.objectContaining({ scenario: "maple-living-dining-v3" }));
-    expect((await postTryResponse(post({ action: "start", scenario: "maple-living-dining-v4" }))).status).toBe(400);
     expect(mock.sandboxPayPal).not.toHaveBeenCalled();
     expect(mock.prepareTry).not.toHaveBeenCalled();
+  });
+
+  it("does not prepare a saved run of a retired walkthrough", async () => {
+    mock.readTrySeed.mockResolvedValue({ ...seed, scenario: "maple-mixed-change-v1", scenarioVersion: 1 });
+    const response = await postTryResponse(post({ action: "prepare", runId: session }, { session, visitor }));
+    expect(response.status).toBe(410);
+    expect(await response.json()).toMatchObject({ code: "RETIRED" });
+    expect(mock.prepareTry).not.toHaveBeenCalled();
+    expect(mock.sandboxPayPal).not.toHaveBeenCalled();
   });
 
   it("GET only reads truthful saved progress, including previous runs, and never starts preparation", async () => {
