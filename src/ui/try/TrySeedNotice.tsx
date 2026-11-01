@@ -9,6 +9,7 @@ import type { PaymentsWorkspace } from "@/payments/types";
 import type { PricingWorkspace } from "@/pricing/types";
 import { HOME_DESIGNER_REQUEST, HOME_SCENARIO, isHomeScenario } from "@/demo/living-dining";
 import { money } from "../pricing/common";
+import { OPEN_FIRST_CHANGE_EVENT } from "../pricing/ChangeDrawer";
 import { lineProgress } from "../payments/progress";
 import { HOME_GUIDE_STEPS, MAPLE_EXAMPLE_REQUEST, MAPLE_GUIDE_STEPS, mapleChangeLines, mapleGuideStep, type MapleGuideData } from "./maple-guide";
 import { navigateGuidePage, useGuideAnchor } from "./useGuideAnchor";
@@ -97,8 +98,10 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
   const exampleRequest = home ? HOME_DESIGNER_REQUEST : MAPLE_EXAMPLE_REQUEST;
   const switchNeeded = account.id !== step.role;
   const nextName = step.role === "emma" ? "Emma" : "Jordan";
+  const changeCount = data.pricing?.review?.input.changes.length ?? 0;
+  const reviewLabel = changeCount ? `Review the ${changeCount} change${changeCount === 1 ? "" : "s"}` : "Review the changes";
   const currentDestination = !switchNeeded && ((step.destination === "chat" && currentView === "chats") || (step.destination === "pricing" && currentView === "pricing") || (step.destination === "order" && currentView === "change-order" && currentOrderId === step.orderId));
-  const action = switchNeeded ? `Continue as ${nextName}` : currentDestination ? step.destination === "pricing" ? step.anchor === "pricing-source-status" ? step.action : "Continue pricing below" : step.destination === "order" ? step.anchor === "payments" ? "Go to payments below" : "Go to client review below" : step.action : step.action;
+  const action = switchNeeded ? `Continue as ${nextName}` : currentDestination ? step.destination === "pricing" ? step.anchor === "pricing-source-status" ? step.action : reviewLabel : step.destination === "order" ? step.anchor === "payments" ? "Go to payments below" : "Go to client review below" : step.action : step.action;
   const outcomes = data.payments && data.payments.orderId !== data.seedOrderId ? mapleChangeLines(data.payments) : [];
 
   function continueGuide() {
@@ -121,7 +124,9 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
     } else if (currentDestination) {
       if (step.destination === "pricing") {
         const notice = step.anchor ? document.getElementById(step.anchor) : null;
-        (notice ?? document.querySelector<HTMLElement>('input[aria-label="Client change-order title"]'))?.scrollIntoView({ behavior: "smooth", block: "center" });
+        // The pricing page opens its first change to check in the details drawer.
+        if (notice) notice.scrollIntoView({ behavior: "smooth", block: "center" });
+        else window.dispatchEvent(new Event(OPEN_FIRST_CHANGE_EVENT));
       }
       else document.getElementById(step.anchor ?? "payments")?.scrollIntoView({ behavior: "smooth", block: "start" });
     } else {

@@ -226,7 +226,7 @@ export function usePricingWorkspace(projectKey: CaseKey) {
     try {
       const body = await requestJson(`${endpoint}/issue`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       if (!orderBody(body)) throw new Error("The change-order response was incomplete.");
-      if (!alive.current) return;
+      if (!alive.current) return false;
       setLastOrder(body);
       setNotice(`Quote V${body.order.version} sent to the client in the project chat. Nothing is approved or charged until they confirm it.`);
       try {
@@ -239,6 +239,8 @@ export function usePricingWorkspace(projectKey: CaseKey) {
           }
         }
       } catch { if (alive.current) setNotice(`Quote V${body.order.version} was sent to the client in the project chat. The saved history could not be refreshed; the read-only link below is valid.`); }
+      // The version reached the client's chat, whatever the history refresh found.
+      return true;
     } catch (cause) {
       if (!alive.current) return;
       setError(cause instanceof Error ? cause.message : "Could not send this version to the client.");
