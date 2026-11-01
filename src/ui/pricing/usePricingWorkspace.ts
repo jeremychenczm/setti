@@ -73,7 +73,8 @@ export function usePricingWorkspace(projectKey: CaseKey) {
     setWorkspace(state);
     // A review saved against an older draft arrives already carried onto the current one.
     const carried = state.carryOver && state.sourceDraft ? state.carryOver : null;
-    let nextInput = carried ? structuredClone(carried.input) : state.review ? structuredClone(state.review.input) : null;
+    // Version 0 is the server's unsaved proposal from the draft; it starts from the same input with the walkthrough's preselected checks.
+    let nextInput = carried ? structuredClone(carried.input) : state.review && state.review.version > 0 ? structuredClone(state.review.input) : null;
     if (!nextInput && state.sourceDraft && (!state.sourceDraft.basedOnQuoteFingerprint || state.sourceDraft.basedOnQuoteFingerprint === quoteFingerprint(state.quote))) {
       try { nextInput = createReviewInput(state.quote, state.sourceDraft); }
       catch (cause) { setError(`${cause instanceof Error ? cause.message : "The AI draft no longer matches the original quote."} Return to the chat and ask @AI to prepare a new draft.`); }
