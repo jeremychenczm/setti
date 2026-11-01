@@ -1,6 +1,7 @@
 import type { FundingPlan } from "@/approval/funding";
 import type { CaseKey } from "@/chat/types";
 import type { SettlementView } from "./fees";
+import type { CancellationReason } from "./cancellation";
 import type { SavedMethodView } from "./saved-methods";
 
 export type RecordedSettlement = SettlementView & { observedAt: string | null };
@@ -75,6 +76,15 @@ export interface SupplierEventView {
   createdAt: string;
 }
 
+/** Why and when the studio cancelled an item; shown wherever the item's payments are. */
+export interface ItemCancellationView {
+  reason: CancellationReason;
+  reasonText: string;
+  note: string;
+  by: string;
+  at: string;
+}
+
 export interface PaymentLineView {
   itemId: string;
   side: "baseline" | "proposed";
@@ -98,6 +108,12 @@ export interface PaymentLineView {
   /** Frozen return condition, retained even when another item's unresolved operation blocks actions. */
   refundRequiresSupplierCredit?: boolean;
   steps: PaymentStep[];
+  /** What the version assigned before the studio cancelled the item (`targetCents` is then zero). */
+  cancelledTargetCents?: number;
+  /** The studio cancelled this item; a hold still above zero is still being released. */
+  cancellation?: ItemCancellationView | null;
+  /** The designer may cancel this furniture item of the current version: nothing was charged for it and no PayPal step of it is open. */
+  canCancelItem?: boolean;
 }
 
 export interface CallView {

@@ -17,6 +17,7 @@ import { paypalCalls } from "./schema";
 import { summarizeHold } from "./holds";
 import { confirmedSupplierTerms } from "./supplier-terms";
 import { recordedSettlement } from "./fee-evidence";
+import { cancellationView } from "./item-holds-view";
 import { activeSavedMethod, savedMethodView, type SavedMethodView } from "./saved-methods";
 import type { CaptureView, DemoCheckout, HoldView, OperationView, PaymentLineView, PaymentStep, PaymentsWorkspace, RefundView, SupplierEventView } from "./types";
 
@@ -64,11 +65,17 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
     const events: SupplierEventView[] = ledger.supplierEvents.filter((event) => event.changeOrderId === orderId && event.itemId === businessId)
       .map((event) => ({ id: event.id, kind: event.kind, quantity: event.quantity, unitPriceCents: event.unitPriceCents, taxCents: event.taxCents, freightCents: event.freightCents, totalCents: event.totalCents, inStock: event.inStock, leadTimeDays: event.leadTimeDays, reference: event.reference, note: event.note, isDemo: true, createdAt: event.createdAt.toISOString() }));
     const terms = confirmedSupplierTerms(order, line);
+    const cancelled = businessId ? ledger.cancellations.find((entry) => entry.itemId === businessId) : undefined;
+    // The designer may cancel a furniture item of the current version that nothing was charged for, once its PayPal steps are settled.
+    const canCancelItem = owner && current && account?.role === "designer" && !!businessId && !cancelled && line.category === "furniture" && line.targetCents > 0
+      && !money.captures.some((capture) => capture.status !== "declined")
+      && !ledger.operations.some((operation) => operation.itemId === businessId && (operation.status === "pending" || operation.status === "unknown"));
     lines.push({
       ...line, businessItemId: businessId ?? null, releasedCents: money.holds.reduce((total, hold) => total + hold.releasedCents, 0), ...money,
       confirmedTerms: terms,
       refundRequiresSupplierCredit: line.side === "baseline" && order.changes.some((change) => change.itemId === line.itemId && ["returned", "cancelled"].includes(change.oldItemHandling)),
       supplierEvents: events, steps: steps(plan, line, owner && current, events, terms?.purpose === "retained_cost", savedMethod).map((step) => ({ ...step, available: step.available && member && step.actor === account?.role })),
+      cancellation: cancelled ? cancellationView(cancelled) : null, canCancelItem,
     });
   }
   return {

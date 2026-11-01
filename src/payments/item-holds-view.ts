@@ -9,10 +9,10 @@ import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
 import { items, revisionLines } from "../db/schema";
 import { PaymentActionError } from "./binding";
-import { CANCELLATION_REASON_TEXT, type CancellationReason } from "./cancellation";
+import { CANCELLATION_REASON_TEXT } from "./cancellation";
 import { activeSavedMethod, savedMethodView, type SavedMethodView } from "./saved-methods";
 import { lockPaymentBasis } from "./services";
-import type { CheckoutView, DemoCheckout } from "./types";
+import type { CheckoutView, DemoCheckout, ItemCancellationView } from "./types";
 
 export interface ItemHoldView {
   /** The quote line id. */
@@ -33,7 +33,7 @@ export interface ItemHoldView {
   /** The designer may cancel the item: nothing was charged for it and no PayPal step of it is open. */
   canCancelItem: boolean;
   /** Why and when the studio cancelled the item. While `heldCents` is above zero its hold is still being released. */
-  cancellation: { reason: CancellationReason; reasonText: string; note: string; by: string; at: string } | null;
+  cancellation: ItemCancellationView | null;
   /** With no saved method, the client may hold this item alone through PayPal or the Sandbox test card (V1 only). */
   canCheckout: boolean;
   paypalAuthorizationId: string | null;
@@ -66,6 +66,11 @@ export interface ItemHoldsView {
   /** The hash of the document the client confirmed, sent back with supplier and capture steps. */
   contentHash: string | null;
   reason: string | null;
+}
+
+/** How a recorded cancellation is shown. */
+export function cancellationView(record: { reason: ItemCancellationView["reason"]; note: string; cancelledBy: string; createdAt: Date }): ItemCancellationView {
+  return { reason: record.reason, reasonText: CANCELLATION_REASON_TEXT[record.reason], note: record.note, by: record.cancelledBy, at: record.createdAt.toISOString() };
 }
 
 export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseKey, account: DemoAccount | null, demo: DemoCheckout | null = null): Promise<ItemHoldsView> {
@@ -122,7 +127,7 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
       canCheck: member && !!displayedOperation && ["holding", "awaiting_client", "unknown"].includes(state),
       canCancel: !manualReview && client && state === "awaiting_client",
       canCancelItem: account?.role === "designer" && ["held", "confirmed", "to_hold", "failed"].includes(state) && !charged && !stepOpen,
-      cancellation: cancelled ? { reason: cancelled.reason, reasonText: CANCELLATION_REASON_TEXT[cancelled.reason], note: cancelled.note, by: cancelled.cancelledBy, at: cancelled.createdAt.toISOString() } : null,
+      cancellation: cancelled ? cancellationView(cancelled) : null,
       canCheckout: false,
       paypalAuthorizationId: hold?.paypalAuthorizationId ?? null, expiresAt: hold?.expiresAt?.toISOString() ?? null,
       failureMessage: ["failed", "awaiting_client", "unknown"].includes(state) ? displayedOperation?.failureMessage ?? null : null,

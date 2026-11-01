@@ -6,7 +6,7 @@
  * gives a reason instead of asking for a signature; a replacement is new money
  * and still goes through a version the client confirms.
  *
- * The cancellation, its chat notice and the voids are written in one
+ * The cancellation, the designer's message to the client and the voids are written in one
  * transaction; PayPal is called after it. Repeating the step resumes the same
  * voids, and a void that failed is tried again under a new attempt.
  */
@@ -16,8 +16,8 @@ import type { Db } from "../db/client";
 import { itemCancellations, items } from "../db/schema";
 import { attempt, openHolds, runEach } from "./actions";
 import { PaymentActionError } from "./binding";
-import { CANCELLATION_REASON_TEXT, CANCELLATION_REASONS, type CancellationReason } from "./cancellation";
-import { noteInCase } from "./notes";
+import { CANCELLATION_REASONS, cancellationMessage, type CancellationReason } from "./cancellation";
+import { noteFromDesigner } from "./notes";
 import { insertOperation, type PaymentOperation } from "./operations";
 import type { PayPalPayments } from "./paypal";
 import { lockPaymentBasis } from "./services";
@@ -35,8 +35,6 @@ export interface CancelItemInput {
   /** The designer's name, as the chat shows it. */
   by: string;
 }
-
-const usd = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 
 export async function cancelApprovedItem(db: Db, paypal: PayPalPayments, sessionId: string, key: CaseKey, input: CancelItemInput): Promise<{ cancellation: ItemCancellation; operations: PaymentOperation[] }> {
   const note = input.note.trim(), by = input.by.trim();
@@ -69,10 +67,8 @@ export async function cancelApprovedItem(db: Db, paypal: PayPalPayments, session
         projectId: basis.projectId, itemId, revisionId: binding.revisionId!, changeOrderId: binding.changeOrderId, reason: input.reason, note, cancelledBy: by,
       }).returning();
       const heldCents = openHolds(ledger, itemId).reduce((total, { heldCents: held }) => total + held, 0);
-      const why = input.reason === "other" ? note : `${CANCELLATION_REASON_TEXT[input.reason]}${note ? ` (${note})` : ""}`;
-      await noteInCase(tx, { ...binding, itemId }, ({ version, itemName }) => `${by} cancelled ${itemName} from V${version}: ${why}. Nothing was charged for it. ${heldCents > 0
-        ? `Its ${usd(heldCents)} hold is being released on PayPal, so the money stays with the client.`
-        : "Nothing was held for it either."} A replacement would come as a new version for the client to confirm.`);
+      // The client hears it from the designer, in the chat, once: the cancellation's id is the message id.
+      await noteFromDesigner(tx, binding, cancellation.id, cancellationMessage({ itemName: item.name, reason: input.reason, note, heldCents }));
     }
 
     // One void per hold still open: an open void is resumed, a failed one is tried again.

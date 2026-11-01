@@ -46,6 +46,9 @@ describe("per-item payment progress", () => {
     expect(lineProgress(furniture).label).toBe("Additional authorization needed");
     expect(lineProgress({ ...furniture, heldCents: 110_000, steps: [step("supplier_confirmation")] }).label).toBe("Awaiting supplier confirmation");
     expect(lineProgress({ ...furniture, heldCents: 110_000, steps: [step("capture")], supplierEvents: [supplier()] }).label).toBe("Ready for capture");
+    const cancellation = { reason: "unavailable" as const, reasonText: "Out of stock or discontinued", note: "", by: "Jordan Lee", at: "2026-11-01T12:00:00.000Z" };
+    expect(lineProgress({ ...furniture, targetCents: 0, cancelledTargetCents: 110_000, heldCents: 0, releasedCents: 110_000, cancellation })).toMatchObject({ label: "Cancelled by the studio", settled: true });
+    expect(lineProgress({ ...furniture, targetCents: 0, cancelledTargetCents: 110_000, heldCents: 110_000, cancellation })).toMatchObject({ label: "Cancelled · hold not released yet", settled: false });
   });
 
   it("preserves the rug's supplier-credit dependency when another item's open operation blocks and clears all steps", () => {

@@ -38,6 +38,18 @@ export async function noteInCase(tx: Writer, operation: Scope & { itemId: string
   await tx.insert(chatMessages).values({ caseId: scope.caseId, id: randomUUID(), actor: "assistant", model: "system", aiState: "completed", text: text({ version: scope.version, itemName: item.name }) });
 }
 
+/**
+ * A message in the designer's own name, for a step the designer just took in
+ * Setti (as the client's hand-off below is in the client's name). A fixed id
+ * writes it once however often the step is repeated.
+ */
+export async function noteFromDesigner(tx: Tx, operation: Scope, id: string, text: string): Promise<void> {
+  const scope = await caseScope(tx, operation);
+  if (!scope) return;
+  const inserted = await tx.insert(chatMessages).values({ caseId: scope.caseId, id, actor: "designer", text }).onConflictDoNothing().returning({ id: chatMessages.id });
+  if (inserted.length) await tx.update(chatCases).set({ updatedAt: new Date() }).where(eq(chatCases.id, scope.caseId));
+}
+
 type Hold = Pick<PaymentOperation, "status" | "amountCents">;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 

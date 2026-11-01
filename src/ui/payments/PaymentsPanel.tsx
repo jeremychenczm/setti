@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, CircleDollarSign, LoaderCircle, LockKeyhole, ReceiptText, RefreshCw, ShieldCheck, Truck, X } from "lucide-react";
+import { ArrowUpRight, Ban, CircleDollarSign, LoaderCircle, LockKeyhole, ReceiptText, RefreshCw, ShieldCheck, Truck, X } from "lucide-react";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { FrozenChangeOrder } from "@/pricing/types";
 import type { SavedMethodView } from "@/payments/saved-methods";
@@ -13,6 +13,9 @@ import { PaymentFees } from "./PaymentFees";
 import { PayMethodChooser, SavedMethodCard, savedMethodName } from "./PaymentMethods";
 import { PayPalButtons } from "./PayPalButtons";
 import { useTryReadiness } from "../try/useTryReadiness";
+import { DEMO_ACCOUNTS } from "@/accounts/demo";
+import type { CancellationReason } from "@/payments/cancellation";
+import { CancellationRecord, CancelItemForm } from "./CancelItemForm";
 import { paymentChanged, usePaymentRefresh } from "./usePaymentRefresh";
 
 type LineRef = { itemId: string; side: PaymentLineView["side"] };
@@ -137,6 +140,31 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
   }
   const run = async (action: Action, key: string) => !!await request(action, key);
 
+  /** Cancels an item of this version through the project's item endpoint, then reloads this version's records. */
+  async function cancelItem(line: PaymentLineView, reason: CancellationReason, note: string): Promise<boolean> {
+    if (mutating.current || readiness.blocked || !workspace) return false;
+    mutating.current = true; setBusy(`cancel-item:${line.side}:${line.itemId}`); dispatchFeedback({ type: "action_started" });
+    try {
+      const response = await fetch(`/api/quotes/${encodeURIComponent(workspace.projectKey)}/item-holds`, {
+        method: "POST", cache: "no-store", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cancel_item", itemId: line.itemId, side: line.side, reason, note }),
+      });
+      const json = await response.json().catch(() => null) as { error?: string; details?: string[] } | null;
+      if (!response.ok) throw new Error([json?.error ?? `Request failed (${response.status}).`, ...(json?.details ?? [])].join(" "));
+      await load();
+      onChange?.();
+      return true;
+    } catch (cause) {
+      dispatchFeedback({ type: "action_failed", message: cause instanceof Error ? cause.message : "The item could not be cancelled." });
+      await load();
+      return false;
+    } finally {
+      mutating.current = false;
+      setBusy(null);
+      paymentChanged(order.projectKey);
+    }
+  }
+
   if (!workspace) return <section id="payments" className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><p className="flex items-center gap-2 text-[12px] text-slate-500">{error ?? <><LoaderCircle className="h-4 w-4 animate-spin" />Loading payment records…</>}</p></section>;
   const open = workspace.operations.filter((operation) => operation.status === "pending" || operation.status === "unknown");
   const plan = workspace.plan;
@@ -174,7 +202,7 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
       </div> : null}
     </div>)}</div>}
 
-    {workspace.lines.length > 0 && <><ExecutionOverview workspace={workspace} /><div className="mt-4 space-y-4">{workspace.lines.map((line) => <LineCard key={`${line.side}:${line.itemId}`} line={line} operations={workspace.operations} version={workspace.version} busy={busy} disabled={disabled} canAct={workspace.canAct} canReconcile={workspace.canReconcile} pay={pay} onAction={(action, key) => run({ ...action, itemId: line.itemId, side: line.side } as Action, key)} onCheck={(operationId) => void run({ action: "check", operationId }, `check:${operationId}`)} />)}</div>
+    {workspace.lines.length > 0 && <><ExecutionOverview workspace={workspace} /><div className="mt-4 space-y-4">{workspace.lines.map((line) => <LineCard key={`${line.side}:${line.itemId}`} line={line} operations={workspace.operations} version={workspace.version} busy={busy} disabled={disabled} canAct={workspace.canAct} canReconcile={workspace.canReconcile} pay={pay} onAction={(action, key) => run({ ...action, itemId: line.itemId, side: line.side } as Action, key)} onCheck={(operationId) => void run({ action: "check", operationId }, `check:${operationId}`)} onCancelItem={(reason, note) => cancelItem(line, reason, note)} />)}</div>
       <PaymentFees lines={workspace.lines} {...(workspace.canReconcile ? { onRefresh: () => void run({ action: "fees" }, "fees"), refreshing: busy === "fees", disabled } : {})} /></>}
 
     {plan && <>
@@ -201,8 +229,11 @@ type LineActionInput = Extract<Action, { itemId: string }> extends infer A ? A e
 /** What a line needs to take the client's payment: the payment choices, the saved method and the raw step request. */
 interface LinePayment { checkout: CheckoutView | null; savedMethod: SavedMethodView | null; request: (action: Action, key: string) => Promise<Reply | null> }
 
-function LineCard({ line, operations, version, busy, disabled, canAct, canReconcile, pay, onAction, onCheck }: { line: PaymentLineView; operations: readonly OperationView[]; version: number; busy: string | null; disabled: boolean; canAct: boolean; canReconcile: boolean; pay: LinePayment; onAction: (action: LineActionInput, key: string) => Promise<boolean>; onCheck: (operationId: string) => void }) {
+const DESIGNER = DEMO_ACCOUNTS.find((account) => account.role === "designer")!.name;
+
+function LineCard({ line, operations, version, busy, disabled, canAct, canReconcile, pay, onAction, onCheck, onCancelItem }: { line: PaymentLineView; operations: readonly OperationView[]; version: number; busy: string | null; disabled: boolean; canAct: boolean; canReconcile: boolean; pay: LinePayment; onAction: (action: LineActionInput, key: string) => Promise<boolean>; onCheck: (operationId: string) => void; onCancelItem: (reason: CancellationReason, note: string) => Promise<boolean> }) {
   const [confirming, setConfirming] = useState<PaymentStep["kind"] | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const [form, setForm] = useState<"supplier_confirmation" | "supplier_credit" | null>(null);
   const [choosing, setChoosing] = useState(false);
   const [save, setSave] = useState(true);
@@ -210,7 +241,7 @@ function LineCard({ line, operations, version, busy, disabled, canAct, canReconc
   const retainedCost = line.confirmedTerms?.purpose === "retained_cost";
   const key = (kind: string) => `${kind}:${line.side}:${line.itemId}`;
   const tiles = [
-    { label: `Confirmed in V${version}`, amount: line.targetCents },
+    { label: `Confirmed in V${version}${line.cancellation ? " · cancelled" : ""}`, amount: line.cancelledTargetCents ?? line.targetCents },
     { label: "Authorized (held)", amount: line.heldCents },
     { label: "Captured", amount: line.capturedCents },
     { label: "Refunded", amount: line.refundedCents },
@@ -259,6 +290,12 @@ function LineCard({ line, operations, version, busy, disabled, canAct, canReconc
       {step.available && canAct && form === "supplier_confirmation" && step.kind === "supplier_confirmation" && <SupplierOrderForm line={line} disabled={disabled} onSubmit={(input) => onAction({ action: "supplier_order", ...input }, key(step.kind)).then((ok) => { if (ok) setForm(null); })} />}
       {step.available && canAct && form === "supplier_credit" && step.kind === "supplier_credit" && <SupplierCreditForm amountCents={step.amountCents} itemId={line.itemId} disabled={disabled} onSubmit={(input) => onAction({ action: "supplier_credit", ...input }, key(step.kind)).then((ok) => { if (ok) setForm(null); })} />}
     </div>)}</div>}
+
+    {line.cancellation && <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-slate-700"><Ban className="h-3.5 w-3.5" />Cancelled by the studio</p><CancellationRecord cancellation={line.cancellation} /></div>}
+    {line.canCancelItem && canAct && (cancelling
+      ? <div className="mt-3 max-w-[440px] rounded-lg border border-red-100 p-3"><CancelItemForm itemName={line.label} heldCents={line.heldCents} designer={DESIGNER} disabled={disabled} busy={busy === `cancel-item:${line.side}:${line.itemId}`}
+        onBack={() => setCancelling(false)} onSubmit={(reason, note) => void onCancelItem(reason, note).then((ok) => { if (ok) setCancelling(false); })} /></div>
+      : <button type="button" disabled={disabled} onClick={() => setCancelling(true)} className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-600 underline-offset-2 hover:text-red-700 hover:underline disabled:opacity-50"><Ban className="h-3.5 w-3.5" />{line.heldCents > 0 ? "Cancel hold…" : "Cancel item…"}</button>)}
 
     {line.holds.length > 0 && <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[620px] border-collapse text-left text-[11px]"><thead><tr className="text-slate-400"><th className="py-1 pr-2 font-medium">PayPal authorization · order</th><th className="py-1 pr-2 font-medium">Amount</th><th className="py-1 pr-2 font-medium">Status</th><th className="py-1 pr-2 font-medium">Created for</th><th className="py-1 font-medium">Honor period · expires</th></tr></thead><tbody>{line.holds.map((hold) => <tr key={hold.id} className="border-t border-slate-100 align-top"><td className="py-1.5 pr-2 font-mono">{hold.paypalAuthorizationId}<br /><span className="text-slate-400">{hold.paypalOrderId}</span></td><td className="py-1.5 pr-2 tabular-nums">{money(hold.amountCents)}{hold.capturedCents ? <><br /><span className="text-slate-500">captured {money(hold.capturedCents)}</span></> : null}</td><td className="py-1.5 pr-2">{hold.status}{hold.heldCents ? ` · ${money(hold.heldCents)} held` : ""}{hold.releasedCents ? ` · ${money(hold.releasedCents)} released` : ""}</td><td className="py-1.5 pr-2">{hold.version ? `V${hold.version}` : "—"}</td><td className="py-1.5">{hold.honorExpiresAt ? dateTime(hold.honorExpiresAt) : "—"}<br /><span className="text-slate-400">{hold.expiresAt ? dateTime(hold.expiresAt) : "not reported"}</span></td></tr>)}</tbody></table></div>}
     {line.captures.length > 0 && <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[620px] border-collapse text-left text-[11px]"><thead><tr className="text-slate-400"><th className="py-1 pr-2 font-medium">PayPal capture</th><th className="py-1 pr-2 font-medium">Amount</th><th className="py-1 pr-2 font-medium">Status</th><th className="py-1 pr-2 font-medium">Refunded</th><th className="py-1 font-medium">Captured</th></tr></thead><tbody>{line.captures.map((capture) => <tr key={capture.id} className="border-t border-slate-100 align-top"><td className="py-1.5 pr-2 font-mono">{capture.paypalCaptureId}{capture.authorizationId ? <><br /><span className="text-slate-400">from {line.holds.find((hold) => hold.id === capture.authorizationId)?.paypalAuthorizationId ?? "hold"}</span></> : null}</td><td className="py-1.5 pr-2 tabular-nums">{money(capture.amountCents)}{capture.finalCapture ? " · final" : ""}</td><td className="py-1.5 pr-2">{capture.status}</td><td className="py-1.5 pr-2 tabular-nums">{money(capture.refundedCents)}{capture.pendingRefundCents ? ` (+${money(capture.pendingRefundCents)} pending)` : ""}</td><td className="py-1.5">{dateTime(capture.createdAt)}</td></tr>)}</tbody></table></div>}

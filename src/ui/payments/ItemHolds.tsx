@@ -7,7 +7,9 @@ import type { ItemHoldView, ItemHoldsView } from "@/payments/item-holds-view";
 import { centsText, dateTime, Field, inputClass, money, parseDollars } from "../pricing/common";
 import { useTryReadiness } from "../try/useTryReadiness";
 import type { CheckoutView } from "@/payments/types";
-import { CANCELLATION_REASON_TEXT, CANCELLATION_REASONS, type CancellationReason } from "@/payments/cancellation";
+import { DEMO_ACCOUNTS } from "@/accounts/demo";
+import type { CancellationReason } from "@/payments/cancellation";
+import { CancellationRecord, CancelItemForm } from "./CancelItemForm";
 import { demoSupplierNumber } from "./demo-supplier";
 import { PayMethodChooser, SavedMethodCard, savedMethodName } from "./PaymentMethods";
 import { paymentChanged, usePaymentRefresh } from "./usePaymentRefresh";
@@ -136,6 +138,7 @@ export function ItemHolds({ projectKey, orderId }: { projectKey: CaseKey; orderI
   </section>;
 }
 
+const DESIGNER = DEMO_ACCOUNTS.find((account) => account.role === "designer")!.name;
 const shortDate = (value: string) => new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
 
 function ItemStatus({ line }: { line: ItemHoldView }) {
@@ -233,7 +236,7 @@ function ItemDrawer({ line, designer, checkout, canHoldAll, busy, blocked, error
     <button type="button" disabled={disabled} onClick={() => void onCancelItem(line.cancellation!.reason, line.cancellation!.note)} className={primary}>{busy === `cancel-item:${line.itemId}` ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Release the {money(line.heldCents)} hold again</button>
     <p className={note}>PayPal has not confirmed the release yet. Nothing was charged for this item.</p>
   </> : <p className={note}>{line.heldCents > 0 ? "The studio is releasing this hold on PayPal. Nothing was charged for this item." : "Cancelled. Nothing was charged, and nothing is held for it now."}</p>;
-  else if (cancelling) next = <CancelItemForm heldCents={line.heldCents} disabled={disabled} busy={busy === `cancel-item:${line.itemId}`}
+  else if (cancelling) next = <CancelItemForm itemName={line.label} heldCents={line.heldCents} designer={DESIGNER} disabled={disabled} busy={busy === `cancel-item:${line.itemId}`}
     onBack={() => setCancelling(false)} onSubmit={async (reason, text) => { if (await onCancelItem(reason, text)) setCancelling(false); }} />;
   const cancelLink = line.canCancelItem && !cancelling && <button type="button" disabled={disabled} onClick={() => setCancelling(true)}
     className="mt-3 inline-flex w-full items-center justify-center gap-1.5 text-[12px] font-medium text-slate-600 underline-offset-2 hover:text-red-700 hover:underline disabled:opacity-50"><Ban className="h-3.5 w-3.5" />{line.heldCents > 0 ? "Cancel hold…" : "Cancel item…"}</button>;
@@ -278,11 +281,7 @@ function ItemDrawer({ line, designer, checkout, canHoldAll, busy, blocked, error
       </section>
       {line.cancellation && <section aria-label="Cancellation">
         <h4 className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Cancelled by the studio</h4>
-        <dl className="mt-1.5 divide-y divide-[var(--line)]">
-          <Row label="Reason">{line.cancellation.reason === "other" ? line.cancellation.note : line.cancellation.reasonText}</Row>
-          {line.cancellation.reason !== "other" && line.cancellation.note && <Row label="Note">{line.cancellation.note}</Row>}
-          <Row label="By">{line.cancellation.by} · {dateTime(line.cancellation.at)}</Row>
-        </dl>
+        <div className="mt-1.5"><CancellationRecord cancellation={line.cancellation} /></div>
       </section>}
       {terms && !line.cancellation && <section aria-label="Supplier confirmation">
         <h4 className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Supplier confirmation{line.supplier ? "" : " · demo"}</h4>
@@ -314,33 +313,3 @@ function ItemDrawer({ line, designer, checkout, canHoldAll, busy, blocked, error
   </>;
 }
 
-/**
- * Why the studio cancels an item, asked before anything is released. The
- * reason reaches the client in the chat; "Other" needs the designer's own words.
- */
-function CancelItemForm({ heldCents, disabled, busy, onBack, onSubmit }: {
-  heldCents: number; disabled: boolean; busy: boolean; onBack: () => void; onSubmit: (reason: CancellationReason, note: string) => void;
-}) {
-  const [reason, setReason] = useState<CancellationReason | null>(null);
-  const [text, setText] = useState("");
-  const missing = !reason ? "Choose a reason." : reason === "other" && !text.trim() ? "Say why the item is cancelled." : null;
-  return <div className="space-y-3">
-    <fieldset>
-      <legend className="text-[12px] font-semibold">Why is this item cancelled?</legend>
-      <div className="mt-2 space-y-1.5">{CANCELLATION_REASONS.map((value) => <label key={value} className="flex items-center gap-2 text-[12px] text-slate-700">
-        <input type="radio" name="cancel-reason" value={value} checked={reason === value} onChange={() => setReason(value)} className="accent-[var(--primary)]" />{CANCELLATION_REASON_TEXT[value]}
-      </label>)}</div>
-    </fieldset>
-    <Field label={reason === "other" ? "What happened" : "Note for the client · optional"}>
-      <textarea className={`${inputClass} min-h-[64px] resize-y`} value={text} onChange={(event) => setText(event.target.value)} maxLength={1_000}
-        placeholder={reason === "other" ? "The client sees this in the chat." : "For example: the supplier discontinued this finish."} />
-    </Field>
-    <p className="rounded-lg bg-[var(--canvas)] p-2.5 text-[11px] leading-relaxed text-slate-600">{heldCents > 0
-      ? `This releases the ${money(heldCents)} hold on PayPal. Nothing is charged, and the client sees the reason in the project chat.`
-      : "Nothing is held or charged for this item. The client sees the reason in the project chat."} A replacement would come as a new version for the client to confirm.</p>
-    <button type="button" disabled={disabled || !!missing} onClick={() => reason && onSubmit(reason, text.trim())}
-      className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-red-700 px-3.5 py-2.5 text-[13px] font-semibold text-white hover:bg-red-800 disabled:opacity-50">
-      {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}{heldCents > 0 ? `Cancel and release ${money(heldCents)}` : "Cancel this item"}</button>
-    <button type="button" disabled={busy} onClick={onBack} className="inline-flex w-full justify-center text-[12px] font-medium text-slate-600 hover:underline disabled:opacity-50">Keep the item</button>
-  </div>;
-}

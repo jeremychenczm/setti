@@ -20,6 +20,9 @@ export function lineProgress(line: PaymentLineView, operations: readonly Operati
     if (unresolved.kind === "authorize" && unresolved.approvalUrl) return result("Awaiting client approval", "waiting", "Continue this item's existing PayPal checkout, then check its recorded result.");
     return result(`${kind} in progress`, "waiting", "Check this item's existing payment operation; its result is not counted as completed yet.");
   }
+  if (line.cancellation) return line.heldCents > 0
+    ? result("Cancelled · hold not released yet", "waiting", "Release this cancelled item's remaining hold. Nothing was charged for it.")
+    : result("Cancelled by the studio", "settled", `${line.cancellation.reasonText}. Nothing was charged, and nothing is held for it now.`, true);
   const net = line.capturedCents - line.refundedCents;
   if (line.refunds.some((refund) => refund.status === "pending")) return result("Refund pending at PayPal", "waiting", "Check the existing refund; pending money is not counted as returned.");
   if (line.captures.some((capture) => capture.status === "pending")) return result("Capture pending at PayPal", "waiting", "Check the existing capture before starting another payment.");

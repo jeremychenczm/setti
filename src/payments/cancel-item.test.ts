@@ -10,10 +10,12 @@ import { signOpeningForTest } from "../opening/testing";
 import { startOpeningCapture } from "./actions";
 import { completeAuthorization } from "./authorize";
 import { cancelApprovedItem } from "./cancel-item";
+import { cancellationMessage } from "./cancellation";
 import { holdApprovedItems } from "./item-holds";
 import { itemHoldsView } from "./item-holds-view";
 import { lockOpeningVersion } from "./opening";
 import { insertOperation } from "./operations";
+import { paymentsWorkspace } from "./workspace";
 import { chargeServices, startServicesCheckout } from "./services";
 import { recordOpeningSupplierOrder } from "./supplier";
 import { bergmund, confirmChange } from "./testing/cases";
@@ -58,7 +60,9 @@ describe.skipIf(!testDatabaseUrl)("the studio cancels an approved item", () => {
   });
   const view = (account = designer) => itemHoldsView(handle.db, session, "willow", account);
   const deskLine = async (account = designer) => (await view(account)).items.find((line) => line.itemId === DESK)!;
-  const messages = async () => (await createChatStore(handle.db).getCase(session, "willow")).messages.map((message) => message.text);
+  const chat = async () => (await createChatStore(handle.db).getCase(session, "willow")).messages;
+  const messages = async () => (await chat()).map((message) => message.text);
+  const fromDesigner = async () => (await chat()).filter((message) => message.actor === "designer" && message.text.startsWith("Update on Writing desk")).map((message) => message.text);
   const version = () => handle.db.transaction((tx) => lockOpeningVersion(tx, session, "willow", null));
   const deskItemId = async () => (await version()).approved.find((entry) => entry.line.itemId === DESK)!.itemId;
 
@@ -83,9 +87,11 @@ describe.skipIf(!testDatabaseUrl)("the studio cancels an approved item", () => {
     expect((await handle.db.select().from(paymentOperations).where(eq(paymentOperations.itemId, await deskItemId()))).map((operation) => operation.kind)).toEqual(["authorize", "void"]);
 
     const text = await messages();
-    expect(text.filter((message) => message.includes("cancelled Writing desk"))).toEqual([
-      `${designer.name} cancelled Writing desk from V1: Out of stock or discontinued (The walnut finish was discontinued.). Nothing was charged for it. Its ${usd(deskTotal)} hold is being released on PayPal, so the money stays with the client. A replacement would come as a new version for the client to confirm.`,
+    // The client hears it from the designer, as a chat message of its own.
+    expect(await fromDesigner()).toEqual([
+      `Update on Writing desk: I've cancelled it because the supplier can't supply it. The walnut finish was discontinued. Nothing was charged for it, and its ${usd(deskTotal)} hold is being released on PayPal. If you'd like a replacement, I'll send it to you as a new version to confirm.`,
     ]);
+    expect(await fromDesigner()).toEqual([cancellationMessage({ itemName: "Writing desk", reason: "unavailable", note: "The walnut finish was discontinued.", heldCents: deskTotal })]);
     expect(text.at(-1)).toMatch(/released the hold for V1 · Writing desk/);
 
     // Repeating the step changes nothing and writes nothing new.
@@ -149,7 +155,7 @@ describe.skipIf(!testDatabaseUrl)("the studio cancels an approved item", () => {
     expect(second.operations).toEqual([expect.objectContaining({ kind: "void", status: "succeeded", amountCents: deskTotal })]);
     expect(second.operations[0].id).not.toBe(first.operations[0].id);
     expect(await deskLine()).toMatchObject({ state: "cancelled", heldCents: 0 });
-    expect((await messages()).filter((message) => message.includes("cancelled Writing desk"))).toHaveLength(1);
+    expect(await fromDesigner()).toHaveLength(1);
   });
 
   it("keeps a cancelled item unfunded in the versions that follow", async () => {
@@ -163,10 +169,22 @@ describe.skipIf(!testDatabaseUrl)("the studio cancels an approved item", () => {
     expect((await handle.db.select().from(paymentOperations).where(eq(paymentOperations.itemId, itemId))).map((operation) => operation.kind)).toEqual(["authorize", "void"]);
   });
 
+  it("cancels an item from a later version's payments page too", async () => {
+    const order = await confirmChange(handle.db, session, "willow", { action: "replace", itemId: CHAIR, after: bergmund() });
+    const deskOf = async (account = designer) => (await paymentsWorkspace(handle.db, session, order.id, new Date(), account))!.lines.find((line) => line.itemId === DESK)!;
+    expect(await deskOf()).toMatchObject({ heldCents: deskTotal, canCancelItem: true, cancellation: null });
+    expect(await deskOf(client)).toMatchObject({ canCancelItem: false });
+
+    const { operations } = await cancel({ reason: "no_response", note: "" });
+    expect(operations).toEqual([expect.objectContaining({ kind: "void", status: "succeeded", changeOrderId: order.id, amountCents: deskTotal })]);
+    expect(await deskOf()).toMatchObject({ targetCents: 0, cancelledTargetCents: deskTotal, heldCents: 0, canCancelItem: false, cancellation: { reason: "no_response", by: designer.name } });
+    expect(await fromDesigner()).toEqual([expect.stringMatching(/^Update on Writing desk: I've cancelled it because the supplier never confirmed the order\. Nothing was charged/)]);
+  });
+
   it("asks for the designer's own words when the reason is Other", async () => {
     await expect(cancel({ reason: "other", note: "  " })).rejects.toMatchObject({ code: "INVALID_INPUT" });
     expect((await cancel({ reason: "other", note: "The client moved the study to the guest room." })).cancellation).toMatchObject({ reason: "other" });
-    expect((await messages()).some((message) => message.includes("cancelled Writing desk from V1: The client moved the study to the guest room."))).toBe(true);
+    expect((await fromDesigner())[0]).toMatch(/^Update on Writing desk: I've cancelled it\. The client moved the study to the guest room\. Nothing was charged/);
   });
 
   it("only cancels an approved furniture item of the current agreement", async () => {
