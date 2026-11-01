@@ -1,12 +1,11 @@
 "use client";
 
-import { ArrowRight, Check } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AccountId } from "@/accounts/demo";
 import type { CaseSnapshot } from "@/chat/types";
 import type { ItemHoldsView } from "@/payments/item-holds-view";
 import type { ServicesPaymentView } from "@/payments/services-view";
-import { EndDemoButton } from "./EndDemoButton";
+import { GuideBar } from "./GuideBar";
 import type { TrySeedNoticeProps } from "./TrySeedNotice";
 import { navigateGuidePage, useGuideAnchor } from "./useGuideAnchor";
 import { WILLOW_GUIDE_STEPS, willowGuideStep, type WillowGuideData } from "./willow-guide";
@@ -86,27 +85,5 @@ export function WillowGuide({ account, onSwitchAccount, onOpenChat, currentView,
     navigateGuidePage(`${path}${step.anchor ? `#${step.anchor}` : ""}`, switchNeeded);
   }
 
-  const done = (index: number) => index < step.index || (index === step.index && !!step.complete);
-  return <aside aria-label="Willow demo guide" className="shrink-0 rounded-xl border border-[var(--primary-line)] bg-[var(--primary-soft)] px-4 py-3 text-[var(--ink)]">
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-    <ol aria-label={`Step ${step.index + 1} of ${WILLOW_GUIDE_STEPS.length}`} className="flex flex-1 flex-wrap items-center gap-1.5">
-      {WILLOW_GUIDE_STEPS.map((label, index) => <li key={label} title={label} aria-current={step.index === index ? "step" : undefined} className="flex items-center gap-1.5">
-        {index > 0 && <span aria-hidden className={`h-px w-4 sm:w-6 ${index <= step.index ? "bg-[var(--primary)]" : "bg-[var(--primary-line)]"}`} />}
-        <span className={`flex h-[18px] w-[18px] items-center justify-center rounded-full text-[9px] font-semibold ${done(index) ? "bg-[var(--primary)] text-white" : index === step.index ? "border-2 border-[var(--primary)] bg-white text-[var(--primary)]" : "border border-[var(--primary-line)] bg-white text-[var(--muted)]"}`}>
-          {done(index) ? <Check className="h-2.5 w-2.5" /> : index + 1}<span className="sr-only">{label}</span>
-        </span>
-      </li>)}
-      <li className="ml-1.5 text-[10px] text-[var(--muted)]">Step {step.index + 1} of {WILLOW_GUIDE_STEPS.length} · {WILLOW_GUIDE_STEPS[step.index]}</li>
-    </ol>
-    <EndDemoButton className="rounded-md px-1.5 py-1 text-[10px] font-medium text-brand-700 hover:bg-brand-100" />
-    </div>
-    <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-2">
-      <div className="min-w-[220px] flex-1">
-        <h2 className="text-[13px] font-semibold leading-snug">{step.title}</h2>
-        <p title={step.detail} className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-slate-600">{step.detail}</p>
-      </div>
-      <button type="button" onClick={continueGuide} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">{action}<ArrowRight className="h-3.5 w-3.5" /></button>
-    </div>
-    {error && <p role="status" className="mt-2 text-[10px] leading-relaxed text-amber-800">{error}</p>}
-  </aside>;
+  return <GuideBar label="Willow demo guide" steps={WILLOW_GUIDE_STEPS} step={step} action={action} onAction={continueGuide} error={error} />;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Check, ChevronDown, ChevronUp, Copy, CreditCard, LoaderCircle, RefreshCw, UserRound } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, LoaderCircle } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { AccountId, DemoAccount } from "@/accounts/demo";
@@ -13,7 +13,7 @@ import { lineProgress } from "../payments/progress";
 import { HOME_GUIDE_STEPS, MAPLE_EXAMPLE_REQUEST, MAPLE_GUIDE_STEPS, mapleChangeLines, mapleGuideStep, type MapleGuideData } from "./maple-guide";
 import { navigateGuidePage, useGuideAnchor } from "./useGuideAnchor";
 import { WillowGuide } from "./WillowGuide";
-import { EndDemoButton } from "./EndDemoButton";
+import { GUIDE_TOOL, GuideBar } from "./GuideBar";
 import { canOpenPreparedWorkspace, useTryPreparation } from "./TryPreparationProvider";
 import { paymentQuestionHref } from "../chat/payment-question";
 
@@ -43,7 +43,6 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
   const seed = preparation.seed;
   const [data, setData] = useState<MapleGuideData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [viewerId, setViewerId] = useState<AccountId | null>(null);
@@ -52,12 +51,11 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
   const busy = useRef(false);
   useGuideAnchor(projectKey === "maple" && data !== null);
 
-  const refresh = useCallback(async (manual = false) => {
+  const refresh = useCallback(async () => {
     if (projectKey !== "maple" || busy.current) return;
     busy.current = true;
     const controller = new AbortController();
     request.current = controller;
-    if (manual) setLoading(true);
     try {
       if (!seed || !canOpenPreparedWorkspace(seed)) { setData(null); setError(null); return; }
       const snapshot = await readJson("/api/chat/maple", controller.signal) as CaseSnapshot;
@@ -78,7 +76,7 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
     } catch {
       if (!controller.signal.aborted) setError("The guide could not refresh. Check the saved project status before repeating an action.");
     } finally {
-      if (request.current === controller) { busy.current = false; setLoading(false); }
+      if (request.current === controller) busy.current = false;
     }
   }, [projectKey, account.id, account.role, currentView, seed]);
 
@@ -91,8 +89,7 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
     return () => { clearInterval(timer); window.removeEventListener("focus", update); request.current?.abort(); busy.current = false; };
   }, [projectKey, refresh]);
 
-  const setupNotice = <PaymentSetupNotice />;
-  if (projectKey !== "maple" || !data || viewerId !== account.id) return setupNotice;
+  if (projectKey !== "maple" || !data || viewerId !== account.id) return <PaymentSetupNotice />;
   const step = mapleGuideStep(data, account.role);
   const home = isHomeScenario(data.scenario);
   const startingVersion = seed?.baselineQuoteVersion ?? (data.seedOrderId ? 2 : 1);
@@ -137,26 +134,11 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
     catch { setCopied(false); setError("Copy is unavailable here. You can select the example text below and paste it into the chat."); }
   }
 
-  return <>{setupNotice}<aside aria-label="Maple demo guide" className="shrink-0 rounded-xl border border-brand-100 bg-brand-50/70 px-4 py-3 text-slate-700">
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-      <p className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] font-semibold text-brand-950"><CreditCard className="h-3.5 w-3.5 shrink-0" />Maple Ave · {home ? "living & dining" : "a change after money moved"}</p>
-      <Link href="/try" className="text-[10px] font-medium text-brand-700 underline underline-offset-2">Demo home</Link>
-      {account.role === "designer" && <Link href="/studio" className="text-[10px] font-medium text-brand-700 underline underline-offset-2">Studio projects</Link>}
-      <EndDemoButton className="rounded-md px-1.5 py-1 text-[10px] font-medium text-brand-700 hover:bg-brand-100" />
-      <span className="inline-flex items-center gap-1.5 rounded-full border border-brand-100 bg-white px-2.5 py-1 text-[10px]"><UserRound className="h-3 w-3" />You are {account.name} · {account.role === "designer" ? "Designer" : "Client"}</span>
-      <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} aria-controls={detailsId} className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[10px] font-medium text-brand-700 hover:bg-brand-100">{expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}{expanded ? "Hide details" : "Show steps and money"}</button>
-      <button type="button" onClick={() => void refresh(true)} disabled={loading} aria-label="Refresh demo guide from saved records" className="rounded-md p-1 text-brand-700 hover:bg-brand-100 disabled:opacity-50">{loading ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}</button>
-    </div>
-    <div className="mt-2 flex flex-wrap items-center gap-3">
-      <div className="min-w-0 flex-1"><h2 className="text-[12px] font-semibold text-slate-900"><span className="mr-1.5 font-normal text-slate-500">{step.index + 1}/{guideSteps.length}</span>{step.title}</h2></div>
-      <button type="button" onClick={continueGuide} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3 py-2 text-[11px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">{action}<ArrowRight className="h-3 w-3" /></button>
-    </div>
-    <div id={detailsId} hidden={!expanded} className="mt-2 max-h-[28dvh] overflow-y-auto pr-1">
-    <ol aria-label="Demo progress from saved records" className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-500">
-      {guideSteps.map((label, index) => <li key={label} aria-current={index === step.index ? "step" : undefined} className={`flex items-center gap-1 ${index === step.index ? "font-semibold text-brand-800" : ""}`}>{index < step.index || (index === step.index && step.complete) ? <Check className="h-3 w-3 text-emerald-700" /> : <span>{index + 1}.</span>}{label}</li>)}
-    </ol>
-    <p className="mt-2 max-w-4xl text-[11px] leading-relaxed">{step.detail}</p>
-    {outcomes.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-3">
+  return <GuideBar label="Maple demo guide" steps={guideSteps} step={step} action={action} onAction={continueGuide} error={error}
+    tools={<button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} aria-controls={detailsId} className={GUIDE_TOOL}>{expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}{expanded ? "Hide details" : "Money and story"}</button>}>
+    <PaymentSetupNotice embedded />
+    <div id={detailsId} hidden={!expanded} className="mt-2.5 max-h-[28dvh] overflow-y-auto border-t border-[var(--primary-line)] pr-1 pt-2.5 text-[10px] leading-relaxed text-slate-500">
+    {outcomes.length > 0 && <div className="mb-3 grid gap-2 sm:grid-cols-3">
       {outcomes.map((line) => {
         const progress = lineProgress(line, data.payments!.operations);
         const href = `/change-orders/${data.payments!.orderId}#payment-line-${line.side}-${line.itemId}`;
@@ -164,27 +146,28 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
         return <Link href={href} key={`${line.side}:${line.itemId}`} className="min-w-0 rounded-lg border border-brand-100 bg-white px-3 py-2 hover:border-brand-300"><p className="truncate text-[11px] font-semibold text-slate-800">{line.label}{line.change === "replace" ? line.side === "baseline" ? " · old item" : " · replacement" : ""}</p><p className={`mt-1 text-[10px] font-medium ${progress.settled ? "text-emerald-700" : "text-amber-800"}`}>{progress.label}</p><p className="mt-1 text-[10px] leading-relaxed text-slate-500">{result}</p></Link>;
       })}
     </div>}
-    <details className="mt-2.5 text-[10px] leading-relaxed text-slate-500"><summary className="w-fit cursor-pointer font-medium text-brand-800">Starting story, example request and what is real</summary>
-      <p className="mt-2">{home ? `Emma confirmed the living-and-dining V${startingVersion}. ${data.preparationPending ? "The starting test payments are being prepared in the background; use the progress notice to see which records are complete." : "The sofa, coffee table, dining table and six chairs have individual Sandbox holds and have not been ordered. The sideboard's $1,200 test payment has been captured."} The $1,000 design fee is unchanged and unpaid. The sample conversation ends before Jordan requests a revised quote.` : "Prepared starting point: Emma confirmed V2; the lounge chair has an $800 hold and the wool rug has a completed $300 payment. These starting transactions were created on PayPal Sandbox with a test card. They are history prepared for this demo, not actions you just took."}</p>
+      <p>{home ? `Emma confirmed the living-and-dining V${startingVersion}. ${data.preparationPending ? "The starting test payments are being prepared in the background; use the progress notice to see which records are complete." : "The sofa, coffee table, dining table and six chairs have individual Sandbox holds and have not been ordered. The sideboard's $1,200 test payment has been captured."} The $1,000 design fee is unchanged and unpaid. The sample conversation ends before Jordan requests a revised quote.` : "Prepared starting point: Emma confirmed V2; the lounge chair has an $800 hold and the wool rug has a completed $300 payment. These starting transactions were created on PayPal Sandbox with a test card. They are history prepared for this demo, not actions you just took."}</p>
       <Link href={data.seedOrderId ? `/change-orders/${data.seedOrderId}#payments` : "/quotes/maple#item-holds"} className="mt-1 inline-block font-medium text-[var(--primary)] underline">Inspect the starting V{startingVersion} payment records</Link>
       <div className="mt-2 rounded-lg border border-brand-100 bg-white p-2.5"><p className="select-text text-[11px] text-slate-700">{exampleRequest}</p><button type="button" onClick={() => void copyRequest()} className="mt-2 inline-flex items-center gap-1 font-medium text-brand-700"><Copy className="h-3 w-3" />{copied ? "Copied · paste and send when ready" : home ? "Copy designer request" : "Copy example request"}</button></div>
       <p className="mt-2">{home ? `The initial V${startingVersion}, discussion and supplier documents are prepared fictional examples. A new @AI request uses the configured model to select sources and draft changes; prices and totals come from the supplied evidence and the pricing engine.` : "The initial AI draft and prior demo decisions are scripted. Your new @AI requests use the configured model; supplier confirmations and credits are designer-entered demo records."} You still review prices, sign the client version and confirm each money action yourself. No real money moves. The cards above cover this change, not the whole project&rsquo;s settlement.</p>
-    </details>
     </div>
-    {error && <p role="status" className="mt-2 text-[10px] leading-relaxed text-amber-800">{error}</p>}
-  </aside></>;
+  </GuideBar>;
 }
 
-function PaymentSetupNotice() {
+/** Where the background test payments stand: a row of the guide, or its own bar before the guide has loaded. */
+function PaymentSetupNotice({ embedded = false }: { embedded?: boolean }) {
   const { seed, error, refresh, retry } = useTryPreparation();
   if (!seed || seed.scenario !== HOME_SCENARIO || seed.status === "ready") return null;
   const stages = seed.stages.filter((stage) => stage.id !== "quote" && stage.id !== "discussion");
   const done = stages.filter((stage) => stage.status === "done").length;
   const paused = seed.status === "failed" || !!error;
-  return <aside aria-label="Background payment setup" className="shrink-0 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-[11px] text-stone-700">
-    <div className="flex flex-wrap items-center gap-2"><span role="status" className="flex flex-1 items-center gap-2 font-medium">{!paused && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}{paused ? "Test payment setup paused" : "Test payments are being prepared in the background"}<span className="font-normal text-stone-500">{done}/{stages.length} steps saved</span></span>{paused && <button type="button" disabled={seed.busy} onClick={() => seed.canResume ? retry() : void refresh()} className="font-semibold text-[var(--primary)] underline disabled:opacity-50">{seed.canResume ? "Resume setup" : "Check saved status"}</button>}</div>
-    <p className="mt-1.5 leading-relaxed">Keep reading the discussion and reviewing the quote. Sending the revised version and payment actions become available when setup finishes.</p>
-    {paused && <p className="mt-1.5 text-amber-800">{error || seed.error || "The saved records remain available. Resume the same setup when ready."}</p>}
-    <details className="mt-2 text-[10px] text-stone-500"><summary className="w-fit cursor-pointer font-medium">See setup progress</summary><ol className="mt-2 space-y-1">{stages.map((stage) => <li key={stage.id} className="flex items-start gap-2">{stage.status === "done" ? <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-700" /> : <span className="w-3 shrink-0">·</span>}<span>{stage.label} · {stage.status === "done" ? "Saved" : stage.status === "running" ? "In progress" : stage.status === "failed" ? "Paused" : "Waiting"}</span></li>)}</ol></details>
-  </aside>;
+  const body = <>
+    <div className="flex flex-wrap items-center gap-2"><span role="status" className="flex flex-1 items-center gap-1.5 font-medium">{!paused && <LoaderCircle className="h-3.5 w-3.5 animate-spin text-[var(--primary)]" />}{paused ? "Test payment setup paused" : "Preparing the starting test payments in the background"}<span className="font-normal text-[var(--muted)]">· {done}/{stages.length} saved</span></span>{paused && <button type="button" disabled={seed.busy} onClick={() => seed.canResume ? retry() : void refresh()} className="font-semibold text-[var(--primary)] underline disabled:opacity-50">{seed.canResume ? "Resume setup" : "Check saved status"}</button>}</div>
+    <p className="mt-0.5 text-[10px] leading-relaxed text-[var(--muted)]">Keep reading the discussion and reviewing the quote. Sending the revised version and payment actions open when setup finishes.</p>
+    {paused && <p className="mt-1 text-[10px] text-amber-800">{error || seed.error || "The saved records remain available. Resume the same setup when ready."}</p>}
+    <details className="mt-1.5 text-[10px] text-[var(--muted)]"><summary className="w-fit cursor-pointer font-medium">See setup progress</summary><ol className="mt-1.5 space-y-1">{stages.map((stage) => <li key={stage.id} className="flex items-start gap-2">{stage.status === "done" ? <Check className="mt-0.5 h-3 w-3 shrink-0 text-emerald-700" /> : <span className="w-3 shrink-0">·</span>}<span>{stage.label} · {stage.status === "done" ? "Saved" : stage.status === "running" ? "In progress" : stage.status === "failed" ? "Paused" : "Waiting"}</span></li>)}</ol></details>
+  </>;
+  return embedded
+    ? <section aria-label="Background payment setup" className="mt-2.5 border-t border-[var(--primary-line)] pt-2.5 text-[11px]">{body}</section>
+    : <aside aria-label="Background payment setup" className="shrink-0 rounded-xl border border-[var(--primary-line)] bg-[var(--primary-soft)] px-4 py-3 text-[11px] text-[var(--ink)]">{body}</aside>;
 }
