@@ -136,12 +136,17 @@ export interface SentVersion {
   source?: ChangeSource;
 }
 
+/** Where a running reply is: reading the project, writing, checking against the records, or correcting itself. */
+export type AiStage = "reading" | "writing" | "checking" | "rewriting";
+
 export interface StoredCase {
   id: string;
   projectKey: CaseKey;
   messages: CaseMessage[];
   draft: ChangeDraft | null;
   activeMessageId: string | null;
+  /** Set while a reply runs; optional for legacy store adapters. */
+  activeRunStage?: AiStage | null;
   /** Server-owned current approved baseline; optional for legacy store adapters. */
   quote?: ApprovedQuoteReport;
   /** Where the project's V1 is with the client; optional for legacy store adapters. */
@@ -187,6 +192,8 @@ export type BeginAiResult =
 export interface ChatStore {
   readMoneyContext?(sessionId: string, projectKey: CaseKey): Promise<MoneyContext>;
   getCase(sessionId: string, projectKey: CaseKey): Promise<StoredCase>;
+  /** Records the running reply's stage; ignored once that run has ended. */
+  reportAiStage?(sessionId: string, projectKey: CaseKey, runId: string, stage: AiStage): Promise<void>;
   appendMessage(sessionId: string, projectKey: CaseKey, input: AppendMessageInput): Promise<StoredCase>;
   /** Freezes the prepared V1 and posts it as the designer's message; repeating it changes nothing. */
   sendQuote(sessionId: string, projectKey: CaseKey, input: SendQuoteInput): Promise<StoredCase>;

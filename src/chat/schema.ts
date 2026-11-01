@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { check, integer, jsonb, pgTable, primaryKey, serial, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
-import type { AiState, CaseKey, ChangeDraft, HumanActor } from "./types";
+import type { AiStage, AiState, CaseKey, ChangeDraft, HumanActor } from "./types";
 import type { MoneyAnswer } from "../ai/money-types";
 
 /** Demo conversations are independent of real projects, quotes and payments. */
@@ -12,6 +12,8 @@ export const chatCases = pgTable("chat_cases", {
   activeMessageId: uuid("active_message_id"),
   activeRunId: uuid("active_run_id"),
   activeRunStartedAt: timestamp("active_run_started_at", { withTimezone: true }),
+  /** What the running reply is doing now, for the waiting client; cleared with the run. */
+  activeRunStage: text("active_run_stage").$type<AiStage>(),
   latestCompletedSequence: integer("latest_completed_sequence").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

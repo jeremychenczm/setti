@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AppendMessageInput, CaseKey, CaseMessage, CaseSnapshot, ChatErrorResponse, HumanActor } from "@/chat/types";
+import { isAiInvocation } from "@/ai/intent";
+import type { AiStage, AppendMessageInput, CaseKey, CaseMessage, CaseSnapshot, ChatErrorResponse, HumanActor } from "@/chat/types";
 
 interface RetryAction {
   messageId?: string;
@@ -29,6 +30,29 @@ export function useCaseChat(projectKey: CaseKey) {
   const request = useRef<AbortController | null>(null);
   const busy = useRef(false);
   const endpoint = `/api/chat/${projectKey}`;
+  const [stage, setStage] = useState<AiStage | null>(null);
+  // Whether this reply needed a corrected attempt, so the steps can show it.
+  const [rewrote, setRewrote] = useState(false);
+  // Whether the message being sent asks Setti, so only those sends show reply steps.
+  const [sendingToAi, setSendingToAi] = useState(false);
+
+  // While a message is sending, read the reply's real stage from the saved case; the reply itself arrives with the send.
+  useEffect(() => {
+    if (!sending) { setStage(null); setRewrote(false); return; }
+    let stopped = false;
+    const timer = window.setInterval(async () => {
+      try {
+        const response = await fetch(endpoint, { cache: "no-store" });
+        const body = await readResponse(response);
+        if (!stopped && response.ok && isSnapshot(body, projectKey)) {
+          const current = body.activeMessageId ? body.activeRunStage ?? null : null;
+          setStage(current);
+          if (current === "rewriting") setRewrote(true);
+        }
+      } catch { /* progress only; the send reports the outcome */ }
+    }, 1200);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [sending, endpoint, projectKey]);
 
   const load = useCallback(async () => {
     request.current?.abort();
@@ -96,6 +120,7 @@ export function useCaseChat(projectKey: CaseKey) {
     if (optimistic && retryAction?.input && action.input?.id !== retryAction.input.id) return;
     busy.current = true;
     setSending(true);
+    setSendingToAi(Boolean(action.messageId) || isAiInvocation(action.input?.text ?? ""));
     setError(null);
     setRetryAction(null);
     const controller = new AbortController();
@@ -192,6 +217,9 @@ export function useCaseChat(projectKey: CaseKey) {
     messages: optimistic && !messages.some((message) => message.id === optimistic.id) ? [...messages, optimistic] : messages,
     loading,
     running: sending || Boolean(snapshot?.activeMessageId),
+    stage: stage ?? (snapshot?.activeMessageId ? snapshot.activeRunStage ?? null : null),
+    rewrote,
+    aiReplying: Boolean(snapshot?.activeMessageId) || (sending && sendingToAi),
     error,
     canRetry: Boolean(retryAction),
     unsavedMessageId: optimistic && !messages.some((message) => message.id === optimistic.id) ? optimistic.id : null,

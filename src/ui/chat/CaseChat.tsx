@@ -1,11 +1,11 @@
 "use client";
 
-import { Bot, FileText, LoaderCircle, MessageSquare, PanelRight, Plus, RefreshCw, SendHorizontal, X } from "lucide-react";
+import { Bot, Check, Circle, FileText, LoaderCircle, MessageSquare, PanelRight, Plus, RefreshCw, SendHorizontal, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { isAiInvocation } from "@/ai/intent";
 import { clientOf, DEMO_ACCOUNTS, type AccountId, type DemoAccount } from "@/accounts/demo";
-import type { CaseKey, CaseMessage, HumanActor } from "@/chat/types";
+import type { AiStage, CaseKey, CaseMessage, HumanActor } from "@/chat/types";
 import type { QuoteDocument } from "@/quotes/types";
 import { isMapleSampleScope, MAPLE_MIXED_CHANGE_MESSAGE } from "@/demo/maple-materials";
 import { HOME_DESIGNER_REQUEST } from "@/demo/living-dining";
@@ -42,8 +42,31 @@ interface CaseChatProps {
   onLatest?: (message: CaseMessage | null) => void;
 }
 
+/** Each step of a running reply: what it says while active, once done, and before it starts. */
+const STEPS: Record<AiStage, { active: string; done: string; pending: string }> = {
+  reading: { active: "Reading the project records…", done: "Read the project records", pending: "Read the project records" },
+  writing: { active: "Writing the reply…", done: "Wrote the reply", pending: "Write the reply" },
+  rewriting: { active: "Correcting a detail that did not match the records…", done: "Corrected a detail that did not match the records", pending: "Correct a detail" },
+  checking: { active: "Checking it against the records…", done: "Checked against the records", pending: "Check it against the records" },
+};
+
+/** The reply's progress as the server reports it: done steps ticked, the current one spinning. */
+function ReplySteps({ stage, rewrote }: { stage: AiStage | null; rewrote: boolean }) {
+  const steps: AiStage[] = ["reading", "writing", ...(rewrote || stage === "rewriting" ? ["rewriting" as const] : []), "checking"];
+  const current = steps.indexOf(stage ?? "reading");
+  return <ol className="space-y-1">
+    {steps.map((step, index) => {
+      const state = index < current ? "done" : index === current ? "active" : "pending";
+      return <li key={step} className={`flex items-center gap-2 ${state === "pending" ? "text-amber-900/40" : ""}`}>
+        {state === "done" ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : state === "active" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Circle className="h-3.5 w-3.5" />}
+        <span className={state === "active" ? "font-medium" : ""}>{STEPS[step][state]}</span>
+      </li>;
+    })}
+  </ol>;
+}
+
 export function CaseChat({ projectKey, quote, account, onSwitchAccount, onOpenQuote, onSelectCase, conversationOptions, onSelectProject, onLatest }: CaseChatProps) {
-  const { snapshot, messages, loading, running, error, canRetry, unsavedMessageId, hasUnsent, send, sendQuote, retry, editUnsent, reload } = useCaseChat(projectKey);
+  const { snapshot, messages, loading, running, stage, rewrote, aiReplying, error, canRetry, unsavedMessageId, hasUnsent, send, sendQuote, retry, editUnsent, reload } = useCaseChat(projectKey);
   const latest = latestChatMessage(messages);
   const reportLatest = useRef(onLatest);
   useEffect(() => { reportLatest.current = onLatest; });
@@ -217,7 +240,7 @@ export function CaseChat({ projectKey, quote, account, onSwitchAccount, onOpenQu
               {discussionStart >= 0 && <div id="home-discussion-start" className="scroll-mt-3 rounded-xl border border-stone-200 bg-stone-50 p-4"><p className="text-[12px] font-semibold text-stone-800">A little more room to live</p><p className="mt-1 text-[11px] leading-relaxed text-stone-600">A prepared sample conversation between Emma and Jordan. They work through the living and dining layout together before asking for a revised quote. You can continue the discussion or prepare the proposal.</p></div>}
               {renderTimeline(discussionStart >= 0 ? messages.slice(discussionStart) : messages)}
 
-              {running && <div role="status" aria-live="polite" className="flex items-start gap-2.5"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800"><Bot className="h-5 w-5" /></span><div className="rounded-xl bg-[var(--agent)] px-3.5 py-2.5 text-[12px] text-amber-900"><span className="flex items-center gap-2"><LoaderCircle className="h-3.5 w-3.5 animate-spin" />Saving the message and checking the request…</span><p className="mt-1 text-[10px] text-amber-800">AI requests may take a minute or more. Your conversation is kept in this case.</p></div></div>}
+              {running && <div role="status" aria-live="polite" className="flex items-start gap-2.5"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800"><Bot className="h-5 w-5" /></span><div className="rounded-xl bg-[var(--agent)] px-3.5 py-2.5 text-[12px] text-amber-900">{aiReplying ? <ReplySteps stage={stage} rewrote={rewrote} /> : <span className="flex items-center gap-2"><LoaderCircle className="h-3.5 w-3.5 animate-spin" />Saving the message…</span>}{aiReplying && <p className="mt-1.5 text-[10px] text-amber-800">Replies are checked against the project records before they appear. Your conversation is kept in this case.</p>}</div></div>}
 
               {error && <div role="alert" className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] leading-relaxed text-red-800"><p>{error}</p><div className="mt-2 flex flex-wrap gap-3">{canRetry && <button disabled={running} onClick={() => retry()} className="flex items-center gap-1.5 font-medium hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Retry this message</button>}{hasUnsent && !running && <button onClick={() => { const unsent = editUnsent(); if (unsent) { setText(unsent.text); input.current?.focus(); } }} className="font-medium hover:underline">Edit unsent message</button>}{!running && !hasUnsent && <button onClick={() => void reload()} className="font-medium hover:underline">Reload saved chat</button>}</div></div>}
 

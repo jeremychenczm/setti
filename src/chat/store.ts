@@ -82,14 +82,14 @@ async function sentVersions(tx: Transaction, row: CaseRow): Promise<SentVersion[
 
 async function snapshot(tx: Transaction, row: CaseRow): Promise<StoredCase> {
   const messages = await tx.select().from(chatMessages).where(eq(chatMessages.caseId, row.id)).orderBy(asc(chatMessages.sequence));
-  return { id: row.id, projectKey: row.projectKey, messages: messages.map(publicMessage), draft: row.draft, activeMessageId: row.activeMessageId, quote: (await currentCaseQuote(tx, row.id, row.projectKey)) ?? undefined, opening: (await readOpening(tx, row)).opening, versions: await sentVersions(tx, row) };
+  return { id: row.id, projectKey: row.projectKey, messages: messages.map(publicMessage), draft: row.draft, activeMessageId: row.activeMessageId, activeRunStage: row.activeMessageId ? row.activeRunStage : null, quote: (await currentCaseQuote(tx, row.id, row.projectKey)) ?? undefined, opening: (await readOpening(tx, row)).opening, versions: await sentVersions(tx, row) };
 }
 
 async function expireRun(tx: Transaction, row: CaseRow): Promise<CaseRow> {
   if (!row.activeRunStartedAt || Date.now() - row.activeRunStartedAt.getTime() < RUN_TIMEOUT_MS) return row;
   await tx.update(chatMessages).set({ aiState: "failed", error: "AI reply timed out. Retry this message." })
     .where(and(eq(chatMessages.caseId, row.id), eq(chatMessages.id, row.activeMessageId!), eq(chatMessages.lastRunId, row.activeRunId!)));
-  const [updated] = await tx.update(chatCases).set({ activeMessageId: null, activeRunId: null, activeRunStartedAt: null, updatedAt: new Date() })
+  const [updated] = await tx.update(chatCases).set({ activeMessageId: null, activeRunId: null, activeRunStartedAt: null, activeRunStage: null, updatedAt: new Date() })
     .where(eq(chatCases.id, row.id)).returning();
   return updated;
 }
@@ -108,6 +108,13 @@ export function createChatStore(db: Db): ChatStore {
     },
     getCase(sessionId, projectKey) {
       return withinCase(sessionId, projectKey, snapshot);
+    },
+
+    async reportAiStage(sessionId, projectKey, runId, stage) {
+      validateScope(sessionId, projectKey);
+      // Only the run still active on the case moves its stage; a finished or replaced run is ignored.
+      await db.update(chatCases).set({ activeRunStage: stage })
+        .where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, projectKey), eq(chatCases.activeRunId, runId)));
     },
 
     appendMessage(sessionId, projectKey, input: AppendMessageInput) {
@@ -190,7 +197,7 @@ export function createChatStore(db: Db): ChatStore {
         const runId = randomUUID();
         await tx.update(chatMessages).set({ aiState: "running", error: null, model: null, lastRunId: runId })
           .where(and(eq(chatMessages.caseId, row.id), eq(chatMessages.id, messageId)));
-        const [updated] = await tx.update(chatCases).set({ activeMessageId: messageId, activeRunId: runId, activeRunStartedAt: new Date(), updatedAt: new Date() })
+        const [updated] = await tx.update(chatCases).set({ activeMessageId: messageId, activeRunId: runId, activeRunStartedAt: new Date(), activeRunStage: "reading", updatedAt: new Date() })
           .where(eq(chatCases.id, row.id)).returning();
         return { status: "started", runId, state: await snapshot(tx, updated) };
       });
@@ -234,7 +241,7 @@ export function createChatStore(db: Db): ChatStore {
           .where(and(eq(chatMessages.caseId, row.id), eq(chatMessages.id, messageId)));
         const [updated] = await tx.update(chatCases).set({
           ...("draft" in result ? { draft } : {}),
-          activeMessageId: null, activeRunId: null, activeRunStartedAt: null,
+          activeMessageId: null, activeRunId: null, activeRunStartedAt: null, activeRunStage: null,
           latestCompletedSequence: message.sequence, updatedAt: new Date(),
         }).where(eq(chatCases.id, row.id)).returning();
         return { state: await snapshot(tx, updated), stale: false };
@@ -255,7 +262,7 @@ export function createChatStore(db: Db): ChatStore {
         }
         await tx.update(chatMessages).set({ aiState: "failed", error: error.trim().slice(0, 2_000) || "AI reply failed. Retry this message." })
           .where(and(eq(chatMessages.caseId, row.id), eq(chatMessages.id, messageId)));
-        const [updated] = await tx.update(chatCases).set({ activeMessageId: null, activeRunId: null, activeRunStartedAt: null, updatedAt: new Date() })
+        const [updated] = await tx.update(chatCases).set({ activeMessageId: null, activeRunId: null, activeRunStartedAt: null, activeRunStage: null, updatedAt: new Date() })
           .where(eq(chatCases.id, row.id)).returning();
         return { state: await snapshot(tx, updated), stale: false };
       });

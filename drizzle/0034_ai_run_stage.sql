@@ -1,0 +1,1 @@
+ALTER TABLE "chat_cases" ADD COLUMN "active_run_stage" text;

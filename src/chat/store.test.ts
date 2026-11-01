@@ -43,6 +43,21 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     return result;
   }
 
+  it("keeps the running reply's stage on the case only while that run is active", async () => {
+    const input = human("@AI explain the quote");
+    await store.appendMessage(sessionId, "maple", input);
+    const run = await start(input.id);
+    expect((await store.getCase(sessionId, "maple")).activeRunStage).toBe("reading");
+    await store.reportAiStage!(sessionId, "maple", run.runId, "checking");
+    expect((await store.getCase(sessionId, "maple")).activeRunStage).toBe("checking");
+    await store.reportAiStage!(sessionId, "maple", randomUUID(), "rewriting");
+    expect((await store.getCase(sessionId, "maple")).activeRunStage).toBe("checking");
+    await store.completeAi(sessionId, "maple", input.id, run.runId, { text: "Here is the quote.", model: "test-model" });
+    expect((await store.getCase(sessionId, "maple")).activeRunStage).toBeNull();
+    await store.reportAiStage!(sessionId, "maple", run.runId, "writing");
+    expect((await store.getCase(sessionId, "maple")).activeRunStage).toBeNull();
+  });
+
   it("lazily creates one case under concurrent reads and isolates sessions and projects", async () => {
     const [first, duplicate] = await Promise.all([store.getCase(sessionId, "maple"), store.getCase(sessionId, "maple")]);
     expect(first.id).toBe(duplicate.id);
