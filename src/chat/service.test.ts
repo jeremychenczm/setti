@@ -5,7 +5,7 @@ import { defaultOpening } from "../opening/document";
 import { approvedForTest } from "../opening/testing";
 import { quoteFingerprint } from "../quotes/fingerprint";
 
-function scenario(text = "@AI，餐椅从四把改成六把。") {
+function scenario(text = "@AI Change the dining chairs from four to six.") {
   const state: StoredCase = {
     id: "case-test", projectKey: "willow", draft: null, activeMessageId: "request", quote: approvedForTest("willow"),
     messages: [{ id: "request", actor: "client", text, createdAt: "2026-10-18T12:00:00Z", replyToMessageId: null, aiState: "running", error: null, model: null }],
@@ -15,7 +15,7 @@ function scenario(text = "@AI，餐椅从四把改成六把。") {
     beginAi: vi.fn().mockResolvedValue({ status: "started", runId: "run", state }),
     completeAi: vi.fn().mockResolvedValue(state), failAi: vi.fn().mockResolvedValue(state),
   };
-  const modelOutput = { intent: "draft" as const, message: "待核价数量草稿。", title: "餐椅数量", changes: [{ action: "quantity" as const, itemId: "willow-dining-chair", quantity: 6, productOptionId: null, description: "", sourceMessageIds: ["request"] }], unresolved: [], constraints: [] };
+  const modelOutput = { intent: "draft" as const, message: "Quantity draft for designer review.", title: "Dining chair quantity", changes: [{ action: "quantity" as const, itemId: "willow-dining-chair", quantity: 6, productOptionId: null, description: "", sourceMessageIds: ["request"] }], unresolved: [], constraints: [] };
   const deps = { configured: () => true, readPage: vi.fn(), callModel: vi.fn().mockResolvedValue({ model: "test-model", output: modelOutput }) };
   return { state, store, deps, modelOutput };
 }
@@ -67,12 +67,12 @@ describe("AI orchestration", () => {
     }));
   });
   it("deduplicates links, preserves failed retrieval and never invents a product", async () => {
-    const s = scenario("@AI，改成这个4把 https://shop.example/chair。 https://shop.example/chair");
-    s.deps.readPage.mockRejectedValue(new Error("页面要求登录"));
-    Object.assign(s.modelOutput.changes[0], { action: "replace", productOptionId: null, quantity: 4, description: "新餐椅" });
+    const s = scenario("@AI Change to this one, 4 chairs https://shop.example/chair. https://shop.example/chair");
+    s.deps.readPage.mockRejectedValue(new Error("The page requires sign-in"));
+    Object.assign(s.modelOutput.changes[0], { action: "replace", productOptionId: null, quantity: 4, description: "New dining chair" });
     await runCaseAi(s.store, "session", "willow", "request", s.deps);
     expect(s.deps.readPage).toHaveBeenCalledTimes(1);
-    expect(s.deps.callModel.mock.calls[0][0].pages[0]).toMatchObject({ error: "页面要求登录", products: [] });
+    expect(s.deps.callModel.mock.calls[0][0].pages[0]).toMatchObject({ error: "The page requires sign-in", products: [] });
     expect(s.store.completeAi).toHaveBeenCalledWith("session", "willow", "request", "run", expect.objectContaining({ draft: expect.objectContaining({ deltaSubtotalCents: null }) }));
   });
   it("marks invalid model output failed without persisting a draft", async () => {
@@ -95,6 +95,6 @@ describe("AI orchestration", () => {
     expect(JSON.stringify(vi.mocked(s.store.failAi).mock.calls)).not.toContain("sk-ant");
   });
   it("normalizes sentence punctuation without changing product URL query choices", () => {
-    expect(messageUrls("看这个 https://shop.example/item?variant=gray&currency=USD，其他不动。")).toEqual(["https://shop.example/item?variant=gray&currency=USD"]);
+    expect(messageUrls("Look at this https://shop.example/item?variant=gray&currency=USD, keep the rest.")).toEqual(["https://shop.example/item?variant=gray&currency=USD"]);
   });
 });

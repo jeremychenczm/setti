@@ -35,7 +35,7 @@ export function canLoadMapleSampleMaterials(quote: Pick<QuoteDocument, "projectI
   const desk = input.changes.find((change) => change.itemId === "chair" && change.action === "replace")?.after;
   const rug = input.changes.find((change) => change.itemId === "rug" && change.action === "remove");
   return !!desk && !!rug && rug.after === null && desk.quantity === 1 && desk.category === "furniture"
-    && /desk|writing\s+table|书桌|寫字桌|写字台|辦公桌|办公桌/i.test(`${desk.name} ${desk.specification}`)
+    && /desk|writing\s+table/i.test(`${desk.name} ${desk.specification}`)
     && !desk.sourceUrl && (desk.unitPriceCents === null || desk.unitPriceCents === MAPLE_SAMPLE_MATERIALS.desk.unitPriceCents)
     && (desk.currency === null || desk.currency === "USD");
 }

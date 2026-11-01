@@ -142,7 +142,7 @@ describe("client approval HTTP boundaries", () => {
   });
 
   it("bounds streamed UTF-8 bytes even without a content-length header", async () => {
-    const req = request({ method: "POST", cookie: sessionId, body: { ...input(), note: "椅".repeat(6000) } });
+    const req = request({ method: "POST", cookie: sessionId, body: { ...input(), note: "€".repeat(6000) } });
     expect(req.headers.get("content-length")).toBeNull();
     const response = await postApprovalResponse(req, orderId);
     expect(response.status).toBe(413);

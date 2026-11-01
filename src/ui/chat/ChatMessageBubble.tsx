@@ -13,7 +13,7 @@ export function timeLabel(value: string): string {
 }
 
 function linkedText(value: string): ReactNode[] {
-  return value.split(/(https?:\/\/[^\s<>，。！？、；：）】」』]+)/g).map((part, index) => /^https?:\/\//.test(part)
+  return value.split(/(https?:\/\/[^\s<>]+)/g).map((part, index) => /^https?:\/\//.test(part)
     ? <a key={index} href={part} target="_blank" rel="noreferrer" className="break-all text-[var(--primary)] underline decoration-brand-200 underline-offset-2">{part}</a>
     : <span key={index}>{part}</span>);
 }

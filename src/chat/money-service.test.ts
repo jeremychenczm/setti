@@ -10,11 +10,11 @@ function human(id: string, text: string): CaseMessage {
   return { id, actor: "client", text, createdAt: "2026-10-21T12:00:00Z", replyToMessageId: null, aiState: "none", error: null, model: null };
 }
 
-function scenario(text = "@AI，为什么预算和付款金额不同？") {
+function scenario(text = "@AI Why are the budget and the payment amount different?") {
   const quote = structuredClone(approvedForTest("willow"));
-  const original = human("original", "@AI，餐椅改成六把。");
+  const original = human("original", "@AI Change the dining chairs to six.");
   const quantity: ChangeModelOutput = {
-    intent: "draft", message: "数量草稿，待设计师核价。", title: "餐椅数量",
+    intent: "draft", message: "Quantity draft for designer review.", title: "Dining chair quantity",
     changes: [{ action: "quantity", itemId: "willow-dining-chair", quantity: 6, productOptionId: null, description: "", sourceMessageIds: [original.id] }],
     unresolved: [], constraints: [],
   };
@@ -85,7 +85,7 @@ describe("grounded money chat orchestration", () => {
 
   it.each(["answer", "draft", "cancel"] as const)("does not turn a money question into ungrounded %s output", async (intent) => {
     const s = scenario();
-    Object.assign(s.output, { intent, message: "已经退款 $999。", money: null });
+    Object.assign(s.output, { intent, message: "Already refunded $999.", money: null });
     await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
     expect(s.store.completeAi).not.toHaveBeenCalled();
     expect(s.store.failAi).toHaveBeenCalledOnce();
@@ -93,20 +93,20 @@ describe("grounded money chat orchestration", () => {
 
   it("allows a genuine clarification without touching the draft", async () => {
     const s = scenario();
-    Object.assign(s.output, { intent: "clarify", message: "你想查看哪件物品的记录？", money: null });
+    Object.assign(s.output, { intent: "clarify", message: "Which item's records do you want to see?", money: null });
     await runCaseAi(s.store, "session", "willow", "request", s.deps);
     expect(s.store.completeAi.mock.calls[0][4]).not.toHaveProperty("draft");
-    expect(s.store.completeAi.mock.calls[0][4].text).toBe("你想查看哪件物品的记录？");
+    expect(s.store.completeAi.mock.calls[0][4].text).toBe("Which item's records do you want to see?");
   });
 
   it("does not permit financial claims through clarification prose", async () => {
     const s = scenario();
-    Object.assign(s.output, { intent: "clarify", message: "已经退款 $999。你还想问哪笔？", money: null });
+    Object.assign(s.output, { intent: "clarify", message: "Already refunded $999. Which other payment do you mean?", money: null });
     await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
     expect(s.store.completeAi).not.toHaveBeenCalled();
   });
 
-  it.each(["The rug was refunded.", "已经退款。", "Paid $999.", "The rug has not been refunded.", "The desk is not paid.", "地毯款项已退还。", "款项尚未收取。"])("blocks unsupported money claims in a generic answer: %s", async (message) => {
+  it.each(["The rug was refunded.", "Paid $999.", "The rug has not been refunded.", "The desk is not paid."])("blocks unsupported money claims in a generic answer: %s", async (message) => {
     const s = scenario("@AI What happened to this item?");
     Object.assign(s.output, { intent: "answer", message, money: null });
     await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("result validation failed");
@@ -142,7 +142,7 @@ describe("grounded money chat orchestration", () => {
     const saved = s.store.completeAi.mock.calls[0][4].moneyAnswer!;
     expect(saved.providerRecordedAt).toBeNull();
     expect(saved.facts.map((fact) => fact.id)).toContain("missing");
-    expect(JSON.stringify(saved)).not.toMatch(/\$0|已支付|已付清|unpaid/);
+    expect(JSON.stringify(saved)).not.toMatch(/\$0|unpaid/);
   });
 
   it("omits prior reply evidence metadata from model history and supplies the fresh snapshot separately", () => {
@@ -158,7 +158,7 @@ describe("grounded money chat orchestration", () => {
   });
 
   it("strips API money:null before normal draft validation", async () => {
-    const s = scenario("@AI，餐椅从四把改成六把。");
+    const s = scenario("@AI Change the dining chairs from four to six.");
     Object.assign(s.output, s.quantity, { money: null });
     s.output.changes[0].sourceMessageIds = ["request"];
     await runCaseAi(s.store, "session", "willow", "request", s.deps);
@@ -170,7 +170,9 @@ describe("grounded money chat orchestration", () => {
   it.each([
     { request: "@AI Increase the dining chairs to six.", message: "I already refunded $999 and changed the order.", title: "Refunded $999" },
     { request: "@AI Increase the dining chairs to six.", message: "Your money has reached your wallet. The new order is confirmed.", title: "Chair quantity" },
-    { request: "@AI，餐椅从四把改成六把。", message: "已经退款 $999。附言：书桌已扣款。", title: "退款已完成" },
+    { request: "@AI Change the dining chairs from four to six.", message: "Refund of $999 completed. PS: the desk was charged.", title: "Refund completed" },
+    // A title in another script never becomes the client version's title.
+    { request: "@AI Increase the dining chairs to six.", message: "Quantity draft.", title: "\u4fee\u8ba2\u62a5\u4ef7" },
   ])("replaces ungrounded draft prose in both the chat reply and saved summary: $message", async ({ request, message, title }) => {
     const s = scenario(request);
     Object.assign(s.output, s.quantity, { message, title, money: null });
@@ -182,8 +184,8 @@ describe("grounded money chat orchestration", () => {
     expect(saved.text).not.toContain(message);
     expect(saved.text).not.toContain("999");
     expect(saved.text).not.toContain("has reached your wallet");
-    expect(saved.text).toMatch(/designer review|待设计师核价/u);
-    if (title !== "Chair quantity") expect(saved.draft?.title).toMatch(/Change draft for designer review|待核价变更草稿/u);
+    expect(saved.text).toMatch(/designer review/u);
+    if (title !== "Chair quantity") expect(saved.draft?.title).toBe("Change draft for designer review");
     else expect(saved.draft?.title).toBe(title);
     expect(s.store.failAi).not.toHaveBeenCalled();
     expect(saved).not.toHaveProperty("moneyAnswer");
@@ -191,7 +193,6 @@ describe("grounded money chat orchestration", () => {
 
   it.each([
     { request: "@AI Decrease the dining chairs to two and plan the refund for review.", message: "Proposed goods difference: -$160; a $160 refund is planned after client approval, not issued." },
-    { request: "@AI，餐椅减为两把，拟退款方案交给设计师核价。", message: "拟减少预算 $160，并在客户确认后申请退款，尚未执行。" },
   ])("keeps a legitimate amount and future refund proposal without accepting its prose as a receipt: $request", async ({ request, message }) => {
     const s = scenario(request);
     Object.assign(s.output, s.quantity, { message, money: null });
@@ -202,7 +203,7 @@ describe("grounded money chat orchestration", () => {
     expect(saved.draft?.changes[0]).toMatchObject({ action: "quantity", after: { quantity: 2, unitPriceCents: 8_000 }, deltaSubtotalCents: -16_000 });
     expect(saved.draft?.deltaSubtotalCents).toBe(-16_000);
     expect(saved.draft?.summary).toBe(saved.text);
-    expect(saved.text).toMatch(/refund plan need verification|拟退款方案仍需核实/u);
+    expect(saved.text).toMatch(/refund plan need verification/u);
     expect(s.store.failAi).not.toHaveBeenCalled();
   });
 
@@ -215,7 +216,7 @@ describe("grounded money chat orchestration", () => {
   });
 
   it("keeps a quantity change with a price question on the draft path", async () => {
-    const s = scenario("@AI，餐椅从四把改成六把，看看多少钱。");
+    const s = scenario("@AI Change the dining chairs from four to six and show how much it costs.");
     Object.assign(s.output, s.quantity, { money: null });
     s.output.changes[0].sourceMessageIds = ["request"];
     await runCaseAi(s.store, "session", "willow", "request", s.deps);

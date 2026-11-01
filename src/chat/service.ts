@@ -9,8 +9,8 @@ import { buildMoneyAnswer, hasUnsupportedMoneyClaim, isMoneyQuestion } from "@/a
 import { HOME_EVIDENCE_PAGE, isHomeQuote } from "@/demo/home-evidence";
 
 export function messageUrls(text: string): string[] {
-  const matches = text.match(/https?:\/\/[^\s<>"'，。！？；、）》）\u3000]+/gu) ?? [];
-  return matches.map((value) => value.replace(/[，。！？；、）》）\]),;.!?]+$/gu, ""));
+  const matches = text.match(/https?:\/\/[^\s<>"']+/gu) ?? [];
+  return matches.map((value) => value.replace(/[\]),;.!?]+$/gu, ""));
 }
 
 export function failedPage(url: string, error: string): ProductPage {
@@ -30,10 +30,8 @@ export interface DraftDependencies {
 }
 
 /** Model prose cannot turn a proposed change into an apparent payment receipt. */
-function draftReviewMessage(changeCount: number, request: string): string {
-  return /[\u3400-\u9fff]/u.test(request)
-    ? `已整理 ${changeCount} 项待设计师核价的变更。价格、税费、运费、旧物处理及拟退款方案仍需核实。创建此草稿不代表批准订单，也不会执行付款或退款。`
-    : `Prepared ${changeCount} proposed change${changeCount === 1 ? "" : "s"} for designer review. Prices, taxes, delivery, old-item handling and any refund plan need verification. Creating this draft does not approve orders or execute payments.`;
+function draftReviewMessage(changeCount: number): string {
+  return `Prepared ${changeCount} proposed change${changeCount === 1 ? "" : "s"} for designer review. Prices, taxes, delivery, old-item handling and any refund plan need verification. Creating this draft does not approve orders or execute payments.`;
 }
 
 export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKey, messageId: string, dependencies?: Partial<DraftDependencies>): Promise<StoredCase> {
@@ -77,7 +75,7 @@ export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKe
     }
     if (isHomeQuote(quote) && trigger.actor !== "designer" && ["draft", "cancel"].includes(result.output.intent)) {
       return await store.completeAi(sessionId, key, messageId, runId, {
-        text: /[\u3400-\u9fff]/u.test(trigger.text) ? "已保留你的讨论。由 Jordan 汇总变更、核价并发送修订报价后，你再正式确认。此消息没有创建或撤销设计师的报价草稿，也未执行付款。" : "Your discussion is saved. Jordan prepares and checks the revised proposal before sending it for your formal confirmation. This message did not create or cancel the studio's draft or execute a payment.",
+        text: "Your discussion is saved. Jordan prepares and checks the revised proposal before sending it for your formal confirmation. This message did not create or cancel the studio's draft or execute a payment.",
         model: "system",
       });
     }
@@ -90,11 +88,10 @@ export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKe
       // Preserve valid proposals even when the model mentions a legitimate price or
       // future refund. Render payment claims only through the grounded money path;
       // a draft's chat reply and saved summary always use server-owned copy.
-      generated.text = draftReviewMessage(generated.draft.changes.length, trigger.text);
+      generated.text = draftReviewMessage(generated.draft.changes.length);
       generated.draft.summary = generated.text;
-      if (hasUnsupportedMoneyClaim(generated.draft.title)) {
-        generated.draft.title = /[\u3400-\u9fff]/u.test(trigger.text) ? "待核价变更草稿" : "Change draft for designer review";
-      }
+      // The title becomes the client version's title: a payment claim, or a script other than English, falls back to plain copy.
+      if (hasUnsupportedMoneyClaim(generated.draft.title)) generated.draft.title = "Change draft for designer review";
     }
     return await store.completeAi(sessionId, key, messageId, runId, { ...generated, model: result.model });
   } catch (error) {

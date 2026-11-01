@@ -45,7 +45,7 @@ describe("Maple walkthrough supplier materials", () => {
   });
 
   it("accepts a model's desk wording but refuses another product, quantity or change set", () => {
-    for (const name of ["Light oak desk", "Oak writing table", "浅橡木书桌"]) {
+    for (const name of ["Light oak desk", "Oak writing table"]) {
       const { quote, input } = fixture(name);
       expect(canLoadMapleSampleMaterials(quote, input)).toBe(true);
     }

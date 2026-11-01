@@ -8,8 +8,8 @@ import { buildDraft } from "./draft";
 import { modelContext } from "./model";
 
 const messages: CaseMessage[] = [
-  { id: "discussion", actor: "client", text: "我们讨论的是餐椅，不是书房椅子。", createdAt: "2026-10-18T10:00:00Z", replyToMessageId: null, aiState: "none", error: null, model: null },
-  { id: "request", actor: "designer", text: "@AI，改成这个，4把，其他不动。https://shop.example/chair", createdAt: "2026-10-18T10:01:00Z", replyToMessageId: null, aiState: "running", error: null, model: null },
+  { id: "discussion", actor: "client", text: "We mean the dining chairs, not the study chairs.", createdAt: "2026-10-18T10:00:00Z", replyToMessageId: null, aiState: "none", error: null, model: null },
+  { id: "request", actor: "designer", text: "@AI Change them to this one, 4 chairs, keep the rest. https://shop.example/chair", createdAt: "2026-10-18T10:01:00Z", replyToMessageId: null, aiState: "running", error: null, model: null },
 ];
 // Deliberately synthetic product input: real source retrieval is tested separately.
 const page: ProductPage = {
@@ -17,9 +17,9 @@ const page: ProductPage = {
   products: [{ id: "page-test:0", name: "New dining chair", sku: "TEST-794", brand: "Test brand", seller: "Test store", specification: "Gray chair, two component packages per chair", currency: "USD", unitPriceCents: 12500, unitLabel: "each", priceEvidence: 'Offer: {"price":"125.00","priceCurrency":"USD"}', availability: null }],
 };
 const output = {
-  intent: "draft" as const, message: "已整理为待设计师核价的餐椅替换草稿。", title: "餐椅换款",
+  intent: "draft" as const, message: "Prepared a dining chair replacement draft for designer review.", title: "Dining chair replacement",
   changes: [{ action: "replace" as const, itemId: "willow-dining-chair", quantity: 4, productOptionId: "page-test:0", description: "New dining chair", sourceMessageIds: ["discussion", "request"] }],
-  unresolved: [], constraints: ["其他不动"],
+  unresolved: [], constraints: ["Keep the rest unchanged"],
 };
 
 function input() {
@@ -78,22 +78,22 @@ describe("server-validated change drafts", () => {
     expect(() => buildDraft({ ...input(), current: { ...first, projectKey: "maple" } })).toThrow();
   });
   it("allows clarifications and answers without replacing the current draft", () => {
-    const result = buildDraft({ ...input(), output: { ...output, intent: "clarify", message: "要选哪一种颜色？", changes: [] } });
+    const result = buildDraft({ ...input(), output: { ...output, intent: "clarify", message: "Which color should I choose?", changes: [] } });
     expect(result.draft).toBeUndefined();
-    expect(result.text).toBe("要选哪一种颜色？");
+    expect(result.text).toBe("Which color should I choose?");
     expect(() => buildDraft({ ...input(), output: { ...output, intent: "answer" } })).toThrow();
   });
   it("can explicitly withdraw the current unapproved draft without changing V1", () => {
     const current = buildDraft(input()).draft!;
     const original = JSON.stringify(willowApprovedQuote);
-    const result = buildDraft({ ...input(), current, output: { ...output, intent: "cancel", message: "已撤回当前草稿，仍按 V1；没有取消任何订单或执行支付。", changes: [] } });
+    const result = buildDraft({ ...input(), current, output: { ...output, intent: "cancel", message: "Withdrew the current draft; V1 stands. No order was cancelled and no payment was made.", changes: [] } });
     expect(result.draft).toBeNull();
     expect(JSON.stringify(willowApprovedQuote)).toBe(original);
     expect(() => buildDraft({ ...input(), output: { ...output, intent: "cancel", changes: [] } })).toThrow("No current draft");
   });
   it("keeps an unknown replacement useful while marking prices as pending", () => {
     const data = input();
-    Object.assign(data.output.changes[0], { productOptionId: null, description: "那张还没报价的新餐椅" });
+    Object.assign(data.output.changes[0], { productOptionId: null, description: "The new dining chair that has no quote yet" });
     const draft = buildDraft(data).draft!;
     expect(draft.changes[0].after?.quantity).toBe(4);
     expect(draft.changes[0].after?.unitPriceCents).toBeNull();
@@ -115,7 +115,7 @@ describe("server-validated change drafts", () => {
     expect(withCurrent.currentDraft).not.toHaveProperty("basedOnQuoteFingerprint");
     expect(withCurrent.currentDraft.changes).toHaveLength(1);
     const data = input();
-    data.messages[0].text = "长".repeat(120001);
+    data.messages[0].text = "a".repeat(120001);
     expect(() => modelContext(data)).toThrow("not silently truncated");
   });
 });

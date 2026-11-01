@@ -235,7 +235,7 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
   });
 
   it("uses the shared invocation syntax for @Change Agent and natural @AI commands", async () => {
-    const input = human("@Change Agent: 改数量为4");
+    const input = human("@Change Agent: set the quantity to 4");
     await store.appendMessage(sessionId, "maple", input);
     const run = await start(input.id);
     await store.completeAi(sessionId, "maple", input.id, run.runId, { text: "The quantity proposal is ready.", model: "test-model" });
@@ -244,7 +244,7 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     await expect(store.beginAi(sessionId, "maple", incidentalMention.id)).rejects.toMatchObject({ code: "INVALID_AI_TRIGGER" });
     // A completed original request remains idempotent even after a later human message.
     expect((await store.beginAi(sessionId, "maple", input.id)).status).toBe("completed");
-    const next = human("@AI 改数量为6");
+    const next = human("@AI set the quantity to 6");
     await store.appendMessage(sessionId, "maple", next);
     expect((await store.beginAi(sessionId, "maple", next.id)).status).toBe("started");
   });

@@ -68,7 +68,7 @@ describe("case chat HTTP boundary", () => {
     expect(body.quote.id).not.toBe("demo-willow-v1");
   });
   it("saves ordinary discussion and links without invoking AI", async () => {
-    const input = { id: randomUUID(), actor: "client", text: "这把椅子怎么样 https://shop.example/chair" };
+    const input = { id: randomUUID(), actor: "client", text: "What about this chair? https://shop.example/chair" };
     const response = await postCaseResponse(post(input), "willow");
     expect(response.status).toBe(200);
     expect(mocks.store.appendMessage).toHaveBeenCalledWith(expect.any(String), "willow", input);
@@ -76,7 +76,7 @@ describe("case chat HTTP boundary", () => {
   });
   it("accepts natural mention requests and retries without appending another message", async () => {
     const id = randomUUID();
-    await postCaseResponse(post({ id, actor: "designer", text: "@AI，改成这个，4把。" }), "willow");
+    await postCaseResponse(post({ id, actor: "designer", text: "@AI, change it to this one, 4 chairs." }), "willow");
     expect(mocks.run).toHaveBeenCalledWith(mocks.store, expect.any(String), "willow", id);
     vi.mocked(mocks.store.appendMessage).mockClear();
     await postCaseResponse(post({ messageId: id }), "willow", true);

@@ -36,16 +36,16 @@ describe("recorded money answers", () => {
     context.sources[0].href = "https://evil.example/pay";
     expect(() => buildMoneyAnswer(context, ["budget"])).toThrow();
   });
-  it.each(["@AI 为什么书桌已扣款但地毯还没有退款？", "@AI Explain the holds and refunds.", "@AI Where is my money?", "@AI 核对这次预算和付款情况", "@AI Why did we replace the chair and pay more?", "@AI Please explain why replacing the chair cost more.", "@AI 请解释为什么把餐椅换成新款后预算变多了"])('recognizes a read-only money question: %s', (text) => {
+  it.each(["@AI Why was the desk charged when the rug is not refunded yet?", "@AI Explain the holds and refunds.", "@AI Where is my money?", "@AI Check this budget and payment status", "@AI Why did we replace the chair and pay more?", "@AI Please explain why replacing the chair cost more."])('recognizes a read-only money question: %s', (text) => {
     expect(isMoneyQuestion(text)).toBe(true);
   });
-  it.each(["@AI 餐椅从四把改成六把，其他不动。", "@AI Return the rug and replace the chair with a desk.", "@AI 地毯退掉，书桌改两张", "@AI，餐椅从四把改成六把，看看多少钱。", "@AI Can you replace the chair and show the cost?", "@AI Could you please replace the chair and show the cost?", "@AI Please replace the chair and show the cost."])('keeps natural change requests on the draft path: %s', (text) => {
+  it.each(["@AI Change the dining chairs from four to six, keep the rest.", "@AI Return the rug and replace the chair with a desk.", "@AI Return the rug, make it two desks", "@AI, change the dining chairs from four to six and show how much it costs.", "@AI Can you replace the chair and show the cost?", "@AI Could you please replace the chair and show the cost?", "@AI Please replace the chair and show the cost."])('keeps natural change requests on the draft path: %s', (text) => {
     expect(isMoneyQuestion(text)).toBe(false);
   });
-  it.each(["You already paid $999.", "The refund completed.", "已经退款成功了。", "书桌已扣款。", "授权结果未知。", "The rug has not been refunded.", "The desk is not paid.", "地毯款项已退还。", "款项尚未收取。", "Payment has not been received."])("blocks unsupported payment prose: %s", (text) => {
+  it.each(["You already paid $999.", "The refund completed.", "The authorization result is unknown.", "The rug has not been refunded.", "The desk is not paid.", "Payment has not been received.", "\u9000\u6b3e\u5b8c\u6210\u3002"])("blocks unsupported payment prose: %s", (text) => {
     expect(hasUnsupportedMoneyClaim(text)).toBe(true);
   });
-  it.each(["Which item or payment should I check?", "Do you mean the quote or the payment?", "你想查看哪件物品的退款记录？"])("allows procedural clarification without a payment-status assertion: %s", (text) => {
+  it.each(["Which item or payment should I check?", "Do you mean the quote or the payment?"])("allows procedural clarification without a payment-status assertion: %s", (text) => {
     expect(hasUnsupportedMoneyClaim(text)).toBe(false);
   });
 });
