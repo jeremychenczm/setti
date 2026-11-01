@@ -3,13 +3,15 @@
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { accountOrDefault, canOpenProject, clientOf, DEMO_ACCOUNTS, rememberAccount, type AccountId, type DemoAccount } from "@/accounts/demo";
-import type { CaseKey } from "@/chat/types";
+import type { CaseKey, CaseMessage } from "@/chat/types";
 import { isCaseKey } from "@/chat/cases";
 import { STUDIO_CASES, studioCase } from "@/demo/studio-cases";
 import { mapleApprovedQuote } from "@/quotes/demo-quote";
 import type { QuoteDocument } from "@/quotes/types";
 import { willowQuote } from "@/quotes/willow-quote";
-import { ConversationList, type ProjectChat } from "./ConversationList";
+import { latestChatMessage } from "../chat/activity";
+import type { Person } from "../demo-data";
+import { ConversationList, type ChatPreview, type ProjectChat } from "./ConversationList";
 import { Sidebar, type View } from "./Sidebar";
 import { TrySeedNotice } from "../try/TrySeedNotice";
 
@@ -33,6 +35,12 @@ const projects: Omit<ProjectChat, "counterpart">[] = [
   { key: "maple", title: "Maple Ave", subtitle: "Interior design" },
 ];
 const designer = DEMO_ACCOUNTS.find((person) => person.role === "designer")!;
+
+/** How the chat list names a message: "You" for the signed-in account, otherwise the sender's first name. */
+function chatPreview(account: DemoAccount, client: Person, message: { actor: CaseMessage["actor"]; text: string; at: string }): ChatPreview {
+  const from = message.actor === "assistant" ? "Setti" : message.actor === account.role ? "You" : (message.actor === "designer" ? designer : client).name.split(" ")[0];
+  return { from, text: message.text.replace(/\s+/g, " ").trim(), at: message.at };
+}
 
 /** A client account only ever lands on its own project. */
 function reachable(account: DemoAccount, wanted: CaseKey): CaseKey {
@@ -83,9 +91,32 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
     window.history.pushState(window.history.state, "", `/chats/${encodeURIComponent(id)}`);
   }
 
+  /** The latest message of each live project chat: read once per account, then kept current by the open chat. */
+  const [livePreviews, setLivePreviews] = useState<Partial<Record<CaseKey, ChatPreview | null>>>({});
+  const showLatest = (key: CaseKey, message: CaseMessage | null) =>
+    setLivePreviews((previous) => ({ ...previous, [key]: message ? chatPreview(account, clientOf(key), { ...message, at: message.createdAt }) : null }));
+  useEffect(() => {
+    const controller = new AbortController();
+    for (const project of projects) {
+      if (!canOpenProject(account, project.key)) continue;
+      fetch(`/api/chat/${project.key}`, { cache: "no-store", signal: controller.signal })
+        .then((response) => response.ok ? response.json() as Promise<{ messages?: CaseMessage[] }> : null)
+        .then((snapshot) => {
+          const latest = Array.isArray(snapshot?.messages) ? latestChatMessage(snapshot.messages) : null;
+          setLivePreviews((previous) => ({ ...previous, [project.key]: latest ? chatPreview(account, clientOf(project.key), { ...latest, at: latest.createdAt }) : null }));
+        })
+        .catch(() => undefined);
+    }
+    return () => controller.abort();
+  }, [account]);
+
   const visibleProjects: ProjectChat[] = projects.filter((project) => canOpenProject(account, project.key))
-    .map((project) => ({ ...project, counterpart: account.role === "designer" ? clientOf(project.key) : designer }));
-  const conversations: ProjectChat<string>[] = [...visibleProjects, ...(account.role === "designer" ? STUDIO_CASES.map((project) => ({ key: project.id, title: project.name, subtitle: project.industry, counterpart: { id: project.id, name: project.client.name, role: "client" as const } })) : [])];
+    .map((project) => ({ ...project, counterpart: account.role === "designer" ? clientOf(project.key) : designer, preview: livePreviews[project.key] ?? null }));
+  const conversations: ProjectChat<string>[] = [...visibleProjects, ...(account.role === "designer" ? STUDIO_CASES.map((project) => {
+    const counterpart = { id: project.id, name: project.client.name, role: "client" as const };
+    const latest = project.messages.at(-1);
+    return { key: project.id, title: project.name, subtitle: project.industry, counterpart, preview: latest ? chatPreview(account, counterpart, latest) : null };
+  }) : [])];
 
   const open = (key: string) => {
     if (studioCase(key)) { openPreparedProject(key); return; }
@@ -131,18 +162,19 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
 
   return (
     <div className="flex h-dvh min-h-0 gap-2 bg-[var(--canvas)] p-2 text-[var(--ink)]">
-      <Sidebar view={view} onView={showView} account={account} onSwitchAccount={switchAccount} />
+      {/* The icon rail and the chat list are one panel, as in a messaging app; other modules keep only the rail. */}
+      <div className="flex min-h-0 shrink-0 overflow-hidden rounded-xl bg-white shadow-sm">
+        <Sidebar view={view} onView={showView} account={account} onSwitchAccount={switchAccount} />
+        {view === "chats" && <div className="hidden min-h-0 border-l border-[var(--line)] lg:flex"><ConversationList projects={conversations} activeId={preparedProject?.id ?? activeId} onOpen={open} /></div>}
+      </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
         {view !== "projects" && !preparedProject && <TrySeedNotice projectKey={view === "chats" ? activeId : quoteId} account={account} onSwitchAccount={switchAccount} onOpenChat={() => { setActiveId(view === "quotes" ? quoteId : activeId); setView("chats"); }} currentView={view} />}
         <div className="flex min-h-0 min-w-0 flex-1 gap-2">
           {view === "projects" && account.role === "designer" && <StudioProjectsModule onOpenProject={openPreparedProject} />}
-          {view === "chats" && (
-            <>
-              <div className="hidden min-h-0 shrink-0 2xl:flex"><ConversationList projects={conversations} activeId={preparedProject?.id ?? activeId} onOpen={open} /></div>
-              {preparedProject ? <StudioProjectChat key={preparedProject.id} project={preparedProject} projects={conversations} onSelectProject={open} onOpenRecords={openPreparedRecords} /> : <CaseChat key={`${account.id}:${activeId}`} projectKey={activeId} quote={quotes[activeId]} account={account} onSwitchAccount={switchAccount} onOpenQuote={openCaseQuote} onSelectCase={open} conversationOptions={conversations} onSelectProject={open} />}
-            </>
-          )}
+          {view === "chats" && (preparedProject
+            ? <StudioProjectChat key={preparedProject.id} project={preparedProject} projects={conversations} onSelectProject={open} onOpenRecords={openPreparedRecords} />
+            : <CaseChat key={`${account.id}:${activeId}`} projectKey={activeId} quote={quotes[activeId]} account={account} onSwitchAccount={switchAccount} onOpenQuote={openCaseQuote} onSelectCase={open} conversationOptions={conversations} onSelectProject={open} onLatest={(message) => showLatest(activeId, message)} />)}
 
           {view === "quotes" && preparedProject && <StudioProjectRecords key={`${preparedProject.id}:${recordsTab}`} project={preparedProject} initialTab={recordsTab} onBack={openQuoteChat} onSelectTab={openPreparedRecords} />}
           {view === "quotes" && !preparedProject && <QuoteBoard key={`${account.id}:${quoteId}:${focusItemId ?? ""}`} projectKey={quoteId} viewer={account} options={visibleProjects.map((project) => project.key)} focusItemId={focusItemId}

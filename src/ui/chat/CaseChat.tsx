@@ -15,7 +15,7 @@ import type { Person } from "../demo-data";
 import { useDismiss } from "../useDismiss";
 import { useResizableWidth } from "../useResizableWidth";
 import { usd } from "../demo-data";
-import { chatTimeline } from "./activity";
+import { chatTimeline, latestChatMessage } from "./activity";
 import { ActivityCard } from "./ActivityCard";
 import { ChatMessageBubble as MessageBubble } from "./ChatMessageBubble";
 import { ChatComposer, ChatHeader, ChatStatusBar } from "./ChatLayout";
@@ -38,10 +38,16 @@ interface CaseChatProps {
   onSelectCase: (projectKey: CaseKey) => void;
   conversationOptions?: { key: string; title: string }[];
   onSelectProject?: (id: string) => void;
+  /** Told the latest message once the conversation loads and whenever it changes, for the chat list. */
+  onLatest?: (message: CaseMessage | null) => void;
 }
 
-export function CaseChat({ projectKey, quote, account, onSwitchAccount, onOpenQuote, onSelectCase, conversationOptions, onSelectProject }: CaseChatProps) {
+export function CaseChat({ projectKey, quote, account, onSwitchAccount, onOpenQuote, onSelectCase, conversationOptions, onSelectProject, onLatest }: CaseChatProps) {
   const { snapshot, messages, loading, running, error, canRetry, unsavedMessageId, hasUnsent, send, sendQuote, retry, editUnsent, reload } = useCaseChat(projectKey);
+  const latest = latestChatMessage(messages);
+  const reportLatest = useRef(onLatest);
+  useEffect(() => { reportLatest.current = onLatest; });
+  useEffect(() => { if (!loading) reportLatest.current?.(latest); }, [loading, latest]);
   const actor: HumanActor = account.role;
   const [text, setText] = useState("");
   const [draftOpen, setDraftOpen] = useState(false);

@@ -23,6 +23,11 @@ export function chatTimeline(messages: readonly CaseMessage[]): TimelineEntry[] 
   return entries;
 }
 
+/** The latest message someone wrote or Setti replied, for the chat list; records are not messages. */
+export function latestChatMessage(messages: readonly CaseMessage[]): CaseMessage | null {
+  return messages.filter((message) => !isActivityRecord(message) && message.text.trim()).at(-1) ?? null;
+}
+
 /** The first sentence of a record, for the collapsed card. */
 export function recordHeadline(text: string): string {
   return text.split(/(?<=[.!?])\s/u)[0];

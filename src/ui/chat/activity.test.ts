@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CaseMessage } from "@/chat/types";
-import { chatTimeline, isActivityRecord, recordHeadline } from "./activity";
+import { chatTimeline, isActivityRecord, latestChatMessage, recordHeadline } from "./activity";
 
 const message = (id: string, fields: Partial<CaseMessage> = {}): CaseMessage => ({
   id, actor: "client", text: id, createdAt: "2026-10-31T10:00:00.000Z", replyToMessageId: null, aiState: "none", error: null, model: null, ...fields,
@@ -20,6 +20,11 @@ describe("chat activity records", () => {
     expect(entries.map((entry) => entry.kind === "message" ? entry.message.id : entry.records.map((item) => item.id))).toEqual([
       "v1", ["signed", "hold", "capture"], "handoff", ["supplier"],
     ]);
+  });
+
+  it("previews the latest message someone wrote, not a record or an empty AI placeholder", () => {
+    expect(latestChatMessage([message("handoff"), record("hold"), message("running", { actor: "assistant", text: " ", aiState: "running", replyToMessageId: "ask" })])?.id).toBe("handoff");
+    expect(latestChatMessage([record("signed")])).toBeNull();
   });
 
   it("shows a record's first sentence without splitting amounts", () => {
