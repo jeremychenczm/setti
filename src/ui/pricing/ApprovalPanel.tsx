@@ -45,12 +45,13 @@ export function ApprovalPanel({ workspace, loading, onChange, onBusyChange }: Ap
   const [notice, setNotice] = useState<string | null>(null);
   const alive = useRef(true);
   const mutating = useRef(false);
+  const leaving = useRef<ReturnType<typeof setTimeout> | null>(null);
   const disabled = loading || Boolean(busy) || Boolean(pending);
   const ready = canDecide && !disabled && acknowledged && signature.trim() === clientName;
 
   useEffect(() => {
     alive.current = true;
-    return () => { alive.current = false; };
+    return () => { alive.current = false; if (leaving.current) clearTimeout(leaving.current); };
   }, []);
 
   function accept(next: ApprovalWorkspace) {
@@ -58,7 +59,7 @@ export function ApprovalPanel({ workspace, loading, onChange, onBusyChange }: Ap
     setPending(null);
     setError(null);
     setNotice(next.view.decision?.decision === "approved"
-      ? `Your confirmation of V${order.version} is saved. No payment was executed.`
+      ? `Your confirmation of V${order.version} is saved.`
       : next.view.decision ? `Your request to adjust V${order.version} is saved. Discuss the changes with the designer.` : null);
   }
 
@@ -86,6 +87,11 @@ export function ApprovalPanel({ workspace, loading, onChange, onBusyChange }: Ap
     try {
       const next = await requestWorkspace(order.id, input);
       if (alive.current) accept(next);
+      // Confirming is the client's step; the chat shows the hand-off to the designer, as after the first payment.
+      if (alive.current && input.decision === "approved" && next.view.decision?.decision === "approved") {
+        setNotice(`Your confirmation of V${order.version} is saved. Opening the project chat…`);
+        leaving.current = setTimeout(() => window.location.assign(`/chats/${order.projectKey}`), 1500);
+      }
     } catch (cause) {
       if (!alive.current) return;
       setPending(input);
@@ -132,7 +138,7 @@ export function ApprovalPanel({ workspace, loading, onChange, onBusyChange }: Ap
         <p className="mt-2">{decision.clientName} · {dateTime(decision.decidedAt)} PT</p>
         <p className="mt-1 text-[11px]">Recorded with the exact frozen content and quote revision. Demo client decision.</p>
         {decision.note && <p className="mt-3 whitespace-pre-wrap border-t border-current/10 pt-3">{decision.note}</p>}
-        {decision.decision === "approved" && view.status !== "superseded" && <p className="mt-3 text-[11px]">This confirmed version is the baseline for the next change. Payment execution is a separate step.</p>}
+        {decision.decision === "approved" && view.status !== "superseded" && <p className="mt-3 text-[11px]">This confirmed version is the baseline for the next change. With a saved payment method, its new items are held right away; releases, captures and refunds are separate steps.</p>}
       </div>}
       {notice && <p role="status" className="mt-4 rounded-lg bg-brand-50 p-3 text-[12px] leading-relaxed text-brand-900">{notice}</p>}
       {error && <div role="alert" className="mt-4 rounded-lg border border-red-100 bg-red-50 p-3 text-[12px] leading-relaxed text-red-900"><p>{error}</p>{pending && <div className="mt-3 flex flex-wrap gap-3"><button onClick={() => void checkSavedStatus()} disabled={Boolean(busy) || loading} className="inline-flex items-center gap-1.5 font-semibold underline disabled:opacity-50">{busy === "check" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Check saved status</button><button onClick={() => void submit(pending)} disabled={Boolean(busy) || loading} className="font-semibold underline disabled:opacity-50">Retry the same {pending.decision === "approved" ? "confirmation" : "request"}</button></div>}</div>}

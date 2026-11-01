@@ -24,6 +24,7 @@ import { cancelItemHold, checkItemHold, holdApprovedItems, startItemCheckout } f
 import { itemHoldsView } from "./item-holds-view";
 import { checkServicesCheckout, lockPaymentBasis, startServicesCheckout } from "./services";
 import { afterServicesPaid } from "./services-paid";
+import { afterVersionConfirmed } from "./version-confirmed";
 import { servicesPaymentView } from "./services-view";
 
 const uuid = z.uuid();
@@ -119,6 +120,12 @@ const statuses: Record<string, number> = {
 async function pendingPreparation(sessionId: string, key: CaseKey) {
   return key === "maple" && await paymentPreparationPending(db(), sessionId)
     ? NextResponse.json({ code: "PREPARATION_PENDING", error: PREPARATION_MESSAGE }, { status: 409, headers }) : null;
+}
+
+/** After the client confirms a version: its new items are held with the saved method and the client hands over in the chat. */
+export async function afterClientConfirmed(req: NextRequest, sessionId: string, key: CaseKey, orderId: string): Promise<void> {
+  if (await pendingPreparation(sessionId, key)) return;
+  await afterVersionConfirmed(db(), sandboxPayPal(), sessionId, key, orderId, paypalLinks(req));
 }
 
 function fail(error: unknown) {

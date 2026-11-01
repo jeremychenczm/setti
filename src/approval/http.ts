@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ACCOUNT_COOKIE, accountOrDefault, clientOf } from "@/accounts/demo";
 import type { CaseKey } from "@/chat/types";
 import { isSameOriginRequest } from "@/http/origin";
+import { afterClientConfirmed } from "@/payments/http";
 import { approvalStore } from "./server";
 import { ApprovalStoreError } from "./store";
 import type { ApprovalWorkspace } from "./types";
@@ -79,6 +80,8 @@ export async function postApprovalResponse(req: NextRequest, id: string) {
     const refusal = notTheClient(req, current.view.order.projectKey);
     if (refusal) return NextResponse.json({ code: "FORBIDDEN", error: refusal }, { status: 403, headers });
     const decided = await approvalStore().decide(sessionId, id, input);
+    // The confirmation is saved first; a failed hold or hand-off after it does not undo it, and the payments panel offers the holds by hand.
+    if (decided.view.decision?.decision === "approved") await afterClientConfirmed(req, sessionId, current.view.order.projectKey, id).catch(() => undefined);
     return NextResponse.json(asViewer(req, decided), { headers });
   } catch (error) { return fail(error); }
 }
