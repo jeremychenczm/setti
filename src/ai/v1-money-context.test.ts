@@ -17,7 +17,7 @@ function authorization(id: string, itemId: string | null, amountCents: number, p
 function fixture() {
   const quote = structuredClone(HOME_APPROVED_QUOTE);
   const itemMapping = Object.fromEntries(quote.lines.map((line) => [itemMappingKey({ ...line, sourceUrl: line.source.url ?? null }), businessId(line.itemId)]));
-  const ledger: ProjectLedger = { authorizations: [], captures: [], refunds: [], operations: [], supplierEvents: [], servicesHoldLines: [] };
+  const ledger: ProjectLedger = { authorizations: [], captures: [], refunds: [], operations: [], supplierEvents: [], servicesHoldLines: [], cancellations: [] };
   for (const itemId of HOME_ITEM_IDS) {
     const line = quote.lines.find((entry) => entry.itemId === itemId)!;
     const amount = line.quantity * line.unitPriceCents;
@@ -49,7 +49,7 @@ describe("signed V1 payment evidence", () => {
 
   it.each(["seeding", "failed"] as const)("preserves %s preparation as a mandatory warning before any payment exists", (preparationStatus) => {
     const input = fixture();
-    input.ledger = { authorizations: [], captures: [], refunds: [], operations: [], supplierEvents: [], servicesHoldLines: [] };
+    input.ledger = { authorizations: [], captures: [], refunds: [], operations: [], supplierEvents: [], servicesHoldLines: [], cancellations: [] };
     const context = openingMoneyContext({ ...input, preparationStatus, providerRecordedAt: null });
     expect(context.mandatoryFactIds).toEqual(expect.arrayContaining(["payment-preparation", "no-provider-records"]));
     expect(statement(context, "payment-preparation")).toMatch(/do not treat absent amounts as zero or settled/);
@@ -71,7 +71,7 @@ describe("signed V1 payment evidence", () => {
     const input = fixture();
     input.quote.lines = input.quote.lines.slice(0, 2).map((line, index) => ({ ...line, itemId: `service-${index}`, category: "service" as const, quantity: 1, unitPriceCents: (index + 1) * 10_000 }));
     input.itemMapping = Object.fromEntries(input.quote.lines.map((line) => [itemMappingKey({ ...line, sourceUrl: line.source.url ?? null }), businessId(line.itemId)]));
-    input.ledger = { authorizations: [authorization("shared", null, 30_000)], captures: [], refunds: [], supplierEvents: [], operations: [operation("op-shared", null, 30_000, { servicesHold: true, status: "unknown" })], servicesHoldLines: input.quote.lines.map((line) => ({ operationId: "op-shared", itemId: businessId(line.itemId), amountCents: line.unitPriceCents })) };
+    input.ledger = { authorizations: [authorization("shared", null, 30_000)], captures: [], refunds: [], supplierEvents: [], operations: [operation("op-shared", null, 30_000, { servicesHold: true, status: "unknown" })], servicesHoldLines: input.quote.lines.map((line) => ({ operationId: "op-shared", itemId: businessId(line.itemId), amountCents: line.unitPriceCents })), cancellations: [] };
     const context = openingMoneyContext(input);
     expect(statement(context, "item:baseline:service-0")).toContain("recorded held amount $100.00");
     expect(statement(context, "item:baseline:service-1")).toContain("recorded held amount $200.00");

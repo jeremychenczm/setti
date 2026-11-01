@@ -233,6 +233,15 @@ describe("buildOpeningPlan", () => {
     expect(plan.actions.map((action) => [action.itemId, action.kind, action.timing])).toEqual([["desk", "capture", "after_vendor_confirmation"]]);
   });
 
+  it("releases a cancelled item's hold and never funds it again", () => {
+    const held = buildOpeningPlan(opening, lines, facts(fact({ itemId: "desk", heldCents: 110_000, cancelled: true }), fact({ itemId: "consultation", capturedCents: 30_000 })));
+    expect(held.actions.map((action) => [action.itemId, action.kind, action.amountCents, action.timing])).toEqual([["desk", "release_authorization", 110_000, "on_payment_execution"]]);
+    expect(held.lines.find((line) => line.itemId === "desk")).toMatchObject({ targetCents: 0, cancelledTargetCents: 110_000 });
+    const released = buildOpeningPlan(opening, lines, facts(fact({ itemId: "desk", cancelled: true }), fact({ itemId: "consultation", capturedCents: 30_000 })));
+    expect(released.actions).toEqual([]);
+    expect(released.money).toMatchObject({ newAuthorizationCents: 0, releaseCents: 0, chargeCents: 0 });
+  });
+
   it("blocks money it cannot attribute to an approved line", () => {
     const plan = buildOpeningPlan(opening, lines, facts(fact({ itemId: "sofa", heldCents: 50_000 })));
     expect(plan.status).toBe("blocked");

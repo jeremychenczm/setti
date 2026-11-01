@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { boolean, check, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { items, paymentOperations, projects, revisions } from "../db/schema";
 import { changeOrders } from "../pricing/schema";
+import type { CancellationReason } from "./cancellation";
 
 /**
  * What the supplier confirmed, recorded by the designer for one business item
@@ -83,6 +84,31 @@ export const savedPaymentMethodRemovals = pgTable("saved_payment_method_removals
   projectId: uuid("project_id").notNull().references(() => projects.id),
   removedAt: timestamp("removed_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * The studio cancelled an approved furniture item before anything was charged
+ * for it: the supplier cannot supply it, never answered, or the client asked in
+ * the chat. Its holds are released and no version funds it again. Cancelling
+ * gives money back to the client, so it needs a reason but not a signature; a
+ * replacement is new money and still goes through a version the client confirms.
+ * One per business item. A record: never changed or deleted.
+ */
+export const itemCancellations = pgTable("item_cancellations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: uuid("project_id").notNull().references(() => projects.id),
+  itemId: uuid("item_id").notNull().unique().references(() => items.id),
+  /** The client-confirmed version in force when the item was cancelled: its revision, and its change order unless it was the signed V1. */
+  revisionId: uuid("revision_id").notNull().references(() => revisions.id),
+  changeOrderId: uuid("change_order_id").references(() => changeOrders.id),
+  reason: text("reason").$type<CancellationReason>().notNull(),
+  note: text("note").notNull().default(""),
+  cancelledBy: text("cancelled_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  check("item_cancellations_reason", sql`${t.reason} IN ('unavailable', 'no_response', 'client_asked', 'other')`),
+  check("item_cancellations_note", sql`length(${t.note}) <= 1000 AND (${t.reason} <> 'other' OR length(btrim(${t.note})) > 0)`),
+  check("item_cancellations_by", sql`length(btrim(${t.cancelledBy})) > 0`),
+]);
 
 /**
  * How a design-services hold is split across the approved service lines it pays

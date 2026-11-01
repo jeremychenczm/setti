@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, ne } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { approvals, paymentOperations, paypalAuthorizations, paypalCaptures, paypalRefunds, revisionLines, revisions, servicesHoldLines, supplierEvents } from "../db/schema";
+import { approvals, itemCancellations, paymentOperations, paypalAuthorizations, paypalCaptures, paypalRefunds, revisionLines, revisions, servicesHoldLines, supplierEvents } from "../db/schema";
 import { chatCases, chatMessages } from "../chat/schema";
 import { createChatStore } from "../chat/store";
 import { clientSignatureName } from "../opening/types";
@@ -29,6 +29,8 @@ export interface ProjectLedger {
   supplierEvents: (typeof supplierEvents.$inferSelect)[];
   /** How each design-services hold is split across the services it pays for. */
   servicesHoldLines: (typeof servicesHoldLines.$inferSelect)[];
+  /** Items the studio cancelled before they were charged: no version funds them again. */
+  cancellations: (typeof itemCancellations.$inferSelect)[];
 }
 
 /** Every money record and operation of one business project. */
@@ -41,7 +43,8 @@ export async function readLedger(db: Reader, projectId: string): Promise<Project
   const events = await db.select().from(supplierEvents).where(eq(supplierEvents.projectId, projectId));
   const split = (await db.select({ line: servicesHoldLines }).from(servicesHoldLines)
     .innerJoin(paymentOperations, eq(servicesHoldLines.operationId, paymentOperations.id)).where(eq(paymentOperations.projectId, projectId))).map(({ line }) => line);
-  return { authorizations, captures, refunds, operations, supplierEvents: events, servicesHoldLines: split };
+  const cancellations = await db.select().from(itemCancellations).where(eq(itemCancellations.projectId, projectId));
+  return { authorizations, captures, refunds, operations, supplierEvents: events, servicesHoldLines: split, cancellations };
 }
 
 export interface FundingIdentity { itemId: string; side: "baseline" | "proposed" }
@@ -148,7 +151,13 @@ export function ledgerFacts(identities: ReadonlyMap<string, FundingIdentity>, id
     facts.set(key, fact);
   }
   if (captures.some((capture) => !capture.authorizationId && capture.status !== "declined")) blockers.push("A direct capture has no item allocation in the current ledger. Allocate it before calculating payment actions.");
-  return { status: authorizations.length || captures.length || refunds.length || operations.length ? "recorded" : "no_records", checkedAt, lines: [...facts.values()], blockers: [...new Set(blockers)] };
+  for (const cancellation of ledger.cancellations) {
+    const identity = identities.get(cancellation.itemId);
+    if (!identity) continue;
+    const key = `${identity.side}:${identity.itemId}`;
+    facts.set(key, { ...(facts.get(key) ?? { ...identity, heldCents: 0, capturedCents: 0, refundedCents: 0 }), cancelled: true });
+  }
+  return { status: authorizations.length || captures.length || refunds.length || operations.length || ledger.cancellations.length ? "recorded" : "no_records", checkedAt, lines: [...facts.values()], blockers: [...new Set(blockers)] };
 }
 
 export function createApprovalStore(db: Db) {

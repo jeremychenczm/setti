@@ -15,6 +15,8 @@ export interface FundingLineFact {
   /** Pending/unknown provider results must never become zero or settled money. */
   uncertainReason?: string;
   vendorCreditConfirmed?: boolean;
+  /** The studio cancelled this item before it was charged: its target is zero, whatever the document assigns. */
+  cancelled?: boolean;
 }
 
 export interface FundingFacts {
@@ -45,8 +47,10 @@ export interface FundingLine {
   changed: boolean;
   /** The change that produced the line: the old product of a replacement is `replace` on the baseline side. */
   change: ReviewedChange["action"] | null;
-  /** The complete reviewed amount this version assigns to the line, including retained old-item costs. */
+  /** The complete reviewed amount this version assigns to the line, including retained old-item costs; zero once the studio cancelled the item. */
   targetCents: number;
+  /** What the document assigned before the studio cancelled the item; present only for a cancelled item. */
+  cancelledTargetCents?: number;
   heldCents: number;
   capturedCents: number;
   refundedCents: number;
@@ -253,9 +257,12 @@ function planFunding(header: PlanHeader, facts: FundingFacts, notices: string[],
       capturedCents: sum([...byFact.values()].map((fact) => fact.capturedCents)),
       refundedCents: sum([...byFact.values()].map((fact) => fact.refundedCents)),
     };
+    // A cancelled item is funded by nothing: what it still holds is released, and it is never held again.
+    const target = (group: Group) => byFact.get(key(group.itemId, group.side))?.cancelled ? 0 : group.targetCents;
     result.lines = groups.map((group) => {
       const fact = byFact.get(key(group.itemId, group.side)) ?? emptyFact(group);
-      return { itemId: group.itemId, side: group.side, label: group.label, category: group.category, changed: group.changed, change: group.change, targetCents: group.targetCents, heldCents: fact.heldCents, capturedCents: fact.capturedCents, refundedCents: fact.refundedCents };
+      return { itemId: group.itemId, side: group.side, label: group.label, category: group.category, changed: group.changed, change: group.change, targetCents: target(group),
+        ...(fact.cancelled ? { cancelledTargetCents: group.targetCents } : {}), heldCents: fact.heldCents, capturedCents: fact.capturedCents, refundedCents: fact.refundedCents };
     });
     if (blockers.length) throw new Error("Resolve the funding blockers before calculating payment actions.");
 
@@ -267,13 +274,14 @@ function planFunding(header: PlanHeader, facts: FundingFacts, notices: string[],
     for (const group of groups) {
       const fact = byFact.get(key(group.itemId, group.side)) ?? emptyFact(group);
       const paid = fact.capturedCents - fact.refundedCents;
-      const remaining = Math.max(group.targetCents - paid, 0);
-      if (paid > group.targetCents) {
+      const targetCents = target(group);
+      const remaining = Math.max(targetCents - paid, 0);
+      if (paid > targetCents) {
         const conditional = ["returned", "cancelled"].includes(group.handling ?? "") && !fact.vendorCreditConfirmed;
         if (group.handling === "pending" || group.handling === "not_applicable" && group.side === "baseline" && changedItems.has(group.itemId)) {
           throw new Error("A captured item reduction needs a confirmed old-item handling decision.");
         }
-        push(group, "refund", paid - group.targetCents, conditional ? "after_vendor_credit" : "on_payment_execution",
+        push(group, "refund", paid - targetCents, conditional ? "after_vendor_credit" : "on_payment_execution",
           conditional ? "Refund only after the vendor credit is verified; the reviewed retained cost is deducted once." : "Refund completed captures above the reviewed target after subtracting prior refunds and retained costs.");
       }
       if (fact.heldCents > remaining) {

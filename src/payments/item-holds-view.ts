@@ -9,6 +9,7 @@ import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
 import { items, revisionLines } from "../db/schema";
 import { PaymentActionError } from "./binding";
+import { CANCELLATION_REASON_TEXT, type CancellationReason } from "./cancellation";
 import { activeSavedMethod, savedMethodView, type SavedMethodView } from "./saved-methods";
 import { lockPaymentBasis } from "./services";
 import type { CheckoutView, DemoCheckout } from "./types";
@@ -16,16 +17,23 @@ import type { CheckoutView, DemoCheckout } from "./types";
 export interface ItemHoldView {
   /** The quote line id. */
   itemId: string;
+  /** Which side of a replacement the line is (V1 lines are the baseline). */
+  side: "baseline" | "proposed";
   label: string;
+  /** What the client approved for the item; a cancelled item keeps the amount it had. */
   targetCents: number;
   heldCents: number;
   capturedCents: number;
-  state: "captured" | "confirmed" | "held" | "holding" | "awaiting_client" | "unknown" | "failed" | "to_hold";
+  state: "captured" | "confirmed" | "held" | "holding" | "awaiting_client" | "unknown" | "failed" | "to_hold" | "cancelled";
   operationId: string | null;
   /** Only the owning project's client receives the provider approval link. */
   approvalUrl: string | null;
   canCheck: boolean;
   canCancel: boolean;
+  /** The designer may cancel the item: nothing was charged for it and no PayPal step of it is open. */
+  canCancelItem: boolean;
+  /** Why and when the studio cancelled the item. While `heldCents` is above zero its hold is still being released. */
+  cancellation: { reason: CancellationReason; reasonText: string; note: string; by: string; at: string } | null;
   /** With no saved method, the client may hold this item alone through PayPal or the Sandbox test card (V1 only). */
   canCheckout: boolean;
   paypalAuthorizationId: string | null;
@@ -87,7 +95,8 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
   const lines = plan.lines.flatMap((line): ItemHoldView[] => {
     const businessId = basis.businessItem(line);
     const manualReview = manualReviews.find((operation) => operation.itemId === businessId);
-    if (!businessId || kinds.get(businessId) !== "furniture" || (line.targetCents === 0 && !manualReview)) return [];
+    const cancelled = ledger.cancellations.find((entry) => entry.itemId === businessId);
+    if (!businessId || kinds.get(businessId) !== "furniture" || (line.targetCents === 0 && !manualReview && !cancelled)) return [];
     const latest = ledger.operations.filter((operation) => operation.kind === "authorize" && operation.itemId === businessId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
     const displayedOperation = manualReview ?? latest;
     const hold = ledger.authorizations.filter((entry) => entry.itemId === businessId && (entry.status === "created" || entry.status === "partially_captured") && !(entry.expiresAt && entry.expiresAt.getTime() <= now))
@@ -95,6 +104,7 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
     const funded = line.heldCents + line.capturedCents - line.refundedCents;
     const event = ledger.supplierEvents.find((entry) => entry.kind === "order_confirmed" && entry.itemId === businessId && (basis.orderId ? entry.changeOrderId === basis.orderId : entry.revisionId === basis.key));
     const state = manualReview ? "unknown"
+      : cancelled ? "cancelled"
       : line.capturedCents - line.refundedCents >= line.targetCents ? "captured"
       : funded >= line.targetCents && event ? "confirmed"
       : funded >= line.targetCents ? "held"
@@ -102,12 +112,17 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
           : latest?.status === "pending" && latest.approvalUrl ? "awaiting_client"
           : latest?.status === "pending" ? "holding"
           : latest?.status === "failed" ? "failed" : "to_hold";
+    const charged = ledger.captures.some((capture) => capture.status !== "declined"
+      && (capture.itemId === businessId || ledger.authorizations.some((entry) => entry.id === capture.authorizationId && entry.itemId === businessId)));
+    const stepOpen = ledger.operations.some((operation) => operation.itemId === businessId && (operation.status === "pending" || operation.status === "unknown"));
     return [{
-      itemId: line.itemId, label: line.label, targetCents: line.targetCents, heldCents: line.heldCents, capturedCents: line.capturedCents - line.refundedCents, state,
+      itemId: line.itemId, side: line.side, label: line.label, targetCents: line.cancelledTargetCents ?? line.targetCents, heldCents: line.heldCents, capturedCents: line.capturedCents - line.refundedCents, state,
       operationId: displayedOperation?.id ?? null,
       approvalUrl: !manualReview && client && state === "awaiting_client" ? displayedOperation?.approvalUrl ?? null : null,
       canCheck: member && !!displayedOperation && ["holding", "awaiting_client", "unknown"].includes(state),
       canCancel: !manualReview && client && state === "awaiting_client",
+      canCancelItem: account?.role === "designer" && ["held", "confirmed", "to_hold", "failed"].includes(state) && !charged && !stepOpen,
+      cancellation: cancelled ? { reason: cancelled.reason, reasonText: CANCELLATION_REASON_TEXT[cancelled.reason], note: cancelled.note, by: cancelled.cancelledBy, at: cancelled.createdAt.toISOString() } : null,
       canCheckout: false,
       paypalAuthorizationId: hold?.paypalAuthorizationId ?? null, expiresAt: hold?.expiresAt?.toISOString() ?? null,
       failureMessage: ["failed", "awaiting_client", "unknown"].includes(state) ? displayedOperation?.failureMessage ?? null : null,
@@ -116,7 +131,7 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
       supplier: event ? { reference: event.reference, totalCents: event.totalCents, leadTimeDays: event.leadTimeDays } : null,
     }];
   });
-  const toHoldCents = lines.reduce((total, line) => total + Math.max(line.targetCents - line.heldCents - line.capturedCents, 0), 0);
+  const toHoldCents = lines.reduce((total, line) => total + (line.cancellation ? 0 : Math.max(line.targetCents - line.heldCents - line.capturedCents, 0)), 0);
   const waiting = lines.some((line) => ["holding", "awaiting_client", "unknown"].includes(line.state));
   const canHold = member && !!saved && toHoldCents > 0 && !waiting && plan.status !== "blocked" && manualReviews.length === 0;
   // Change orders take each item's payment on their own payments panel; V1 takes it here.

@@ -9,7 +9,7 @@ const mock = vi.hoisted(() => ({
   startAuthorization: vi.fn(), startCapture: vi.fn(), startRelease: vi.fn(), startRefund: vi.fn(), checkPayment: vi.fn(), cancelPayment: vi.fn(),
   returnFromPayPal: vi.fn(), operationPage: vi.fn(), paymentsWorkspace: vi.fn(), recordSupplierOrder: vi.fn(), recordSupplierCredit: vi.fn(),
   startServicesCheckout: vi.fn(), checkServicesCheckout: vi.fn(), chargeServices: vi.fn(), lockPaymentBasis: vi.fn(), servicesPaymentView: vi.fn(), completeAuthorization: vi.fn(), cancelCheckout: vi.fn(),
-  holdApprovedItems: vi.fn(), checkItemHold: vi.fn(), cancelItemHold: vi.fn(), itemHoldsView: vi.fn(),
+  holdApprovedItems: vi.fn(), checkItemHold: vi.fn(), cancelItemHold: vi.fn(), itemHoldsView: vi.fn(), cancelApprovedItem: vi.fn(),
   paymentPreparationPending: vi.fn(),
   db: { transaction: (work: (tx: object) => unknown) => work({}) },
 }));
@@ -23,6 +23,7 @@ vi.mock("./services", () => ({ startServicesCheckout: mock.startServicesCheckout
 vi.mock("./services-view", () => ({ servicesPaymentView: mock.servicesPaymentView }));
 vi.mock("./item-holds", () => ({ holdApprovedItems: mock.holdApprovedItems, checkItemHold: mock.checkItemHold, cancelItemHold: mock.cancelItemHold }));
 vi.mock("./item-holds-view", () => ({ itemHoldsView: mock.itemHoldsView }));
+vi.mock("./cancel-item", () => ({ cancelApprovedItem: mock.cancelApprovedItem }));
 vi.mock("./authorize", () => ({ completeAuthorization: mock.completeAuthorization, cancelCheckout: mock.cancelCheckout }));
 vi.mock("./server", () => ({ sandboxPayPal: () => ({}) }));
 vi.mock("../try/preparation", () => ({ paymentPreparationPending: mock.paymentPreparationPending, PREPARATION_MESSAGE: "The starting payments are being prepared." }));
@@ -338,5 +339,18 @@ describe("item-holds HTTP boundaries", () => {
     expect((await postItemHoldsResponse(holds({ action: "cancel", operationId }, "jordan"), "willow")).status).toBe(403);
     expect((await postItemHoldsResponse(holds({ action: "cancel", operationId }, "sofia"), "willow")).status).toBe(200);
     expect(mock.cancelItemHold).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow", operationId);
+  });
+
+  it("lets only the designer cancel an item, with a reason from the list", async () => {
+    mock.cancelApprovedItem.mockResolvedValue({ cancellation: { id: "c" }, operations: [{ id: operationId }] });
+    const body = { action: "cancel_item", itemId: "willow-desk", reason: "no_response", note: "  Three emails, no answer.  " };
+    expect((await postItemHoldsResponse(holds(body, "sofia"), "willow")).status).toBe(403);
+    expect((await postItemHoldsResponse(holds(body, "jordan", false), "willow")).status).toBe(403);
+    expect((await postItemHoldsResponse(holds({ ...body, reason: "too_expensive" }, "jordan"), "willow")).status).toBe(400);
+    expect((await postItemHoldsResponse(holds({ ...body, amountCents: 1 }, "jordan"), "willow")).status).toBe(400);
+    expect(mock.cancelApprovedItem).not.toHaveBeenCalled();
+    const response = await postItemHoldsResponse(holds(body, "jordan"), "willow");
+    expect(await response.json()).toMatchObject({ attempted: 1, view: { projectKey: "willow" } });
+    expect(mock.cancelApprovedItem).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow", { action: "cancel_item", itemId: "willow-desk", reason: "no_response", note: "Three emails, no answer.", by: "Jordan Lee" });
   });
 });

@@ -11,6 +11,8 @@ import { refreshDemoCookies } from "@/http/demo-cookies";
 import { cancelPayment, checkPayment, operationPage, returnFromPayPal, startAuthorization, startCapture, startOpeningCapture, startRefund, startRelease, type LinkBuilder } from "./actions";
 import { cancelCheckout, completeAuthorization } from "./authorize";
 import { PaymentActionError } from "./binding";
+import { cancelApprovedItem } from "./cancel-item";
+import { CANCELLATION_REASONS } from "./cancellation";
 import { PaymentOperationError } from "./operations";
 import { sandboxPayPal, sandboxTestCard } from "./server";
 import { removeCaseSavedMethod } from "./saved-methods";
@@ -70,6 +72,7 @@ const holdSchema = z.discriminatedUnion("action", [
   z.strictObject({ action: z.literal("capture"), itemId: z.string().min(1).max(300), contentHash: hash }),
   z.strictObject({ action: z.literal("check"), operationId: uuid }),
   z.strictObject({ action: z.literal("cancel"), operationId: uuid }),
+  z.strictObject({ action: z.literal("cancel_item"), itemId: z.string().min(1).max(300), side: z.enum(["baseline", "proposed"]).optional(), reason: z.enum(CANCELLATION_REASONS), note: z.string().trim().max(1_000) }),
 ]);
 class HttpError extends Error { constructor(message: string, readonly status: number) { super(message); } }
 
@@ -366,6 +369,7 @@ export async function postItemHoldsResponse(req: NextRequest, rawKey: string) {
     const preparing = await pendingPreparation(sessionId, rawKey);
     if (preparing) return preparing;
     if ((input.action === "supplier_order" || input.action === "capture") && account.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "Only the designer records supplier confirmations and captures." }, { status: 403, headers });
+    if (input.action === "cancel_item" && account.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "Only the designer cancels an item. The client can ask for it in the chat." }, { status: 403, headers });
     if ((input.action === "cancel" || input.action === "remove_saved" || input.action === "checkout") && (account.role !== "client" || account.projectKey !== rawKey)) return NextResponse.json({ code: "FORBIDDEN", error: "Only the client pays, leaves a PayPal checkout or removes the saved payment method." }, { status: 403, headers });
     if (input.action === "checkout" && input.via === "test_card" && !demoCheckout().testCard) return NextResponse.json({ code: "FORBIDDEN", error: "The Sandbox test card is turned off on this server." }, { status: 403, headers });
     let attempted = 0, operationId: string | null = null, paypalOrderId: string | null = null;
@@ -394,6 +398,9 @@ export async function postItemHoldsResponse(req: NextRequest, rawKey: string) {
         break;
       case "remove_saved":
         await removeCaseSavedMethod(db(), sandboxPayPal(), sessionId, rawKey);
+        break;
+      case "cancel_item":
+        attempted = (await cancelApprovedItem(db(), sandboxPayPal(), sessionId, rawKey, { ...input, by: account.name })).operations.length;
         break;
     }
     return refreshDemoCookies(NextResponse.json({ view: await holdsView(req, rawKey, sessionId), attempted, operationId, paypalOrderId }, { headers }), req);

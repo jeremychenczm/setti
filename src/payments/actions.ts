@@ -85,7 +85,7 @@ export async function startAuthorization(db: Db, paypal: PayPalPayments, session
 }
 
 /** Holds of one business item that can still be captured or voided, oldest first, with what each still holds. */
-function openHolds(ledger: ProjectLedger, itemId: string, now = new Date()) {
+export function openHolds(ledger: ProjectLedger, itemId: string, now = new Date()) {
   return ledger.authorizations
     .filter((hold) => hold.itemId === itemId && (hold.status === "created" || hold.status === "partially_captured") && !(hold.expiresAt && hold.expiresAt.getTime() <= now.getTime()))
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
@@ -110,7 +110,7 @@ function refundableCaptures(ledger: ProjectLedger, itemId: string) {
 }
 
 /** Runs each operation that is not finished yet, one after another; finished ones are returned as they are. */
-async function runEach(operations: PaymentOperation[], run: (id: string) => Promise<PaymentOperation>): Promise<PaymentOperation[]> {
+export async function runEach(operations: PaymentOperation[], run: (id: string) => Promise<PaymentOperation>): Promise<PaymentOperation[]> {
   const results: PaymentOperation[] = [];
   for (const operation of operations) results.push(operation.status === "succeeded" || operation.status === "failed" ? operation : await run(operation.id));
   return results;

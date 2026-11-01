@@ -1,12 +1,13 @@
 "use client";
 
-import { Armchair, ArrowUpRight, CheckCircle2, ChevronRight, CircleDollarSign, FilePenLine, LoaderCircle, LockKeyhole, RefreshCw, Truck, TriangleAlert, X } from "lucide-react";
+import { Armchair, ArrowUpRight, Ban, CheckCircle2, ChevronRight, CircleDollarSign, FilePenLine, LoaderCircle, LockKeyhole, RefreshCw, Truck, TriangleAlert, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CaseKey } from "@/chat/types";
 import type { ItemHoldView, ItemHoldsView } from "@/payments/item-holds-view";
 import { centsText, dateTime, Field, inputClass, money, parseDollars } from "../pricing/common";
 import { useTryReadiness } from "../try/useTryReadiness";
 import type { CheckoutView } from "@/payments/types";
+import { CANCELLATION_REASON_TEXT, CANCELLATION_REASONS, type CancellationReason } from "@/payments/cancellation";
 import { demoSupplierNumber } from "./demo-supplier";
 import { PayMethodChooser, SavedMethodCard, savedMethodName } from "./PaymentMethods";
 import { paymentChanged, usePaymentRefresh } from "./usePaymentRefresh";
@@ -16,6 +17,7 @@ type Body =
   | { action: "check" | "cancel"; operationId: string }
   | { action: "checkout"; itemId: string; via: "popup" | "test_card"; save: boolean }
   | { action: "capture"; itemId: string; contentHash: string }
+  | { action: "cancel_item"; itemId: string; side: "baseline" | "proposed"; reason: CancellationReason; note: string }
   | { action: "supplier_order"; itemId: string; contentHash: string; quantity: number; unitPriceCents: number; taxCents: number; freightCents: number; inStock: boolean; leadTimeDays: number | null; reference: string; note: string };
 
 type Reply = { view: ItemHoldsView; operationId: string | null; paypalOrderId: string | null };
@@ -71,7 +73,9 @@ export function ItemHolds({ projectKey, orderId }: { projectKey: CaseKey; orderI
   const run = useCallback(async (label: string, body: Body) => !!await send(label, body), [send]);
 
   if (!view?.basis || view.basis.orderId !== orderId || !view.items.length) return null;
-  const covered = view.items.filter((line) => line.state === "held" || line.state === "confirmed" || line.state === "captured").length;
+  const active = view.items.filter((line) => line.state !== "cancelled");
+  const cancelled = view.items.length - active.length;
+  const covered = active.filter((line) => line.state === "held" || line.state === "confirmed" || line.state === "captured").length;
   const failed = view.items.filter((line) => line.state === "failed").length;
   const contentHash = view.contentHash ?? "";
   const open = view.items.find((line) => line.itemId === selected) ?? null;
@@ -96,7 +100,7 @@ export function ItemHolds({ projectKey, orderId }: { projectKey: CaseKey; orderI
     <div className="flex flex-wrap items-center gap-2">
       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-brand-700"><Armchair className="h-4 w-4" /></span>
       <div className="mr-auto"><h2 id="item-holds-title" className="text-[13px] font-semibold">Approved items · V{view.basis.version}</h2><p className="text-[11px] text-[var(--muted)]">Select an item to see its terms, PayPal hold and next step.</p></div>
-      <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${covered === view.items.length ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{covered} of {view.items.length} held</span>
+      <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${covered === active.length ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{covered} of {active.length} held{cancelled ? ` · ${cancelled} cancelled` : ""}</span>
     </div>
     {view.savedMethod && <div className="mt-3"><SavedMethodCard method={view.savedMethod} canRemove={view.canRemoveSaved} busy={busy === "remove"} disabled={!!busy || readiness.blocked} onRemove={() => void run("remove", { action: "remove_saved" })} /></div>}
     {(readiness.pending || Boolean(readiness.blocked && readiness.error)) && <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-[12px] leading-relaxed text-amber-900">{readiness.notice ?? readiness.error}</p>}
@@ -107,11 +111,11 @@ export function ItemHolds({ projectKey, orderId }: { projectKey: CaseKey; orderI
         </thead>
         <tbody>{view.items.map((line) => <tr key={line.itemId} onClick={() => setSelected(line.itemId)} aria-selected={selected === line.itemId}
           className={`cursor-pointer border-t border-[var(--line)] align-top transition-colors hover:bg-brand-50/60 ${selected === line.itemId ? "bg-brand-50" : ""}`}>
-          <td className="px-3 py-2.5"><button type="button" onClick={() => setSelected(line.itemId)} className="text-left font-medium text-[var(--ink)] hover:underline">{line.label}</button>{line.vendor && <span className="block text-[10px] text-[var(--muted)]">{line.vendor}</span>}</td>
+          <td className="px-3 py-2.5"><button type="button" onClick={() => setSelected(line.itemId)} className={`text-left font-medium hover:underline ${line.cancellation ? "text-[var(--muted)] line-through" : "text-[var(--ink)]"}`}>{line.label}</button>{line.vendor && <span className="block text-[10px] text-[var(--muted)]">{line.vendor}</span>}</td>
           <td className="px-3 py-2.5 tabular-nums text-slate-600">{line.terms ? `${line.terms.quantity} × ${money(line.terms.unitPriceCents)}` : "—"}</td>
           <td className="px-3 py-2.5 text-right tabular-nums">{money(line.targetCents)}</td>
           <td className="px-3 py-2.5 whitespace-nowrap text-[11px]"><ItemStatus line={line} /></td>
-          <td className="px-3 py-2.5 text-[11px]">{line.supplier ? <span className="font-mono text-slate-700">{line.supplier.reference}</span> : <span className="text-[var(--muted)]">Not confirmed</span>}</td>
+          <td className="px-3 py-2.5 text-[11px]">{line.supplier ? <span className="font-mono text-slate-700">{line.supplier.reference}</span> : <span className="text-[var(--muted)]">{line.cancellation ? line.cancellation.reasonText : "Not confirmed"}</span>}</td>
           <td className="pr-3 pt-3 text-[var(--muted)]"><ChevronRight className="h-3.5 w-3.5" /></td>
         </tr>)}</tbody>
       </table>
@@ -126,6 +130,7 @@ export function ItemHolds({ projectKey, orderId }: { projectKey: CaseKey; orderI
       onConfirm={(order) => void confirm(open, order)}
       onRevise={(order) => void revise(open, order)}
       onCapture={() => void run(`capture:${open.itemId}`, { action: "capture", itemId: open.itemId, contentHash })}
+      onCancelItem={(reason, note) => run(`cancel-item:${open.itemId}`, { action: "cancel_item", itemId: open.itemId, side: open.side, reason, note })}
       onCheck={() => { if (open.operationId) void run(`check:${open.itemId}`, { action: "check", operationId: open.operationId }); }}
       onCancel={() => { if (open.operationId) void run(`cancel:${open.itemId}`, { action: "cancel", operationId: open.operationId }); }} />}
   </section>;
@@ -143,6 +148,7 @@ function ItemStatus({ line }: { line: ItemHoldView }) {
     unknown: <span className="text-amber-800">Outcome unknown · check PayPal</span>,
     failed: <span className="inline-flex items-center gap-1 text-amber-800"><TriangleAlert className="h-3.5 w-3.5" />Not held</span>,
     to_hold: <span className="text-[var(--muted)]">To hold</span>,
+    cancelled: <span className="inline-flex items-center gap-1 text-slate-500"><Ban className="h-3.5 w-3.5" />Cancelled{line.heldCents > 0 ? " · hold not released yet" : ""}</span>,
   }[line.state];
 }
 
@@ -157,10 +163,11 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
  */
 type SupplierOrder = { quantity: number; unitPriceCents: number; taxCents: number; freightCents: number; inStock: boolean; leadTimeDays: number | null; reference: string };
 
-function ItemDrawer({ line, designer, checkout, canHoldAll, busy, blocked, error, send, onClose, onConfirm, onRevise, onCapture, onCheck, onCancel }: {
+function ItemDrawer({ line, designer, checkout, canHoldAll, busy, blocked, error, send, onClose, onConfirm, onRevise, onCapture, onCheck, onCancel, onCancelItem }: {
   line: ItemHoldView; designer: boolean; checkout: CheckoutView | null; canHoldAll: boolean; busy: string | null; blocked: boolean; error: string | null;
   send: (label: string, body: Body) => Promise<Reply | null>;
   onClose: () => void; onConfirm: (order: SupplierOrder) => void; onRevise: (order: SupplierOrder) => void; onCapture: () => void; onCheck: () => void; onCancel: () => void;
+  onCancelItem: (reason: CancellationReason, note: string) => Promise<boolean>;
 }) {
   const [save, setSave] = useState(true);
   // What the supplier confirmed: filled in from the approved line (there is no real supplier), and editable.
@@ -173,9 +180,11 @@ function ItemDrawer({ line, designer, checkout, canHoldAll, busy, blocked, error
   const [inStock, setInStock] = useState(true);
   const popup = useRef<string | null>(null);
   const disabled = !!busy || blocked;
-  const due = Math.max(line.targetCents - line.heldCents - line.capturedCents, 0);
+  const due = line.cancellation ? 0 : Math.max(line.targetCents - line.heldCents - line.capturedCents, 0);
+  // The cancel form replaces the item's next step until it is sent or closed.
+  const [cancelling, setCancelling] = useState(false);
   const terms = line.terms;
-  const editing = designer && line.state === "held" && !!terms && !line.supplier;
+  const editing = designer && line.state === "held" && !!terms && !line.supplier && !cancelling;
   const amounts = [parseDollars(unit), parseDollars(tax), parseDollars(delivery)];
   const count = Number(quantity), days = leadTime.trim() ? Number(leadTime) : null;
   const problem = !reference.trim() ? "Enter the supplier's order number."
@@ -220,6 +229,14 @@ function ItemDrawer({ line, designer, checkout, canHoldAll, busy, blocked, error
       onError: () => { if (popup.current) void send(`check:${line.itemId}`, { action: "check", operationId: popup.current }); },
     }} />;
   else if ((line.state === "to_hold" || line.state === "failed") && canHoldAll) next = <p className={note}>Hold it with the saved payment method using the Hold button under the table.</p>;
+  if (line.cancellation) next = line.heldCents > 0 && designer ? <>
+    <button type="button" disabled={disabled} onClick={() => void onCancelItem(line.cancellation!.reason, line.cancellation!.note)} className={primary}>{busy === `cancel-item:${line.itemId}` ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Release the {money(line.heldCents)} hold again</button>
+    <p className={note}>PayPal has not confirmed the release yet. Nothing was charged for this item.</p>
+  </> : <p className={note}>{line.heldCents > 0 ? "The studio is releasing this hold on PayPal. Nothing was charged for this item." : "Cancelled. Nothing was charged, and nothing is held for it now."}</p>;
+  else if (cancelling) next = <CancelItemForm heldCents={line.heldCents} disabled={disabled} busy={busy === `cancel-item:${line.itemId}`}
+    onBack={() => setCancelling(false)} onSubmit={async (reason, text) => { if (await onCancelItem(reason, text)) setCancelling(false); }} />;
+  const cancelLink = line.canCancelItem && !cancelling && <button type="button" disabled={disabled} onClick={() => setCancelling(true)}
+    className="mt-3 inline-flex w-full items-center justify-center gap-1.5 text-[12px] font-medium text-slate-600 underline-offset-2 hover:text-red-700 hover:underline disabled:opacity-50"><Ban className="h-3.5 w-3.5" />{line.heldCents > 0 ? "Cancel hold…" : "Cancel item…"}</button>;
 
   return <>
     {/* A click beside the drawer closes it. PayPal's own popup overlay sits above this, so it never closes a checkout. */}
@@ -259,7 +276,15 @@ function ItemDrawer({ line, designer, checkout, canHoldAll, busy, blocked, error
           {line.canCancel && <button type="button" disabled={disabled} onClick={onCancel} className="underline disabled:opacity-50">Leave checkout</button>}
         </div>}
       </section>
-      {terms && <section aria-label="Supplier confirmation">
+      {line.cancellation && <section aria-label="Cancellation">
+        <h4 className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Cancelled by the studio</h4>
+        <dl className="mt-1.5 divide-y divide-[var(--line)]">
+          <Row label="Reason">{line.cancellation.reason === "other" ? line.cancellation.note : line.cancellation.reasonText}</Row>
+          {line.cancellation.reason !== "other" && line.cancellation.note && <Row label="Note">{line.cancellation.note}</Row>}
+          <Row label="By">{line.cancellation.by} · {dateTime(line.cancellation.at)}</Row>
+        </dl>
+      </section>}
+      {terms && !line.cancellation && <section aria-label="Supplier confirmation">
         <h4 className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Supplier confirmation{line.supplier ? "" : " · demo"}</h4>
         {editing ? <div className="mt-2 space-y-2.5">
           <p className="text-[11px] leading-relaxed text-[var(--muted)]">There is no real supplier in this demo, so this is filled in from the approved line. Change anything the supplier confirmed differently.</p>
@@ -280,10 +305,42 @@ function ItemDrawer({ line, designer, checkout, canHoldAll, busy, blocked, error
         </dl>}
       </section>}
     </div>
-    {(next || error) && <footer className="border-t border-[var(--line)] px-5 py-4">
+    {(next || error || cancelLink) && <footer className="border-t border-[var(--line)] px-5 py-4">
       {error && <p role="alert" className="mb-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[11px] leading-relaxed text-red-800">{error}</p>}
       {next}
+      {cancelLink}
     </footer>}
   </aside>
   </>;
+}
+
+/**
+ * Why the studio cancels an item, asked before anything is released. The
+ * reason reaches the client in the chat; "Other" needs the designer's own words.
+ */
+function CancelItemForm({ heldCents, disabled, busy, onBack, onSubmit }: {
+  heldCents: number; disabled: boolean; busy: boolean; onBack: () => void; onSubmit: (reason: CancellationReason, note: string) => void;
+}) {
+  const [reason, setReason] = useState<CancellationReason | null>(null);
+  const [text, setText] = useState("");
+  const missing = !reason ? "Choose a reason." : reason === "other" && !text.trim() ? "Say why the item is cancelled." : null;
+  return <div className="space-y-3">
+    <fieldset>
+      <legend className="text-[12px] font-semibold">Why is this item cancelled?</legend>
+      <div className="mt-2 space-y-1.5">{CANCELLATION_REASONS.map((value) => <label key={value} className="flex items-center gap-2 text-[12px] text-slate-700">
+        <input type="radio" name="cancel-reason" value={value} checked={reason === value} onChange={() => setReason(value)} className="accent-[var(--primary)]" />{CANCELLATION_REASON_TEXT[value]}
+      </label>)}</div>
+    </fieldset>
+    <Field label={reason === "other" ? "What happened" : "Note for the client · optional"}>
+      <textarea className={`${inputClass} min-h-[64px] resize-y`} value={text} onChange={(event) => setText(event.target.value)} maxLength={1_000}
+        placeholder={reason === "other" ? "The client sees this in the chat." : "For example: the supplier discontinued this finish."} />
+    </Field>
+    <p className="rounded-lg bg-[var(--canvas)] p-2.5 text-[11px] leading-relaxed text-slate-600">{heldCents > 0
+      ? `This releases the ${money(heldCents)} hold on PayPal. Nothing is charged, and the client sees the reason in the project chat.`
+      : "Nothing is held or charged for this item. The client sees the reason in the project chat."} A replacement would come as a new version for the client to confirm.</p>
+    <button type="button" disabled={disabled || !!missing} onClick={() => reason && onSubmit(reason, text.trim())}
+      className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-red-700 px-3.5 py-2.5 text-[13px] font-semibold text-white hover:bg-red-800 disabled:opacity-50">
+      {busy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}{heldCents > 0 ? `Cancel and release ${money(heldCents)}` : "Cancel this item"}</button>
+    <button type="button" disabled={busy} onClick={onBack} className="inline-flex w-full justify-center text-[12px] font-medium text-slate-600 hover:underline disabled:opacity-50">Keep the item</button>
+  </div>;
 }
