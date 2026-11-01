@@ -8,23 +8,26 @@
  * 2. Holds in their last week that still wait for their supplier, where the
  *    client saved a payment method, get the renewal notice in the project chat:
  *    once per hold, as one automatic notice per project both people see.
+ * 3. Two days after that notice, from day 25, each such hold is renewed with the
+ *    saved payment method: a new hold first, then the old one is voided (see
+ *    renew.ts). Both people are told what was renewed, by PayPal id.
  *
- * Nothing here moves money. Every run is recorded with what it found.
+ * Renewals move holds, never charges. Every run is recorded with what it found.
  */
 import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { DEMO_ACCOUNTS } from "../accounts/demo";
 import { chatCases, chatMessages } from "../chat/schema";
 import type { Db } from "../db/client";
-import { holdChecks, paypalAuthorizations, projects, renewalNotices } from "../db/schema";
-import { AUTHORIZATION_VALIDITY_DAYS } from "../money/authorization";
+import { holdChecks, paymentOperations, paypalAuthorizations, projects, renewalNotices, savedPaymentMethods } from "../db/schema";
 import { pricingCases } from "../pricing/schema";
 import { renewalNotice, renewalNoticesDue } from "./attention";
+import { holdClock } from "./hold-clock";
 import { itemHoldsView } from "./item-holds-view";
+import { renewalReport, renewDueHolds } from "./renew";
 import type { PayPalPayments } from "./paypal";
 import type { HoldReadback } from "./schema";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const OPEN = ["created", "partially_captured"] as const;
 
 export interface DailyCheckResult {
@@ -35,6 +38,8 @@ export interface DailyCheckResult {
   readbacks: HoldReadback[];
   /** Holds this run announced in a renewal notice. */
   notices: number;
+  /** Holds this run renewed with the client's saved payment method. */
+  renewals: number;
   problems: string[];
 }
 
@@ -75,9 +80,9 @@ export async function runDailyCheck(db: Db, paypal: PayPalPayments, options: { n
 
   // 1. Holds past their 29 days: ask PayPal where each one stands.
   const readbacks: HoldReadback[] = [];
+  const operations = projectIds.length ? await db.select({ id: paymentOperations.id, renewedAt: paymentOperations.renewedAt }).from(paymentOperations).where(inArray(paymentOperations.projectId, projectIds)) : [];
   for (const hold of open) {
-    const expiresAt = hold.expiresAt ?? new Date(hold.createdAt.getTime() + AUTHORIZATION_VALIDITY_DAYS * DAY_MS);
-    if (expiresAt.getTime() <= now.getTime()) readbacks.push(await readBack(db, paypal, hold, problems));
+    if (holdClock(hold, operations).expiresAt.getTime() <= now.getTime()) readbacks.push(await readBack(db, paypal, hold, problems));
   }
 
   // 2. The renewal notice, in each project that still has open holds.
@@ -94,11 +99,11 @@ export async function runDailyCheck(db: Db, paypal: PayPalPayments, options: { n
       // Each hold is announced once: the holds not announced before go into one message, written with their records.
       const messageId = randomUUID();
       notices += await db.transaction(async (tx) => {
-        const recorded = await tx.insert(renewalNotices).values(due.map((line) => ({ authorizationId: line.timing!.holdId, caseId: scope.caseId, messageId })))
+        const recorded = await tx.insert(renewalNotices).values(due.map((line) => ({ authorizationId: line.timing!.holdId, caseId: scope.caseId, messageId, noticedAt: now })))
           .onConflictDoNothing().returning({ authorizationId: renewalNotices.authorizationId });
         const fresh = due.filter((line) => recorded.some((entry) => entry.authorizationId === line.timing!.holdId));
         if (!fresh.length) return 0;
-        const text = renewalNotice({ lines: fresh, client: scope.clientName, designer: designer.name, method: { kind: method.kind, label: method.label } });
+        const text = renewalNotice({ lines: fresh, client: scope.clientName, designer: designer.name, method: { kind: method.kind, label: method.label }, now });
         await tx.insert(chatMessages).values({ caseId: scope.caseId, id: messageId, actor: "assistant", model: "notice", aiState: "completed", text });
         await tx.update(chatCases).set({ updatedAt: new Date() }).where(eq(chatCases.id, scope.caseId));
         return fresh.length;
@@ -108,8 +113,31 @@ export async function runDailyCheck(db: Db, paypal: PayPalPayments, options: { n
     }
   }
 
-  await db.update(holdChecks).set({ finishedAt: new Date(), holds: open.length, readbacks, notices, problems }).where(eq(holdChecks.id, run.id));
-  return { id: run.id, checkedAt: now.toISOString(), holds: open.length, readbacks, notices, problems };
+  // 3. Renewals, two days after their notice.
+  let renewals = 0;
+  for (const scope of scopes) {
+    if (!open.some((hold) => hold.projectId === scope.projectId)) continue;
+    try {
+      const outcomes = await renewDueHolds(db, paypal, { sessionId: scope.sessionId, projectKey: scope.projectKey }, now);
+      renewals += outcomes.filter((outcome) => outcome.fresh && (outcome.status === "renewed" || outcome.status === "old_still_open")).length;
+      for (const outcome of outcomes) {
+        if (outcome.status === "failed" || outcome.status === "unknown") problems.push(`Hold ${outcome.oldAuthorizationId} for ${outcome.itemLabel} was not renewed: ${outcome.message}`);
+        if (outcome.status === "old_still_open") problems.push(`Hold ${outcome.oldAuthorizationId} for ${outcome.itemLabel} was renewed but not released yet: ${outcome.message ?? "PayPal did not confirm the release."}`);
+      }
+      const [method] = await db.select({ kind: savedPaymentMethods.kind, label: savedPaymentMethods.label }).from(savedPaymentMethods)
+        .where(eq(savedPaymentMethods.projectId, scope.projectId)).orderBy(desc(savedPaymentMethods.createdAt)).limit(1);
+      const text = renewalReport(outcomes, { client: scope.clientName, designer: designer.name, method: { kind: method?.kind === "card" ? "card" : "paypal", label: method?.label ?? null } });
+      if (text) {
+        await db.insert(chatMessages).values({ caseId: scope.caseId, id: randomUUID(), actor: "assistant", model: "notice", aiState: "completed", text });
+        await db.update(chatCases).set({ updatedAt: new Date() }).where(eq(chatCases.id, scope.caseId));
+      }
+    } catch (error) {
+      problems.push(`The holds of ${scope.projectKey} could not be renewed: ${error instanceof Error ? error.message : "unknown error"}`);
+    }
+  }
+
+  await db.update(holdChecks).set({ finishedAt: new Date(), holds: open.length, readbacks, notices, renewals, problems }).where(eq(holdChecks.id, run.id));
+  return { id: run.id, checkedAt: now.toISOString(), holds: open.length, readbacks, notices, renewals, problems };
 }
 
 /** The latest finished run that covers this session: its own demo run, or a studio-wide one. */

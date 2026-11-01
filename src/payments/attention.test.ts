@@ -11,7 +11,7 @@ const saved = { kind: "paypal" as const, label: "b•••@personal.example.com
 const item = (patch: Partial<ItemHoldView> = {}): ItemHoldView => ({
   itemId: "willow-armchair", side: "baseline", label: "Lounge armchair", targetCents: 16_204, heldCents: 16_204, capturedCents: 0, state: "held",
   operationId: "hold", approvalUrl: null, canCheck: false, canCancel: false, canCancelItem: true, cancellation: null, canCheckout: false,
-  paypalAuthorizationId: "AUTH", expiresAt: timing.expiresAt, timing, expiredAt: null, failureMessage: null, vendor: "Alder Row Furniture",
+  paypalAuthorizationId: "AUTH", expiresAt: timing.expiresAt, timing, expiredAt: null, renewal: null, failureMessage: null, vendor: "Alder Row Furniture",
   terms: null, supplier: null, ...patch,
 });
 const view = (items: ItemHoldView[], patch: Partial<ItemHoldsView> = {}): ItemHoldsView => ({
@@ -43,13 +43,21 @@ describe("what needs the designer today", () => {
 
   it("warns a week before the 29 days run out, and says what happens next", () => {
     expect(one(item(), at(21.9))[0].kind).toBe("honor_lapsed");
-    expect(one(item(), at(22))[0]).toMatchObject({ kind: "expiring", urgency: "soon", title: "Lounge armchair · hold expires Nov 30", detail: expect.stringMatching(/A new hold can replace it with the client's saved payment method, without asking the client again\./) });
+    expect(one(item(), at(22))[0]).toMatchObject({ kind: "expiring", urgency: "soon", title: "Lounge armchair · hold expires Nov 30", detail: expect.stringMatching(/Setti renews it on Nov 26 with the client's saved payment method\./) });
     expect(one(item(), at(22), { savedMethod: null, savedPayPal: false })[0]).toMatchObject({ kind: "expiring", urgency: "now", detail: expect.stringMatching(/the client has to approve a new hold/) });
   });
 
   it("flags a hold that expired, whether or not the ledger has caught up", () => {
     expect(one(item(), at(29))[0]).toMatchObject({ kind: "expired", urgency: "now", detail: expect.stringMatching(/ended on Nov 30/) });
     expect(one(item({ state: "to_hold", heldCents: 0, timing: null, expiredAt: at(29).toISOString() }), at(30))[0]).toMatchObject({ kind: "expired", detail: expect.stringMatching(/lapsed on Nov 30/) });
+  });
+
+  it("says so when Setti could not renew a hold", () => {
+    const failed = item({ renewal: { message: "PayPal refused the saved payment method.", at: at(25).toISOString() } });
+    expect(one(failed, at(25.1))[0]).toMatchObject({
+      kind: "renewal_failed", urgency: "now", title: "Lounge armchair · renewal failed",
+      detail: "Setti could not renew the hold: PayPal refused the saved payment method. The current hold still ends Nov 30. Ask the client to approve a new hold, or cancel the item.",
+    });
   });
 
   it("puts open and failed PayPal steps first", () => {
@@ -71,13 +79,13 @@ describe("what needs the designer today", () => {
     expect(renewalNoticesDue(view(lines), at(22)).map((line) => line.itemId)).toEqual(["willow-armchair"]);
     expect(renewalNoticesDue(view(lines), at(29))).toEqual([]);
     expect(renewalNoticesDue(view(lines, { savedMethod: null, savedPayPal: false }), at(23))).toEqual([]);
-    expect(renewalNotice({ lines: [item()], client: "Sofia Martinez", designer: "Jordan Lee", method: { kind: "card", label: "Visa •••• 0026" } }))
+    expect(renewalNotice({ lines: [item()], client: "Sofia Martinez", designer: "Jordan Lee", method: { kind: "card", label: "Visa •••• 0026" }, now: at(22) }))
       .toBe("Heads-up for Sofia and Jordan: the $162.04 hold for Lounge armchair ends Nov 30, because PayPal holds last 29 days, and Alder Row Furniture hasn't confirmed the order yet. On Nov 26 Setti will replace it with a new hold of the same amount on Sofia's saved card (Visa •••• 0026), so nothing is charged and Sofia doesn't need to do anything. If the project or this item has stopped, Jordan can cancel the hold before then.");
   });
 
   it("puts a project's holds that came due together into one notice", () => {
     const lines = Array.from({ length: 10 }, (_, index) => item({ itemId: `item-${index}`, label: `Item ${index + 1}`, heldCents: 1_000 }));
-    const text = renewalNotice({ lines, client: "Sofia Martinez", designer: "Jordan Lee", method: { kind: "paypal", label: "b•••@personal.example.com" } });
+    const text = renewalNotice({ lines, client: "Sofia Martinez", designer: "Jordan Lee", method: { kind: "paypal", label: "b•••@personal.example.com" }, now: at(22) });
     expect(text.split("\n")).toEqual([
       "Heads-up for Sofia and Jordan: 10 holds end Nov 30, because PayPal holds last 29 days, and their suppliers haven't confirmed the orders yet:",
       ...Array.from({ length: 8 }, (_, index) => `• Item ${index + 1} · $10.00`),

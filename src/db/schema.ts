@@ -15,6 +15,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
@@ -236,6 +237,10 @@ export const paymentOperations = pgTable(
     servicesHold: boolean("services_hold").notNull().default(false),
     /** A hold placed with the project's saved PayPal: no checkout, no buyer on PayPal. */
     savedMethodId: uuid("saved_method_id").references((): AnyPgColumn => savedPaymentMethods.id),
+    /** A renewal: this saved-method hold replaces that older hold of the same item, which is voided once this one is in place. */
+    replacesAuthorizationId: uuid("replaces_authorization_id").references((): AnyPgColumn => paypalAuthorizations.id),
+    /** The clock of the run that renewed the hold: the new hold's days count from it (a run may check ahead of real time). */
+    renewedAt: timestamp("renewed_at", { withTimezone: true }),
     requestId: text("request_id").notNull().unique(),
     attempts: integer("attempts").notNull().default(0),
     /** PayPal order created for an authorization, and the buyer approval link it returned. */
@@ -256,6 +261,10 @@ export const paymentOperations = pgTable(
     check("payment_operations_authorize_is_bound", sql`${t.kind} <> 'authorize' OR ${t.revisionId} IS NOT NULL`),
     check("payment_operations_save_on_checkout", sql`NOT ${t.savePaymentMethod} OR (${t.kind} = 'authorize' AND ${t.savedMethodId} IS NULL)`),
     check("payment_operations_saved_method_holds", sql`${t.savedMethodId} IS NULL OR ${t.kind} = 'authorize'`),
+    check("payment_operations_renewal_is_saved_hold", sql`${t.replacesAuthorizationId} IS NULL OR (${t.kind} = 'authorize' AND ${t.savedMethodId} IS NOT NULL)`),
+    check("payment_operations_renewal_clock", sql`(${t.replacesAuthorizationId} IS NULL) = (${t.renewedAt} IS NULL)`),
+    // One renewal of a hold at a time; a failed attempt may be tried again.
+    uniqueIndex("payment_operations_one_renewal").on(t.replacesAuthorizationId).where(sql`${t.replacesAuthorizationId} IS NOT NULL AND ${t.status} <> 'failed'`),
     check("payment_operations_services_hold", sql`NOT ${t.servicesHold} OR (${t.kind} = 'authorize' AND ${t.itemId} IS NULL AND ${t.savedMethodId} IS NULL AND ${t.revisionId} IS NOT NULL)`),
     check(
       "payment_operations_binding_complete",

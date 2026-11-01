@@ -13,7 +13,7 @@
 import type { CaseKey } from "../chat/types";
 import type { ItemHoldView, ItemHoldsView } from "./item-holds-view";
 
-export type AttentionKind = "payment_unknown" | "hold_failed" | "expired" | "capture_ready" | "expiring" | "honor_lapsed" | "supplier_unconfirmed";
+export type AttentionKind = "payment_unknown" | "hold_failed" | "renewal_failed" | "expired" | "capture_ready" | "expiring" | "honor_lapsed" | "supplier_unconfirmed";
 
 export interface AttentionItem {
   /** Stable per project, item and kind. */
@@ -37,7 +37,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** A week before a hold expires, Setti starts saying so. */
 export const EXPIRY_NOTICE_DAYS = 7;
 
-const ORDER: AttentionKind[] = ["payment_unknown", "hold_failed", "expired", "capture_ready", "expiring", "honor_lapsed", "supplier_unconfirmed"];
+const ORDER: AttentionKind[] = ["payment_unknown", "hold_failed", "renewal_failed", "expired", "capture_ready", "expiring", "honor_lapsed", "supplier_unconfirmed"];
 
 const day = (value: Date) => value.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
 
@@ -57,6 +57,9 @@ function reminder(view: ItemHoldsView, line: ItemHoldView, now: Date): Pick<Atte
     return { kind: "expired", title: `${line.label} · the hold expired`, detail: `It lapsed on ${day(new Date(line.expiredAt))}, so nothing is held for it. Hold it again, or cancel the item.`, urgency: "now" };
   }
   if ((line.state !== "held" && line.state !== "confirmed") || !line.timing) return null;
+  if (line.renewal) {
+    return { kind: "renewal_failed", title: `${line.label} · renewal failed`, detail: `Setti could not renew the hold: ${line.renewal.message} The current hold still ends ${day(new Date(line.timing.expiresAt))}. Ask the client to approve a new hold, or cancel the item.`, urgency: "now" };
+  }
 
   const authorizedAt = new Date(line.timing.authorizedAt), honorEndsAt = new Date(line.timing.honorEndsAt), expiresAt = new Date(line.timing.expiresAt);
   const elapsed = now.getTime() - authorizedAt.getTime();
@@ -64,9 +67,8 @@ function reminder(view: ItemHoldsView, line: ItemHoldView, now: Date): Pick<Atte
     return { kind: "expired", title: `${line.label} · the hold expired`, detail: `Its 29 days ended on ${day(expiresAt)}. Check PayPal, then hold it again or cancel the item.`, urgency: "now" };
   }
   const expiring = now.getTime() >= expiresAt.getTime() - EXPIRY_NOTICE_DAYS * DAY_MS;
-  // Renewing it is a new hold of the same amount: with a saved method the client need not approve it again.
   const renewal = view.savedMethod
-    ? `A new hold can replace it with the client's saved payment method, without asking the client again.`
+    ? `Setti renews it on ${day(new Date(authorizedAt.getTime() + RENEWAL_DAY * DAY_MS))} with the client's saved payment method.`
     : "No payment method is saved, so the client has to approve a new hold.";
   if (line.state === "confirmed") {
     const assured = now.getTime() < honorEndsAt.getTime();
@@ -103,6 +105,8 @@ export function sortAttention(items: AttentionItem[]): AttentionItem[] {
 
 /** The day Setti replaces a hold still waiting for its supplier, with the client's saved payment method. */
 export const RENEWAL_DAY = 25;
+/** The renewal waits at least this long after its notice. */
+export const NOTICE_LEAD_DAYS = 2;
 
 /**
  * The items whose hold gets the renewal notice at `now`: held, the supplier has
@@ -128,10 +132,12 @@ const LISTED = 8;
  * renewed, so it says how to stop it. One notice covers every hold of the
  * project that came due together.
  */
-export function renewalNotice(input: { lines: ItemHoldView[]; client: string; designer: string; method: { kind: "paypal" | "card"; label: string | null } }): string {
+export function renewalNotice(input: { lines: ItemHoldView[]; client: string; designer: string; method: { kind: "paypal" | "card"; label: string | null }; now: Date }): string {
   const client = input.client.split(" ")[0], designer = input.designer.split(" ")[0];
   const method = input.method.kind === "card" ? `saved card${input.method.label ? ` (${input.method.label})` : ""}` : "saved PayPal";
-  const entries = input.lines.map((line) => ({ line, ends: day(new Date(line.timing!.expiresAt)), renew: day(new Date(new Date(line.timing!.authorizedAt).getTime() + RENEWAL_DAY * DAY_MS)) }));
+  // Day 25, or two days after this notice if it comes late: the notice always leaves that long to stop it.
+  const renewOn = (line: ItemHoldView) => new Date(Math.max(new Date(line.timing!.authorizedAt).getTime() + RENEWAL_DAY * DAY_MS, input.now.getTime() + NOTICE_LEAD_DAYS * DAY_MS));
+  const entries = input.lines.map((line) => ({ line, ends: day(new Date(line.timing!.expiresAt)), renew: day(renewOn(line)) }));
   if (entries.length === 1) {
     const [{ line, ends, renew }] = entries;
     return `Heads-up for ${client} and ${designer}: the ${usd(line.heldCents)} hold for ${line.label} ends ${ends}, because PayPal holds last 29 days, and ${line.vendor ?? "the supplier"} hasn't confirmed the order yet. `

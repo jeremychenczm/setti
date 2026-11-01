@@ -56,6 +56,9 @@ export interface OperationRequest {
   savedMethodId?: string | null;
   /** The one checkout that holds every approved design service; its split is written separately. */
   servicesHold?: boolean;
+  /** A renewal: the older hold of the same item this saved-method hold replaces, and the clock the renewal ran against. */
+  replacesAuthorizationId?: string | null;
+  renewedAt?: Date | null;
 }
 
 /** A new operation id and the request id every attempt of it sends to PayPal. */
@@ -78,7 +81,7 @@ function sameRequest(operation: PaymentOperation, request: OperationRequest): Pa
     && operation.contentHash === (binding?.contentHash ?? null) && operation.revisionContentHash === (binding?.revisionContentHash ?? null)
     && operation.itemId === (binding?.itemId ?? null) && operation.supplierEventId === (request.supplierEventId ?? null)
     && operation.savePaymentMethod === (request.savePaymentMethod ?? false) && operation.savedMethodId === (request.savedMethodId ?? null)
-    && operation.servicesHold === (request.servicesHold ?? false);
+    && operation.servicesHold === (request.servicesHold ?? false) && operation.replacesAuthorizationId === (request.replacesAuthorizationId ?? null);
   if (!same) throw new PaymentOperationError("IDEMPOTENCY_CONFLICT", "This business event already has a payment operation with different details.");
   return operation;
 }
@@ -113,6 +116,8 @@ export async function insertOperation(db: Writer, request: OperationRequest): Pr
       savePaymentMethod: request.savePaymentMethod ?? false,
       savedMethodId: request.savedMethodId ?? null,
       servicesHold: request.servicesHold ?? false,
+      replacesAuthorizationId: request.replacesAuthorizationId ?? null,
+      renewedAt: request.renewedAt ?? null,
     }).onConflictDoNothing({ target: paymentOperations.businessKey }).returning();
   } catch (error) {
     throw new PaymentOperationError("OPERATION_REFUSED", databaseMessage(error));

@@ -61,10 +61,10 @@ describe.skipIf(!testDatabaseUrl)("the designer's reminders from recorded holds"
     expect(after.find((entry) => entry.itemId === DESK)).toMatchObject({ kind: "capture_ready" });
   });
 
-  it("warns before the holds expire and says the saved method can replace them", async () => {
+  it("warns before the holds expire and says Setti renews them with the saved method", async () => {
     const soon = await reminders(23);
     expect(soon.length).toBe(21);
-    expect(soon.every((entry) => entry.kind === "expiring" && /replace it with the client's saved payment method/.test(entry.detail))).toBe(true);
+    expect(soon.every((entry) => entry.kind === "expiring" && /Setti renews it on .+ with the client's saved payment method/.test(entry.detail))).toBe(true);
   });
 
   it("shows the client nothing: these are the studio's reminders", async () => {

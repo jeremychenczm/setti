@@ -8,9 +8,10 @@ import type { DemoAccount } from "../accounts/demo";
 import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
 import { items, revisionLines } from "../db/schema";
-import { AUTHORIZATION_VALIDITY_DAYS, HONOR_PERIOD_DAYS } from "../money/authorization";
+import { HONOR_PERIOD_DAYS } from "../money/authorization";
 import { PaymentActionError } from "./binding";
 import { CANCELLATION_REASON_TEXT } from "./cancellation";
+import { holdClock } from "./hold-clock";
 import { activeSavedMethod, savedMethodView, type SavedMethodView } from "./saved-methods";
 import { lockPaymentBasis } from "./services";
 import type { CheckoutView, DemoCheckout, ItemCancellationView } from "./types";
@@ -46,6 +47,8 @@ export interface ItemHoldView {
   timing: { holdId: string; authorizedAt: string; honorEndsAt: string; expiresAt: string } | null;
   /** When the item's last hold expired, if it lapsed and nothing holds the item now. */
   expiredAt: string | null;
+  /** Setti's last renewal of the current hold failed; the hold stays as it was until it expires. */
+  renewal: { message: string; at: string } | null;
   failureMessage: string | null;
   /** Who supplies the item. */
   vendor: string | null;
@@ -111,9 +114,12 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
     const businessId = basis.businessItem(line);
     const manualReview = manualReviews.find((operation) => operation.itemId === businessId);
     const cancelled = ledger.cancellations.find((entry) => entry.itemId === businessId);
+    // Renewals of this item's holds: an unsettled one is checked like any hold; a failed one is reported.
+    const renewals = ledger.operations.filter((operation) => operation.replacesAuthorizationId && operation.itemId === businessId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const renewalOpen = renewals.find((operation) => operation.status === "unknown" || operation.status === "pending");
     if (!businessId || kinds.get(businessId) !== "furniture" || (line.targetCents === 0 && !manualReview && !cancelled)) return [];
     const latest = ledger.operations.filter((operation) => operation.kind === "authorize" && operation.itemId === businessId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
-    const displayedOperation = manualReview ?? latest;
+    const displayedOperation = manualReview ?? renewalOpen ?? latest;
     const open = ledger.authorizations.filter((entry) => entry.itemId === businessId && (entry.status === "created" || entry.status === "partially_captured"));
     const live = open.filter((entry) => !(entry.expiresAt && entry.expiresAt.getTime() <= now)).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     const hold = live[0];
@@ -121,7 +127,7 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
     const lapsed = live.length ? undefined : open.filter((entry) => entry.expiresAt).sort((a, b) => b.expiresAt!.getTime() - a.expiresAt!.getTime())[0];
     const funded = line.heldCents + line.capturedCents - line.refundedCents;
     const event = ledger.supplierEvents.find((entry) => entry.kind === "order_confirmed" && entry.itemId === businessId && (basis.orderId ? entry.changeOrderId === basis.orderId : entry.revisionId === basis.key));
-    const state = manualReview ? "unknown"
+    const state = manualReview || renewalOpen?.status === "unknown" ? "unknown"
       : cancelled ? "cancelled"
       : line.capturedCents - line.refundedCents >= line.targetCents ? "captured"
       : funded >= line.targetCents && event ? "confirmed"
@@ -143,13 +149,18 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
       cancellation: cancelled ? cancellationView(cancelled) : null,
       canCheckout: false,
       paypalAuthorizationId: hold?.paypalAuthorizationId ?? null, expiresAt: hold?.expiresAt?.toISOString() ?? null,
-      timing: oldest ? {
-        holdId: oldest.id,
-        authorizedAt: oldest.createdAt.toISOString(),
-        honorEndsAt: new Date(oldest.createdAt.getTime() + HONOR_PERIOD_DAYS * DAY_MS).toISOString(),
-        expiresAt: (oldest.expiresAt ?? new Date(oldest.createdAt.getTime() + AUTHORIZATION_VALIDITY_DAYS * DAY_MS)).toISOString(),
-      } : null,
+      timing: oldest ? (() => {
+        const clock = holdClock(oldest, ledger.operations);
+        return {
+          holdId: oldest.id, authorizedAt: clock.authorizedAt.toISOString(),
+          honorEndsAt: new Date(clock.authorizedAt.getTime() + HONOR_PERIOD_DAYS * DAY_MS).toISOString(), expiresAt: clock.expiresAt.toISOString(),
+        };
+      })() : null,
       expiredAt: !cancelled && lapsed ? lapsed.expiresAt!.toISOString() : null,
+      renewal: (() => {
+        const failed = oldest && renewals.find((operation) => operation.replacesAuthorizationId === oldest.id);
+        return failed?.status === "failed" ? { message: failed.failureMessage ?? "PayPal did not place the new hold.", at: failed.updatedAt.toISOString() } : null;
+      })(),
       failureMessage: ["failed", "awaiting_client", "unknown"].includes(state) ? displayedOperation?.failureMessage ?? null : null,
       vendor: vendors.get(businessId) ?? null,
       terms: v1Terms.get(businessId) ?? null,

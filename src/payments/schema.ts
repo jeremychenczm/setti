@@ -133,6 +133,8 @@ export const holdChecks = pgTable("hold_checks", {
   holds: integer("holds").notNull().default(0),
   readbacks: jsonb("readbacks").$type<HoldReadback[]>().notNull().default([]),
   notices: integer("notices").notNull().default(0),
+  /** Holds this run renewed with the client's saved payment method. */
+  renewals: integer("renewals").notNull().default(0),
   /** What the run could not check or settle; empty when everything was checked. */
   problems: jsonb("problems").$type<string[]>().notNull().default([]),
 }, (t) => [
@@ -148,6 +150,8 @@ export const renewalNotices = pgTable("renewal_notices", {
   authorizationId: uuid("authorization_id").primaryKey().references(() => paypalAuthorizations.id),
   caseId: uuid("case_id").notNull(),
   messageId: uuid("message_id").notNull(),
+  /** The clock of the run that gave the notice; the renewal waits until two days after it. */
+  noticedAt: timestamp("noticed_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
