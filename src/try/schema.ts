@@ -4,7 +4,7 @@ import { changeOrders } from "../pricing/schema";
 
 export type TrySeedStatus = "seeding" | "ready" | "failed";
 export type TryStageId = "quote" | "chair_hold" | "rug_hold" | "supplier" | "rug_capture" | "fees"
-  | "design_services" | "sofa_hold" | "coffee_table_hold" | "dining_table_hold" | "dining_chairs_hold" | "sideboard_hold" | "sideboard_supplier" | "sideboard_capture" | "discussion";
+  | "starting_payments" | "design_services" | "sofa_hold" | "coffee_table_hold" | "dining_table_hold" | "dining_chairs_hold" | "sideboard_hold" | "sideboard_supplier" | "sideboard_capture" | "discussion";
 export interface TryStage {
   id: TryStageId;
   label: string;

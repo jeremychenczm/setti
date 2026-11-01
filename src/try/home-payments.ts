@@ -52,6 +52,37 @@ export async function prepareHomeServices(deps: TryDeps, session: string): Promi
   return [checkout.id, ...ledger.operations.filter((entry) => entry.kind === "capture" && entry.authorizationId === hold!.id).map((entry) => entry.id)];
 }
 
+/**
+ * The V1 starting payments that do not depend on each other run at the same
+ * time: the design fee and each furniture hold. Their operations are recorded
+ * together first, from one payment plan, because an operation still open makes
+ * the plan wait; each then runs, or resumes, on its own original operation.
+ */
+export async function prepareHomeStartingPayments(deps: TryDeps, session: string, itemIds: string[]): Promise<string[]> {
+  await deps.db.transaction(async (tx) => {
+    const basis = await lockPaymentBasis(tx, session, "maple");
+    if (basis.version !== 1) throw new MaplePreparationError("The V1 starting payments cannot be added to a later agreement.", false);
+    if (basis.ledger.operations.some((entry) => entry.kind === "authorize" && entry.revisionId === basis.key)) return;
+    if (basis.plan.status === "blocked") throw new MaplePreparationError("The original V1 payment plan has unresolved operations.");
+    const design = basis.plan.actions.find((entry) => entry.itemId === "design" && entry.kind === "capture" && entry.timing === "on_payment_execution");
+    const designItem = design && basis.businessItem(design);
+    if (!design || !designItem) throw new MaplePreparationError("The V1 design service has no payment to prepare.", false);
+    const services = await insertOperation(tx, { businessKey: `try-v1-services:${basis.key}`, projectId: basis.projectId, kind: "authorize", amountCents: design.amountCents, binding: basis.bind(null), servicesHold: true, savePaymentMethod: true });
+    await tx.insert(servicesHoldLines).values({ operationId: services.id, itemId: designItem, amountCents: design.amountCents });
+    for (const itemId of itemIds) {
+      const action = basis.plan.actions.find((entry) => entry.kind === "new_authorization" && entry.itemId === itemId && entry.side === "baseline");
+      const business = action && basis.businessItem(action);
+      if (!action || !business) throw new MaplePreparationError("The V1 furniture line has no authorization to prepare.", false);
+      await insertOperation(tx, { businessKey: `try-v1-hold:${basis.key}:${business}`, projectId: basis.projectId, kind: "authorize", amountCents: action.amountCents, binding: basis.bind(business) });
+    }
+  });
+  // Every payment finishes or stops before the stage reports, so a resumed stage never races one still running.
+  const settled = await Promise.allSettled([prepareHomeServices(deps, session), ...itemIds.map((itemId) => prepareHomeHold(deps, session, itemId))]);
+  const failure = settled.find((result) => result.status === "rejected");
+  if (failure) throw failure.reason;
+  return settled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+}
+
 async function ownedOperation(db: Db, session: string, itemId: string, kind: "authorize" | "capture") {
   return db.transaction(async (tx) => {
     const version = await lockOpeningVersion(tx, session, "maple", null);

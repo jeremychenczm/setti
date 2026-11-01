@@ -9,7 +9,7 @@ import { refreshRecordedFees } from "../payments/fee-refresh";
 import type { PayPalPayments, TestCardApproval } from "../payments/paypal";
 import { authorizeItem, captureMapleRug, capturePreparedItem, confirmSupplierOrder, ensureMapleQuote, MaplePreparationError, mapleRun } from "./maple";
 import { appendHomeDiscussion, ensureHomeQuote, ensureHomeWorkspace } from "./home";
-import { prepareHomeCapture, prepareHomeHold, prepareHomeServices, prepareHomeSupplier, refreshHomeFees } from "./home-payments";
+import { prepareHomeCapture, prepareHomeHold, prepareHomeServices, prepareHomeStartingPayments, prepareHomeSupplier, refreshHomeFees } from "./home-payments";
 import { trySeeds, type TrySeedStatus, type TryStage } from "./schema";
 
 export const MAPLE_SCENARIO = "maple-mixed-change-v1";
@@ -38,10 +38,13 @@ export type TryPreparation = { kind: "ready" | "progress" | "busy" | "failed"; s
 function stages(scenario: string = MAPLE_SCENARIO): TryStage[] {
   const definitions = isHomeScenario(scenario) ? [
     ["quote", "Import the prepared $7,730 living-and-dining agreement"],
-    ...(scenario === HOME_SCENARIO ? [["design_services", "Record the $1,000 design fee paid under V1"]] : []),
-    ["sofa_hold", "Place the $2,400 sofa hold"], ["coffee_table_hold", "Place the $650 coffee table hold"],
-    ["dining_table_hold", "Place the $1,400 dining table hold"], ["dining_chairs_hold", "Place the $1,080 hold for six dining chairs"],
-    ["sideboard_hold", "Place the $1,200 sideboard hold"], ["sideboard_supplier", "Record the sideboard supplier confirmation (demo)"],
+    // V1 pays the design fee and places all five holds at once; the older V2 story keeps one stage per hold.
+    ...(scenario === HOME_SCENARIO ? [["starting_payments", "Pay the $1,000 design fee and place the five furniture holds ($6,730)"]] : [
+      ["sofa_hold", "Place the $2,400 sofa hold"], ["coffee_table_hold", "Place the $650 coffee table hold"],
+      ["dining_table_hold", "Place the $1,400 dining table hold"], ["dining_chairs_hold", "Place the $1,080 hold for six dining chairs"],
+      ["sideboard_hold", "Place the $1,200 sideboard hold"],
+    ]),
+    ["sideboard_supplier", "Record the sideboard supplier confirmation (demo)"],
     ["sideboard_capture", "Capture the $1,200 sideboard payment"], ["fees", "Read the PayPal payment evidence"],
     ["discussion", "Save the living-and-dining discussion and demo supplier notes"],
   ] : [
@@ -152,7 +155,9 @@ export async function prepareTry(deps: TryDeps, session: string, runId: string):
     if (v1) {
       await ensureHomeWorkspace(deps.db, session);
       const heldItem = homeHeldItems[stage.id];
-      if (heldItem) preparedOperations = await prepareHomeHold(deps, session, heldItem);
+      if (stage.id === "starting_payments") preparedOperations = await prepareHomeStartingPayments(deps, session, Object.values(homeHeldItems));
+      // Runs saved before the starting payments ran together keep their one-hold stages.
+      else if (heldItem) preparedOperations = await prepareHomeHold(deps, session, heldItem);
       else if (stage.id === "design_services") preparedOperations = await prepareHomeServices(deps, session);
       else if (stage.id === "sideboard_supplier") await prepareHomeSupplier(deps.db, session);
       else if (stage.id === "sideboard_capture") preparedOperations = await prepareHomeCapture(deps, session);

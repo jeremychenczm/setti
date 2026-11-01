@@ -48,6 +48,8 @@ describe.skipIf(!testDatabaseUrl)("instant living-and-dining V1 workspace", () =
     const run = await start();
     expect(run.seed).toMatchObject({ status: "seeding", workspaceReady: true, baselineQuoteVersion: 1, scenarioVersion: 3, changeOrderId: null });
     expect(run.seed.stages.filter((stage) => stage.status === "done").map((stage) => stage.id)).toEqual(["quote", "discussion"]);
+    // The design fee and the five holds do not depend on each other, so they run as one stage.
+    expect(run.seed.stages.map((stage) => stage.id)).toEqual(["quote", "starting_payments", "sideboard_supplier", "sideboard_capture", "fees", "discussion"]);
     expect(paypal.calls).toHaveLength(0);
     const chat = await createChatStore(handle.db).getCase(run.session, "maple");
     expect(chat.quote).toEqual(HOME_APPROVED_QUOTE);
@@ -66,6 +68,7 @@ describe.skipIf(!testDatabaseUrl)("instant living-and-dining V1 workspace", () =
   it("prepares the paid V1 design fee, five furniture holds and the sideboard capture", async () => {
     const run = await start(), ready = await finish(run.session);
     expect(ready).toMatchObject({ status: "ready", workspaceReady: true, baselineQuoteVersion: 1, changeOrderId: null });
+    expect(ready.stages.find((stage) => stage.id === "starting_payments")?.operationIds).toHaveLength(7);
     const [bridge] = await handle.db.select().from(pricingCases);
     const ledger = await readLedger(handle.db, bridge.projectId);
     expect(ledger.authorizations).toHaveLength(6);
@@ -139,7 +142,7 @@ describe.skipIf(!testDatabaseUrl)("instant living-and-dining V1 workspace", () =
     await finish(run.session);
     const calls = paypal.calls.length;
     const [seed] = await handle.db.select().from(trySeeds).where(eq(trySeeds.sessionId, run.session));
-    await handle.db.update(trySeeds).set({ status: "seeding", stages: seed.stages.map((stage) => ["design_services", "sofa_hold"].includes(stage.id) ? { ...stage, status: "pending" as const } : stage) }).where(eq(trySeeds.sessionId, run.session));
+    await handle.db.update(trySeeds).set({ status: "seeding", stages: seed.stages.map((stage) => stage.id === "starting_payments" ? { ...stage, status: "pending" as const } : stage) }).where(eq(trySeeds.sessionId, run.session));
     await finish(run.session);
     expect(paypal.calls).toHaveLength(calls);
     const operations = await handle.db.select().from(paymentOperations);
