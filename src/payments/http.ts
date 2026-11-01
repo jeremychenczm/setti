@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { paymentPreparationPending, PREPARATION_MESSAGE } from "../try/preparation";
 import { z } from "zod";
@@ -13,6 +14,7 @@ import { cancelCheckout, completeAuthorization } from "./authorize";
 import { PaymentActionError } from "./binding";
 import { attentionView } from "./attention-view";
 import { cancelApprovedItem } from "./cancel-item";
+import { runDailyCheck } from "./daily-check";
 import { CANCELLATION_REASONS } from "./cancellation";
 import { PaymentOperationError } from "./operations";
 import { sandboxPayPal, sandboxTestCard } from "./server";
@@ -413,6 +415,20 @@ export async function getAttentionResponse(req: NextRequest) {
   const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
   if (account?.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "Only the designer sees the studio's reminders." }, { status: 403, headers });
   try { return refreshDemoCookies(NextResponse.json(await attentionView(db(), session(req), account), { headers }), req); }
+  catch (error) { return fail(error); }
+}
+
+/**
+ * The daily check, called once a day by the host's scheduler with the job secret
+ * (SETTI_JOB_SECRET). Without the secret configured, the endpoint stays closed.
+ */
+export async function postDailyCheckResponse(req: NextRequest) {
+  const secret = process.env.SETTI_JOB_SECRET?.trim();
+  if (!secret) return NextResponse.json({ code: "NOT_CONFIGURED", error: "The daily check is not configured on this server." }, { status: 503, headers });
+  const given = Buffer.from(req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "");
+  const expected = Buffer.from(secret);
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return NextResponse.json({ code: "FORBIDDEN", error: "The job secret is missing or wrong." }, { status: 401, headers });
+  try { return NextResponse.json(await runDailyCheck(db(), sandboxPayPal()), { headers }); }
   catch (error) { return fail(error); }
 }
 

@@ -3,13 +3,13 @@ import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PaymentActionError } from "./binding";
 import { callbackState } from "./callback-state";
-import { getAttentionResponse, getItemHoldsResponse, getPaymentsResponse, getServicesPaymentResponse, paypalRedirectResponse, postItemHoldsResponse, postPaymentsResponse, postServicesPaymentResponse } from "./http";
+import { getAttentionResponse, getItemHoldsResponse, postDailyCheckResponse, getPaymentsResponse, getServicesPaymentResponse, paypalRedirectResponse, postItemHoldsResponse, postPaymentsResponse, postServicesPaymentResponse } from "./http";
 
 const mock = vi.hoisted(() => ({
   startAuthorization: vi.fn(), startCapture: vi.fn(), startRelease: vi.fn(), startRefund: vi.fn(), checkPayment: vi.fn(), cancelPayment: vi.fn(),
   returnFromPayPal: vi.fn(), operationPage: vi.fn(), paymentsWorkspace: vi.fn(), recordSupplierOrder: vi.fn(), recordSupplierCredit: vi.fn(),
   startServicesCheckout: vi.fn(), checkServicesCheckout: vi.fn(), chargeServices: vi.fn(), lockPaymentBasis: vi.fn(), servicesPaymentView: vi.fn(), completeAuthorization: vi.fn(), cancelCheckout: vi.fn(),
-  holdApprovedItems: vi.fn(), checkItemHold: vi.fn(), cancelItemHold: vi.fn(), itemHoldsView: vi.fn(), cancelApprovedItem: vi.fn(), attentionView: vi.fn(),
+  holdApprovedItems: vi.fn(), checkItemHold: vi.fn(), cancelItemHold: vi.fn(), itemHoldsView: vi.fn(), cancelApprovedItem: vi.fn(), attentionView: vi.fn(), runDailyCheck: vi.fn(),
   paymentPreparationPending: vi.fn(),
   db: { transaction: (work: (tx: object) => unknown) => work({}) },
 }));
@@ -25,6 +25,7 @@ vi.mock("./item-holds", () => ({ holdApprovedItems: mock.holdApprovedItems, chec
 vi.mock("./item-holds-view", () => ({ itemHoldsView: mock.itemHoldsView }));
 vi.mock("./cancel-item", () => ({ cancelApprovedItem: mock.cancelApprovedItem }));
 vi.mock("./attention-view", () => ({ attentionView: mock.attentionView }));
+vi.mock("./daily-check", () => ({ runDailyCheck: mock.runDailyCheck }));
 vi.mock("./authorize", () => ({ completeAuthorization: mock.completeAuthorization, cancelCheckout: mock.cancelCheckout }));
 vi.mock("./server", () => ({ sandboxPayPal: () => ({}) }));
 vi.mock("../try/preparation", () => ({ paymentPreparationPending: mock.paymentPreparationPending, PREPARATION_MESSAGE: "The starting payments are being prepared." }));
@@ -366,5 +367,23 @@ describe("studio reminders HTTP boundary", () => {
     const response = await getAttentionResponse(get("jordan"));
     expect(await response.json()).toEqual({ items: [], checkedAt: "2026-11-01T00:00:00.000Z" });
     expect(mock.attentionView).toHaveBeenCalledWith(mock.db, sessionId, expect.objectContaining({ id: "jordan" }));
+  });
+});
+
+describe("daily check HTTP boundary", () => {
+  const call = (secret?: string) => new NextRequest(`${origin}/api/jobs/daily-check`, { method: "POST", headers: secret === undefined ? {} : { Authorization: `Bearer ${secret}` } });
+  beforeEach(() => { vi.clearAllMocks(); mock.runDailyCheck.mockResolvedValue({ id: "run", holds: 0, notices: 0, readbacks: [], problems: [] }); });
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("stays closed without a configured secret and refuses a wrong one", async () => {
+    vi.stubEnv("SETTI_JOB_SECRET", "");
+    expect((await postDailyCheckResponse(call("anything"))).status).toBe(503);
+    vi.stubEnv("SETTI_JOB_SECRET", "job-secret-for-tests");
+    for (const secret of [undefined, "", "job-secret-for-test", "job-secret-for-tests-x"]) expect((await postDailyCheckResponse(call(secret))).status).toBe(401);
+    expect(mock.runDailyCheck).not.toHaveBeenCalled();
+    const response = await postDailyCheckResponse(call("job-secret-for-tests"));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ id: "run" });
+    expect(mock.runDailyCheck).toHaveBeenCalledWith(mock.db, {});
   });
 });

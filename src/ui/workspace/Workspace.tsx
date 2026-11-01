@@ -170,7 +170,7 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
       <div className="flex min-h-0 shrink-0 overflow-hidden rounded-xl bg-white shadow-sm">
         <Sidebar view={view} onView={showView} account={account} onSwitchAccount={switchAccount} badges={{ chats: attention.view?.items.length ?? 0 }} />
         {view === "chats" && <div className="hidden min-h-0 border-l border-[var(--line)] lg:flex"><ConversationList projects={conversations} activeId={preparedProject?.id ?? activeId} onOpen={open}
-          top={account.role === "designer" ? <NeedsYouToday items={attention.view?.items ?? null} error={attention.error} /> : undefined} /></div>}
+          top={account.role === "designer" ? <NeedsYouToday items={attention.view?.items ?? null} error={attention.error} lastCheck={attention.view?.lastCheck ?? null} /> : undefined} /></div>}
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">

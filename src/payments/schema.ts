@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
-import { items, paymentOperations, projects, revisions } from "../db/schema";
+import { items, paymentOperations, paypalAuthorizations, projects, revisions } from "../db/schema";
 import { changeOrders } from "../pricing/schema";
 import type { CancellationReason } from "./cancellation";
 
@@ -109,6 +109,47 @@ export const itemCancellations = pgTable("item_cancellations", {
   check("item_cancellations_note", sql`length(${t.note}) <= 1000 AND (${t.reason} <> 'other' OR length(btrim(${t.note})) > 0)`),
   check("item_cancellations_by", sql`length(btrim(${t.cancelledBy})) > 0`),
 ]);
+
+/** What one daily check found for a hold PayPal was asked about. */
+export interface HoldReadback {
+  paypalAuthorizationId: string;
+  outcome: "expired" | "voided" | "still_held" | "captured_elsewhere" | "unreadable";
+  paypalStatus: string | null;
+  debugId: string | null;
+}
+
+/**
+ * One run of the daily check: holds past their 29 days read back from PayPal,
+ * and renewal notices posted to the chats. `checkedAt` is the clock the run
+ * worked against; a demo session's run names its session. Kept as a record.
+ */
+export const holdChecks = pgTable("hold_checks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
+  sessionId: uuid("session_id"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  /** Open item holds the run looked at. */
+  holds: integer("holds").notNull().default(0),
+  readbacks: jsonb("readbacks").$type<HoldReadback[]>().notNull().default([]),
+  notices: integer("notices").notNull().default(0),
+  /** What the run could not check or settle; empty when everything was checked. */
+  problems: jsonb("problems").$type<string[]>().notNull().default([]),
+}, (t) => [
+  check("hold_checks_counts", sql`${t.holds} >= 0 AND ${t.notices} >= 0`),
+]);
+
+/**
+ * Which holds already had their renewal notice, and in which chat message: a
+ * hold is announced once, and one message covers every hold of a project the
+ * same run found due. A record: never changed or deleted.
+ */
+export const renewalNotices = pgTable("renewal_notices", {
+  authorizationId: uuid("authorization_id").primaryKey().references(() => paypalAuthorizations.id),
+  caseId: uuid("case_id").notNull(),
+  messageId: uuid("message_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 /**
  * How a design-services hold is split across the approved service lines it pays

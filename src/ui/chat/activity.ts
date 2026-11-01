@@ -5,6 +5,7 @@ import type { CaseMessage } from "@/chat/types";
  * a supplier confirmation). It answers no one: the assistant's replies, even
  * fixed guidance, always reply to the message that asked.
  */
+/** System records fold into project activity; an automatic notice (`model: "notice"`) stands on its own. */
 export function isActivityRecord(message: CaseMessage): boolean {
   return message.actor === "assistant" && message.model === "system" && !message.replyToMessageId;
 }

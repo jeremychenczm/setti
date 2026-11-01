@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { projectAttention, sortAttention } from "./attention";
+import { projectAttention, renewalNotice, renewalNoticesDue, sortAttention } from "./attention";
 import type { ItemHoldView, ItemHoldsView } from "./item-holds-view";
 
 const DAY = 24 * 60 * 60 * 1000;
 const authorizedAt = new Date("2026-11-01T18:00:00.000Z");
 const at = (days: number) => new Date(authorizedAt.getTime() + days * DAY);
-const timing = { authorizedAt: authorizedAt.toISOString(), honorEndsAt: at(3).toISOString(), expiresAt: at(29).toISOString() };
+const timing = { holdId: "hold-armchair", authorizedAt: authorizedAt.toISOString(), honorEndsAt: at(3).toISOString(), expiresAt: at(29).toISOString() };
 const saved = { kind: "paypal" as const, label: "b•••@personal.example.com", savedAt: authorizedAt.toISOString() };
 
 const item = (patch: Partial<ItemHoldView> = {}): ItemHoldView => ({
@@ -63,6 +63,27 @@ describe("what needs the designer today", () => {
 
   it("links a later version's items to that version's payments page", () => {
     expect(one(item(), at(1), { basis: { version: 2, orderId: "order-2" } })[0].href).toBe("/change-orders/order-2#payment-line-baseline-willow-armchair");
+  });
+
+  it("gives the renewal notice only to unconfirmed holds in their last week, with a saved method", () => {
+    const lines = [item(), item({ itemId: "desk", state: "confirmed" }), item({ itemId: "rug", state: "cancelled" })];
+    expect(renewalNoticesDue(view(lines), at(21.9))).toEqual([]);
+    expect(renewalNoticesDue(view(lines), at(22)).map((line) => line.itemId)).toEqual(["willow-armchair"]);
+    expect(renewalNoticesDue(view(lines), at(29))).toEqual([]);
+    expect(renewalNoticesDue(view(lines, { savedMethod: null, savedPayPal: false }), at(23))).toEqual([]);
+    expect(renewalNotice({ lines: [item()], client: "Sofia Martinez", designer: "Jordan Lee", method: { kind: "card", label: "Visa •••• 0026" } }))
+      .toBe("Heads-up for Sofia and Jordan: the $162.04 hold for Lounge armchair ends Nov 30, because PayPal holds last 29 days, and Alder Row Furniture hasn't confirmed the order yet. On Nov 26 Setti will replace it with a new hold of the same amount on Sofia's saved card (Visa •••• 0026), so nothing is charged and Sofia doesn't need to do anything. If the project or this item has stopped, Jordan can cancel the hold before then.");
+  });
+
+  it("puts a project's holds that came due together into one notice", () => {
+    const lines = Array.from({ length: 10 }, (_, index) => item({ itemId: `item-${index}`, label: `Item ${index + 1}`, heldCents: 1_000 }));
+    const text = renewalNotice({ lines, client: "Sofia Martinez", designer: "Jordan Lee", method: { kind: "paypal", label: "b•••@personal.example.com" } });
+    expect(text.split("\n")).toEqual([
+      "Heads-up for Sofia and Jordan: 10 holds end Nov 30, because PayPal holds last 29 days, and their suppliers haven't confirmed the orders yet:",
+      ...Array.from({ length: 8 }, (_, index) => `• Item ${index + 1} · $10.00`),
+      "• and 2 more: Item 9, Item 10",
+      "On Nov 26 Setti will replace each with a new hold of the same amount on Sofia's saved PayPal ($100.00 in all), so nothing is charged and Sofia doesn't need to do anything. If the project or any of these items has stopped, Jordan can cancel those holds before then.",
+    ]);
   });
 
   it("lists what to do today first", () => {

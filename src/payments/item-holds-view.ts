@@ -43,7 +43,7 @@ export interface ItemHoldView {
    * The clock of the item's oldest open hold, which runs out first: when PayPal
    * authorized it, when its 3-day honor period ends, and when it expires.
    */
-  timing: { authorizedAt: string; honorEndsAt: string; expiresAt: string } | null;
+  timing: { holdId: string; authorizedAt: string; honorEndsAt: string; expiresAt: string } | null;
   /** When the item's last hold expired, if it lapsed and nothing holds the item now. */
   expiredAt: string | null;
   failureMessage: string | null;
@@ -144,6 +144,7 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
       canCheckout: false,
       paypalAuthorizationId: hold?.paypalAuthorizationId ?? null, expiresAt: hold?.expiresAt?.toISOString() ?? null,
       timing: oldest ? {
+        holdId: oldest.id,
         authorizedAt: oldest.createdAt.toISOString(),
         honorEndsAt: new Date(oldest.createdAt.getTime() + HONOR_PERIOD_DAYS * DAY_MS).toISOString(),
         expiresAt: (oldest.expiresAt ?? new Date(oldest.createdAt.getTime() + AUTHORIZATION_VALIDITY_DAYS * DAY_MS)).toISOString(),

@@ -253,6 +253,20 @@
       "when": 1793558334305,
       "tag": "0035_item_cancellations",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793563541165,
+      "tag": "0036_hold_checks",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1793564185097,
+      "tag": "0037_renewal_notices",
+      "breakpoints": true
     }
   ]
 }

@@ -13,6 +13,8 @@ describe("chat activity records", () => {
     expect(isActivityRecord(message("guidance", { actor: "assistant", model: "system", replyToMessageId: "ask" }))).toBe(false);
     expect(isActivityRecord(message("answer", { actor: "assistant", model: "claude-opus-5-5", replyToMessageId: "ask" }))).toBe(false);
     expect(isActivityRecord(message("sofia"))).toBe(false);
+    // An automatic notice both people must read stands on its own.
+    expect(isActivityRecord(message("renewal", { actor: "assistant", model: "notice", aiState: "completed" }))).toBe(false);
   });
 
   it("groups records in a row and keeps every message in its place", () => {

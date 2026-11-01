@@ -100,3 +100,50 @@ export function sortAttention(items: AttentionItem[]): AttentionItem[] {
   return [...items].sort((a, b) => (a.urgency === b.urgency ? 0 : a.urgency === "now" ? -1 : 1)
     || ORDER.indexOf(a.kind) - ORDER.indexOf(b.kind) || a.projectName.localeCompare(b.projectName) || a.itemLabel.localeCompare(b.itemLabel));
 }
+
+/** The day Setti replaces a hold still waiting for its supplier, with the client's saved payment method. */
+export const RENEWAL_DAY = 25;
+
+/**
+ * The items whose hold gets the renewal notice at `now`: held, the supplier has
+ * not confirmed, a payment method is saved, in the last week before expiry.
+ */
+export function renewalNoticesDue(view: ItemHoldsView, now: Date): ItemHoldView[] {
+  if (!view.savedMethod) return [];
+  return view.items.filter((line) => {
+    if (line.state !== "held" || !line.timing) return false;
+    const expiresAt = new Date(line.timing.expiresAt).getTime();
+    return now.getTime() >= expiresAt - EXPIRY_NOTICE_DAYS * DAY_MS && now.getTime() < expiresAt;
+  });
+}
+
+const usd = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+
+/** A notice lists this many items in full; the rest by name. */
+const LISTED = 8;
+
+/**
+ * The automatic notice both people read in the project chat, a few days before
+ * Setti replaces holds. It is the one warning that holds are about to be
+ * renewed, so it says how to stop it. One notice covers every hold of the
+ * project that came due together.
+ */
+export function renewalNotice(input: { lines: ItemHoldView[]; client: string; designer: string; method: { kind: "paypal" | "card"; label: string | null } }): string {
+  const client = input.client.split(" ")[0], designer = input.designer.split(" ")[0];
+  const method = input.method.kind === "card" ? `saved card${input.method.label ? ` (${input.method.label})` : ""}` : "saved PayPal";
+  const entries = input.lines.map((line) => ({ line, ends: day(new Date(line.timing!.expiresAt)), renew: day(new Date(new Date(line.timing!.authorizedAt).getTime() + RENEWAL_DAY * DAY_MS)) }));
+  if (entries.length === 1) {
+    const [{ line, ends, renew }] = entries;
+    return `Heads-up for ${client} and ${designer}: the ${usd(line.heldCents)} hold for ${line.label} ends ${ends}, because PayPal holds last 29 days, and ${line.vendor ?? "the supplier"} hasn't confirmed the order yet. `
+      + `On ${renew} Setti will replace it with a new hold of the same amount on ${client}'s ${method}, so nothing is charged and ${client} doesn't need to do anything. `
+      + `If the project or this item has stopped, ${designer} can cancel the hold before then.`;
+  }
+  const sameEnd = entries.every((entry) => entry.ends === entries[0].ends), sameRenew = entries.every((entry) => entry.renew === entries[0].renew);
+  const total = entries.reduce((sum, entry) => sum + entry.line.heldCents, 0);
+  const listed = entries.slice(0, LISTED).map((entry) => `• ${entry.line.label} · ${usd(entry.line.heldCents)}${sameEnd ? "" : ` · ends ${entry.ends}`}`);
+  const rest = entries.slice(LISTED);
+  return `Heads-up for ${client} and ${designer}: ${entries.length} holds ${sameEnd ? `end ${entries[0].ends}` : "end within the week"}, because PayPal holds last 29 days, and their suppliers haven't confirmed the orders yet:\n`
+    + `${listed.join("\n")}${rest.length ? `\n• and ${rest.length} more: ${rest.map((entry) => entry.line.label).join(", ")}` : ""}\n`
+    + `${sameRenew ? `On ${entries[0].renew}` : "A few days before each one ends,"} Setti will replace each with a new hold of the same amount on ${client}'s ${method} (${usd(total)} in all), so nothing is charged and ${client} doesn't need to do anything. `
+    + `If the project or any of these items has stopped, ${designer} can cancel those holds before then.`;
+}

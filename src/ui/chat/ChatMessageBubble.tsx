@@ -22,7 +22,8 @@ function linkedText(value: string): ReactNode[] {
 export function ChatMessageBubble({ message, person, own, highlighted, unsaved, running, canRetryAi, onRetry, about, attachment }: { message: CaseMessage; person: Person; own: boolean; highlighted: boolean; unsaved: boolean; running: boolean; canRetryAi: boolean; onRetry: () => void; about: { name: string; open: () => void } | null; attachment: ReactNode }) {
   const assistant = message.actor === "assistant";
   // A fixed system notice is not Setti speaking: it is labelled, and looks, apart from AI replies.
-  const notice = assistant && message.model === "system";
+  // "notice" is an automatic notice both people must see, so it is never folded into project activity.
+  const notice = assistant && (message.model === "system" || message.model === "notice");
   return (
     <div id={`case-message-${message.id}`} className={`scroll-mt-5 rounded-xl transition-colors ${highlighted ? "bg-yellow-50 ring-2 ring-yellow-200" : ""}`}>
       <div className={`flex items-start gap-2.5 ${own ? "justify-end" : ""}`}>
