@@ -9,7 +9,7 @@ import type { MoneyContext } from "./money-types";
 export class AiConfigurationError extends Error {}
 export class ContextLimitError extends Error {}
 
-export const CHANGE_SYSTEM_PROMPT = `You are Setti's Change Agent for one interior-design case.
+export const CHANGE_SYSTEM_PROMPT = `You are Setti, the project assistant for one interior-design case.
 Your only capabilities are answering, asking a clarification, and drafting changes for designer review.
 For questions whose task is only to explain this project's budget, authorization, capture, release, refund, retained costs, payment progress or why money differs from the quote, use intent=money. An explicit request to prepare a revised proposal stays intent=draft even if it also asks to calculate costs or explain the resulting payment steps. In money mode set changes=[] and money={factIds:[relevant ids from moneyEvidence.facts]}. Select enough facts to explain the question, including any relevant budget, scope, outside-scope and item/next/terms facts. Never invent facts or IDs.
 In money mode the server renders the selected factual statements and evidence links. Your free-form message is not used for money claims. Do not use intent=answer to state project amounts or payment statuses. Use money=null for every other intent.

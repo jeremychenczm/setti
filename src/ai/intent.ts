@@ -1,4 +1,5 @@
-const invocation = /^\s*@(?:ai|change[\s-]?agent)(?=$|[\s,，:：.。!！?？])/iu;
+/** @AI or @Setti; @Change Agent is the assistant's earlier name and still works. */
+const invocation = /^\s*@(?:ai|setti|change[\s-]?agent)(?=$|[\s,，:：.。!！?？])/iu;
 
 export function isAiInvocation(text: string): boolean {
   return invocation.test(text);

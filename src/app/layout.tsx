@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Dancing_Script, Inter } from "next/font/google";
 import "./globals.css";
 import { TryPreparationProvider } from "@/ui/try/TryPreparationProvider";
 
 const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
+/** Only for the preview of a typed signature. */
+const signatureFace = Dancing_Script({ variable: "--font-signature-face", subsets: ["latin"] });
 
 /**
  * Browser translators replace text nodes with their own elements. When React later
@@ -38,7 +40,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     // <body> before React hydrates; ignore those two elements' attribute differences.
     <html lang="en" suppressHydrationWarning>
       <head><script dangerouslySetInnerHTML={{ __html: TRANSLATION_GUARD }} /></head>
-      <body className={`${inter.variable} antialiased`} suppressHydrationWarning>
+      <body className={`${inter.variable} ${signatureFace.variable} antialiased`} suppressHydrationWarning>
         <TryPreparationProvider>{children}</TryPreparationProvider>
       </body>
     </html>

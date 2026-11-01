@@ -1,10 +1,10 @@
 "use client";
 
-import { Check, Copy, CreditCard, LoaderCircle, Wallet } from "lucide-react";
-import { useState } from "react";
+import { CalendarClock, Check, Copy, CreditCard, LoaderCircle, LockKeyhole, Wallet } from "lucide-react";
+import { useId, useState } from "react";
 import type { SavedMethodView } from "@/payments/saved-methods";
 import type { CheckoutView } from "@/payments/types";
-import { PayPalButtons, type PayPalHandlers } from "./PayPalButtons";
+import { PayPalButton, type PayPalHandlers } from "./PayPalButtons";
 
 const shortDate = (value: string) => new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
 
@@ -37,31 +37,63 @@ export function SavedMethodCard({ method, canRemove, busy, disabled, onRemove }:
   </div>;
 }
 
+type Method = "paypal" | "paylater" | "card";
+
 /**
- * Every way the client can pay where no method is saved yet: PayPal or Pay Later
- * in a window over this page, or the Sandbox test card in one click. A checkbox
- * asks for consent to save the method for the project's later holds.
+ * Every way the client can pay where no method is saved yet, as one list:
+ * PayPal or Pay Later in a window over this page, or the Sandbox test card in
+ * one click. Only the chosen method's button shows. A checkbox asks for consent
+ * to save the method for the project's later holds.
  */
 export function PayMethodChooser({ options, paypal, testCardBusy, disabled, save, onSaveChange, onTestCard }: {
   options: CheckoutView; paypal: PayPalHandlers; testCardBusy: boolean; disabled: boolean;
   save: boolean; onSaveChange: (save: boolean) => void; onTestCard: () => void;
 }) {
-  return <div className="max-w-[380px] space-y-3">
-    {options.paypalClientId && <PayPalButtons clientId={options.paypalClientId} disabled={disabled} {...paypal} />}
-    {options.testCard && <>
-      {options.paypalClientId && <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-[var(--muted)]"><span className="h-px flex-1 bg-[var(--line)]" />or<span className="h-px flex-1 bg-[var(--line)]" /></div>}
-      <button type="button" disabled={disabled} onClick={onTestCard}
-        className="flex w-full items-center gap-3 rounded-lg border border-[var(--line)] bg-white px-3 py-2.5 text-left transition-colors hover:border-brand-300 hover:bg-brand-50 disabled:opacity-50">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--canvas)]">{testCardBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <CreditCard className="h-4 w-4" />}</span>
-        <span className="min-w-0 flex-1"><span className="block text-[12px] font-semibold text-[var(--ink)]">Pay with the Sandbox test card</span><span className="block text-[10px] text-[var(--muted)]">Visa •••• 0026 · PayPal&apos;s test card, entered for you</span></span>
-        <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800">Demo</span>
-      </button>
-    </>}
+  const group = useId();
+  const methods: { id: Method; title: string; detail: string; icon: typeof Wallet; demo?: boolean }[] = [
+    ...(options.paypalClientId ? [
+      { id: "paypal" as const, title: "PayPal", detail: "Log in to PayPal in a window over this page", icon: Wallet },
+      { id: "paylater" as const, title: "Pay Later", detail: "Pay in 4 or monthly, with PayPal", icon: CalendarClock },
+    ] : []),
+    ...(options.testCard ? [{ id: "card" as const, title: "Card", detail: "Visa •••• 0026 · PayPal's Sandbox test card", icon: CreditCard, demo: true }] : []),
+  ];
+  const [chosen, setChosen] = useState<Method | null>(null);
+  const method = methods.find((entry) => entry.id === chosen)?.id ?? methods[0]?.id;
+
+  return <div className="max-w-[420px] space-y-3">
+    <div role="radiogroup" aria-label="Payment method" className="overflow-hidden rounded-xl border border-[var(--line)] bg-white">
+      {methods.map((entry, index) => {
+        const selected = entry.id === method;
+        const Icon = entry.icon;
+        return <div key={entry.id} className={index ? "border-t border-[var(--line)]" : undefined}>
+          <label className={`flex cursor-pointer items-center gap-3 px-3.5 py-3 ${selected ? "" : "hover:bg-[var(--canvas)]"}`}>
+            <input type="radio" name={group} checked={selected} disabled={disabled} onChange={() => setChosen(entry.id)} className="h-4 w-4 shrink-0 accent-[var(--ink)]" />
+            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${selected ? "bg-[var(--ink)] text-white" : "bg-[var(--canvas)] text-slate-600"}`}><Icon className="h-4 w-4" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-semibold text-[var(--ink)]">{entry.title}</span>
+              <span className="block truncate text-[11px] text-[var(--muted)]">{entry.detail}</span>
+            </span>
+            {entry.demo && <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">Demo</span>}
+          </label>
+          {selected && <div className="px-3.5 pb-3.5">
+            {entry.id === "card"
+              ? <>
+                <button type="button" disabled={disabled} onClick={onTestCard}
+                  className="inline-flex h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary-fill)] text-[13px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:opacity-50">
+                  {testCardBusy ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LockKeyhole className="h-4 w-4" />}Pay with the test card
+                </button>
+                <p className="mt-2 text-[10px] leading-relaxed text-[var(--muted)]">Setti enters PayPal&apos;s Sandbox test card for you. No real money moves.</p>
+              </>
+              : options.paypalClientId && <PayPalButton clientId={options.paypalClientId} funding={entry.id} disabled={disabled} {...paypal} />}
+          </div>}
+        </div>;
+      })}
+    </div>
     {options.canSave && <label className="flex items-start gap-2 text-[11px] leading-relaxed text-slate-600">
       <input type="checkbox" checked={save} disabled={disabled} onChange={(event) => onSaveChange(event.target.checked)} className="mt-0.5 accent-[var(--primary)]" />
-      <span>Save this payment method for the project, so the studio can hold each approved item later without asking you again. You can remove it anytime.</span>
+      <span>Save this payment method for the project. Approved furniture is held with it, one item at a time, without asking you again. You can remove it anytime.</span>
     </label>}
-    {options.paypalClientId && options.sandboxBuyer && <SandboxBuyer buyer={options.sandboxBuyer} />}
+    {method !== "card" && options.paypalClientId && options.sandboxBuyer && <SandboxBuyer buyer={options.sandboxBuyer} />}
   </div>;
 }
 

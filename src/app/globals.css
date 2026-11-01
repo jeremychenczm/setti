@@ -16,6 +16,7 @@
 
 @theme inline {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-signature: var(--font-signature-face), "Brush Script MT", cursive;
   --color-brand-50: #fffaf0;
   --color-brand-100: #fff1d6;
   --color-brand-200: #ffe2ad;

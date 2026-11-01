@@ -13,6 +13,7 @@ import { usd } from "../demo-data";
 import { ProjectPayments } from "../payments/ProjectPayments";
 import { LineReview, LineStateBadge, type LineChoice } from "./LineReview";
 import { ResolvePanel, type ResolveItem } from "./ResolvePanel";
+import { BulkDecisionBar } from "./BulkDecisionBar";
 import { SignBar } from "./SignBar";
 
 type QuoteRow = QuoteLine & QuoteLineTotals;
@@ -29,8 +30,9 @@ const quoteTheme = themeQuartz.withParams({
   fontFamily: "inherit",
   fontSize: 13,
   headerFontSize: 11,
-  rowHoverColor: "#fffaf0",
-  selectedRowBackgroundColor: "#fff1d6",
+  rowHoverColor: "#fafaf8",
+  // Ticked lines keep a plain background; the checkbox already shows the tick.
+  selectedRowBackgroundColor: "#ffffff",
   wrapperBorder: false,
 });
 
@@ -117,6 +119,7 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
   // The item whose drawer opened from "Drop…" or "Withdraw…", which opens on that confirmation.
   const [dropFor, setDropFor] = useState<string | null>(null);
   const grid = useRef<GridApi<QuoteRow> | null>(null);
+  const [gridReady, setGridReady] = useState(false);
   const selected = allRows.find((line) => line.itemId === selectedId);
   const rooms = useMemo(() => [...new Set(quote.lines.map((line) => line.room))], [quote]);
   const productSubtotal = useMemo(() => calculateQuoteTotals(quote.lines.filter((line) => line.category === "furniture")).subtotalCents, [quote]);
@@ -154,10 +157,6 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
       return next;
     });
     grid.current?.deselectAll();
-  }
-
-  function approveRest() {
-    setChoices((previous) => ({ ...Object.fromEntries(pendingLines.map((line) => [line.itemId, { decision: "approved" as const, note: "" }])), ...previous }));
   }
 
   async function sign(signature: string) {
@@ -210,6 +209,14 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
     mode: "multiRow", checkboxes: true, headerCheckbox: true, selectAll: "currentPage", enableClickSelection: false, hideDisabledCheckboxes: true,
     isRowSelectable: (node) => !!node.data && lineOf(node.data.itemId).state === "pending",
   } : undefined, [reviewing, lineOf]);
+  // For the demo, every undecided line starts ticked when the review opens, so approving them all is one click.
+  const preTicked = useRef(false);
+  useEffect(() => {
+    if (!reviewing) { preTicked.current = false; return; }
+    if (!gridReady || preTicked.current) return;
+    preTicked.current = true;
+    grid.current?.selectAll("all");
+  }, [reviewing, gridReady]);
   const selectionColumn = useMemo<ColDef<QuoteRow>>(() => ({ pinned: "left", width: 48, minWidth: 48, maxWidth: 48, resizable: false, suppressHeaderMenuButton: true }), []);
 
   function downloadCsv() {
@@ -285,6 +292,7 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
               </select>
               <label className="ml-auto flex items-center gap-2 rounded-lg border border-[var(--line)] px-2.5 py-1.5"><Search className="h-3.5 w-3.5 text-[var(--muted)]" /><input aria-label="Search quote items" placeholder="Find an item or supplier…" value={query} onChange={(event) => setQuery(event.target.value)} className="w-44 bg-transparent text-[12px] outline-none placeholder:text-[var(--muted)]" />{query && <button onClick={() => setQuery("")} aria-label="Clear quote search"><X className="h-3 w-3" /></button>}</label>
             </div>
+            {reviewing && ticked.length > 0 && <BulkDecisionBar count={ticked.length} onApprove={() => setTickedChoices({ decision: "approved", note: "" })} onDecline={(reason) => setTickedChoices({ decision: "declined", note: reason })} onUndecide={() => setTickedChoices(null)} onClear={() => grid.current?.deselectAll()} />}
             <div className={`setti-quote-grid w-full ${allRows.length > 10 ? "h-[490px]" : "h-[310px]"}`}>
               <AgGridReact<QuoteRow>
                 modules={modules}
@@ -306,7 +314,7 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
                 paginationPageSize={10}
                 paginationPageSizeSelector={false}
                 suppressCellFocus={false}
-                onGridReady={({ api }) => { grid.current = api; }}
+                onGridReady={({ api }) => { grid.current = api; setGridReady(true); }}
                 onModelUpdated={({ api }) => setVisibleCount(api.getDisplayedRowCount())}
                 onRowClicked={({ data }) => { if (data) setSelectedId(data.itemId); }}
                 overlayNoRowsTemplate="<span>No matching items. Clear your search or select another category.</span>"
@@ -351,13 +359,13 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
             </div>
           </div>
 
-          {open && opening.progress.approved > 0 && <ProjectPayments projectKey={quote.projectId as CaseKey} orderId={null} />}
+          {open && opening.progress.approved > 0 && <ProjectPayments projectKey={quote.projectId as CaseKey} orderId={null} onServicesPaid={viewer.role === "client" ? onOpenChat : undefined} />}
 
           <div className="mt-6 rounded-xl border border-dashed border-slate-200 px-4 py-3 text-[11px] leading-relaxed text-[var(--muted)]"><span className="font-medium text-slate-600">About this example. </span>{quote.demoNotice}<ul className="mt-2 list-disc space-y-1 pl-4">{quote.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul><p className="mt-2 font-medium">{quote.paymentNote}</p></div>
         </div>
       </div>
-      {reviewing && <SignBar clientName={clientName} approveCount={toApprove.length} approveCents={calculateQuoteTotals(toApprove).totalCents} declineCount={chosen.length - toApprove.length} undecided={pendingLines.length - chosen.length} missingReasons={missingReasons}
-        selectedCount={ticked.length} onApproveRest={approveRest} onApproveSelected={() => setTickedChoices({ decision: "approved", note: "" })} onDeclineSelected={(reason) => setTickedChoices({ decision: "declined", note: reason })} onUndecideSelected={() => setTickedChoices(null)} onClearSelection={() => grid.current?.deselectAll()} onSign={sign} />}
+      {reviewing && <SignBar clientName={clientName} version={quote.version} approveCount={toApprove.length} approveCents={calculateQuoteTotals(toApprove).totalCents} declineCount={chosen.length - toApprove.length} undecided={pendingLines.length - chosen.length} missingReasons={missingReasons}
+        onSign={sign} />}
     </section>
   );
 }

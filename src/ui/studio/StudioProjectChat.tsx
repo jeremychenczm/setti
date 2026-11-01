@@ -110,7 +110,7 @@ export function StudioProjectChat({ project, projects, onSelectProject, onOpenRe
   }
 
   return <section aria-label={`${project.name} project chat`} className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-white shadow-sm">
-    <ChatHeader person={client} projectId={project.id} projectName={project.name} projects={projects} onSelectProject={onSelectProject} subtitle={`${designer.name} · ${client.name} · Change Agent`}>
+    <ChatHeader person={client} projectId={project.id} projectName={project.name} projects={projects} onSelectProject={onSelectProject} subtitle={`${designer.name} · ${client.name} · Setti`}>
       <button onClick={() => onOpenRecords("quote")} className="flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--primary-soft)] px-3 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-brand-100"><FileText className="h-3.5 w-3.5" />Quote V{project.quote.version}{project.quote.status === "draft" ? " · Draft" : ""}</button>
       <button onClick={() => setDetailsOpen((open) => !open)} aria-label={detailsOpen ? "Close project details" : "Open project details"} aria-pressed={detailsOpen} className={`rounded-lg p-2 ${detailsOpen ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "text-[var(--muted)] hover:bg-[var(--canvas)]"}`}><PanelRight className="h-4 w-4" /></button>
     </ChatHeader>

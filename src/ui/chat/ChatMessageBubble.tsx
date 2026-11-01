@@ -7,7 +7,7 @@ import type { Person } from "../demo-data";
 import { Avatar } from "../workspace/primitives";
 import { MoneyAnswerCard } from "./MoneyAnswerCard";
 
-function timeLabel(value: string): string {
+export function timeLabel(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
@@ -27,7 +27,7 @@ export function ChatMessageBubble({ message, person, own, highlighted, unsaved, 
         {!own && (assistant ? <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800"><Bot className="h-5 w-5" /></span> : <Avatar person={person} />)}
         {own && <span className="order-last"><Avatar person={person} /></span>}
         <div className={`max-w-[88%] rounded-xl px-3.5 py-2.5 sm:max-w-[82%] ${assistant ? "bg-[var(--agent)]" : own ? "bg-[var(--primary-soft)]" : "bg-[var(--canvas)]"}`}>
-          <div className={`mb-1 text-[11px] font-semibold ${assistant ? "text-amber-800" : "text-slate-600"}`}>{assistant ? message.moneyAnswer ? "Money Agent" : "Change Agent" : person.name}</div>
+          <div className={`mb-1 text-[11px] font-semibold ${assistant ? "text-amber-800" : "text-slate-600"}`}>{assistant ? "Setti" : person.name}</div>
           {about && <button onClick={about.open} className="mb-1.5 inline-flex max-w-full items-center gap-1 rounded-full border border-brand-100 bg-white px-2 py-0.5 text-[11px] font-medium text-[var(--primary)] hover:bg-brand-50"><FileText className="h-3 w-3 shrink-0" /><span className="truncate">About · {about.name} (V1)</span></button>}
           <p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed">{linkedText(message.text)}</p>
           {attachment}

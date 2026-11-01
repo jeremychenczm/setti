@@ -22,7 +22,8 @@ import { paymentsWorkspace } from "./workspace";
 import { refreshRecordedFees } from "./fee-refresh";
 import { cancelItemHold, checkItemHold, holdApprovedItems, startItemCheckout } from "./item-holds";
 import { itemHoldsView } from "./item-holds-view";
-import { chargeServices, checkServicesCheckout, lockPaymentBasis, startServicesCheckout } from "./services";
+import { checkServicesCheckout, lockPaymentBasis, startServicesCheckout } from "./services";
+import { afterServicesPaid } from "./services-paid";
 import { servicesPaymentView } from "./services-view";
 
 const uuid = z.uuid();
@@ -229,9 +230,9 @@ export async function paypalRedirectResponse(req: NextRequest, outcome: "return"
     target = await operationPage(db(), operationId.data);
     const result = await returnFromPayPal(db(), sandboxPayPal(), operationId.data, req.nextUrl.searchParams.get("token"), outcome);
     if (!result) return page("unmatched");
-    // An authorized design-services hold is charged right away; the page can finish it if this stops early.
+    // An authorized design-services hold is charged and the furniture held right away; the page can finish it if this stops early.
     const sessionId = session(req);
-    if (result.servicesHold && result.state === "authorized" && sessionId && target?.projectKey) await chargeServices(db(), sandboxPayPal(), sessionId, target.projectKey).catch(() => []);
+    if (result.servicesHold && result.state === "authorized" && sessionId && target?.projectKey) await afterServicesPaid(db(), sandboxPayPal(), sessionId, target.projectKey, paypalLinks(req)).catch(() => null);
     return page(outcome === "cancel" && result.state === "failed" ? "cancelled" : result.state);
   } catch {
     // The page offers "Check PayPal status", which reads the real outcome again.
@@ -298,7 +299,7 @@ export async function postServicesPaymentResponse(req: NextRequest, rawKey: stri
         const started = await startServicesCheckout(db(), paypal, sessionId, rawKey, paypalLinks(req), { save: input.save });
         const { operation, state } = await approveCheckoutWithTestCard(db(), paypal, sandboxTestCard(), started);
         operationId = operation.id;
-        if (state === "authorized") await chargeServices(db(), paypal, sessionId, rawKey);
+        if (state === "authorized") await afterServicesPaid(db(), paypal, sessionId, rawKey, paypalLinks(req));
         break;
       }
       case "remove_saved":
@@ -307,21 +308,23 @@ export async function postServicesPaymentResponse(req: NextRequest, rawKey: stri
       case "approve": {
         await servicesOperation(sessionId, rawKey, input.operationId);
         const { state } = await completeAuthorization(db(), paypal, input.operationId);
-        if (state === "authorized") await chargeServices(db(), paypal, sessionId, rawKey);
+        if (state === "authorized") await afterServicesPaid(db(), paypal, sessionId, rawKey, paypalLinks(req));
         break;
       }
       case "cancel":
         await servicesOperation(sessionId, rawKey, input.operationId);
-        await cancelCheckout(db(), paypal, input.operationId);
+        // PayPal may report the order approved after all; then it is settled like an approval.
+        if ((await cancelCheckout(db(), paypal, input.operationId)).state === "authorized") await afterServicesPaid(db(), paypal, sessionId, rawKey, paypalLinks(req));
         break;
       case "check": {
         const result = await checkServicesCheckout(db(), paypal, sessionId, rawKey, input.operationId, paypalLinks(req));
+        if (result.state === "authorized") await afterServicesPaid(db(), paypal, sessionId, rawKey, paypalLinks(req));
         operationId = result.operation.id;
         paypalOrderId = result.operation.paypalOrderId;
         break;
       }
       case "charge":
-        await chargeServices(db(), paypal, sessionId, rawKey);
+        await afterServicesPaid(db(), paypal, sessionId, rawKey, paypalLinks(req));
         break;
     }
     return refreshDemoCookies(NextResponse.json({ view: await servicesView(req, rawKey, sessionId), operationId, paypalOrderId }, { headers }), req);

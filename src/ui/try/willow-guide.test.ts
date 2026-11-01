@@ -4,7 +4,7 @@ import type { ItemHoldView, ItemHoldsView } from "@/payments/item-holds-view";
 import type { ServicesPaymentView } from "@/payments/services-view";
 import { willowGuideStep, type WillowGuideData } from "./willow-guide";
 
-const serviceView = (patch: Partial<ServicesPaymentView> = {}): ServicesPaymentView => ({ projectKey: "willow", basis: { version: 1, orderId: null }, services: [{ itemId: "consultation", label: "Consultation", targetCents: 30_000, capturedCents: 30_000, captures: [] }], dueCents: 0, checkout: null, savedPayPal: true, savedMethod: { kind: "paypal", label: "b•••@personal.example.com", savedAt: "2026-10-30T12:00:00.000Z" }, canRemoveSaved: false, checkoutOptions: null, canPay: false, canFinish: false, canCheck: false, reason: null, paypalClientId: null, ...patch });
+const serviceView = (patch: Partial<ServicesPaymentView> = {}): ServicesPaymentView => ({ projectKey: "willow", basis: { version: 1, orderId: null }, services: [{ itemId: "consultation", label: "Consultation", targetCents: 30_000, capturedCents: 30_000, captures: [] }], dueCents: 0, furnitureToHold: { count: 0, cents: 0 }, checkout: null, savedPayPal: true, savedMethod: { kind: "paypal", label: "b•••@personal.example.com", savedAt: "2026-10-30T12:00:00.000Z" }, canRemoveSaved: false, checkoutOptions: null, canPay: false, canFinish: false, canCheck: false, reason: null, paypalClientId: null, ...patch });
 const item = (patch: Partial<ItemHoldView> = {}): ItemHoldView => ({ itemId: "chair", label: "Chair", targetCents: 10_000, heldCents: 10_000, capturedCents: 0, state: "held", operationId: "hold", approvalUrl: null, canCheck: false, canCancel: false, canCheckout: false, paypalAuthorizationId: "AUTH", expiresAt: null, failureMessage: null, vendor: "Alder Row", terms: { quantity: 1, unitPriceCents: 10_000, taxCents: 0, freightCents: 0, leadTimeDays: 21 }, supplier: null, ...patch });
 const holdsView = (patch: Partial<ItemHoldsView> = {}): ItemHoldsView => ({ projectKey: "willow", basis: { version: 1, orderId: null }, items: [item()], toHoldCents: 0, savedPayPal: true, savedMethod: { kind: "paypal", label: "b•••@personal.example.com", savedAt: "2026-10-30T12:00:00.000Z" }, canRemoveSaved: false, checkoutOptions: null, canHold: false, canConfirmSupplier: true, contentHash: "hash", reason: null, ...patch });
 function approved(): WillowGuideData {
@@ -24,13 +24,21 @@ describe("Willow first-quote guide", () => {
     data.snapshot.opening.progress.approved = 0;
     const step = willowGuideStep(data, "designer");
     expect(step).toMatchObject({ index: 1, role: "sofia", destination: "quote" });
-    expect(step.detail).toContain("leave the other lines undecided");
+    expect(step.detail).toContain("Lines left undecided can be signed later");
   });
 
   it("proceeds to the selected service payment without requiring all 28 lines", () => {
     const data = approved();
     data.services = serviceView({ dueCents: 30_000, canPay: false, savedPayPal: false });
-    expect(willowGuideStep(data, "designer")).toMatchObject({ index: 2, role: "sofia", anchor: "design-services" });
+    const step = willowGuideStep(data, "designer");
+    expect(step).toMatchObject({ index: 2, role: "sofia", anchor: "design-services" });
+    expect(step.detail).toContain("the same payment then holds each approved furniture item");
+  });
+
+  it("asks Jordan to hold only what the services payment left unheld", () => {
+    const data = approved();
+    data.holds = holdsView({ items: [item(), item({ itemId: "lamp", label: "Lamp", state: "to_hold", heldCents: 0 })], toHoldCents: 10_000, canHold: true });
+    expect(willowGuideStep(data, "client")).toMatchObject({ index: 2, role: "jordan", title: "Hold the remaining furniture items", anchor: "item-holds" });
   });
 
   it("does not infer any payment state from missing or mismatched version records", () => {
@@ -66,7 +74,7 @@ describe("Willow first-quote guide", () => {
     data.services!.savedPayPal = false;
     data.holds = { ...data.holds!, savedPayPal: false, savedMethod: null, items: data.holds!.items.map((item) => ({ ...item, state: "to_hold", heldCents: 0, canCheckout: true })) };
     const step = willowGuideStep(data, "designer");
-    expect(step).toMatchObject({ index: 3, role: "sofia", title: "Sofia holds each approved item", anchor: "item-holds" });
+    expect(step).toMatchObject({ index: 2, role: "sofia", title: "Sofia holds each approved item", anchor: "item-holds" });
     expect(step.detail).toContain("does not suggest charging the services again");
   });
 
@@ -79,17 +87,17 @@ describe("Willow first-quote guide", () => {
   it("routes payer action to Sofia and unresolved holds to the same operation", () => {
     const data = approved();
     data.holds!.items = [item({ state: "awaiting_client" })];
-    expect(willowGuideStep(data, "designer")).toMatchObject({ index: 3, role: "sofia", anchor: "item-holds" });
+    expect(willowGuideStep(data, "designer")).toMatchObject({ index: 2, role: "sofia", anchor: "item-holds" });
     data.holds!.items = [item({ state: "unknown" })];
-    expect(willowGuideStep(data, "client")).toMatchObject({ index: 3, role: "jordan", title: "Check unresolved item holds" });
+    expect(willowGuideStep(data, "client")).toMatchObject({ index: 2, role: "jordan", title: "Check unresolved item holds" });
   });
 
   it("keeps supplier confirmation and capture as separate designer steps", () => {
     const data = approved();
-    expect(willowGuideStep(data, "client")).toMatchObject({ index: 4, role: "jordan" });
+    expect(willowGuideStep(data, "client")).toMatchObject({ index: 3, role: "jordan" });
     expect(willowGuideStep(data, "client").complete).toBeUndefined();
     data.holds!.items = [item({ state: "confirmed" })];
-    expect(willowGuideStep(data, "client").title).toBe("Capture the supplier-confirmed items");
+    expect(willowGuideStep(data, "client")).toMatchObject({ index: 4, title: "Capture the supplier-confirmed items" });
   });
 
   it("marks only the selected captured scope complete", () => {

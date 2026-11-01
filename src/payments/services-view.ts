@@ -33,6 +33,8 @@ export interface ServicesPaymentView {
   services: ServiceChargeView[];
   /** Approved design services not yet captured. */
   dueCents: number;
+  /** Approved furniture still to be held: paying the services holds it with the saved payment method, item by item. */
+  furnitureToHold: { count: number; cents: number };
   /** The latest design-services checkout. */
   checkout: { operationId: string; status: PaymentOperation["status"]; paypalOrderId: string | null; approvalUrl: string | null; authorized: boolean; failureMessage: string | null } | null;
   savedPayPal: boolean;
@@ -53,7 +55,7 @@ export interface ServicesPaymentView {
 }
 
 export async function servicesPaymentView(db: Db, sessionId: string | null, key: CaseKey, account: DemoAccount | null, paypalClientId: string | null, demo: Omit<DemoCheckout, "paypalClientId"> = { testCard: false, sandboxBuyer: null }): Promise<ServicesPaymentView> {
-  const empty = (reason: string): ServicesPaymentView => ({ projectKey: key, basis: null, services: [], dueCents: 0, checkout: null, savedPayPal: false, savedMethod: null, canRemoveSaved: false, checkoutOptions: null, canPay: false, canFinish: false, canCheck: false, reason, paypalClientId: null });
+  const empty = (reason: string): ServicesPaymentView => ({ projectKey: key, basis: null, services: [], dueCents: 0, furnitureToHold: { count: 0, cents: 0 }, checkout: null, savedPayPal: false, savedMethod: null, canRemoveSaved: false, checkoutOptions: null, canPay: false, canFinish: false, canCheck: false, reason, paypalClientId: null });
   if (!sessionId) return empty("Open this project from the browser that owns the demo case.");
   let basis;
   try { basis = await db.transaction((tx) => lockPaymentBasis(tx, sessionId, key)); }
@@ -73,6 +75,11 @@ export async function servicesPaymentView(db: Db, sessionId: string | null, key:
     return [{ itemId: line.itemId, label: line.label, targetCents: line.targetCents, capturedCents: line.capturedCents - line.refundedCents, captures }];
   });
   const dueCents = services.reduce((total, line) => total + Math.max(line.targetCents - line.capturedCents, 0), 0);
+  const furniture = plan.actions.flatMap((action) => {
+    const businessId = basis.businessItem(action);
+    return action.kind === "new_authorization" && businessId && kinds.get(businessId) === "furniture" ? [action.amountCents] : [];
+  });
+  const furnitureToHold = { count: furniture.length, cents: furniture.reduce((total, cents) => total + cents, 0) };
 
   const latest = ledger.operations.filter((operation) => operation.servicesHold).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
   const hold = latest?.status === "succeeded" ? ledger.authorizations.find((entry) => entry.operationId === latest.id) : undefined;
@@ -95,7 +102,7 @@ export async function servicesPaymentView(db: Db, sessionId: string | null, key:
           : !client ? "The client pays from their own account. Switch to the client's account to pay."
             : null;
   return {
-    projectKey: key, basis: { version: basis.version, orderId: basis.orderId }, services, dueCents,
+    projectKey: key, basis: { version: basis.version, orderId: basis.orderId }, services, dueCents, furnitureToHold,
     checkout: latest ? { operationId: latest.id, status: latest.status, paypalOrderId: latest.paypalOrderId, approvalUrl: client && latest.status === "pending" && !latest.paypalResourceId ? latest.approvalUrl : null, authorized: latest.status === "succeeded", failureMessage: latest.failureMessage } : null,
     savedPayPal: !!saved, savedMethod: saved, canRemoveSaved: client && !!saved,
     checkoutOptions: canPay ? { paypalClientId, ...demo, canSave: !saved } : null,

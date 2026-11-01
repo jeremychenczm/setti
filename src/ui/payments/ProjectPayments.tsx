@@ -9,9 +9,9 @@ import { ItemHolds } from "./ItemHolds";
  * PayPal checkout, then each approved item held with the PayPal saved there.
  * Furniture holds start only when the viewer explicitly requests them.
  */
-export function ProjectPayments({ projectKey, orderId }: { projectKey: CaseKey; orderId: string | null }) {
+export function ProjectPayments({ projectKey, orderId, onServicesPaid }: { projectKey: CaseKey; orderId: string | null; onServicesPaid?: () => void }) {
   return <>
-    <DesignServicesPayment projectKey={projectKey} orderId={orderId} />
+    <DesignServicesPayment projectKey={projectKey} orderId={orderId} onPaid={onServicesPaid} />
     {orderId === null && <ItemHolds projectKey={projectKey} orderId={orderId} />}
   </>;
 }

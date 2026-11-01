@@ -172,7 +172,7 @@ export function createChatStore(db: Db): ChatStore {
       return withinCase(sessionId, projectKey, async (tx, row) => {
         const message = await readMessage(tx, row.id, messageId);
         if (!isAiInvocation(message.text)) {
-          throw new ChatStoreError("INVALID_AI_TRIGGER", "Start the message with @AI or @Change Agent to request a reply.");
+          throw new ChatStoreError("INVALID_AI_TRIGGER", "Start the message with @AI or @Setti to request a reply.");
         }
         if (message.aiState === "completed") return { status: "completed", state: await snapshot(tx, row) };
         if (row.activeRunId) {
