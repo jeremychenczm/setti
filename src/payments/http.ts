@@ -11,6 +11,7 @@ import { refreshDemoCookies } from "@/http/demo-cookies";
 import { cancelPayment, checkPayment, operationPage, returnFromPayPal, startAuthorization, startCapture, startOpeningCapture, startRefund, startRelease, type LinkBuilder } from "./actions";
 import { cancelCheckout, completeAuthorization } from "./authorize";
 import { PaymentActionError } from "./binding";
+import { attentionView } from "./attention-view";
 import { cancelApprovedItem } from "./cancel-item";
 import { CANCELLATION_REASONS } from "./cancellation";
 import { PaymentOperationError } from "./operations";
@@ -405,6 +406,14 @@ export async function postItemHoldsResponse(req: NextRequest, rawKey: string) {
     }
     return refreshDemoCookies(NextResponse.json({ view: await holdsView(req, rawKey, sessionId), attempted, operationId, paypalOrderId }, { headers }), req);
   } catch (error) { return fail(error); }
+}
+
+/** The designer's reminders across the projects this browser session owns. Clients have their own steps on each page. */
+export async function getAttentionResponse(req: NextRequest) {
+  const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
+  if (account?.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "Only the designer sees the studio's reminders." }, { status: 403, headers });
+  try { return refreshDemoCookies(NextResponse.json(await attentionView(db(), session(req), account), { headers }), req); }
+  catch (error) { return fail(error); }
 }
 
 /** The design-services checkout must belong to this session's project. */

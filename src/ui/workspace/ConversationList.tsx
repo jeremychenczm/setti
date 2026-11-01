@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { CaseKey } from "@/chat/types";
 import type { Person } from "../demo-data";
 import { Avatar } from "./primitives";
@@ -28,9 +29,11 @@ export function previewTime(value: string, now = new Date()): string {
     : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export function ConversationList<Key extends string>({ projects, activeId, onOpen }: { projects: ProjectChat<Key>[]; activeId: Key; onOpen: (key: Key) => void }) {
+/** `top` sits above the chats, as the designer's reminders do. */
+export function ConversationList<Key extends string>({ projects, activeId, onOpen, top }: { projects: ProjectChat<Key>[]; activeId: Key; onOpen: (key: Key) => void; top?: ReactNode }) {
   return (
     <section aria-label="Chats" className="flex w-[296px] shrink-0 flex-col">
+      {top}
       <h2 className="px-4 pb-2 pt-4 text-[15px] font-semibold">Chats</h2>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {projects.map((project) => (

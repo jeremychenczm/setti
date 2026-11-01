@@ -3,13 +3,13 @@ import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PaymentActionError } from "./binding";
 import { callbackState } from "./callback-state";
-import { getItemHoldsResponse, getPaymentsResponse, getServicesPaymentResponse, paypalRedirectResponse, postItemHoldsResponse, postPaymentsResponse, postServicesPaymentResponse } from "./http";
+import { getAttentionResponse, getItemHoldsResponse, getPaymentsResponse, getServicesPaymentResponse, paypalRedirectResponse, postItemHoldsResponse, postPaymentsResponse, postServicesPaymentResponse } from "./http";
 
 const mock = vi.hoisted(() => ({
   startAuthorization: vi.fn(), startCapture: vi.fn(), startRelease: vi.fn(), startRefund: vi.fn(), checkPayment: vi.fn(), cancelPayment: vi.fn(),
   returnFromPayPal: vi.fn(), operationPage: vi.fn(), paymentsWorkspace: vi.fn(), recordSupplierOrder: vi.fn(), recordSupplierCredit: vi.fn(),
   startServicesCheckout: vi.fn(), checkServicesCheckout: vi.fn(), chargeServices: vi.fn(), lockPaymentBasis: vi.fn(), servicesPaymentView: vi.fn(), completeAuthorization: vi.fn(), cancelCheckout: vi.fn(),
-  holdApprovedItems: vi.fn(), checkItemHold: vi.fn(), cancelItemHold: vi.fn(), itemHoldsView: vi.fn(), cancelApprovedItem: vi.fn(),
+  holdApprovedItems: vi.fn(), checkItemHold: vi.fn(), cancelItemHold: vi.fn(), itemHoldsView: vi.fn(), cancelApprovedItem: vi.fn(), attentionView: vi.fn(),
   paymentPreparationPending: vi.fn(),
   db: { transaction: (work: (tx: object) => unknown) => work({}) },
 }));
@@ -24,6 +24,7 @@ vi.mock("./services-view", () => ({ servicesPaymentView: mock.servicesPaymentVie
 vi.mock("./item-holds", () => ({ holdApprovedItems: mock.holdApprovedItems, checkItemHold: mock.checkItemHold, cancelItemHold: mock.cancelItemHold }));
 vi.mock("./item-holds-view", () => ({ itemHoldsView: mock.itemHoldsView }));
 vi.mock("./cancel-item", () => ({ cancelApprovedItem: mock.cancelApprovedItem }));
+vi.mock("./attention-view", () => ({ attentionView: mock.attentionView }));
 vi.mock("./authorize", () => ({ completeAuthorization: mock.completeAuthorization, cancelCheckout: mock.cancelCheckout }));
 vi.mock("./server", () => ({ sandboxPayPal: () => ({}) }));
 vi.mock("../try/preparation", () => ({ paymentPreparationPending: mock.paymentPreparationPending, PREPARATION_MESSAGE: "The starting payments are being prepared." }));
@@ -352,5 +353,18 @@ describe("item-holds HTTP boundaries", () => {
     const response = await postItemHoldsResponse(holds(body, "jordan"), "willow");
     expect(await response.json()).toMatchObject({ attempted: 1, view: { projectKey: "willow" } });
     expect(mock.cancelApprovedItem).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow", { action: "cancel_item", itemId: "willow-desk", reason: "no_response", note: "Three emails, no answer.", by: "Jordan Lee" });
+  });
+});
+
+describe("studio reminders HTTP boundary", () => {
+  const get = (account: string | null) => new NextRequest(`${origin}/api/attention`, { headers: { Cookie: [`setti-demo-chat=${sessionId}`, ...(account ? [`setti-demo-account=${account}`] : [])].join("; ") } });
+  beforeEach(() => { vi.clearAllMocks(); mock.attentionView.mockResolvedValue({ items: [], checkedAt: "2026-11-01T00:00:00.000Z" }); });
+
+  it("serves the reminders to the designer only", async () => {
+    for (const account of ["sofia", "emma", null]) expect((await getAttentionResponse(get(account))).status).toBe(403);
+    expect(mock.attentionView).not.toHaveBeenCalled();
+    const response = await getAttentionResponse(get("jordan"));
+    expect(await response.json()).toEqual({ items: [], checkedAt: "2026-11-01T00:00:00.000Z" });
+    expect(mock.attentionView).toHaveBeenCalledWith(mock.db, sessionId, expect.objectContaining({ id: "jordan" }));
   });
 });

@@ -110,7 +110,9 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
     dispatchFeedback({ type: "action_started" });
     void load().then(() => {
       // The section renders after loading, so the browser could not jump to #payments by itself.
-      if (window.location.hash === "#payments") window.requestAnimationFrame(() => document.getElementById("payments")?.scrollIntoView({ block: "start" }));
+      // A reminder links straight to one item's card.
+      const target = window.location.hash === "#payments" || window.location.hash.startsWith("#payment-line-") ? decodeURIComponent(window.location.hash.slice(1)) : null;
+      if (target) window.requestAnimationFrame(() => document.getElementById(target)?.scrollIntoView({ block: "start" }));
     });
     const returned = new URLSearchParams(window.location.search).get("paypal");
     setNotice(paymentReturnNotice(returned));

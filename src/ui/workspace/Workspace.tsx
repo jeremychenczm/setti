@@ -12,7 +12,9 @@ import { willowQuote } from "@/quotes/willow-quote";
 import { latestChatMessage } from "../chat/activity";
 import type { Person } from "../demo-data";
 import { ConversationList, type ChatPreview, type ProjectChat } from "./ConversationList";
+import { NeedsYouToday } from "./NeedsYouToday";
 import { Sidebar, type View } from "./Sidebar";
+import { useAttention } from "./useAttention";
 import { TrySeedNotice } from "../try/TrySeedNotice";
 
 const CaseChat = dynamic(() => import("../chat/CaseChat").then((m) => m.CaseChat), {
@@ -58,6 +60,8 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
   const [preparedCaseId, setPreparedCaseId] = useState<string | null>(initialPreparedCase);
   const [recordsTab, setRecordsTab] = useState<"quote" | "payments">(initialRecordsTab);
   const preparedProject = account.role === "designer" && preparedCaseId ? studioCase(preparedCaseId) : null;
+  // The studio's reminders, for the designer only.
+  const attention = useAttention(account.role === "designer");
 
   useEffect(() => {
     function restoreRoute() {
@@ -164,8 +168,9 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
     <div className="flex h-dvh min-h-0 gap-2 bg-[var(--canvas)] p-2 text-[var(--ink)]">
       {/* The icon rail and the chat list are one panel, as in a messaging app; other modules keep only the rail. */}
       <div className="flex min-h-0 shrink-0 overflow-hidden rounded-xl bg-white shadow-sm">
-        <Sidebar view={view} onView={showView} account={account} onSwitchAccount={switchAccount} />
-        {view === "chats" && <div className="hidden min-h-0 border-l border-[var(--line)] lg:flex"><ConversationList projects={conversations} activeId={preparedProject?.id ?? activeId} onOpen={open} /></div>}
+        <Sidebar view={view} onView={showView} account={account} onSwitchAccount={switchAccount} badges={{ chats: attention.view?.items.length ?? 0 }} />
+        {view === "chats" && <div className="hidden min-h-0 border-l border-[var(--line)] lg:flex"><ConversationList projects={conversations} activeId={preparedProject?.id ?? activeId} onOpen={open}
+          top={account.role === "designer" ? <NeedsYouToday items={attention.view?.items ?? null} error={attention.error} /> : undefined} /></div>}
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">

@@ -63,6 +63,19 @@ export function ItemHolds({ projectKey, orderId }: { projectKey: CaseKey; orderI
   }, [projectKey]);
   usePaymentRefresh(projectKey, load);
   useEffect(() => { void load(); }, [load, readiness.blocked]);
+  // A reminder links here as ?hold=<item>: open that item's drawer once the items arrive, then drop the parameter.
+  const linked = useRef(false);
+  useEffect(() => {
+    if (linked.current || !view?.items.length) return;
+    linked.current = true;
+    const url = new URL(window.location.href);
+    const wanted = url.searchParams.get("hold");
+    if (!wanted || !view.items.some((line) => line.itemId === wanted)) return;
+    setSelected(wanted);
+    document.getElementById("item-holds")?.scrollIntoView({ block: "start" });
+    url.searchParams.delete("hold");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [view]);
 
   /** Runs one step; returns the server's reply, or null when it did not start or failed. */
   const send = useCallback(async (label: string, body: Body): Promise<Reply | null> => {
@@ -267,6 +280,7 @@ function ItemDrawer({ line, designer, checkout, canHoldAll, busy, blocked, error
         <h4 className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">PayPal · Sandbox</h4>
         <dl className="mt-1.5 divide-y divide-[var(--line)]">
           <Row label="Held">{money(line.heldCents)}</Row>
+          {line.timing && (line.state === "held" || line.state === "confirmed") && <Row label="Capture assured until">{new Date(line.timing.honorEndsAt).getTime() > Date.now() ? dateTime(line.timing.honorEndsAt) : `Ended ${dateTime(line.timing.honorEndsAt)}`}</Row>}
           {line.expiresAt && <Row label="Hold expires">{dateTime(line.expiresAt)}</Row>}
           <Row label="Captured">{money(line.capturedCents)}</Row>
           {due > 0 && <Row label="Still to hold">{money(due)}</Row>}
