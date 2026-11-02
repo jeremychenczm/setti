@@ -3,8 +3,7 @@
 import { ArrowRight, ArrowUpRight, Check, ChevronDown, CircleAlert, Clock3, LoaderCircle, RefreshCw } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { rememberAccount, type AccountId } from "@/accounts/demo";
 import { HOME_SCENARIO } from "@/demo/living-dining";
 import styles from "./TryStart.module.css";
@@ -47,14 +46,13 @@ function savedOn(value: string): string {
 
 /** Loading this page only reads state; preparation follows an explicit user action. */
 export function TryStart() {
-  const router = useRouter();
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<MapleRole>("emma");
   const [confirmNew, setConfirmNew] = useState(false);
-  const [opening, startOpening] = useTransition();
+  const [opening, setOpening] = useState(false);
   const mounted = useRef(true);
   const working = useRef(false);
   const active = useRef<AbortController | null>(null);
@@ -93,11 +91,22 @@ export function TryStart() {
     return () => { mounted.current = false; controller.abort(); active.current?.abort(); };
   }, [read]);
 
-  useEffect(() => { router.prefetch("/chats/maple"); }, [router]);
+  // Back from the opened project, the page may come from the browser's cache still "opening".
+  useEffect(() => {
+    const shown = (event: PageTransitionEvent) => { if (event.persisted) setOpening(false); };
+    window.addEventListener("pageshow", shown);
+    return () => window.removeEventListener("pageshow", shown);
+  }, []);
+
+  /** A fresh document reads the role just chosen; a prefetched page may have been rendered for another role. */
+  function enter(path: string, account: AccountId) {
+    rememberAccount(account);
+    setOpening(true);
+    window.location.assign(path);
+  }
 
   function open(href: string, account: AccountId) {
-    rememberAccount(account);
-    startOpening(() => router.push(href === "/quotes/willow" ? href : "/chats/maple"));
+    enter(href === "/quotes/willow" ? href : "/chats/maple", account);
   }
 
   async function post(body: object, signal: AbortSignal): Promise<Snapshot> {
@@ -175,8 +184,7 @@ export function TryStart() {
   }
   function openStudio() {
     setRole("jordan");
-    rememberAccount("jordan");
-    startOpening(() => router.push("/studio"));
+    enter("/studio", "jordan");
   }
   function resume(runId: string, account: MapleRole) {
     if (working.current) return;
