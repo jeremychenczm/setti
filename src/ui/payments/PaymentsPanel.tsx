@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowUpRight, Ban, CircleDollarSign, LoaderCircle, LockKeyhole, ReceiptText, RefreshCw, ShieldCheck, Truck, X } from "lucide-react";
+import { ArrowUpRight, Ban, ChevronRight, CircleDollarSign, LoaderCircle, LockKeyhole, ReceiptText, RefreshCw, ShieldCheck, Truck, X } from "lucide-react";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { FrozenChangeOrder } from "@/pricing/types";
 import type { SavedMethodView } from "@/payments/saved-methods";
@@ -64,25 +64,71 @@ function lineState(line: PaymentLineView, operations: readonly OperationView[]):
 const progressTones = { waiting: "bg-amber-50 text-amber-800", ready: "bg-brand-50 text-brand-800", settled: "bg-emerald-50 text-emerald-800" };
 const lineAnchor = (line: Pick<PaymentLineView, "side" | "itemId">) => `payment-line-${line.side}-${line.itemId}`;
 
-function ExecutionOverview({ workspace }: { workspace: PaymentsWorkspace }) {
+const lineKey = (line: Pick<PaymentLineView, "side" | "itemId">) => `${line.side}:${line.itemId}`;
+/** A link to one item's card, `#payment-line-<side>-<item>`, as the line's key. */
+function lineFromHash(hash: string): string | null {
+  const rest = decodeURIComponent(hash).replace(/^#?payment-line-/, "");
+  if (rest === decodeURIComponent(hash).replace(/^#/, "")) return null;
+  const side = rest.startsWith("baseline-") ? "baseline" : rest.startsWith("proposed-") ? "proposed" : null;
+  return side ? `${side}:${rest.slice(side.length + 1)}` : null;
+}
+
+/** Every item of the version in one table, as the approved items are: select a row to act on it in the side card. */
+function PaymentLines({ workspace, selected, onSelect }: { workspace: PaymentsWorkspace; selected: string | null; onSelect: (key: string) => void }) {
   const totals = paymentScopeTotals(workspace.lines);
   const quoteDelta = workspace.plan?.quoteDeltaCents;
-  return <div className="mt-4 rounded-xl border border-brand-100 bg-brand-50/30 p-4" aria-labelledby="execution-overview-title">
-    <h3 id="execution-overview-title" className="text-[13px] font-semibold text-slate-900">One confirmed version · independent item progress</h3>
-    <p className="mt-1.5 text-[11px] leading-relaxed text-slate-600">Each row below belongs to V{workspace.version}. Completing a new purchase does not complete the release or refund for another item. The quote budget change is separate from money held, captured or returned.</p>
+  return <div className="mt-4" aria-labelledby="execution-overview-title">
+    <h3 id="execution-overview-title" className="text-[13px] font-semibold text-slate-900">Items in V{workspace.version} · each with its own progress</h3>
+    <p className="mt-1 text-[11px] leading-relaxed text-slate-600">Select an item to record its supplier&apos;s confirmation, then capture, release or refund it. Completing one item does not complete another; the quote budget change is separate from money held, captured or returned.</p>
     <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">{[
       { label: "Whole-quote budget change", amount: quoteDelta ?? null, signed: true },
       { label: "Held now · shown items", amount: totals.heldCents },
       { label: "Captured · shown items", amount: totals.capturedCents },
       { label: "Refunded · shown items", amount: totals.refundedCents },
       { label: "Actually released · shown items", amount: totals.releasedCents },
-    ].map((tile) => <div key={tile.label} className="rounded-lg bg-white p-2.5"><p className="text-[10px] text-slate-500">{tile.label}</p><p className="mt-0.5 text-[15px] font-semibold tabular-nums">{tile.amount === null ? "Unavailable" : tile.signed ? signedMoney(tile.amount) : money(tile.amount)}</p></div>)}</div>
-    <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[660px] border-collapse text-left text-[11px]"><thead><tr className="text-slate-500"><th className="py-2 pr-3 font-medium">Item in V{workspace.version}</th><th className="py-2 pr-3 font-medium">Recorded progress</th><th className="py-2 pr-3 font-medium">Net captured</th><th className="py-2 font-medium">Next dependency</th></tr></thead><tbody>{workspace.lines.map((line) => {
-      const progress = lineProgress(line, workspace.operations);
-      return <tr key={`${line.side}:${line.itemId}`} className="border-t border-brand-100 align-top"><td className="py-2.5 pr-3"><a href={`#${encodeURIComponent(lineAnchor(line))}`} className="font-semibold text-slate-800 underline decoration-slate-300 underline-offset-2">{line.label}</a><p className="mt-0.5 text-[10px] text-slate-500">{roleLabel(line)}</p></td><td className="py-2.5 pr-3"><span className={`inline-block rounded-full px-2 py-1 text-[10px] font-medium ${progressTones[progress.tone]}`}>{progress.label}</span></td><td className="py-2.5 pr-3 tabular-nums">{money(line.capturedCents - line.refundedCents)}<p className="mt-0.5 text-[10px] text-slate-500">Target {money(line.targetCents)}</p></td><td className="max-w-[260px] py-2.5 leading-relaxed text-slate-600">{progress.next}</td></tr>;
-    })}</tbody></table></div>
+    ].map((tile) => <div key={tile.label} className="rounded-lg bg-slate-50 p-2.5"><p className="text-[10px] text-slate-500">{tile.label}</p><p className="mt-0.5 text-[15px] font-semibold tabular-nums">{tile.amount === null ? "Unavailable" : tile.signed ? signedMoney(tile.amount) : money(tile.amount)}</p></div>)}</div>
+    <div className="mt-3 max-h-[640px] overflow-auto rounded-lg border border-[var(--line)]">
+      <table className="w-full min-w-[680px] border-collapse text-left text-[12px]">
+        <thead className="sticky top-0 z-10 bg-[var(--canvas)] text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
+          <tr><th className="px-3 py-2 font-medium">Item</th><th className="px-3 py-2 font-medium">Progress</th><th className="px-3 py-2 text-right font-medium">Held</th><th className="px-3 py-2 text-right font-medium">Net captured</th><th className="px-3 py-2 font-medium">Next step</th><th className="w-8" /></tr>
+        </thead>
+        <tbody>{workspace.lines.map((line) => {
+          const key = lineKey(line);
+          const progress = lineProgress(line, workspace.operations);
+          return <tr key={key} id={lineAnchor(line)} onClick={() => onSelect(key)} aria-selected={selected === key}
+            className={`scroll-mt-24 cursor-pointer border-t border-[var(--line)] align-top transition-colors hover:bg-brand-50/60 ${selected === key ? "bg-brand-50" : ""}`}>
+            <td className="px-3 py-2.5"><button type="button" onClick={(event) => { event.stopPropagation(); onSelect(key); }} className={`text-left font-medium hover:underline ${line.cancellation ? "text-[var(--muted)] line-through" : "text-[var(--ink)]"}`}>{line.label}</button><span className="block text-[10px] text-[var(--muted)]">{roleLabel(line)}</span></td>
+            <td className="px-3 py-2.5"><span className={`inline-block whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-medium ${progressTones[progress.tone]}`}>{progress.label}</span></td>
+            <td className="px-3 py-2.5 text-right tabular-nums">{money(line.heldCents)}</td>
+            <td className="px-3 py-2.5 text-right tabular-nums">{money(line.capturedCents - line.refundedCents)}<span className="block text-[10px] text-[var(--muted)]">Target {money(line.targetCents)}</span></td>
+            <td className="max-w-[260px] px-3 py-2.5 text-[11px] leading-relaxed text-slate-600">{progress.next}</td>
+            <td className="pr-3 pt-3 text-[var(--muted)]"><ChevronRight className="h-3.5 w-3.5" /></td>
+          </tr>;
+        })}</tbody>
+      </table>
+    </div>
     <p className="mt-2 text-[10px] leading-relaxed text-slate-500">Net captured = completed captures minus completed refunds. Pending results do not count as settled money. Check any open PayPal operations before continuing.</p>
   </div>;
+}
+
+/** One item's side card beside the table, as the approved items have. A click beside it or Escape closes it. */
+function LineDrawer({ line, operations, onClose, children }: { line: PaymentLineView; operations: readonly OperationView[]; onClose: () => void; children: React.ReactNode }) {
+  const progress = lineProgress(line, operations);
+  return <>
+    {/* PayPal's own popup overlay sits above this, so a click on it never closes a checkout. */}
+    <div aria-hidden className="fixed inset-0 z-30" onClick={onClose} />
+    <aside role="dialog" aria-labelledby="line-drawer-title" className="fixed inset-y-0 right-0 z-40 flex w-full max-w-[440px] flex-col border-l border-[var(--line)] bg-white shadow-2xl">
+      <header className="flex items-start gap-3 border-b border-[var(--line)] px-5 py-4">
+        <div className="min-w-0 flex-1">
+          <h3 id="line-drawer-title" className="text-[15px] font-semibold leading-snug">{line.label}</h3>
+          <p className="mt-0.5 text-[11px] text-[var(--muted)]">{roleLabel(line)}</p>
+          <p className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-[11px] font-medium ${progressTones[progress.tone]}`}>{progress.label}</p>
+        </div>
+        <button type="button" aria-label="Close" onClick={onClose} className="rounded-md p-1 text-[var(--muted)] hover:bg-[var(--canvas)] hover:text-[var(--ink)]"><X className="h-4 w-4" /></button>
+      </header>
+      <div className="flex-1 overflow-y-auto px-5 py-4 text-[12px]">{children}</div>
+    </aside>
+  </>;
 }
 
 export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; onChange?: () => void }) {
@@ -94,6 +140,19 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
   const [notice, setNotice] = useState<ReturnType<typeof paymentReturnNotice>>(null);
   const mutating = useRef(false);
   const loadSequence = useRef(0);
+  const [selected, setSelected] = useState<string | null>(null);
+  useEffect(() => {
+    if (!selected) return;
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setSelected(null); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [selected]);
+  // A reminder or the guide links to one item as #payment-line-…: its card opens, here or after the page loads.
+  useEffect(() => {
+    const opened = () => { const key = lineFromHash(window.location.hash); if (key) setSelected(key); };
+    window.addEventListener("hashchange", opened);
+    return () => window.removeEventListener("hashchange", opened);
+  }, []);
 
   const load = useCallback(async () => {
     const sequence = ++loadSequence.current;
@@ -112,6 +171,8 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
       // The section renders after loading, so the browser could not jump to #payments by itself.
       // A reminder links straight to one item's card.
       const target = window.location.hash === "#payments" || window.location.hash.startsWith("#payment-line-") ? decodeURIComponent(window.location.hash.slice(1)) : null;
+      const linked = lineFromHash(window.location.hash);
+      if (linked) setSelected(linked);
       if (target) window.requestAnimationFrame(() => document.getElementById(target)?.scrollIntoView({ block: "start" }));
     });
     const returned = new URLSearchParams(window.location.search).get("paypal");
@@ -173,6 +234,7 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
   const disabled = Boolean(busy) || readiness.blocked;
   const toHold = workspace.lines.flatMap((line) => line.steps.filter((step) => step.kind === "authorize" && step.available));
   const pay: LinePayment = { checkout: workspace.checkout, savedMethod: workspace.savedMethod, request };
+  const openLine = workspace.lines.find((line) => lineKey(line) === selected) ?? null;
 
   return <section id="payments" aria-labelledby="payments-title" className="mb-5 scroll-mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
     <div className="flex flex-wrap items-center gap-2"><h2 id="payments-title" className="mr-auto flex items-center gap-2 text-[16px] font-semibold"><CircleDollarSign className="h-4.5 w-4.5 text-[var(--primary)]" />Payments · V{workspace.version}</h2><span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-800">PayPal Sandbox · test money</span><button onClick={() => void load()} disabled={Boolean(busy)} className="flex items-center gap-1 text-[11px] text-slate-500 hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Reload</button></div>
@@ -204,7 +266,10 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
       </div> : null}
     </div>)}</div>}
 
-    {workspace.lines.length > 0 && <><ExecutionOverview workspace={workspace} /><div className="mt-4 space-y-4">{workspace.lines.map((line) => <LineCard key={`${line.side}:${line.itemId}`} line={line} operations={workspace.operations} version={workspace.version} busy={busy} disabled={disabled} canAct={workspace.canAct} canReconcile={workspace.canReconcile} pay={pay} onAction={(action, key) => run({ ...action, itemId: line.itemId, side: line.side } as Action, key)} onCheck={(operationId) => void run({ action: "check", operationId }, `check:${operationId}`)} onCancelItem={(reason, note) => cancelItem(line, reason, note)} />)}</div>
+    {workspace.lines.length > 0 && <><PaymentLines workspace={workspace} selected={selected} onSelect={setSelected} />
+      {openLine && <LineDrawer line={openLine} operations={workspace.operations} onClose={() => setSelected(null)}>
+        <LineDetails key={lineKey(openLine)} line={openLine} operations={workspace.operations} version={workspace.version} busy={busy} disabled={disabled} canAct={workspace.canAct} canReconcile={workspace.canReconcile} pay={pay} onAction={(action, key) => run({ ...action, itemId: openLine.itemId, side: openLine.side } as Action, key)} onCheck={(operationId) => void run({ action: "check", operationId }, `check:${operationId}`)} onCancelItem={(reason, note) => cancelItem(openLine, reason, note)} />
+      </LineDrawer>}
       <PaymentFees lines={workspace.lines} {...(workspace.canReconcile ? { onRefresh: () => void run({ action: "fees" }, "fees"), refreshing: busy === "fees", disabled } : {})} /></>}
 
     {plan && <>
@@ -233,7 +298,8 @@ interface LinePayment { checkout: CheckoutView | null; savedMethod: SavedMethodV
 
 const DESIGNER = DEMO_ACCOUNTS.find((account) => account.role === "designer")!.name;
 
-function LineCard({ line, operations, version, busy, disabled, canAct, canReconcile, pay, onAction, onCheck, onCancelItem }: { line: PaymentLineView; operations: readonly OperationView[]; version: number; busy: string | null; disabled: boolean; canAct: boolean; canReconcile: boolean; pay: LinePayment; onAction: (action: LineActionInput, key: string) => Promise<boolean>; onCheck: (operationId: string) => void; onCancelItem: (reason: CancellationReason, note: string) => Promise<boolean> }) {
+/** What one item needs in its side card: its amounts, the supplier's records, and each step it can take next. */
+function LineDetails({ line, operations, version, busy, disabled, canAct, canReconcile, pay, onAction, onCheck, onCancelItem }: { line: PaymentLineView; operations: readonly OperationView[]; version: number; busy: string | null; disabled: boolean; canAct: boolean; canReconcile: boolean; pay: LinePayment; onAction: (action: LineActionInput, key: string) => Promise<boolean>; onCheck: (operationId: string) => void; onCancelItem: (reason: CancellationReason, note: string) => Promise<boolean> }) {
   const [confirming, setConfirming] = useState<PaymentStep["kind"] | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [form, setForm] = useState<"supplier_confirmation" | "supplier_credit" | null>(null);
@@ -251,9 +317,8 @@ function LineCard({ line, operations, version, busy, disabled, canAct, canReconc
   ];
   const pending = line.captures.find((capture) => capture.status === "pending")?.operationId ?? line.refunds.find((refund) => refund.status === "pending")?.operationId ?? null;
   const progress = lineProgress(line, operations);
-  return <article id={lineAnchor(line)} className="scroll-mt-5 rounded-xl border border-slate-200 p-4">
-    <div className="flex flex-wrap items-center gap-2"><h3 className="mr-auto text-[14px] font-semibold">{line.label}</h3><span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${progressTones[progress.tone]}`}>{progress.label}</span><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">{roleLabel(line)}</span></div>
-    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">{tiles.map((tile) => <div key={tile.label} className="rounded-lg bg-slate-50 p-2.5"><p className="text-[10px] text-slate-500">{tile.label}</p><p className="mt-0.5 text-[15px] font-semibold tabular-nums">{money(tile.amount)}</p></div>)}</div>
+  return <div>
+    <div className="grid grid-cols-2 gap-2">{tiles.map((tile) => <div key={tile.label} className="rounded-lg bg-slate-50 p-2.5"><p className="text-[10px] text-slate-500">{tile.label}</p><p className="mt-0.5 text-[15px] font-semibold tabular-nums">{money(tile.amount)}</p></div>)}</div>
     <p className="mt-3 flex items-start gap-1.5 text-[12px] leading-relaxed text-slate-700"><ShieldCheck className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${progress.tone === "settled" ? "text-emerald-600" : progress.tone === "waiting" ? "text-amber-600" : "text-brand-600"}`} />{lineState(line, operations)}</p>
     {canReconcile && pending && operations.find((operation) => operation.id === pending)?.canCheck && <button onClick={() => onCheck(pending)} disabled={disabled} className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-amber-900 underline disabled:opacity-50"><RefreshCw className="h-3.5 w-3.5" />Check the pending PayPal result</button>}
 
@@ -299,10 +364,35 @@ function LineCard({ line, operations, version, busy, disabled, canAct, canReconc
         onBack={() => setCancelling(false)} onSubmit={(reason, note) => void onCancelItem(reason, note).then((ok) => { if (ok) setCancelling(false); })} /></div>
       : <button type="button" disabled={disabled} onClick={() => setCancelling(true)} className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-600 underline-offset-2 hover:text-red-700 hover:underline disabled:opacity-50"><Ban className="h-3.5 w-3.5" />{line.heldCents > 0 ? "Cancel hold…" : "Cancel item…"}</button>)}
 
-    {line.holds.length > 0 && <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[620px] border-collapse text-left text-[11px]"><thead><tr className="text-slate-400"><th className="py-1 pr-2 font-medium">PayPal authorization · order</th><th className="py-1 pr-2 font-medium">Amount</th><th className="py-1 pr-2 font-medium">Status</th><th className="py-1 pr-2 font-medium">Created for</th><th className="py-1 font-medium">Honor period · expires</th></tr></thead><tbody>{line.holds.map((hold) => <tr key={hold.id} className="border-t border-slate-100 align-top"><td className="py-1.5 pr-2 font-mono">{hold.paypalAuthorizationId}<br /><span className="text-slate-400">{hold.paypalOrderId}</span></td><td className="py-1.5 pr-2 tabular-nums">{money(hold.amountCents)}{hold.capturedCents ? <><br /><span className="text-slate-500">captured {money(hold.capturedCents)}</span></> : null}</td><td className="py-1.5 pr-2">{hold.status}{hold.heldCents ? ` · ${money(hold.heldCents)} held` : ""}{hold.releasedCents ? ` · ${money(hold.releasedCents)} released` : ""}</td><td className="py-1.5 pr-2">{hold.version ? `V${hold.version}` : "—"}</td><td className="py-1.5">{hold.honorExpiresAt ? dateTime(hold.honorExpiresAt) : "—"}<br /><span className="text-slate-400">{hold.expiresAt ? dateTime(hold.expiresAt) : "not reported"}</span></td></tr>)}</tbody></table></div>}
-    {line.captures.length > 0 && <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[620px] border-collapse text-left text-[11px]"><thead><tr className="text-slate-400"><th className="py-1 pr-2 font-medium">PayPal capture</th><th className="py-1 pr-2 font-medium">Amount</th><th className="py-1 pr-2 font-medium">Status</th><th className="py-1 pr-2 font-medium">Refunded</th><th className="py-1 font-medium">Captured</th></tr></thead><tbody>{line.captures.map((capture) => <tr key={capture.id} className="border-t border-slate-100 align-top"><td className="py-1.5 pr-2 font-mono">{capture.paypalCaptureId}{capture.authorizationId ? <><br /><span className="text-slate-400">from {line.holds.find((hold) => hold.id === capture.authorizationId)?.paypalAuthorizationId ?? "hold"}</span></> : null}</td><td className="py-1.5 pr-2 tabular-nums">{money(capture.amountCents)}{capture.finalCapture ? " · final" : ""}</td><td className="py-1.5 pr-2">{capture.status}</td><td className="py-1.5 pr-2 tabular-nums">{money(capture.refundedCents)}{capture.pendingRefundCents ? ` (+${money(capture.pendingRefundCents)} pending)` : ""}</td><td className="py-1.5">{dateTime(capture.createdAt)}</td></tr>)}</tbody></table></div>}
-    {line.refunds.length > 0 && <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[620px] border-collapse text-left text-[11px]"><thead><tr className="text-slate-400"><th className="py-1 pr-2 font-medium">PayPal refund</th><th className="py-1 pr-2 font-medium">Amount</th><th className="py-1 pr-2 font-medium">Status</th><th className="py-1 pr-2 font-medium">From capture</th><th className="py-1 font-medium">Refunded</th></tr></thead><tbody>{line.refunds.map((refund) => <tr key={refund.id} className="border-t border-slate-100 align-top"><td className="py-1.5 pr-2 font-mono">{refund.paypalRefundId}</td><td className="py-1.5 pr-2 tabular-nums">{money(refund.amountCents)}</td><td className="py-1.5 pr-2">{refund.status}</td><td className="py-1.5 pr-2 font-mono">{line.captures.find((capture) => capture.id === refund.captureId)?.paypalCaptureId ?? "—"}</td><td className="py-1.5">{dateTime(refund.createdAt)}</td></tr>)}</tbody></table></div>}
-  </article>;
+    <PayPalRecords line={line} />
+  </div>;
+}
+
+/** The PayPal records behind an item, compact enough for the side card. */
+function PayPalRecords({ line }: { line: PaymentLineView }) {
+  if (!line.holds.length && !line.captures.length && !line.refunds.length) return null;
+  const row = "rounded-lg bg-slate-50 p-2.5 text-[11px] leading-relaxed";
+  const id = "break-all font-mono text-[10px] text-slate-500";
+  return <section aria-label="PayPal records" className="mt-4">
+    <h4 className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">PayPal Sandbox records</h4>
+    <ul className="mt-1.5 space-y-1.5">
+      {line.holds.map((hold) => <li key={hold.id} className={row}>
+        <p className="font-medium text-slate-700">Hold · {money(hold.amountCents)} · {hold.status}{hold.heldCents ? ` · ${money(hold.heldCents)} held` : ""}{hold.capturedCents ? ` · ${money(hold.capturedCents)} captured` : ""}{hold.releasedCents ? ` · ${money(hold.releasedCents)} released` : ""}</p>
+        <p className={id}>{hold.paypalAuthorizationId} · order {hold.paypalOrderId}</p>
+        <p className="text-[10px] text-slate-500">{hold.version ? `For V${hold.version} · ` : ""}honor period {hold.honorExpiresAt ? dateTime(hold.honorExpiresAt) : "—"} · expires {hold.expiresAt ? dateTime(hold.expiresAt) : "not reported"}</p>
+      </li>)}
+      {line.captures.map((capture) => <li key={capture.id} className={row}>
+        <p className="font-medium text-slate-700">Capture · {money(capture.amountCents)}{capture.finalCapture ? " · final" : ""} · {capture.status}{capture.refundedCents ? ` · ${money(capture.refundedCents)} refunded` : ""}{capture.pendingRefundCents ? ` (+${money(capture.pendingRefundCents)} pending)` : ""}</p>
+        <p className={id}>{capture.paypalCaptureId}{capture.authorizationId ? ` · from ${line.holds.find((hold) => hold.id === capture.authorizationId)?.paypalAuthorizationId ?? "hold"}` : ""}</p>
+        <p className="text-[10px] text-slate-500">{dateTime(capture.createdAt)}</p>
+      </li>)}
+      {line.refunds.map((refund) => <li key={refund.id} className={row}>
+        <p className="font-medium text-slate-700">Refund · {money(refund.amountCents)} · {refund.status}</p>
+        <p className={id}>{refund.paypalRefundId} · from {line.captures.find((capture) => capture.id === refund.captureId)?.paypalCaptureId ?? "—"}</p>
+        <p className="text-[10px] text-slate-500">{dateTime(refund.createdAt)}</p>
+      </li>)}
+    </ul>
+  </section>;
 }
 
 function StepButton({ step, savedMethod, retainedCost, busy, disabled, onClick }: { step: PaymentStep; savedMethod: SavedMethodView | null; retainedCost: boolean; busy: boolean; disabled: boolean; onClick: () => void }) {
@@ -327,8 +417,8 @@ function SupplierOrderForm({ line, disabled, onSubmit }: { line: PaymentLineView
   return <form className="mt-3 space-y-3 rounded-lg bg-slate-50 p-3" onSubmit={(event) => { event.preventDefault(); if (valid) onSubmit({ quantity: count, unitPriceCents: amounts[0].value!, taxCents: amounts[1].value!, freightCents: amounts[2].value!, inStock, leadTimeDays: days, reference: reference.trim(), note: note.trim() }); }}>
     <div><p className="text-[12px] font-semibold text-slate-800">{retainedCost ? "Demo supplier retained-cost confirmation" : "Demo supplier confirmation"}</p><p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">There is no real supplier in this demo, so the confirmation is filled in from the client-confirmed line. Check it and save it.</p></div>
     <p className="text-[11px] leading-relaxed text-slate-600">{retainedCost ? "Confirm the supplier's total retained cost for the cancelled or replaced item. The client-confirmed total already includes applicable tax and delivery. Closing the original hold after capturing this cost releases the unused balance." : "Enter what the supplier confirmed. This demo record is entered by the designer. If any amount differs from the client-confirmed terms, Setti refuses it and the change goes back to pricing and client confirmation."}</p>
-    <div className="grid gap-3 sm:grid-cols-4"><Field label={retainedCost ? "Cost items" : "Quantity"}><input value={quantity} onChange={(event) => setQuantity(event.target.value)} readOnly={retainedCost} inputMode="numeric" className={inputClass} /></Field><Field label={retainedCost ? "Total retained cost · USD" : "Unit price · USD"} error={amounts[0].error ?? undefined}><input value={unit} onChange={(event) => setUnit(event.target.value)} inputMode="decimal" className={inputClass} /></Field><Field label="Line tax · USD" error={amounts[1].error ?? undefined}><input value={tax} onChange={(event) => setTax(event.target.value)} readOnly={retainedCost} inputMode="decimal" className={inputClass} /></Field><Field label="Line delivery · USD" error={amounts[2].error ?? undefined}><input value={freight} onChange={(event) => setFreight(event.target.value)} readOnly={retainedCost} inputMode="decimal" className={inputClass} /></Field></div>
-    <div className="grid gap-3 sm:grid-cols-3"><Field label={retainedCost ? "Supplier's reference" : "Supplier's order number"}><input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={200} placeholder="From the supplier's confirmation" className={inputClass} /></Field>{!retainedCost && <Field label="Lead time · days (optional)"><input value={leadTime} onChange={(event) => setLeadTime(event.target.value)} inputMode="numeric" className={inputClass} /></Field>}<Field label="Note (optional)"><input value={note} onChange={(event) => setNote(event.target.value)} maxLength={1000} className={inputClass} /></Field></div>
+    <div className="grid grid-cols-2 gap-3"><Field label={retainedCost ? "Cost items" : "Quantity"}><input value={quantity} onChange={(event) => setQuantity(event.target.value)} readOnly={retainedCost} inputMode="numeric" className={inputClass} /></Field><Field label={retainedCost ? "Total retained cost · USD" : "Unit price · USD"} error={amounts[0].error ?? undefined}><input value={unit} onChange={(event) => setUnit(event.target.value)} inputMode="decimal" className={inputClass} /></Field><Field label="Line tax · USD" error={amounts[1].error ?? undefined}><input value={tax} onChange={(event) => setTax(event.target.value)} readOnly={retainedCost} inputMode="decimal" className={inputClass} /></Field><Field label="Line delivery · USD" error={amounts[2].error ?? undefined}><input value={freight} onChange={(event) => setFreight(event.target.value)} readOnly={retainedCost} inputMode="decimal" className={inputClass} /></Field></div>
+    <div className="grid grid-cols-2 gap-3"><Field label={retainedCost ? "Supplier's reference" : "Supplier's order number"}><input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={200} placeholder="From the supplier's confirmation" className={inputClass} /></Field>{!retainedCost && <Field label="Lead time · days (optional)"><input value={leadTime} onChange={(event) => setLeadTime(event.target.value)} inputMode="numeric" className={inputClass} /></Field>}<Field label="Note (optional)"><input value={note} onChange={(event) => setNote(event.target.value)} maxLength={1000} className={inputClass} /></Field></div>
     <label className="flex items-center gap-2 text-[12px]"><input type="checkbox" checked={inStock} onChange={(event) => setInStock(event.target.checked)} />{retainedCost ? "The supplier confirmed this total retained cost for the cancellation or replacement." : "The supplier confirmed the item is in stock and accepted the order."}</label>
     <button type="submit" disabled={disabled || !valid} className="rounded-lg bg-slate-900 px-3.5 py-2 text-[12px] font-semibold text-white disabled:bg-slate-200 disabled:text-slate-400">{retainedCost ? "Save retained-cost confirmation" : "Save supplier confirmation"}</button>
   </form>;
@@ -343,7 +433,7 @@ function SupplierCreditForm({ amountCents, itemId, disabled, onSubmit }: { amoun
   return <form className="mt-3 space-y-3 rounded-lg bg-slate-50 p-3" onSubmit={(event) => { event.preventDefault(); if (valid) onSubmit({ creditCents: parsed.value!, reference: reference.trim(), note: note.trim() }); }}>
     <div><p className="text-[12px] font-semibold text-slate-800">Demo supplier credit</p><p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">There is no real supplier in this demo, so the credit note is filled in from the confirmed refund. Check it and save it.</p></div>
     <p className="text-[11px] leading-relaxed text-slate-600">The credit the supplier issued for the return. It must equal the confirmed refund of {money(amountCents)}; a different credit means the retained cost changed and the return goes back to pricing.</p>
-    <div className="grid gap-3 sm:grid-cols-3"><Field label="Supplier credit · USD" error={parsed.error ?? undefined}><input value={credit} onChange={(event) => setCredit(event.target.value)} inputMode="decimal" className={inputClass} /></Field><Field label="Supplier's credit note number"><input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={200} placeholder="From the supplier's credit note" className={inputClass} /></Field><Field label="Note (optional)"><input value={note} onChange={(event) => setNote(event.target.value)} maxLength={1000} className={inputClass} /></Field></div>
+    <div className="grid grid-cols-2 gap-3"><Field label="Supplier credit · USD" error={parsed.error ?? undefined}><input value={credit} onChange={(event) => setCredit(event.target.value)} inputMode="decimal" className={inputClass} /></Field><Field label="Supplier's credit note number"><input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={200} placeholder="From the supplier's credit note" className={inputClass} /></Field><Field label="Note (optional)"><input value={note} onChange={(event) => setNote(event.target.value)} maxLength={1000} className={inputClass} /></Field></div>
     <button type="submit" disabled={disabled || !valid} className="rounded-lg bg-slate-900 px-3.5 py-2 text-[12px] font-semibold text-white disabled:bg-slate-200 disabled:text-slate-400">Save supplier credit</button>
   </form>;
 }
