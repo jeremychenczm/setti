@@ -26,7 +26,7 @@ export function AccountMenu({ account, onSwitch, compact = false, placement = "b
         aria-label={`Signed in as ${account.name}. Switch account`}
         className={compact ? "rounded-full ring-offset-2 hover:ring-2 hover:ring-brand-100" : "flex w-full items-center gap-2 rounded-lg px-1 py-1 text-left hover:bg-white/70"}
       >
-        <Avatar person={account} size="sm" />
+        <Avatar person={account} size={compact ? "lg" : "sm"} />
         {!compact && <>
           <span className="min-w-0 flex-1 leading-tight">
             <span className="block truncate text-[12px] font-medium">{account.name}</span>

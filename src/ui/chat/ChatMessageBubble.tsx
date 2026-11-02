@@ -27,10 +27,10 @@ export function ChatMessageBubble({ message, person, own, highlighted, unsaved, 
   return (
     <div id={`case-message-${message.id}`} className={`scroll-mt-5 rounded-xl transition-colors ${highlighted ? "bg-yellow-50 ring-2 ring-yellow-200" : ""}`}>
       <div className={`flex items-start gap-2.5 ${own ? "justify-end" : ""}`}>
-        {!own && (notice ? <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"><Info className="h-5 w-5" /></span> : assistant ? <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800"><Bot className="h-5 w-5" /></span> : <Avatar person={person} />)}
+        {!own && (notice ? <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"><Info className="h-5 w-5" /></span> : assistant ? <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-700"><Bot className="h-5 w-5" /></span> : <Avatar person={person} />)}
         {own && <span className="order-last"><Avatar person={person} /></span>}
         <div className={`max-w-[88%] rounded-xl px-3.5 py-2.5 sm:max-w-[82%] ${notice ? "border border-[var(--line)] bg-white" : assistant ? "bg-[var(--agent)]" : own ? "bg-[var(--primary-soft)]" : "bg-[var(--canvas)]"}`}>
-          <div className={`mb-1 text-[11px] font-semibold ${notice ? "text-slate-500" : assistant ? "text-amber-800" : "text-slate-600"}`}>{notice ? "System notice" : assistant ? "Setti" : person.name}</div>
+          <div className={`mb-1 text-[11px] font-semibold ${notice ? "text-slate-500" : assistant ? "text-slate-700" : "text-slate-600"}`}>{notice ? "System notice" : assistant ? "Setti" : person.name}</div>
           {about && <button onClick={about.open} className="mb-1.5 inline-flex max-w-full items-center gap-1 rounded-full border border-brand-100 bg-white px-2 py-0.5 text-[11px] font-medium text-[var(--primary)] hover:bg-brand-50"><FileText className="h-3 w-3 shrink-0" /><span className="truncate">About · {about.name} (V1)</span></button>}
           {/* A written money answer is rendered by its card, with each sentence's evidence numbers. */}
           {!(assistant && message.moneyAnswer?.answer) &&<p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed">{linkedText(message.text)}</p>}

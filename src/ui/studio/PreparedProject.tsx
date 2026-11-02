@@ -5,9 +5,9 @@ import { useState } from "react";
 import { STUDIO_STAGES, studioLineState, studioLineTotal, studioMoneyTotals, studioQuoteTotal, type StudioCase, type StudioQuote } from "@/demo/studio-types";
 import { industryIcons } from "./DesignerProjects";
 import styles from "./Studio.module.css";
+import { Avatar } from "../workspace/primitives";
 
 const money = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
-const initials = (name: string) => name.split(" ").map((word) => word[0]).slice(0, 2).join("");
 const quoteStatus = { approved: "Approved", draft: "Draft · not sent", awaiting_client: "Awaiting client", declined: "Declined · not in force" };
 
 export function StudioProjectRecords({ project, initialTab = "quote", onBack, onSelectTab }: { project: StudioCase; initialTab?: "quote" | "payments"; onBack: () => void; onSelectTab?: (tab: "quote" | "payments") => void }) {
@@ -24,7 +24,7 @@ export function StudioProjectRecords({ project, initialTab = "quote", onBack, on
         <p className={styles.historyNote}>Starting quotes, approvals and payment figures are prepared examples. New discussion stays in this project’s chat; these records do not change when a message is sent.</p>
         <div className={styles.projectColumns}>
           <section className={styles.workspace} aria-label={`${project.name} project history`}>
-            <div className={styles.clientHeader}><span className={styles.clientAvatar}>{initials(project.client.name)}</span><div><strong>{project.client.name}</strong><p>{project.client.title} · project chat with Jordan</p></div></div>
+            <div className={styles.clientHeader}><Avatar person={{ id: project.id, name: project.client.name, role: "client" }} size="lg" /><div><strong>{project.client.name}</strong><p>{project.client.title} · project chat with Jordan</p></div></div>
             <div className={styles.tabs} role="tablist" aria-label="Project records">{([['quote', 'Quotes', FileText], ['payments', 'Payments', ReceiptText]] as const).map(([id, label, TabIcon]) => <button key={id} id={`tab-${id}`} type="button" role="tab" aria-selected={tab === id} aria-controls={`panel-${id}`} onClick={() => onSelectTab ? onSelectTab(id) : setTab(id)}><TabIcon size={14} />{label}</button>)}</div>
             <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} tabIndex={0}>
               {tab === "quote" && <div className={styles.recordContent}>

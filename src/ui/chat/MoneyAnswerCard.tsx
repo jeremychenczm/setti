@@ -27,12 +27,12 @@ export function MoneyAnswerCard({ answer, messageId }: { answer: MoneyAnswer; me
   const sources = new Map(answer.sources.map((source) => [source.id, source]));
   const facts: MoneyFact[] = answer.facts;
 
-  const records = <section aria-label="Money answer evidence" className="mt-3 rounded-lg border border-amber-200/70 bg-white/80 p-3">
-    <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-amber-950"><ReceiptText className="h-3.5 w-3.5 shrink-0" /><span>Recorded funds · V{answer.version}</span></div>
+  const records = <section aria-label="Money answer evidence" className="mt-3 rounded-lg border border-slate-200 bg-white/80 p-3">
+    <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-slate-800"><ReceiptText className="h-3.5 w-3.5 shrink-0" /><span>Recorded funds · V{answer.version}</span></div>
     <p className="text-[10px] leading-relaxed text-slate-500">Saved PayPal Sandbox records read <time dateTime={answer.checkedAt}>{recordedTime(answer.checkedAt)}</time>{answer.providerRecordedAt ? <>; latest PayPal record <time dateTime={answer.providerRecordedAt}>{recordedTime(answer.providerRecordedAt)}</time></> : "; no recorded PayPal receipt"}. Not a live PayPal check.</p>
-    {facts.length ? <ol className="mt-3 space-y-3 border-t border-amber-100 pt-3">
+    {facts.length ? <ol className="mt-3 space-y-3 border-t border-slate-100 pt-3">
       {facts.map((fact, index) => <li key={fact.id} id={`money-${messageId}-fact-${index + 1}`} className="flex gap-2">
-        <span className="mt-0.5 flex h-4 min-w-4 shrink-0 items-center justify-center rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-900">{index + 1}</span>
+        <span className="mt-0.5 flex h-4 min-w-4 shrink-0 items-center justify-center rounded bg-slate-100 px-1 text-[9px] font-semibold text-slate-700">{index + 1}</span>
         <div className="min-w-0">
           <p className="whitespace-pre-wrap break-words text-[11px] leading-relaxed text-slate-700">{fact.text.en}</p>
           <ul aria-label="Sources for this statement" className="mt-1 space-y-0.5">
@@ -56,7 +56,7 @@ export function MoneyAnswerCard({ answer, messageId }: { answer: MoneyAnswer; me
     {body.rows.length > 0 && <table className="mt-2 w-full overflow-hidden rounded-lg bg-white/70 text-[12px]">
       <thead><tr className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]"><th scope="col" className="py-1.5 pl-3 pr-2 text-left font-medium">Item</th><th scope="col" className="px-2 py-1.5 text-left font-medium">What happened</th><th scope="col" className="py-1.5 pl-2 pr-3 text-right font-medium">Charged now</th></tr></thead>
       <tbody>
-        {body.rows.map((row, index) => <tr key={index} className="border-t border-amber-100">
+        {body.rows.map((row, index) => <tr key={index} className="border-t border-slate-100">
           <td className="py-1.5 pl-3 pr-2 align-baseline font-medium">{row.label}</td>
           <td className="px-2 py-1.5 align-baseline text-slate-600">{row.status}</td>
           <td className="whitespace-nowrap py-1.5 pl-2 pr-3 text-right align-baseline font-semibold tabular-nums">{row.amount ?? ""}</td>

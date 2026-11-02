@@ -87,7 +87,7 @@ function Summary({ view }: { view: InboxView }) {
   }, [shown, empty]);
   if (!state) return null;
   return <div className="mb-4 rounded-xl bg-[var(--agent)] px-4 py-3">
-    <p className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-800"><Bot className="h-3.5 w-3.5" />Setti</p>
+    <p className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700"><Bot className="h-3.5 w-3.5" />Setti</p>
     {state === "loading" ? <p role="status" className="mt-1.5 flex items-center gap-1.5 text-[12px] text-slate-600"><LoaderCircle className="h-3.5 w-3.5 animate-spin" />Reading {view.role === "designer" ? "your projects" : "your payment records"}…</p>
       : state.summary ? <>
         <p className="mt-1 text-[13px] leading-relaxed text-[var(--ink)]">{state.summary.sentences.map((sentence) => sentence.text).join(" ")}</p>
