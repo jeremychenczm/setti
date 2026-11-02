@@ -1,3 +1,4 @@
+import { takeAiBudget } from "@/http/ai-budget";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -114,6 +115,8 @@ export async function postCaseResponse(req: NextRequest, rawKey: string, retry =
       if (!isAiInvocation(input.text)) return respond(req, sessionId, snapshot(state, req));
       messageId = input.id;
     }
+    const budget = takeAiBudget(sessionId);
+    if (budget) return respond(req, sessionId, { code: "RATE_LIMITED", error: budget, state: snapshot(await store.getCase(sessionId, rawKey), req) }, 429);
     const state = await runCaseAi(store, sessionId, rawKey, messageId);
     return respond(req, sessionId, snapshot(state, req));
   } catch (error) {

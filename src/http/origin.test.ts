@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-import { describe, expect, it } from "vitest";
-import { isSameOriginRequest, requestOrigin } from "./origin";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { configuredOrigin, isSameOriginRequest, requestOrigin } from "./origin";
 
 function request(host: string | null, origin: string | null, url = "http://localhost:3002/api/try", extra: Record<string, string> = {}) {
   return new NextRequest(url, { headers: { ...(host === null ? {} : { Host: host }), ...(origin === null ? {} : { Origin: origin }), ...extra } });
@@ -39,5 +39,22 @@ describe("mutation request origins", () => {
     expect(isSameOriginRequest(request(null, "http://localhost:3002"))).toBe(true);
     expect(isSameOriginRequest(request(null, "http://127.0.0.1:3002"))).toBe(false);
     expect(isSameOriginRequest(request(null, null))).toBe(false);
+  });
+});
+
+describe("a hosted server behind a proxy that ends TLS", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("uses its configured public origin: the app itself sees plain http", () => {
+    vi.stubEnv("SETTI_PUBLIC_URL", "https://setti.onrender.com/");
+    const req = request("setti.onrender.com", "https://setti.onrender.com", "http://setti.onrender.com/api/try");
+    expect(requestOrigin(req)).toBe("https://setti.onrender.com");
+    expect(isSameOriginRequest(req)).toBe(true);
+    expect(isSameOriginRequest(request("setti.onrender.com", "https://evil.example", "http://setti.onrender.com/api/try"))).toBe(false);
+    expect(isSameOriginRequest(request("setti.onrender.com", "http://setti.onrender.com", "http://setti.onrender.com/api/try"))).toBe(false);
+  });
+
+  it("ignores a configured value that is not a plain web origin", () => {
+    for (const value of ["", "not a url", "ftp://setti.example", "https://user:pass@setti.example"]) expect(configuredOrigin({ SETTI_PUBLIC_URL: value })).toBeNull();
   });
 });

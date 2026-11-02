@@ -1,0 +1,76 @@
+# Render Blueprint for the hosted Setti demo: the web app, its Postgres, and the
+# daily hold check. Secrets marked `sync: false` are entered in the Render
+# dashboard when the Blueprint is created; nothing secret lives in this file.
+# Plans: paid plans keep the app awake and the database from expiring through
+# the judging period; change them in the dashboard if you choose otherwise.
+services:
+  - type: web
+    name: setti
+    runtime: node
+    plan: starter
+    region: oregon
+    branch: main
+    autoDeploy: false
+    buildCommand: npm ci && npm run build
+    # Migrations run before each start; each one runs once.
+    startCommand: npm run db:migrate && npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: setti-db
+          property: connectionString
+      # The public https address of this service, e.g. https://setti.onrender.com.
+      - key: SETTI_PUBLIC_URL
+        sync: false
+      - key: PAYPAL_ENV
+        value: sandbox
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      # The id PayPal shows after registering https://<host>/api/payments/paypal/webhook.
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      - key: SANDBOX_BUYER_EMAIL
+        sync: false
+      - key: SANDBOX_BUYER_PASSWORD
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SETTI_JOB_SECRET
+        generateValue: true
+      - key: SETTI_AI_PER_HOUR
+        value: "40"
+      - key: SETTI_AI_PER_DAY
+        value: "500"
+
+  # Once a day, 7:00 Pacific (15:00 UTC in winter), the daily hold check runs on the web service.
+  - type: cron
+    name: setti-daily-check
+    runtime: node
+    plan: starter
+    region: oregon
+    schedule: "0 15 * * *"
+    buildCommand: "true"
+    startCommand: >-
+      node -e "fetch(process.env.SETTI_PUBLIC_URL + '/api/jobs/daily-check', { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.SETTI_JOB_SECRET } })
+      .then(async (response) => { console.log(response.status, await response.text()); if (!response.ok) process.exit(1); })
+      .catch((error) => { console.error(error); process.exit(1); })"
+    envVars:
+      - key: SETTI_PUBLIC_URL
+        sync: false
+      - key: SETTI_JOB_SECRET
+        fromService:
+          type: web
+          name: setti
+          envVarKey: SETTI_JOB_SECRET
+
+databases:
+  - name: setti-db
+    plan: basic-256mb
+    region: oregon
+    databaseName: setti
+    user: setti

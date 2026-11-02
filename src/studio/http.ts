@@ -1,3 +1,4 @@
+import { takeAiBudget } from "@/http/ai-budget";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -48,6 +49,11 @@ export async function studioChatResponse(req: NextRequest, id: string) {
     const saved = await store().append(session, project, input);
     if (!saved.runId) return response(snapshot(saved.messages));
     let result: Awaited<ReturnType<typeof callStudioModel>>;
+    const budget = takeAiBudget(session);
+    if (budget) {
+      const messages = await store().finish(session, project, input.id, saved.runId, { error: budget });
+      return response({ error: budget, state: snapshot(messages) }, 429);
+    }
     try { result = await callStudioModel(project, saved.messages); }
     catch {
       const error = "AI could not complete this request. Your message is saved; retry it when ready.";
