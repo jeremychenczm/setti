@@ -56,7 +56,7 @@ const testCopy = (names: string[], changes: ScriptedChange[]): ScriptedCopy => (
 /** Several changes share one draft, frozen document, approval and set of version hashes. */
 export async function confirmScriptedChanges(
   db: Db, session: string, key: CaseKey, changes: ScriptedChange[],
-  { confirm = true, copy = {}, actor = "client", expectedBaseline }: { confirm?: boolean; copy?: Partial<ScriptedCopy>; actor?: "client" | "designer"; expectedBaseline?: { id: string; version: number } } = {},
+  { confirm = true, copy = {}, actor = "client", expectedBaseline, note = "" }: { confirm?: boolean; copy?: Partial<ScriptedCopy>; actor?: "client" | "designer"; expectedBaseline?: { id: string; version: number }; note?: string } = {},
 ): Promise<FrozenChangeOrder> {
   if (!changes.length) throw new Error("Expected at least one scripted change");
   const chat = createChatStore(db), pricing = createPricingStore(db);
@@ -104,7 +104,7 @@ export async function confirmScriptedChanges(
   const issued = await pricing.issueReview(session, key, { reviewId: saved.review!.id, expectedVersion: saved.review!.version });
   const order = issued.order;
   if (confirm) {
-    await createApprovalStore(db).decide(session, order.id, { decision: "approved", contentHash: order.contentHash, revisionContentHash: order.revisionContentHash, acknowledged: true, signature: clientSignatureName(order), note: "" });
+    await createApprovalStore(db).decide(session, order.id, { decision: "approved", contentHash: order.contentHash, revisionContentHash: order.revisionContentHash, acknowledged: true, signature: clientSignatureName(order), note });
   }
   return order;
 }

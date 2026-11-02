@@ -40,9 +40,9 @@ describe.skipIf(!testDatabaseUrl)("after the client confirms a version", () => {
     const v2 = await confirmChairReplacement();
     const holds = await settle(v2.id);
     expect(holds).toEqual([expect.objectContaining({ status: "succeeded", amountCents: 54_375, savedMethodId: expect.any(String), approvalUrl: null })]);
+    // The client's own message only: what happened to the money is in the inbox, not the chat.
     const handOff = (await messages()).at(-1)!;
-    expect(handOff).toMatchObject({ id: v2.id, actor: "client" });
-    expect(handOff.text).toBe("I've confirmed V2. The $348.00 held for the item I no longer need is released. 1 furniture item is held on my PayPal ($543.75), to be charged as each supplier confirms. Over to you, Jordan.");
+    expect(handOff).toMatchObject({ id: v2.id, actor: "client", text: "I've confirmed V2. Over to you, Jordan." });
     // The old hold is released before the new one is placed, so the two are never held together.
     const operations = await handle.db.select().from(paymentOperations).where(eq(paymentOperations.changeOrderId, v2.id));
     const release = operations.find((operation) => operation.kind === "void")!;
@@ -54,6 +54,13 @@ describe.skipIf(!testDatabaseUrl)("after the client confirms a version", () => {
     const before = (await messages()).length;
     expect(await settle(v2.id)).toEqual([]);
     expect(await messages()).toHaveLength(before);
+  });
+
+  it("sends the client's own message with the decision, as they wrote it", async () => {
+    await signOpeningForTest(handle.db, session, "willow");
+    const v2 = await confirmScriptedChanges(handle.db, session, "willow", [{ action: "replace", itemId: CHAIR, after: bergmund() }], { confirm: true, note: "Thanks, Jordan. Please go ahead and order." });
+    await settle(v2.id);
+    expect((await messages()).find((message) => message.id === v2.id)).toMatchObject({ actor: "client", text: "Thanks, Jordan. Please go ahead and order." });
   });
 
   it("still hands over when no payment method is saved, leaving the holds for the client", async () => {

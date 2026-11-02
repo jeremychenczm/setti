@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { DEMO_ACCOUNTS } from "../accounts/demo";
+import { changeOrderDecisions } from "../approval/schema";
 import type { Db } from "../db/client";
 import { items, revisions } from "../db/schema";
 import { chatCases, chatMessages } from "../chat/schema";
@@ -67,10 +68,14 @@ async function heldFurniture(tx: Tx, projectId: string, holds: Hold[]): Promise<
     : ` ${held.length} of ${furnitureItems(holds.length)} are held on ${on} (${usd(heldCents)}); the rest still need a hold.`;
 }
 
-/** The client's message that hands the next step to the designer; a fixed id writes it once however often the step is retried. */
-async function handOff(tx: Tx, caseId: string, id: string, said: string): Promise<void> {
+/**
+ * The client's message that hands the next step to the designer; a fixed id
+ * writes it once however often the step is retried. `own` is what the client
+ * wrote themselves, sent as they wrote it.
+ */
+async function handOff(tx: Tx, caseId: string, id: string, said: string, own = false): Promise<void> {
   const designer = DEMO_ACCOUNTS.find((account) => account.role === "designer")!.name.split(" ")[0];
-  const inserted = await tx.insert(chatMessages).values({ caseId, id, actor: "client", text: `${said} Over to you, ${designer}.` })
+  const inserted = await tx.insert(chatMessages).values({ caseId, id, actor: "client", text: own ? said : `${said} Over to you, ${designer}.` })
     .onConflictDoNothing().returning({ id: chatMessages.id });
   if (inserted.length) await tx.update(chatCases).set({ updatedAt: new Date() }).where(eq(chatCases.id, caseId));
 }
@@ -89,23 +94,17 @@ export async function noteServicesPaid(db: Db, operation: Scope & { id: string; 
   });
 }
 
-/** What the client says about the holds a version released. Only releases PayPal confirmed count. */
-function releasedHolds(releases: Hold[]): string {
-  const done = releases.filter((release) => release.status === "succeeded");
-  if (!done.length) return "";
-  const cents = done.reduce((total, release) => total + release.amountCents, 0);
-  return ` The ${usd(cents)} held for ${done.length === 1 ? "the item" : `the ${done.length} items`} I no longer need is released.`;
-}
-
 /**
- * Once the client has confirmed a version, the same hand-off, with the holds it
- * released and the new items held after it. The version's id is the message id.
+ * Once the client has confirmed a version, their own message to the designer:
+ * what they wrote with the decision, or a plain hand-off. The version's id is
+ * its id, so a retry adds nothing. What happened to the money is in the inbox.
  */
-export async function noteVersionConfirmed(db: Db, orderId: string, holds: Hold[], releases: Hold[] = []): Promise<void> {
+export async function noteVersionConfirmed(db: Db, orderId: string): Promise<void> {
   await db.transaction(async (tx) => {
-    const [order] = await tx.select({ caseId: changeOrders.caseId, document: changeOrders.document, projectId: pricingCases.projectId }).from(changeOrders)
-      .innerJoin(pricingCases, eq(pricingCases.caseId, changeOrders.caseId)).where(eq(changeOrders.id, orderId));
+    const [order] = await tx.select({ caseId: changeOrders.caseId, document: changeOrders.document, note: changeOrderDecisions.note }).from(changeOrders)
+      .leftJoin(changeOrderDecisions, eq(changeOrderDecisions.orderId, changeOrders.id)).where(eq(changeOrders.id, orderId));
     if (!order) return;
-    await handOff(tx, order.caseId, orderId, `I've confirmed V${order.document.version}.${releasedHolds(releases)}${await heldFurniture(tx, order.projectId, holds)}`);
+    const note = order.note?.trim();
+    await handOff(tx, order.caseId, orderId, note || `I've confirmed V${order.document.version}.`, !!note);
   });
 }

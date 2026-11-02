@@ -2,6 +2,7 @@
 
 import { Check, ClipboardCheck, LoaderCircle, LockKeyhole, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { DEMO_ACCOUNTS } from "@/accounts/demo";
 import type { ApprovalWorkspace, DecideChangeOrderInput } from "@/approval/types";
 import { dateTime, Field, inputClass } from "./common";
 import { FundingImpactPreview } from "./FundingImpactPreview";
@@ -26,6 +27,11 @@ async function requestWorkspace(orderId: string, input?: DecideChangeOrderInput)
   return body;
 }
 
+const DESIGNER = DEMO_ACCOUNTS.find((account) => account.role === "designer")!.name.split(" ")[0];
+/** What the demo client says to the designer when confirming, prefilled and editable; it is their message in the chat. */
+export const confirmationNote = (version: number) => `Thanks, ${DESIGNER}. V${version} looks right to me, so please go ahead and place the orders.`;
+const today = () => new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" });
+
 interface ApprovalPanelProps {
   workspace: ApprovalWorkspace;
   loading: boolean;
@@ -36,9 +42,10 @@ interface ApprovalPanelProps {
 export function ApprovalPanel({ workspace, loading, onChange, onBusyChange }: ApprovalPanelProps) {
   const { view, canDecide, clientName } = workspace;
   const { order, decision } = view;
-  const [signature, setSignature] = useState("");
-  const [note, setNote] = useState("");
-  const [acknowledged, setAcknowledged] = useState(false);
+  // The demo fills in the client's review, signature and message so a test confirmation is one click; each stays editable.
+  const [signature, setSignature] = useState(clientName ?? "");
+  const [note, setNote] = useState(() => confirmationNote(order.version));
+  const [acknowledged, setAcknowledged] = useState(true);
   const [busy, setBusy] = useState<"approved" | "changes_requested" | "check" | null>(null);
   const [pending, setPending] = useState<DecideChangeOrderInput | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +153,16 @@ export function ApprovalPanel({ workspace, loading, onChange, onBusyChange }: Ap
         <p className="rounded-lg bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600">Reviewing as <strong className="font-semibold text-slate-800">{clientName}</strong> in this demo session. The shared link alone does not grant confirmation permission.</p>
         <fieldset disabled={disabled} className="mt-4 space-y-4">
           <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-brand-100 bg-brand-50/50 p-3 text-[12px] leading-relaxed"><input type="checkbox" aria-label="Reviewed this exact change-order version" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} className="mt-0.5" /><span>I have reviewed the complete V{order.version} quote, changes, prices and client terms. My decision applies to this exact version.</span></label>
-          <div className="grid gap-4 md:grid-cols-2"><Field label="Type the demo client name" hint={`Enter exactly: ${clientName ?? ""}`}><input aria-label="Demo client confirmation name" autoComplete="off" value={signature} onChange={(event) => setSignature(event.target.value)} maxLength={160} className={inputClass} /></Field><Field label="Message to the designer" hint="Required when requesting adjustments; optional when confirming."><textarea aria-label="Client decision note" value={note} onChange={(event) => setNote(event.target.value)} rows={3} maxLength={3000} className={inputClass} /></Field></div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Field label="Your signature" hint={signature.trim() === clientName ? "Prefilled for the demo. Edit it if you like; it must read your full name." : `Type your full name exactly: ${clientName ?? ""}`}><input aria-label="Demo client confirmation name" autoComplete="off" value={signature} onChange={(event) => setSignature(event.target.value)} maxLength={160} className={inputClass} /></Field>
+              <div className="mt-2 rounded-xl border border-[var(--line)] bg-[var(--canvas)] px-4 pb-3 pt-5">
+                <div aria-hidden className="min-h-[46px] truncate border-b border-slate-300 pb-1 font-signature text-[34px] leading-none text-[var(--ink)]">{signature.trim()}</div>
+                <div className="mt-1.5 flex justify-between gap-3 text-[10px] text-[var(--muted)]"><span>{clientName} · Client</span><span>{today()} · V{order.version}</span></div>
+              </div>
+            </div>
+            <Field label="Message to the designer" hint="Sent to the project chat with your decision. Required when requesting adjustments."><textarea aria-label="Client decision note" value={note} onChange={(event) => setNote(event.target.value)} rows={5} maxLength={3000} className={inputClass} /></Field>
+          </div>
           <div className="flex flex-wrap items-center gap-3"><button onClick={() => decide("approved")} disabled={!ready} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-4 py-2.5 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:text-slate-400">{busy === "approved" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}Confirm V{order.version} · scope, prices and terms</button><button onClick={() => decide("changes_requested")} disabled={!ready || !note.trim()} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-2.5 text-[12px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40">{busy === "changes_requested" && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}Request adjustments</button></div>
         </fieldset>
         <p className="mt-3 text-[11px] leading-relaxed text-slate-500">Confirming records agreement to this version. Neither button places a supplier order, authorizes funds, charges or refunds money.</p>
