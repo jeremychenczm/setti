@@ -14,8 +14,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export function holdClock(
   hold: { createdAt: Date; expiresAt: Date | null; operationId: string | null },
   operations: readonly { id: string; renewedAt: Date | null }[],
-): { authorizedAt: Date; expiresAt: Date } {
+): { authorizedAt: Date; expiresAt: Date; renewed: boolean } {
   const renewedAt = hold.operationId ? operations.find((operation) => operation.id === hold.operationId)?.renewedAt ?? null : null;
-  if (renewedAt) return { authorizedAt: renewedAt, expiresAt: new Date(renewedAt.getTime() + AUTHORIZATION_VALIDITY_DAYS * DAY_MS) };
-  return { authorizedAt: hold.createdAt, expiresAt: hold.expiresAt ?? new Date(hold.createdAt.getTime() + AUTHORIZATION_VALIDITY_DAYS * DAY_MS) };
+  if (renewedAt) return { authorizedAt: renewedAt, expiresAt: new Date(renewedAt.getTime() + AUTHORIZATION_VALIDITY_DAYS * DAY_MS), renewed: true };
+  return { authorizedAt: hold.createdAt, expiresAt: hold.expiresAt ?? new Date(hold.createdAt.getTime() + AUTHORIZATION_VALIDITY_DAYS * DAY_MS), renewed: false };
 }

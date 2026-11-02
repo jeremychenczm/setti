@@ -11,6 +11,7 @@ import { items, revisionLines } from "../db/schema";
 import { HONOR_PERIOD_DAYS } from "../money/authorization";
 import { PaymentActionError } from "./binding";
 import { CANCELLATION_REASON_TEXT } from "./cancellation";
+import { demoDays, demoNow } from "../try/demo-time";
 import { holdClock } from "./hold-clock";
 import { activeSavedMethod, savedMethodView, type SavedMethodView } from "./saved-methods";
 import { lockPaymentBasis } from "./services";
@@ -44,7 +45,7 @@ export interface ItemHoldView {
    * The clock of the item's oldest open hold, which runs out first: when PayPal
    * authorized it, when its 3-day honor period ends, and when it expires.
    */
-  timing: { holdId: string; authorizedAt: string; honorEndsAt: string; expiresAt: string } | null;
+  timing: { holdId: string; authorizedAt: string; honorEndsAt: string; expiresAt: string; renewed: boolean } | null;
   /** When the item's last hold expired, if it lapsed and nothing holds the item now. */
   expiredAt: string | null;
   /** Setti's last renewal of the current hold failed; the hold stays as it was until it expires. */
@@ -59,6 +60,8 @@ export interface ItemHoldView {
 }
 
 export interface ItemHoldsView {
+  /** The clock the page judges holds by: real time, or a demo session's simulated time. */
+  clock: { now: string; simulatedDays: number };
   projectKey: CaseKey;
   basis: { version: number; orderId: string | null } | null;
   items: ItemHoldView[];
@@ -87,7 +90,9 @@ export function cancellationView(record: { reason: ItemCancellationView["reason"
 }
 
 export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseKey, account: DemoAccount | null, demo: DemoCheckout | null = null): Promise<ItemHoldsView> {
-  const empty = (reason: string): ItemHoldsView => ({ projectKey: key, basis: null, items: [], toHoldCents: 0, savedPayPal: false, savedMethod: null, canRemoveSaved: false, checkoutOptions: null, canHold: false, canConfirmSupplier: false, contentHash: null, reason });
+  const days = await demoDays(db, sessionId);
+  const clock = { now: demoNow(days).toISOString(), simulatedDays: days };
+  const empty = (reason: string): ItemHoldsView => ({ clock, projectKey: key, basis: null, items: [], toHoldCents: 0, savedPayPal: false, savedMethod: null, canRemoveSaved: false, checkoutOptions: null, canHold: false, canConfirmSupplier: false, contentHash: null, reason });
   if (!sessionId) return empty("Open this project from the browser that owns the demo case.");
   let basis;
   try { basis = await db.transaction((tx) => lockPaymentBasis(tx, sessionId, key)); }
@@ -152,7 +157,7 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
       timing: oldest ? (() => {
         const clock = holdClock(oldest, ledger.operations);
         return {
-          holdId: oldest.id, authorizedAt: clock.authorizedAt.toISOString(),
+          holdId: oldest.id, authorizedAt: clock.authorizedAt.toISOString(), renewed: clock.renewed,
           honorEndsAt: new Date(clock.authorizedAt.getTime() + HONOR_PERIOD_DAYS * DAY_MS).toISOString(), expiresAt: clock.expiresAt.toISOString(),
         };
       })() : null,
@@ -182,6 +187,6 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
           : waiting ? "An item hold is still open. Continue or check that same PayPal order before starting more holds."
             : null;
   const canConfirmSupplier = account?.role === "designer" && !basis.orderId;
-  return { projectKey: key, basis: { version: basis.version, orderId: basis.orderId }, items: lines, toHoldCents, savedPayPal: !!saved, savedMethod: saved, canRemoveSaved: client && !!saved,
+  return { clock, projectKey: key, basis: { version: basis.version, orderId: basis.orderId }, items: lines, toHoldCents, savedPayPal: !!saved, savedMethod: saved, canRemoveSaved: client && !!saved,
     checkoutOptions: demo && lines.some((line) => line.canCheckout) ? { ...demo, canSave: true } : null, canHold, canConfirmSupplier, contentHash: basis.contentHash, reason };
 }

@@ -5,6 +5,7 @@ import type { PricingWorkspace } from "@/pricing/types";
 import { MAPLE_MIXED_CHANGE_MESSAGE } from "@/demo/maple-materials";
 import { isHomeScenario } from "@/demo/living-dining";
 import { lineProgress } from "../payments/progress";
+import { NOT_ORDERED_SKIP } from "./useDemoSkip";
 
 export const MAPLE_EXAMPLE_REQUEST = MAPLE_MIXED_CHANGE_MESSAGE;
 export const MAPLE_GUIDE_STEPS = ["Ask for the change", "Check pricing", "Confirm the version", "Move money", "Explain the evidence"] as const;
@@ -19,6 +20,8 @@ export interface MapleGuideData {
   /** The open pricing form can explicitly adopt a draft before its next save. */
   pricingViewStale?: boolean;
   payments: PaymentsWorkspace | null;
+  /** Days the demo session skipped ahead. */
+  simulatedDays?: number;
 }
 
 export interface MapleGuideStep {
@@ -32,6 +35,10 @@ export interface MapleGuideStep {
   action: string;
   complete?: boolean;
   chatAction?: "ask-payments";
+  /** The action skips the demo's simulated time ahead to this day instead of opening a page. */
+  skipTo?: number;
+  /** A second way on, shown under the step. */
+  secondary?: { label: string; href: string };
 }
 
 /** Progress is derived from saved records, never from which tour buttons were clicked. */
@@ -62,6 +69,16 @@ export function mapleGuideStep(data: MapleGuideData, currentRole: "designer" | "
   if (latest?.status === "approved") {
     if (!payments || payments.orderId !== latest.id) return { index: 3, role: currentRole === "client" ? "emma" : "jordan", destination: "order", orderId: latest.id, anchor: "payments", action: `Open V${latest.version} payments`, title: "Read this version's payment records", detail: "Client confirmation is saved. Payment results have not been loaded here yet; approval alone does not establish a charge, release or refund." };
     const changed = mapleChangeLines(payments);
+    // New items held on the saved card, with no supplier order recorded for any of them yet.
+    const notOrdered = changed.filter((line) => line.category === "furniture" && line.heldCents > 0 && line.steps.some((step) => step.kind === "supplier_confirmation"));
+    const ordered = changed.some((line) => line.supplierEvents.some((event) => event.kind === "order_confirmed"));
+    const days = data.simulatedDays ?? 0;
+    if (payments.current && notOrdered.length && !ordered && days < NOT_ORDERED_SKIP) return {
+      index: 3, role: "jordan", destination: "order", orderId: latest.id, anchor: "payments", action: "Skip ahead 3 days", skipTo: NOT_ORDERED_SKIP,
+      secondary: { label: "Record the confirmations now", href: `/change-orders/${encodeURIComponent(latest.id)}#payments` },
+      title: "What if Jordan is busy and forgets to order?",
+      detail: `Setti released the holds V${latest.version} no longer needs and held ${notOrdered.length === 1 ? "the new item" : `the ${notOrdered.length} new items`} on Emma's saved card, but no supplier order is recorded yet. Skip ahead 3 days to see the reminder Setti gives Jordan, or record the supplier confirmations now. Simulated time moves only the day Setti judges holds by; PayPal calls still happen now, in the Sandbox.`,
+    };
     const settled = payments.current && !!payments.plan && payments.plan.status !== "blocked" && changed.length > 0 && changed.every((line) => lineProgress(line, payments.operations).settled)
       && !payments.operations.some((operation) => operation.status === "pending" || operation.status === "unknown");
     if (settled) {
@@ -79,7 +96,7 @@ export function mapleGuideStep(data: MapleGuideData, currentRole: "designer" | "
     const progress = waiting ? lineProgress(waiting, payments.operations) : null;
     const clientNeeded = progress?.label === "Authorization needed" || progress?.label === "Additional authorization needed" || progress?.label === "Awaiting client approval";
     return { index: 3, role: available ? available.step.actor === "client" ? "emma" : "jordan" : clientNeeded ? "emma" : "jordan", destination: "order", orderId: latest.id, anchor: "payments", action: `Continue V${latest.version} payments`,
-      title: "Each item keeps its own payment progress", detail: payments.plan?.status === "blocked" ? "Check unresolved existing operations before starting another payment. Pending and unknown results are not counted as completed." : available ? `${available.line.label}: ${available.step.note}` : progress?.next ?? payments.reason ?? "Open the recorded payment steps to see what is still needed.",
+      title: "Each item keeps its own payment progress", detail: (notOrdered.length && !ordered && days >= NOT_ORDERED_SKIP ? `${days} days on, Setti's inbox reminds Jordan that ${notOrdered.length === 1 ? "the new item is" : `${notOrdered.length} new items are`} still not ordered. ` : "") + (payments.plan?.status === "blocked" ? "Check unresolved existing operations before starting another payment. Pending and unknown results are not counted as completed." : available ? `${available.line.label}: ${available.step.note}` : progress?.next ?? payments.reason ?? "Open the recorded payment steps to see what is still needed."),
     };
   }
   const failed = [...snapshot.messages].reverse().find((message) => message.actor !== "assistant")?.aiState === "failed";

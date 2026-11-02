@@ -307,7 +307,7 @@ export const approvals = pgTable(
 export { chatCases, chatMessages } from "../chat/schema";
 export { pricingCases, pricingReviews, changeOrders } from "../pricing/schema";
 export { changeOrderDecisions } from "../approval/schema";
-export { holdChecks, itemCancellations, paypalCalls, renewalNotices, savedPaymentMethodRemovals, savedPaymentMethods, servicesHoldLines, supplierEvents } from "../payments/schema";
-export { trySeeds } from "../try/schema";
+export { holdChecks, inboxSummaries, itemCancellations, paypalCalls, paypalWebhookEvents, renewalNotices, savedPaymentMethodRemovals, savedPaymentMethods, servicesHoldLines, supplierEvents } from "../payments/schema";
+export { demoClocks, trySeeds } from "../try/schema";
 export { openingQuotes, openingWithdrawals } from "../opening/schema";
 export { studioThreads } from "../studio/schema";

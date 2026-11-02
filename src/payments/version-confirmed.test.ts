@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { createChatStore } from "../chat/store";
+import { paymentOperations } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import { signOpeningForTest } from "../opening/testing";
 import { confirmScriptedChanges } from "../try/scripted-change";
@@ -28,7 +30,7 @@ describe.skipIf(!testDatabaseUrl)("after the client confirms a version", () => {
   const settle = (orderId: string) => afterVersionConfirmed(handle.db, paypal, session, "willow", orderId, links);
   const messages = async () => (await createChatStore(handle.db).getCase(session, "willow")).messages;
 
-  it("holds the new item with the saved method and hands over once", async () => {
+  it("releases the old item's hold, then holds the new item with the saved method, and hands over once", async () => {
     await signOpeningForTest(handle.db, session, "willow");
     const checkout = await startServicesCheckout(handle.db, paypal, session, "willow", links);
     paypal.approve(checkout.paypalOrderId!);
@@ -40,7 +42,13 @@ describe.skipIf(!testDatabaseUrl)("after the client confirms a version", () => {
     expect(holds).toEqual([expect.objectContaining({ status: "succeeded", amountCents: 54_375, savedMethodId: expect.any(String), approvalUrl: null })]);
     const handOff = (await messages()).at(-1)!;
     expect(handOff).toMatchObject({ id: v2.id, actor: "client" });
-    expect(handOff.text).toBe("I've confirmed V2. 1 furniture item is held on my PayPal ($543.75), to be charged as each supplier confirms. Over to you, Jordan.");
+    expect(handOff.text).toBe("I've confirmed V2. The $348.00 held for the item I no longer need is released. 1 furniture item is held on my PayPal ($543.75), to be charged as each supplier confirms. Over to you, Jordan.");
+    // The old hold is released before the new one is placed, so the two are never held together.
+    const operations = await handle.db.select().from(paymentOperations).where(eq(paymentOperations.changeOrderId, v2.id));
+    const release = operations.find((operation) => operation.kind === "void")!;
+    const hold = operations.find((operation) => operation.kind === "authorize")!;
+    expect(release).toMatchObject({ status: "succeeded", amountCents: 34_800 });
+    expect(release.updatedAt.getTime()).toBeLessThanOrEqual(hold.createdAt.getTime());
 
     // A retried confirmation holds nothing twice and says nothing new.
     const before = (await messages()).length;

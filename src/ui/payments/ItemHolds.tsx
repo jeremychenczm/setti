@@ -140,7 +140,7 @@ export function ItemHolds({ projectKey, orderId }: { projectKey: CaseKey; orderI
     {busy === "hold" && <p role="status" className="mt-3 flex items-center gap-1.5 text-[11px] text-[var(--muted)]"><LoaderCircle className="h-3 w-3 animate-spin" />Holding each approved item on PayPal…</p>}
     {view.reason && !busy && <p className="mt-3 text-[11px] text-[var(--muted)]">{view.reason}</p>}
     {error && !open && <p role="alert" className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[12px] text-red-800">{error}</p>}
-    {open && <ItemDrawer key={open.itemId} line={open} designer={view.canConfirmSupplier} checkout={view.checkoutOptions} canHoldAll={view.canHold} busy={busy} blocked={readiness.blocked} error={error} send={send}
+    {open && <ItemDrawer key={open.itemId} line={open} now={Date.parse(view.clock.now)} designer={view.canConfirmSupplier} checkout={view.checkoutOptions} canHoldAll={view.canHold} busy={busy} blocked={readiness.blocked} error={error} send={send}
       onClose={() => setSelected(null)}
       onConfirm={(order) => void confirm(open, order)}
       onRevise={(order) => void revise(open, order)}
@@ -179,8 +179,8 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
  */
 type SupplierOrder = { quantity: number; unitPriceCents: number; taxCents: number; freightCents: number; inStock: boolean; leadTimeDays: number | null; reference: string };
 
-function ItemDrawer({ line, designer, checkout, canHoldAll, busy, blocked, error, send, onClose, onConfirm, onRevise, onCapture, onCheck, onCancel, onCancelItem }: {
-  line: ItemHoldView; designer: boolean; checkout: CheckoutView | null; canHoldAll: boolean; busy: string | null; blocked: boolean; error: string | null;
+function ItemDrawer({ line, now, designer, checkout, canHoldAll, busy, blocked, error, send, onClose, onConfirm, onRevise, onCapture, onCheck, onCancel, onCancelItem }: {
+  line: ItemHoldView; now: number; designer: boolean; checkout: CheckoutView | null; canHoldAll: boolean; busy: string | null; blocked: boolean; error: string | null;
   send: (label: string, body: Body) => Promise<Reply | null>;
   onClose: () => void; onConfirm: (order: SupplierOrder) => void; onRevise: (order: SupplierOrder) => void; onCapture: () => void; onCheck: () => void; onCancel: () => void;
   onCancelItem: (reason: CancellationReason, note: string) => Promise<boolean>;
@@ -280,7 +280,7 @@ function ItemDrawer({ line, designer, checkout, canHoldAll, busy, blocked, error
         <h4 className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">PayPal · Sandbox</h4>
         <dl className="mt-1.5 divide-y divide-[var(--line)]">
           <Row label="Held">{money(line.heldCents)}</Row>
-          {line.timing && (line.state === "held" || line.state === "confirmed") && <Row label="Capture assured until">{new Date(line.timing.honorEndsAt).getTime() > Date.now() ? dateTime(line.timing.honorEndsAt) : `Ended ${dateTime(line.timing.honorEndsAt)}`}</Row>}
+          {line.timing && (line.state === "held" || line.state === "confirmed") && <Row label="Capture assured until">{new Date(line.timing.honorEndsAt).getTime() > now ? dateTime(line.timing.honorEndsAt) : `Ended ${dateTime(line.timing.honorEndsAt)}`}</Row>}
           {line.expiresAt && <Row label="Hold expires">{dateTime(line.expiresAt)}</Row>}
           <Row label="Captured">{money(line.capturedCents)}</Row>
           {due > 0 && <Row label="Still to hold">{money(due)}</Row>}

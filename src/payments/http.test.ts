@@ -3,13 +3,13 @@ import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PaymentActionError } from "./binding";
 import { callbackState } from "./callback-state";
-import { getAttentionResponse, getItemHoldsResponse, postDailyCheckResponse, getPaymentsResponse, getServicesPaymentResponse, paypalRedirectResponse, postItemHoldsResponse, postPaymentsResponse, postServicesPaymentResponse } from "./http";
+import { getAttentionResponse, getDemoClockResponse, getItemHoldsResponse, postDailyCheckResponse, postDemoClockResponse, postPayPalWebhookResponse, getPaymentsResponse, getServicesPaymentResponse, paypalRedirectResponse, postItemHoldsResponse, postPaymentsResponse, postServicesPaymentResponse } from "./http";
 
 const mock = vi.hoisted(() => ({
   startAuthorization: vi.fn(), startCapture: vi.fn(), startRelease: vi.fn(), startRefund: vi.fn(), checkPayment: vi.fn(), cancelPayment: vi.fn(),
   returnFromPayPal: vi.fn(), operationPage: vi.fn(), paymentsWorkspace: vi.fn(), recordSupplierOrder: vi.fn(), recordSupplierCredit: vi.fn(),
   startServicesCheckout: vi.fn(), checkServicesCheckout: vi.fn(), chargeServices: vi.fn(), lockPaymentBasis: vi.fn(), servicesPaymentView: vi.fn(), completeAuthorization: vi.fn(), cancelCheckout: vi.fn(),
-  holdApprovedItems: vi.fn(), checkItemHold: vi.fn(), cancelItemHold: vi.fn(), itemHoldsView: vi.fn(), cancelApprovedItem: vi.fn(), attentionView: vi.fn(), runDailyCheck: vi.fn(),
+  holdApprovedItems: vi.fn(), checkItemHold: vi.fn(), cancelItemHold: vi.fn(), itemHoldsView: vi.fn(), cancelApprovedItem: vi.fn(), attentionView: vi.fn(), runDailyCheck: vi.fn(), skipAhead: vi.fn(), demoDays: vi.fn(), recordWebhookEvent: vi.fn(),
   paymentPreparationPending: vi.fn(),
   db: { transaction: (work: (tx: object) => unknown) => work({}) },
 }));
@@ -26,6 +26,11 @@ vi.mock("./item-holds-view", () => ({ itemHoldsView: mock.itemHoldsView }));
 vi.mock("./cancel-item", () => ({ cancelApprovedItem: mock.cancelApprovedItem }));
 vi.mock("./attention-view", () => ({ attentionView: mock.attentionView }));
 vi.mock("./daily-check", () => ({ runDailyCheck: mock.runDailyCheck }));
+vi.mock("./webhook", () => ({ recordWebhookEvent: mock.recordWebhookEvent, paypalWebhookVerifier: () => null }));
+vi.mock("../try/clock", () => ({
+  skipAhead: mock.skipAhead, demoDays: mock.demoDays, MAX_SKIP_DAYS: 30,
+  DemoClockError: class DemoClockError extends Error {},
+}));
 vi.mock("./authorize", () => ({ completeAuthorization: mock.completeAuthorization, cancelCheckout: mock.cancelCheckout }));
 vi.mock("./server", () => ({ sandboxPayPal: () => ({}) }));
 vi.mock("../try/preparation", () => ({ paymentPreparationPending: mock.paymentPreparationPending, PREPARATION_MESSAGE: "The starting payments are being prepared." }));
@@ -385,5 +390,46 @@ describe("daily check HTTP boundary", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ id: "run" });
     expect(mock.runDailyCheck).toHaveBeenCalledWith(mock.db, {});
+  });
+});
+
+describe("demo clock HTTP boundary", () => {
+  const skip = (body: unknown, account: string | null, withSession = true) => new NextRequest(`${origin}/api/demo/clock`, {
+    method: "POST", body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json", Origin: origin, Cookie: [...(withSession ? [`setti-demo-chat=${sessionId}`] : []), ...(account ? [`setti-demo-account=${account}`] : [])].join("; ") },
+  });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mock.skipAhead.mockResolvedValue({ days: 2, runs: [{ notices: 0, renewals: 0, problems: [] }, { notices: 0, renewals: 0, problems: ["one"] }] });
+    mock.demoDays.mockResolvedValue(2);
+  });
+
+  it("lets only the designer skip ahead, by whole days up to day 30", async () => {
+    expect((await postDemoClockResponse(skip({ days: 2 }, "sofia"))).status).toBe(403);
+    expect((await postDemoClockResponse(skip({ days: 2 }, "jordan", false))).status).toBe(403);
+    for (const days of [0, 31, 2.5, "2"]) expect((await postDemoClockResponse(skip({ days }, "jordan"))).status).toBe(400);
+    expect(mock.skipAhead).not.toHaveBeenCalled();
+    const response = await postDemoClockResponse(skip({ days: 2 }, "jordan"));
+    expect(await response.json()).toEqual({ days: 2, checks: 2, notices: 0, renewals: 0, problems: ["one"] });
+    expect(mock.skipAhead).toHaveBeenCalledWith(mock.db, {}, sessionId, 2);
+    const read = await getDemoClockResponse(new NextRequest(`${origin}/api/demo/clock`, { headers: { Cookie: `setti-demo-chat=${sessionId}` } }));
+    expect(await read.json()).toEqual({ days: 2 });
+  });
+});
+
+describe("PayPal webhook HTTP boundary", () => {
+  const push = (body: string) => new NextRequest(`${origin}/api/payments/paypal/webhook`, { method: "POST", body, headers: { "Content-Type": "application/json", "paypal-transmission-id": "t-1" } });
+  beforeEach(() => { vi.clearAllMocks(); mock.recordWebhookEvent.mockResolvedValue({ stored: true, operationId }); });
+
+  it("stays closed without a webhook id, refuses unverified events, and keeps verified ones", async () => {
+    const event = JSON.stringify({ id: "WH-1", event_type: "PAYMENT.CAPTURE.COMPLETED", resource: { id: "CAP-1" } });
+    expect((await postPayPalWebhookResponse(push(event))).status).toBe(503);
+    expect((await postPayPalWebhookResponse(push(event), async () => false)).status).toBe(400);
+    expect((await postPayPalWebhookResponse(push("not json"), async () => true)).status).toBe(400);
+    expect(mock.recordWebhookEvent).not.toHaveBeenCalled();
+    const verifier = vi.fn(async ({ headers }: { headers: Headers }) => headers.get("paypal-transmission-id") === "t-1");
+    const response = await postPayPalWebhookResponse(push(event), verifier);
+    expect(await response.json()).toEqual({ received: true, stored: true, operationId });
+    expect(mock.recordWebhookEvent).toHaveBeenCalledWith(mock.db, JSON.parse(event));
   });
 });

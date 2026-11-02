@@ -42,12 +42,13 @@ describe.skipIf(!testDatabaseUrl)("the designer's reminders from recorded holds"
   const later = (days: number) => new Date(Date.now() + days * DAY);
   const reminders = async (days: number, account = designer) => (await attentionView(handle.db, session, account, later(days))).items;
 
-  it("asks about every unconfirmed hold after a day, and follows what the designer does", async () => {
+  it("reminds about every item still only held after three days, and follows what the designer does", async () => {
     expect(await reminders(0)).toEqual([]);
-    const tomorrow = await reminders(1.5);
+    expect(await reminders(2.5)).toEqual([]);
+    const tomorrow = await reminders(3.5);
     expect(tomorrow.length).toBe(21);
-    expect(tomorrow.every((entry) => entry.kind === "supplier_unconfirmed" && entry.projectName === "Willow Residence")).toBe(true);
-    expect(tomorrow.find((entry) => entry.itemId === DESK)).toMatchObject({ href: "/quotes/willow?hold=willow-desk#item-holds", detail: expect.stringMatching(/hold day 2 of 3/) });
+    expect(tomorrow.every((entry) => entry.kind === "not_ordered" && entry.projectName === "Willow Residence")).toBe(true);
+    expect(tomorrow.find((entry) => entry.itemId === DESK)).toMatchObject({ href: "/quotes/willow?hold=willow-desk#item-holds", detail: expect.stringMatching(/^Approved and held for 3 days/) });
 
     const { contentHash } = await handle.db.transaction((tx) => lockOpeningVersion(tx, session, "willow", null));
     await recordOpeningSupplierOrder(handle.db, session, "willow", {
@@ -55,7 +56,7 @@ describe.skipIf(!testDatabaseUrl)("the designer's reminders from recorded holds"
       inStock: true, leadTimeDays: 10, reference: "QMO-SO-1001", note: "",
     });
     await cancelApprovedItem(handle.db, paypal, session, "willow", { itemId: ARMCHAIR, reason: "no_response", note: "", by: designer.name });
-    const after = await reminders(1.5);
+    const after = await reminders(3.5);
     expect(after.length).toBe(20);
     expect(after.find((entry) => entry.itemId === ARMCHAIR)).toBeUndefined();
     expect(after.find((entry) => entry.itemId === DESK)).toMatchObject({ kind: "capture_ready" });
@@ -68,7 +69,7 @@ describe.skipIf(!testDatabaseUrl)("the designer's reminders from recorded holds"
   });
 
   it("shows the client nothing: these are the studio's reminders", async () => {
-    expect(await reminders(1.5, client)).toEqual([]);
-    expect((await attentionView(handle.db, null, designer, later(1.5))).items).toEqual([]);
+    expect(await reminders(3.5, client)).toEqual([]);
+    expect((await attentionView(handle.db, null, designer, later(3.5))).items).toEqual([]);
   });
 });

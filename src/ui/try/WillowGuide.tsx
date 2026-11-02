@@ -5,7 +5,8 @@ import type { AccountId } from "@/accounts/demo";
 import type { CaseSnapshot } from "@/chat/types";
 import type { ItemHoldsView } from "@/payments/item-holds-view";
 import type { ServicesPaymentView } from "@/payments/services-view";
-import { GuideBar } from "./GuideBar";
+import { GUIDE_TOOL, GuideBar } from "./GuideBar";
+import { useDemoSkip } from "./useDemoSkip";
 import type { TrySeedNoticeProps } from "./TrySeedNotice";
 import { navigateGuidePage, useGuideAnchor } from "./useGuideAnchor";
 import { WILLOW_GUIDE_STEPS, willowGuideStep, type WillowGuideData } from "./willow-guide";
@@ -66,14 +67,22 @@ export function WillowGuide({ account, onSwitchAccount, onOpenChat, currentView,
   }, [refresh]);
 
   if (!data || viewerId !== account.id) return null;
+  return <WillowGuideBar data={data} account={account} onSwitchAccount={onSwitchAccount} onOpenChat={onOpenChat} currentView={currentView} currentOrderId={currentOrderId} refresh={refresh} error={error} />;
+}
+
+function WillowGuideBar({ data, account, onSwitchAccount, onOpenChat, currentView, currentOrderId, refresh, error: loadError }: Omit<TrySeedNoticeProps, "projectKey"> & { data: WillowGuideData; refresh: () => Promise<void>; error: string | null }) {
+  const { skipping, skip, error: skipError } = useDemoSkip("willow", refresh);
+  const error = skipError ?? loadError;
   const step = willowGuideStep(data, account.role);
   const switchNeeded = step.role !== account.id;
   const nextName = step.role === "sofia" ? "Sofia" : "Jordan";
   const sameQuote = step.destination === "quote" && currentView === "quotes" && !switchNeeded;
   const sameOrder = step.destination === "order" && currentView === "change-order" && currentOrderId === step.orderId && !switchNeeded;
-  const action = switchNeeded ? `Continue as ${nextName}` : sameQuote || sameOrder ? step.anchor === "client-decision-title" ? "Go to client review below" : step.anchor ? "Go to the payment section below" : step.action : step.action;
+  const action = switchNeeded ? `Continue as ${nextName}` : step.skipTo ? step.action : sameQuote || sameOrder ? step.anchor === "client-decision-title" ? "Go to client review below" : step.anchor ? "Go to the payment section below" : step.action : step.action;
 
   function continueGuide() {
+    if (skipping) return;
+    if (step.skipTo && !switchNeeded) { void skip(step.skipTo); return; }
     if (switchNeeded) onSwitchAccount(step.role);
     if (step.destination === "chat") { onOpenChat(); return; }
     if (sameQuote || sameOrder) {
@@ -85,5 +94,9 @@ export function WillowGuide({ account, onSwitchAccount, onOpenChat, currentView,
     navigateGuidePage(`${path}${step.anchor ? `#${step.anchor}` : ""}`, switchNeeded);
   }
 
-  return <GuideBar label="Willow demo guide" steps={WILLOW_GUIDE_STEPS} step={step} action={action} onAction={continueGuide} error={error} />;
+  const days = data.holds?.clock.simulatedDays ?? 0;
+  return <GuideBar label="Willow demo guide" steps={WILLOW_GUIDE_STEPS} step={step} action={skipping ? "Running each day's check…" : action} onAction={continueGuide} error={error} busy={skipping}
+    tools={days > 0 ? <span className={GUIDE_TOOL} title="Simulated time: Setti judges holds as if this many days had passed. PayPal calls still happen now, in the Sandbox.">Simulated time · day {days}</span> : undefined}>
+    {step.secondary && !switchNeeded && <a href={step.secondary.href} className="mt-1.5 inline-flex text-[11px] font-medium text-brand-700 underline underline-offset-2">{step.secondary.label}</a>}
+  </GuideBar>;
 }

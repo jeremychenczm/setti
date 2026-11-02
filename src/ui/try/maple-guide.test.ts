@@ -15,6 +15,16 @@ function initial(): MapleGuideData {
   return { seedOrderId: "seed-v2", snapshot: { messages: [], activeMessageId: null, draft: draft(), versions: [version()], aiConfigured: true }, pricing: null, payments: null };
 }
 
+/** A confirmed version whose new item is held on the saved card and waits for its supplier. */
+function heldNewItem(days: number): MapleGuideData {
+  const data = confirmed();
+  const held = line({ side: "proposed", businessItemId: "desk", label: "Desk", targetCents: 110_000, heldCents: 110_000, capturedCents: 0, releasedCents: 0,
+    steps: [{ kind: "supplier_confirmation", actor: "designer", amountCents: 110_000, available: true, note: "Record the supplier's order confirmation." }, { kind: "capture", actor: "designer", amountCents: 110_000, available: false, note: "" }] });
+  data.payments = { ...data.payments!, lines: [held] };
+  data.simulatedDays = days;
+  return data;
+}
+
 function confirmed(): MapleGuideData {
   const data = initial();
   data.snapshot.versions = [version(), version({ id: "visitor-v3", version: 3, basedOnVersion: 2 })];
@@ -197,5 +207,15 @@ describe("living-and-dining demo guide", () => {
     expect(step).toMatchObject({ index: 1, destination: "pricing", action: "Review pricing" });
     expect(step.detail).toContain("You can save the review now");
     expect(step.detail).toContain("when the starting payment records are ready");
+  });
+
+  it("offers to skip ahead 3 days while the new items are held and not ordered", () => {
+    expect(mapleGuideStep(heldNewItem(0), "designer")).toMatchObject({
+      index: 3, role: "jordan", action: "Skip ahead 3 days", skipTo: 3, title: "What if Jordan is busy and forgets to order?",
+      secondary: { label: "Record the confirmations now", href: "/change-orders/visitor-v3#payments" },
+    });
+    const after = mapleGuideStep(heldNewItem(3), "designer");
+    expect(after).toMatchObject({ index: 3, title: "Each item keeps its own payment progress", detail: expect.stringMatching(/^3 days on, Setti's inbox reminds Jordan that the new item is still not ordered\. /) });
+    expect(after.skipTo).toBeUndefined();
   });
 });

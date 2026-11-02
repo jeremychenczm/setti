@@ -15,6 +15,10 @@ import { PaymentActionError } from "./binding";
 import { attentionView } from "./attention-view";
 import { cancelApprovedItem } from "./cancel-item";
 import { runDailyCheck } from "./daily-check";
+import { inboxFacts, inboxView } from "./inbox-view";
+import { paypalWebhookVerifier, recordWebhookEvent, type WebhookVerifier } from "./webhook";
+import { summarizeInbox } from "../ai/inbox-summary";
+import { DemoClockError, demoDays, MAX_SKIP_DAYS, skipAhead } from "../try/clock";
 import { CANCELLATION_REASONS } from "./cancellation";
 import { PaymentOperationError } from "./operations";
 import { sandboxPayPal, sandboxTestCard } from "./server";
@@ -430,6 +434,79 @@ export async function postDailyCheckResponse(req: NextRequest) {
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return NextResponse.json({ code: "FORBIDDEN", error: "The job secret is missing or wrong." }, { status: 401, headers });
   try { return NextResponse.json(await runDailyCheck(db(), sandboxPayPal()), { headers }); }
   catch (error) { return fail(error); }
+}
+
+/**
+ * PayPal's webhook: each event is kept only once PayPal verifies its signature
+ * (PAYPAL_WEBHOOK_ID names the webhook registered for this server). Without a
+ * webhook id the endpoint stays closed. An event confirms records; it never moves money.
+ */
+export async function postPayPalWebhookResponse(req: NextRequest, verifier: WebhookVerifier | null = paypalWebhookVerifier()) {
+  if (!verifier) return NextResponse.json({ code: "NOT_CONFIGURED", error: "PayPal webhooks are not configured on this server." }, { status: 503, headers });
+  const body = await req.text();
+  if (body.length > 64_000) return NextResponse.json({ code: "INVALID_REQUEST", error: "The webhook event is too large." }, { status: 413, headers });
+  let event: unknown;
+  try { event = JSON.parse(body); } catch { return NextResponse.json({ code: "INVALID_REQUEST", error: "The webhook event is not JSON." }, { status: 400, headers }); }
+  if (!await verifier({ headers: req.headers, event })) return NextResponse.json({ code: "FORBIDDEN", error: "PayPal did not verify this event's signature." }, { status: 400, headers });
+  try { return NextResponse.json({ received: true, ...await recordWebhookEvent(db(), event) }, { headers }); }
+  catch (error) { return fail(error); }
+}
+
+/** PayPal for reading records back, or null when the server has no Sandbox credentials: the inbox then shows recorded checks only. */
+function readablePayPal() {
+  try { return sandboxPayPal(); } catch { return null; }
+}
+
+/** The signed-in account's payment inbox: the designer's reminders, or the client's money with PayPal's latest confirmations. */
+export async function getInboxResponse(req: NextRequest) {
+  const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
+  if (!account) return NextResponse.json({ code: "FORBIDDEN", error: "Choose an account to open its inbox." }, { status: 403, headers });
+  try { return refreshDemoCookies(NextResponse.json(await inboxView(db(), readablePayPal(), session(req), account), { headers }), req); }
+  catch (error) { return fail(error); }
+}
+
+/** The AI summary on top of the inbox, written from the same facts and checked against them; cached per set of facts. */
+export async function getInboxSummaryResponse(req: NextRequest) {
+  const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
+  const sessionId = session(req);
+  if (!account || !sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "Open the inbox from the browser that owns the demo." }, { status: 403, headers });
+  try {
+    const view = await inboxView(db(), null, sessionId, account);
+    return NextResponse.json(await summarizeInbox(db(), sessionId, { audience: view.role, reader: `${view.reader} (the ${view.role})`, facts: inboxFacts(view) }), { headers });
+  } catch (error) { return fail(error); }
+}
+
+const clockSchema = z.strictObject({ days: z.number().int().min(1).max(MAX_SKIP_DAYS) });
+
+/** How far this demo session has skipped ahead. */
+export async function getDemoClockResponse(req: NextRequest) {
+  try { return NextResponse.json({ days: await demoDays(db(), session(req)) }, { headers }); }
+  catch (error) { return fail(error); }
+}
+
+/**
+ * The designer skips this demo session ahead to a later day: the daily check runs
+ * for each day passed, so reminders, renewal notices and renewals happen as they
+ * would. PayPal calls are real Sandbox calls; only the day Setti judges by moves.
+ */
+export async function postDemoClockResponse(req: NextRequest) {
+  const sessionId = session(req);
+  if (!sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "Skip ahead from the browser that owns the demo." }, { status: 403, headers });
+  try {
+    const input = clockSchema.parse(await boundedJson(req));
+    const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
+    if (account?.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "The designer skips ahead in the demo." }, { status: 403, headers });
+    const { days, runs } = await skipAhead(db(), sandboxPayPal(), sessionId, input.days);
+    return NextResponse.json({
+      days, checks: runs.length,
+      notices: runs.reduce((total, run) => total + run.notices, 0),
+      renewals: runs.reduce((total, run) => total + run.renewals, 0),
+      problems: runs.flatMap((run) => run.problems),
+    }, { headers });
+  } catch (error) {
+    if (error instanceof DemoClockError) return NextResponse.json({ code: "INVALID_REQUEST", error: error.message }, { status: 400, headers });
+    return fail(error);
+  }
 }
 
 /** The design-services checkout must belong to this session's project. */

@@ -1,8 +1,9 @@
 /**
- * What needs the designer today, worked out from recorded money only: holds
- * whose supplier has not confirmed, honor periods that ran out, confirmed items
- * not captured yet, holds near their 29-day expiry or past it, and PayPal steps
- * with no settled result. One reminder per item, the most pressing one. Pure:
+ * What needs the designer today, worked out from recorded money only: items
+ * still only held three days after the client approved them (not ordered yet),
+ * confirmed items not captured yet, holds near their 29-day expiry or past it,
+ * and PayPal steps with no settled result. One reminder per item, the most
+ * pressing one. Pure:
  * the clock is an argument, so every boundary is testable and a demo can ask
  * about a later day.
  *
@@ -13,7 +14,7 @@
 import type { CaseKey } from "../chat/types";
 import type { ItemHoldView, ItemHoldsView } from "./item-holds-view";
 
-export type AttentionKind = "payment_unknown" | "hold_failed" | "renewal_failed" | "expired" | "capture_ready" | "expiring" | "honor_lapsed" | "supplier_unconfirmed";
+export type AttentionKind = "payment_unknown" | "hold_failed" | "renewal_failed" | "expired" | "capture_ready" | "expiring" | "not_ordered";
 
 export interface AttentionItem {
   /** Stable per project, item and kind. */
@@ -37,7 +38,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** A week before a hold expires, Setti starts saying so. */
 export const EXPIRY_NOTICE_DAYS = 7;
 
-const ORDER: AttentionKind[] = ["payment_unknown", "hold_failed", "renewal_failed", "expired", "capture_ready", "expiring", "honor_lapsed", "supplier_unconfirmed"];
+const ORDER: AttentionKind[] = ["payment_unknown", "hold_failed", "renewal_failed", "expired", "capture_ready", "expiring", "not_ordered"];
 
 const day = (value: Date) => value.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
 
@@ -79,12 +80,10 @@ function reminder(view: ItemHoldsView, line: ItemHoldView, now: Date): Pick<Atte
     };
   }
   if (expiring) return { kind: "expiring", title: `${line.label} · hold expires ${day(expiresAt)}`, detail: `${supplier} still hasn't confirmed the order. ${renewal}`, urgency: view.savedMethod ? "soon" : "now" };
+  // One reminder, once PayPal's 3-day honor period is over: the item was approved and held, and no supplier order is recorded.
   if (now.getTime() >= honorEndsAt.getTime()) {
-    return { kind: "honor_lapsed", title: `${line.label} · still no supplier confirmation`, detail: `${supplier} hasn't confirmed the order and the 3-day honor period has ended, so capture is no longer assured. Confirm the order or cancel the hold.`, urgency: "now" };
-  }
-  if (elapsed >= DAY_MS) {
-    const holdDay = Math.min(3, Math.floor(elapsed / DAY_MS) + 1);
-    return { kind: "supplier_unconfirmed", title: `${line.label} · supplier hasn't confirmed`, detail: `${supplier} · hold day ${holdDay} of 3. Capture is assured until ${day(honorEndsAt)}.`, urgency: holdDay >= 3 ? "now" : "soon" };
+    const days = Math.floor(elapsed / DAY_MS);
+    return { kind: "not_ordered", title: `${line.label} · not ordered yet`, detail: `Approved and held for ${days} days, but no order with ${supplier} is recorded. After PayPal's 3-day honor period, capture is no longer assured: place the order and record the supplier's confirmation.`, urgency: "now" };
   }
   return null;
 }

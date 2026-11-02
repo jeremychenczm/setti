@@ -41,3 +41,17 @@ export const trySeeds = pgTable("try_seeds", {
   index("try_seeds_created_at").on(t.createdAt),
   index("try_seeds_visitor_id").on(t.visitorId),
 ]);
+
+/**
+ * How far a demo session has skipped ahead, in whole days. Its reminders,
+ * notices and renewals are worked out as if that much time had passed, so a
+ * visitor can see what happens on day 3 or day 25 of a hold. PayPal calls still
+ * happen now, in the Sandbox; only the clock Setti judges by moves.
+ */
+export const demoClocks = pgTable("demo_clocks", {
+  sessionId: uuid("session_id").primaryKey(),
+  days: integer("days").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  check("demo_clocks_days", sql`${t.days} BETWEEN 0 AND 30`),
+]);

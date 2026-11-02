@@ -2,6 +2,7 @@ import type { AccountId } from "@/accounts/demo";
 import type { CaseSnapshot } from "@/chat/types";
 import type { ItemHoldsView } from "@/payments/item-holds-view";
 import type { ServicesPaymentView } from "@/payments/services-view";
+import { NOT_ORDERED_SKIP } from "./useDemoSkip";
 
 export const WILLOW_GUIDE_STEPS = ["Send V1", "Sign selected lines", "Pay and hold", "Supplier confirms", "Capture"] as const;
 
@@ -21,6 +22,10 @@ export interface WillowGuideStep {
   anchor?: "design-services" | "item-holds" | "payments" | "client-decision-title";
   orderId?: string;
   complete?: boolean;
+  /** The action skips the demo's simulated time ahead to this day instead of opening a page. */
+  skipTo?: number;
+  /** A second way on, shown under the step. */
+  secondary?: { label: string; href: string };
 }
 
 /** Paying and saving a wallet are separate observed facts, not consequences of a signature. */
@@ -52,8 +57,16 @@ export function willowGuideStep(data: WillowGuideData, currentRole: "designer" |
   if (clientNeeded) return { index: 2, title: `${clientNeeded.label} needs Sofia on PayPal`, detail: "Continue that item's existing PayPal order, then check its result. The saved wallet does not mean every future hold is approved automatically.", role: "sofia", destination: "quote", anchor: "item-holds", action: "Continue the existing item hold" };
   if (holds.items.some((item) => item.state === "holding" || item.state === "unknown")) return { index: 2, title: "Check unresolved item holds", detail: "Keep each pending or unknown item attached to its existing PayPal operation. Use its Check action before starting additional holds.", role: "jordan", destination: "quote", anchor: "item-holds", action: "Inspect the same item holds" };
   if (holds.toHoldCents > 0) return { index: 2, title: "Hold the remaining furniture items", detail: holds.canHold ? "The services payment did not hold every approved furniture item. Each remaining item gets its own PayPal authorization with the saved payment method. A hold reserves money; it does not mean the supplier was paid or the item was ordered." : holds.reason ?? "Inspect the item's recorded blocker before attempting its hold again.", role: "jordan", destination: "quote", anchor: "item-holds", action: "Open the item holds" };
-  const unconfirmed = holds.items.find((item) => item.state === "held");
-  if (unconfirmed) return { index: 3, title: `Jordan checks ${unconfirmed.label}'s supplier confirmation`, detail: "Record the demo supplier confirmation against the exact approved quantity, price, tax and delivery. Only then does the item's Capture action become available. This is a designer-entered record, not a live supplier integration.", role: "jordan", destination: "quote", anchor: "item-holds", action: "Record supplier confirmation below" };
+  const unconfirmed = holds.items.filter((item) => item.state === "held");
+  const ordered = holds.items.some((item) => item.supplier);
+  // Before any supplier order is recorded, the guide can show what happens when the designer is busy and forgets.
+  if (unconfirmed.length && !ordered && holds.clock.simulatedDays < NOT_ORDERED_SKIP) return {
+    index: 3, title: "What if Jordan is busy and forgets to order?", role: "jordan", destination: "quote", anchor: "item-holds",
+    detail: `Sofia's ${unconfirmed.length === 1 ? "item is" : `${unconfirmed.length} items are`} held, but no supplier order is recorded yet. Skip ahead 3 days to see the reminder Setti gives Jordan, or record the supplier confirmations now. Simulated time moves only the day Setti judges holds by; PayPal calls still happen now, in the Sandbox.`,
+    action: "Skip ahead 3 days", skipTo: NOT_ORDERED_SKIP, secondary: { label: "Record the confirmations now", href: "/quotes/willow#item-holds" },
+  };
+  const [first] = unconfirmed;
+  if (first) return { index: 3, title: `Jordan checks ${first.label}'s supplier confirmation`, detail: `${holds.clock.simulatedDays >= NOT_ORDERED_SKIP && !ordered ? `${holds.clock.simulatedDays} days on, Setti's inbox reminds Jordan that ${unconfirmed.length === 1 ? "this item is" : `${unconfirmed.length} items are`} still not ordered. ` : ""}Record the demo supplier confirmation against the exact approved quantity, price, tax and delivery, or cancel an item whose supplier cannot supply it. Only then does the item's Capture action become available. This is a designer-entered record, not a live supplier integration.`, role: "jordan", destination: "quote", anchor: "item-holds", action: "Record supplier confirmation below" };
   if (holds.items.some((item) => item.state === "confirmed")) return { index: 4, title: "Capture the supplier-confirmed items", detail: "Review and confirm each available capture. The real Sandbox result is saved per item, so one item's result cannot stand in for the rest of the project.", role: "jordan", destination: "quote", anchor: "item-holds", action: "Inspect and capture each ready item" };
   // A cancelled item whose hold is released needs nothing more.
   const complete = holds.items.every((item) => item.state === "captured" || (item.state === "cancelled" && item.heldCents === 0));

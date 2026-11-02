@@ -15,6 +15,7 @@ import { HOME_GUIDE_STEPS, MAPLE_EXAMPLE_REQUEST, MAPLE_GUIDE_STEPS, mapleChange
 import { navigateGuidePage, useGuideAnchor } from "./useGuideAnchor";
 import { WillowGuide } from "./WillowGuide";
 import { GUIDE_TOOL, GuideBar } from "./GuideBar";
+import { useDemoSkip } from "./useDemoSkip";
 import { canOpenPreparedWorkspace, useTryPreparation } from "./TryPreparationProvider";
 import { paymentQuestionHref } from "../chat/payment-question";
 
@@ -23,7 +24,7 @@ export interface TrySeedNoticeProps {
   account: DemoAccount;
   onSwitchAccount: (id: AccountId) => void;
   onOpenChat: () => void;
-  currentView: "chats" | "quotes" | "pricing" | "change-order";
+  currentView: "chats" | "quotes" | "pricing" | "change-order" | "inbox";
   currentOrderId?: string;
 }
 
@@ -51,6 +52,9 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
   const request = useRef<AbortController | null>(null);
   const busy = useRef(false);
   useGuideAnchor(projectKey === "maple" && data !== null);
+  const reload = useCallback(async () => { busy.current = false; await refreshRef.current(); }, []);
+  const refreshRef = useRef<() => Promise<void>>(async () => undefined);
+  const { skipping, skip, error: skipError } = useDemoSkip("maple", reload);
 
   const refresh = useCallback(async () => {
     if (projectKey !== "maple" || busy.current) return;
@@ -63,15 +67,16 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
       if (snapshot.projectKey !== "maple" || !Array.isArray(snapshot.messages) || !Array.isArray(snapshot.versions)) throw new Error("The guide received incomplete project records.");
       const approved = [...snapshot.versions].filter((version) => version.status === "approved").sort((a, b) => b.version - a.version)[0];
       const paymentOrderId = approved?.id ?? seed.changeOrderId;
-      const [pricing, payments] = await Promise.all([
+      const [pricing, payments, clock] = await Promise.all([
         account.role === "designer" ? readJson("/api/pricing/maple", controller.signal).then((value) => value as PricingWorkspace).catch(() => null) : Promise.resolve(null),
         paymentOrderId ? readJson(`/api/change-orders/${encodeURIComponent(paymentOrderId)}/payments`, controller.signal).then((value) => value as PaymentsWorkspace).catch(() => null) : Promise.resolve(null),
+        readJson("/api/demo/clock", controller.signal).then((value) => value as { days?: number }).catch(() => null),
       ]);
       if (controller.signal.aborted) return;
       const validPayments = payments?.orderId === paymentOrderId && Array.isArray(payments.lines) && Array.isArray(payments.operations) ? payments : null;
       const formStale = currentView === "pricing" ? document.getElementById("pricing-workspace")?.getAttribute("data-pricing-source-stale") : null;
       setData({ seedOrderId: seed.changeOrderId, scenario: seed.scenario, preparationPending: seed.scenario === HOME_SCENARIO && seed.status !== "ready", snapshot, pricing: pricing?.projectKey === "maple" ? pricing : null, payments: validPayments,
-        pricingViewStale: formStale === "true" ? true : formStale === "false" ? false : undefined });
+        pricingViewStale: formStale === "true" ? true : formStale === "false" ? false : undefined, simulatedDays: typeof clock?.days === "number" ? clock.days : 0 });
       setViewerId(account.id);
       setError(!paymentOrderId || validPayments ? null : "Payment records could not be refreshed. Open the version to check its saved status.");
     } catch {
@@ -81,6 +86,7 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
     }
   }, [projectKey, account.id, account.role, currentView, seed]);
 
+  refreshRef.current = refresh;
   useEffect(() => {
     if (projectKey !== "maple") return;
     void refresh();
@@ -101,10 +107,12 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
   const changeCount = data.pricing?.review?.input.changes.length ?? 0;
   const reviewLabel = changeCount ? `Review the ${changeCount} change${changeCount === 1 ? "" : "s"}` : "Review the changes";
   const currentDestination = !switchNeeded && ((step.destination === "chat" && currentView === "chats") || (step.destination === "pricing" && currentView === "pricing") || (step.destination === "order" && currentView === "change-order" && currentOrderId === step.orderId));
-  const action = switchNeeded ? `Continue as ${nextName}` : currentDestination ? step.destination === "pricing" ? step.anchor === "pricing-source-status" ? step.action : reviewLabel : step.destination === "order" ? step.anchor === "payments" ? "Go to payments below" : "Go to client review below" : step.action : step.action;
+  const action = switchNeeded ? `Continue as ${nextName}` : skipping ? "Running each day's check…" : step.skipTo ? step.action : currentDestination ? step.destination === "pricing" ? step.anchor === "pricing-source-status" ? step.action : reviewLabel : step.destination === "order" ? step.anchor === "payments" ? "Go to payments below" : "Go to client review below" : step.action : step.action;
   const outcomes = data.payments && data.payments.orderId !== data.seedOrderId ? mapleChangeLines(data.payments) : [];
 
   function continueGuide() {
+    if (skipping) return;
+    if (step.skipTo && !switchNeeded) { void skip(step.skipTo); return; }
     if (switchNeeded) onSwitchAccount(step.role);
     if (step.destination === "chat") {
       if (step.chatAction === "ask-payments") {
@@ -139,9 +147,11 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
     catch { setCopied(false); setError("Copy is unavailable here. You can select the example text below and paste it into the chat."); }
   }
 
-  return <GuideBar label="Maple demo guide" steps={guideSteps} step={step} action={action} onAction={continueGuide} error={error}
-    tools={<button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} aria-controls={detailsId} className={GUIDE_TOOL}>{expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}{expanded ? "Hide details" : "Money and story"}</button>}>
+  const days = data.simulatedDays ?? 0;
+  return <GuideBar label="Maple demo guide" steps={guideSteps} step={step} action={action} onAction={continueGuide} error={skipError ?? error} busy={skipping}
+    tools={<>{days > 0 && <span className={GUIDE_TOOL} title="Simulated time: Setti judges holds as if this many days had passed. PayPal calls still happen now, in the Sandbox.">Simulated time · day {days}</span>}<button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} aria-controls={detailsId} className={GUIDE_TOOL}>{expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}{expanded ? "Hide details" : "Money and story"}</button></>}>
     <PaymentSetupNotice embedded />
+    {step.secondary && !switchNeeded && <a href={step.secondary.href} className="mt-1.5 inline-flex text-[11px] font-medium text-brand-700 underline underline-offset-2">{step.secondary.label}</a>}
     <div id={detailsId} hidden={!expanded} className="mt-2.5 max-h-[28dvh] overflow-y-auto border-t border-[var(--primary-line)] pr-1 pt-2.5 text-[10px] leading-relaxed text-slate-500">
     {outcomes.length > 0 && <div className="mb-3 grid gap-2 sm:grid-cols-3">
       {outcomes.map((line) => {

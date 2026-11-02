@@ -156,6 +156,42 @@ export const renewalNotices = pgTable("renewal_notices", {
 });
 
 /**
+ * A PayPal webhook event, kept once by its event id after PayPal verified its
+ * signature, with the record it is about. Events confirm what Setti recorded;
+ * they never change money records by themselves. A record: never changed or deleted.
+ */
+export const paypalWebhookEvents = pgTable("paypal_webhook_events", {
+  eventId: text("event_id").primaryKey(),
+  eventType: text("event_type").notNull(),
+  resourceId: text("resource_id"),
+  resourceStatus: text("resource_status"),
+  amountCents: integer("amount_cents"),
+  /** The Setti operation the event is about, when one matches. */
+  operationId: uuid("operation_id").references(() => paymentOperations.id),
+  /** When PayPal created the event. */
+  paypalCreatedAt: timestamp("paypal_created_at", { withTimezone: true }),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One sentence of an inbox summary and the facts it rests on. */
+export interface SummarySentence { text: string; factIds: string[] }
+
+/**
+ * The AI summaries written for a payment inbox, one per set of facts: the same
+ * facts are never summarised twice, and a session's model calls can be counted.
+ * `sentences` is null when the model's text failed verification twice; the
+ * inbox then shows the records without a summary.
+ */
+export const inboxSummaries = pgTable("inbox_summaries", {
+  key: text("key").primaryKey(),
+  sessionId: uuid("session_id").notNull(),
+  sentences: jsonb("sentences").$type<SummarySentence[]>(),
+  model: text("model"),
+  problems: jsonb("problems").$type<string[]>().notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * How a design-services hold is split across the approved service lines it pays
  * for, written together with the hold's operation. Each line is captured from
  * the hold separately, up to its amount. A record: never changed or deleted.

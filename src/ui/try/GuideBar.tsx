@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Check } from "lucide-react";
+import { ArrowRight, Check, LoaderCircle } from "lucide-react";
 import type { ReactNode } from "react";
 import { EndDemoButton } from "./EndDemoButton";
 
@@ -9,7 +9,7 @@ import { EndDemoButton } from "./EndDemoButton";
  * step with its action, and a way to end the demo. Every walkthrough uses the
  * same bar; `tools` and `children` add what one walkthrough needs on top.
  */
-export function GuideBar({ label, steps, step, action, onAction, tools, children, error }: {
+export function GuideBar({ label, steps, step, action, onAction, tools, children, error, busy = false }: {
   label: string;
   steps: readonly string[];
   step: { index: number; title: string; detail: string; complete?: boolean };
@@ -20,6 +20,8 @@ export function GuideBar({ label, steps, step, action, onAction, tools, children
   /** Rows under the next step. */
   children?: ReactNode;
   error?: string | null;
+  /** The action is running. */
+  busy?: boolean;
 }) {
   const done = (index: number) => index < step.index || (index === step.index && !!step.complete);
   return <aside aria-label={label} className="shrink-0 rounded-xl border border-[var(--primary-line)] bg-[var(--primary-soft)] px-4 py-3 text-[var(--ink)]">
@@ -41,7 +43,7 @@ export function GuideBar({ label, steps, step, action, onAction, tools, children
         <h2 className="text-[13px] font-semibold leading-snug">{step.title}</h2>
         <p title={step.detail} className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-slate-600">{step.detail}</p>
       </div>
-      <button type="button" onClick={onAction} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">{action}<ArrowRight className="h-3.5 w-3.5" /></button>
+      <button type="button" onClick={onAction} disabled={busy} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:cursor-wait disabled:opacity-70">{busy && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}{action}{!busy && <ArrowRight className="h-3.5 w-3.5" />}</button>
     </div>
     {children}
     {error && <p role="status" className="mt-2 text-[10px] leading-relaxed text-amber-800">{error}</p>}

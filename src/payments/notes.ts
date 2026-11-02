@@ -89,12 +89,23 @@ export async function noteServicesPaid(db: Db, operation: Scope & { id: string; 
   });
 }
 
-/** Once the client has confirmed a version, the same hand-off, with the new items held after it. The version's id is the message id. */
-export async function noteVersionConfirmed(db: Db, orderId: string, holds: Hold[]): Promise<void> {
+/** What the client says about the holds a version released. Only releases PayPal confirmed count. */
+function releasedHolds(releases: Hold[]): string {
+  const done = releases.filter((release) => release.status === "succeeded");
+  if (!done.length) return "";
+  const cents = done.reduce((total, release) => total + release.amountCents, 0);
+  return ` The ${usd(cents)} held for ${done.length === 1 ? "the item" : `the ${done.length} items`} I no longer need is released.`;
+}
+
+/**
+ * Once the client has confirmed a version, the same hand-off, with the holds it
+ * released and the new items held after it. The version's id is the message id.
+ */
+export async function noteVersionConfirmed(db: Db, orderId: string, holds: Hold[], releases: Hold[] = []): Promise<void> {
   await db.transaction(async (tx) => {
     const [order] = await tx.select({ caseId: changeOrders.caseId, document: changeOrders.document, projectId: pricingCases.projectId }).from(changeOrders)
       .innerJoin(pricingCases, eq(pricingCases.caseId, changeOrders.caseId)).where(eq(changeOrders.id, orderId));
     if (!order) return;
-    await handOff(tx, order.caseId, orderId, `I've confirmed V${order.document.version}.${await heldFurniture(tx, order.projectId, holds)}`);
+    await handOff(tx, order.caseId, orderId, `I've confirmed V${order.document.version}.${releasedHolds(releases)}${await heldFurniture(tx, order.projectId, holds)}`);
   });
 }

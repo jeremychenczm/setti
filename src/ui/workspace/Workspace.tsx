@@ -12,7 +12,6 @@ import { willowQuote } from "@/quotes/willow-quote";
 import { latestChatMessage } from "../chat/activity";
 import type { Person } from "../demo-data";
 import { ConversationList, type ChatPreview, type ProjectChat } from "./ConversationList";
-import { NeedsYouToday } from "./NeedsYouToday";
 import { Sidebar, type View } from "./Sidebar";
 import { useAttention } from "./useAttention";
 import { TrySeedNotice } from "../try/TrySeedNotice";
@@ -25,6 +24,9 @@ const QuoteBoard = dynamic(() => import("../quotes/QuoteBoard").then((m) => m.Qu
 });
 const StudioProjectsModule = dynamic(() => import("../studio/StudioProjectsModule").then((m) => m.StudioProjectsModule), {
   loading: () => <div role="status" className="flex flex-1 items-center justify-center rounded-xl bg-white text-[13px] text-[var(--muted)]">Loading projects…</div>,
+});
+const InboxModule = dynamic(() => import("../inbox/Inbox").then((m) => m.Inbox), {
+  loading: () => <div role="status" className="flex flex-1 items-center justify-center rounded-xl bg-white text-[13px] text-[var(--muted)]">Loading inbox…</div>,
 });
 const StudioProjectChat = dynamic(() => import("../studio/StudioProjectChat").then((m) => m.StudioProjectChat));
 const StudioProjectRecords = dynamic(() => import("../studio/PreparedProject").then((m) => m.StudioProjectRecords));
@@ -67,6 +69,7 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
     function restoreRoute() {
       const url = new URL(window.location.href);
       if (url.pathname === "/studio" && account.role === "designer") { setView("projects"); return; }
+      if (url.pathname === "/inbox") { setView("inbox"); return; }
       const match = /^\/(chats|quotes)\/([^/]+)$/.exec(url.pathname);
       if (!match) return;
       const id = decodeURIComponent(match[2]);
@@ -84,7 +87,7 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
     if (next === "projects" && account.role !== "designer") return;
     setView(next);
     if (next === "quotes") setRecordsTab("quote");
-    const path = next === "projects" ? "/studio" : next === "quotes" ? `/quotes/${preparedProject?.id ?? quoteId}` : `/chats/${preparedProject?.id ?? activeId}`;
+    const path = next === "projects" ? "/studio" : next === "inbox" ? "/inbox" : next === "quotes" ? `/quotes/${preparedProject?.id ?? quoteId}` : `/chats/${preparedProject?.id ?? activeId}`;
     window.history.replaceState(window.history.state, "", path);
   }
 
@@ -168,15 +171,15 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
     <div className="flex h-dvh min-h-0 gap-2 bg-[var(--canvas)] p-2 text-[var(--ink)]">
       {/* The icon rail and the chat list are one panel, as in a messaging app; other modules keep only the rail. */}
       <div className="flex min-h-0 shrink-0 overflow-hidden rounded-xl bg-white shadow-sm">
-        <Sidebar view={view} onView={showView} account={account} onSwitchAccount={switchAccount} badges={{ chats: attention.view?.items.length ?? 0 }} />
-        {view === "chats" && <div className="hidden min-h-0 border-l border-[var(--line)] lg:flex"><ConversationList projects={conversations} activeId={preparedProject?.id ?? activeId} onOpen={open}
-          top={account.role === "designer" ? <NeedsYouToday items={attention.view?.items ?? null} error={attention.error} lastCheck={attention.view?.lastCheck ?? null} /> : undefined} /></div>}
+        <Sidebar view={view} onView={showView} account={account} onSwitchAccount={switchAccount} badges={{ inbox: attention.view?.items.length ?? 0 }} />
+        {view === "chats" && <div className="hidden min-h-0 border-l border-[var(--line)] lg:flex"><ConversationList projects={conversations} activeId={preparedProject?.id ?? activeId} onOpen={open} /></div>}
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
         {view !== "projects" && !preparedProject && <TrySeedNotice projectKey={view === "chats" ? activeId : quoteId} account={account} onSwitchAccount={switchAccount} onOpenChat={() => { setActiveId(view === "quotes" ? quoteId : activeId); setView("chats"); }} currentView={view} />}
         <div className="flex min-h-0 min-w-0 flex-1 gap-2">
           {view === "projects" && account.role === "designer" && <StudioProjectsModule onOpenProject={openPreparedProject} />}
+          {view === "inbox" && <InboxModule key={account.id} account={account} />}
           {view === "chats" && (preparedProject
             ? <StudioProjectChat key={preparedProject.id} project={preparedProject} projects={conversations} onSelectProject={open} onOpenRecords={openPreparedRecords} />
             : <CaseChat key={`${account.id}:${activeId}`} projectKey={activeId} quote={quotes[activeId]} account={account} onSwitchAccount={switchAccount} onOpenQuote={openCaseQuote} onSelectCase={open} conversationOptions={conversations} onSelectProject={open} onLatest={(message) => showLatest(activeId, message)} />)}

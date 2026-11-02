@@ -6,7 +6,7 @@ import { willowGuideStep, type WillowGuideData } from "./willow-guide";
 
 const serviceView = (patch: Partial<ServicesPaymentView> = {}): ServicesPaymentView => ({ projectKey: "willow", basis: { version: 1, orderId: null }, services: [{ itemId: "consultation", label: "Consultation", targetCents: 30_000, capturedCents: 30_000, captures: [] }], dueCents: 0, furnitureToHold: { count: 0, cents: 0 }, checkout: null, savedPayPal: true, savedMethod: { kind: "paypal", label: "b•••@personal.example.com", savedAt: "2026-10-30T12:00:00.000Z" }, canRemoveSaved: false, checkoutOptions: null, canPay: false, canFinish: false, canCheck: false, reason: null, paypalClientId: null, ...patch });
 const item = (patch: Partial<ItemHoldView> = {}): ItemHoldView => ({ itemId: "chair", side: "baseline", label: "Chair", targetCents: 10_000, heldCents: 10_000, capturedCents: 0, state: "held", operationId: "hold", approvalUrl: null, canCheck: false, canCancel: false, canCancelItem: false, cancellation: null, canCheckout: false, paypalAuthorizationId: "AUTH", expiresAt: null, timing: null, expiredAt: null, renewal: null, failureMessage: null, vendor: "Alder Row", terms: { quantity: 1, unitPriceCents: 10_000, taxCents: 0, freightCents: 0, leadTimeDays: 21 }, supplier: null, ...patch });
-const holdsView = (patch: Partial<ItemHoldsView> = {}): ItemHoldsView => ({ projectKey: "willow", basis: { version: 1, orderId: null }, items: [item()], toHoldCents: 0, savedPayPal: true, savedMethod: { kind: "paypal", label: "b•••@personal.example.com", savedAt: "2026-10-30T12:00:00.000Z" }, canRemoveSaved: false, checkoutOptions: null, canHold: false, canConfirmSupplier: true, contentHash: "hash", reason: null, ...patch });
+const holdsView = (patch: Partial<ItemHoldsView> = {}): ItemHoldsView => ({ clock: { now: "2026-11-01T12:00:00.000Z", simulatedDays: 0 }, projectKey: "willow", basis: { version: 1, orderId: null }, items: [item()], toHoldCents: 0, savedPayPal: true, savedMethod: { kind: "paypal", label: "b•••@personal.example.com", savedAt: "2026-10-30T12:00:00.000Z" }, canRemoveSaved: false, checkoutOptions: null, canHold: false, canConfirmSupplier: true, contentHash: "hash", reason: null, ...patch });
 function approved(): WillowGuideData {
   return { snapshot: { opening: { ...defaultOpening("willow"), status: "approved", sentAt: "2026-10-24T00:00:00Z", progress: { approved: 2, declined: 1, withdrawn: 0, pending: 25, approvedTotalCents: 40_000 } }, versions: [] }, services: serviceView(), holds: holdsView() };
 }
@@ -94,6 +94,7 @@ describe("Willow first-quote guide", () => {
 
   it("keeps supplier confirmation and capture as separate designer steps", () => {
     const data = approved();
+    data.holds!.clock.simulatedDays = 3;
     expect(willowGuideStep(data, "client")).toMatchObject({ index: 3, role: "jordan" });
     expect(willowGuideStep(data, "client").complete).toBeUndefined();
     data.holds!.items = [item({ state: "confirmed" })];
@@ -106,6 +107,33 @@ describe("Willow first-quote guide", () => {
     const step = willowGuideStep(data, "client");
     expect(step).toMatchObject({ index: 4, complete: true });
     expect(step.detail).toContain("Undecided and declined lines remain separate");
+  });
+
+  describe("when Jordan is busy and forgets to order", () => {
+    const at = (days: number, items: ReturnType<typeof item>[]) => {
+      const data = approved();
+      data.holds = holdsView({ items, clock: { now: "2026-11-01T12:00:00.000Z", simulatedDays: days } });
+      return willowGuideStep(data, "designer");
+    };
+
+    it("offers to skip ahead 3 days before any supplier order is recorded", () => {
+      expect(at(0, [item(), item({ itemId: "desk", label: "Desk" })])).toMatchObject({
+        index: 3, title: "What if Jordan is busy and forgets to order?", action: "Skip ahead 3 days", skipTo: 3,
+        secondary: { label: "Record the confirmations now", href: "/quotes/willow#item-holds" }, detail: expect.stringMatching(/^Sofia's 2 items are held, but no supplier order is recorded yet\./),
+      });
+    });
+
+    it("then asks for the confirmations, saying what Setti reminded Jordan of", () => {
+      const step = at(3, [item(), item({ itemId: "desk", label: "Desk" })]);
+      expect(step).toMatchObject({ index: 3, title: "Jordan checks Chair's supplier confirmation", detail: expect.stringMatching(/^3 days on, Setti's inbox reminds Jordan that 2 items are still not ordered\. /) });
+      expect(step.skipTo).toBeUndefined();
+    });
+
+    it("does not offer the skip once an order is recorded", () => {
+      const step = at(0, [item({ state: "confirmed", supplier: { reference: "SO-1", totalCents: 10_000, leadTimeDays: 10 } }), item({ itemId: "desk", label: "Desk" })]);
+      expect(step).toMatchObject({ index: 3, title: "Jordan checks Desk's supplier confirmation" });
+      expect(step.skipTo).toBeUndefined();
+    });
   });
 
   it("redirects a replaced V1 to the new version without checking off unpaid steps", () => {
