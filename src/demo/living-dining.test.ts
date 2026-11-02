@@ -24,19 +24,21 @@ describe("Maple living-and-dining scenario", () => {
     for (const line of HOME_APPROVED_QUOTE.lines) {
       expect(line.source.kind).toBe("demo");
       expect(line.source.url).toBeUndefined();
-      expect(HOME_SUPPLIER_NOTES).toContain(`[${line.source.reference}] itemId=${line.itemId}`);
+      expect(HOME_SUPPLIER_NOTES).toContain(`[${line.source.reference}] `);
       expect(HOME_SUPPLIER_NOTES).toContain(line.sku);
       expect(line.specification).not.toBe("");
       expect(line.returnPolicy).toMatch(/Fictional/);
     }
-    expect(HOME_SUPPLIER_NOTES).toContain("not real supplier documents");
+    expect(HOME_SUPPLIER_NOTES).toContain("not real suppliers");
     expect(HOME_APPROVED_QUOTE.paymentNote).toContain("does not confirm");
   });
 
   it("keeps quantity, shape and retained-cost cross-checks consistent for the five changes", () => {
-    expect(HOME_SUPPLIER_NOTES).toContain("unit USD 180, quantity 2, combined line USD 360");
-    expect(HOME_SUPPLIER_NOTES).toContain("110 cm diameter × 75 cm high, suitable for four people");
-    expect(HOME_SUPPLIER_NOTES).toContain("Revised quantity 4 × unit USD 180 = USD 720");
+    // The documents give unit prices and terms; the quantities come from the discussion.
+    expect(HOME_SUPPLIER_NOTES).toContain("round side table in light oak, 40 cm diameter × 50 cm high, light enough to lift; USD 180 each");
+    expect(HOME_SUPPLIER_NOTES).toContain("110 cm diameter × 75 cm high, seats four; USD 1,250 each");
+    expect(HOME_SUPPLIER_NOTES).toContain("USD 180 each; lead time 14 days");
+    expect(HOME_SUPPLIER_NOTES).toContain("We keep 20% of the goods price");
     const sideboard = HOME_APPROVED_QUOTE.lines.find((line) => line.itemId === "sideboard")!;
     const retainedCents = sideboard.quantity * sideboard.unitPriceCents * sideboard.restockingFeeBps! / 10_000;
     expect(retainedCents).toBe(24_000);
@@ -45,9 +47,10 @@ describe("Maple living-and-dining scenario", () => {
     const revisedTotalCents = revisedGoodsCents + 100_000 + retainedCents;
     expect(revisedTotalCents).toBe(567_000);
     expect(calculateQuoteTotals(HOME_APPROVED_QUOTE.lines).totalCents - revisedTotalCents).toBe(206_000);
-    // The source documents provide unit prices and terms, not the consolidated answer.
-    expect(HOME_SUPPLIER_NOTES).not.toMatch(/5,670|2,060|4,430/);
-    expect(HOME_SUPPLIER_NOTES).toContain("supplier credit before refunding");
+    // The source documents provide unit prices and terms, not the answer: no totals,
+    // retained costs, refunds, quantities to use, or instructions to the model.
+    expect(HOME_SUPPLIER_NOTES).not.toMatch(/5,670|2,060|4,430|USD 360|USD 720|USD 240|USD 960/);
+    expect(HOME_SUPPLIER_NOTES).not.toMatch(/\bDo not\b|\bdo not\b|not four additional|itemId=|not_ordered|old-item|the designer must|consult the/i);
   });
 
   it("ends the human discussion on direction only and leaves the first AI draft explicit", () => {

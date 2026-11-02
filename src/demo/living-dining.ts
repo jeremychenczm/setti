@@ -94,35 +94,34 @@ export const HOME_APPROVED_QUOTE: ApprovedQuoteReport = {
 
 /** Local fictional material supplied to the AI; none of these references is a real file or vendor quote. */
 export const HOME_SUPPLIER_NOTES = `FICTIONAL MAPLE LIVING & DINING SUPPLIER MATERIALS
-These are Setti's invented demonstration inputs, not real supplier documents, uploaded files, live stock checks or external product recommendations. All amounts are USD. Line tax and delivery are explicitly USD 0 for both original and proposed goods, solely as demo assumptions. No alternative is custom-made. Lead times and return terms are illustrative. A quote or these notes do not prove a PayPal transaction or a supplier credit; use the saved ledger for payment facts. The designer must review and the client must formally confirm a priced change before any money action.
+Invented for this demo: not real suppliers, uploaded files or live stock checks. Prices are in USD per item and include tax and delivery. Lead times and return terms are illustrative.
 
-[MAPLE-LD-SOFA-01] itemId=sofa | Alder Room (demo)
-Original: DEMO-LD-SOFA-230, one straight three-seat sofa, 230 × 95 × 80 cm (W × D × H), warm neutral fabric, no chaise; unit USD 2,400, line USD 2,400.
-Alternative: DEMO-LD-SOFA-200, one compact straight sofa, 200 × 90 × 80 cm, warm neutral fabric, no chaise; unit USD 2,100, quantity 1, line USD 2,100; sample lead time 21 days. Do not retain the larger sofa as an additional item.
-Handling and returns: original sofa not ordered; cancel before supplier confirmation with USD 0 retained cost. Standard unused sofas may be returned within 14 days of delivery with prior approval and a 15% goods-price restocking fee. This later-return fee does not apply to the unplaced original order.
+[MAPLE-LD-SOFA-01] Alder Room (demo) · Sofa
+Current item: DEMO-LD-SOFA-230, straight three-seat sofa, 230 × 95 × 80 cm (W × D × H), warm neutral fabric, no chaise; USD 2,400 each.
+Alternative: DEMO-LD-SOFA-200, compact straight sofa, 200 × 90 × 80 cm, warm neutral fabric, no chaise; USD 2,100 each; lead time 21 days.
+Terms: an order not yet confirmed can be changed or cancelled free of charge. Unused sofas can be returned within 14 days of delivery with prior approval; a 15% restocking fee applies to the goods price.
 
-[MAPLE-LD-COFFEE-01] itemId=coffee-table | Orbit Workshop (demo)
-Original: DEMO-LD-COFFEE-120, one large rectangular coffee table, 120 × 65 × 40 cm; unit and line USD 650.
-Alternative: DEMO-LD-SIDE-40, small movable round side table, 40 cm diameter × 50 cm high, light oak, easy to lift; unit USD 180, quantity 2, combined line USD 360; sample lead time 14 days. Two independent small tables replace the single large coffee table; this is neither a single USD 360 table nor two large coffee tables.
-Handling and returns: original coffee table not ordered; cancel before supplier confirmation with USD 0 retained cost. Standard unused tables may be returned within 14 days with prior approval and a 10% goods-price restocking fee.
+[MAPLE-LD-COFFEE-01] Orbit Workshop (demo) · Coffee table
+Current item: DEMO-LD-COFFEE-120, large rectangular coffee table, 120 × 65 × 40 cm; USD 650 each.
+Alternative: DEMO-LD-SIDE-40, round side table in light oak, 40 cm diameter × 50 cm high, light enough to lift; USD 180 each; lead time 14 days.
+Terms: an order not yet confirmed can be changed or cancelled free of charge. Unused tables can be returned within 14 days of delivery with prior approval; a 10% restocking fee applies to the goods price.
 
-[MAPLE-LD-DINING-01] itemId=dining-table | Common Table Co (demo)
-Original: DEMO-LD-DINING-160, one fixed rectangular table, 160 × 85 × 75 cm, seats six, no extension; unit and line USD 1,400.
-Alternative: DEMO-LD-ROUND-110, one round light oak dining table, 110 cm diameter × 75 cm high, suitable for four people, fixed top, no extension; unit USD 1,250, quantity 1, line USD 1,250; sample lead time 21 days. Diameter is not rectangular width; do not invent a six-seat or extending table.
-Handling and returns: original dining table not ordered; cancel before supplier confirmation with USD 0 retained cost. An unused standard table may be returned within 14 days with prior approval and a 15% goods-price restocking fee. Room circulation still needs the designer's measured-layout review; these dimensions are not a verified clearance plan.
+[MAPLE-LD-DINING-01] Common Table Co (demo) · Dining table
+Current item: DEMO-LD-DINING-160, fixed rectangular dining table, 160 × 85 × 75 cm, seats six; USD 1,400 each.
+Alternative: DEMO-LD-ROUND-110, fixed round dining table in light oak, 110 cm diameter × 75 cm high, seats four; USD 1,250 each; lead time 21 days.
+Terms: an order not yet confirmed can be changed or cancelled free of charge. Unused tables can be returned within 14 days of delivery with prior approval; a 15% restocking fee applies to the goods price.
 
-[MAPLE-LD-CHAIRS-01] itemId=dining-chairs | Gather Seating (demo)
-Keep DEMO-LD-CHAIR-01, the existing light oak chair with warm neutral upholstery, 45 × 53 × 80 cm, seat height 46 cm. Original quantity 6 × unit USD 180 = USD 1,080. Revised quantity 4 × unit USD 180 = USD 720, four chairs total, not four additional chairs; sample lead time 14 days.
-Handling and returns: chairs not ordered; reducing from six to four before supplier confirmation has USD 0 retained cost. Later returns of unused chairs within 14 days require prior approval and retain 10% of the returned goods price. Keep this as a quantity change to the existing chair line.
+[MAPLE-LD-CHAIRS-01] Gather Seating (demo) · Dining chairs
+Current item: DEMO-LD-CHAIR-01, light oak dining chair with warm neutral upholstery, 45 × 53 × 80 cm, seat height 46 cm; USD 180 each; lead time 14 days.
+Terms: an order not yet confirmed can be changed, including its quantity, or cancelled free of charge. Unused chairs can be returned within 14 days of delivery with prior approval; a 10% restocking fee applies to the goods price.
 
-[MAPLE-LD-SIDEBOARD-01] itemId=sideboard | Still House Storage (demo)
-Original: DEMO-LD-SIDEBOARD-160, one standard light oak sideboard, 160 × 40 × 80 cm; unit and line USD 1,200; sample lead time 21 days. Remove it entirely, with no replacement cabinet and no zero-priced new product.
-Fictional starting-history condition: the sideboard was an early delivery, supplier-confirmed and charged at USD 1,200; consult the actual prepared ledger to verify the payment state. It remains unused and within the sample 14-day return window. This supplier permits its return with prior approval and a 20% inclusive retained cost: USD 1,200 × 20% = USD 240. Old-item handling is returned, not not_ordered. Expected supplier credit and subsequent customer refund: USD 1,200 − USD 240 = USD 960. There are no additional tax, freight, handling or cancellation charges in this sample. The USD 240 is a retained cost on the removed line, not a new service. Record the supplier credit before refunding; do not claim the credit or refund already happened.
+[MAPLE-LD-SIDEBOARD-01] Still House Storage (demo) · Sideboard
+Current item: DEMO-LD-SIDEBOARD-160, light oak sideboard, 160 × 40 × 80 cm; USD 1,200 each; lead time 21 days.
+Delivery: delivered early to Maple Ave; unused, in its original packaging and still within the 14-day return window.
+Terms: unused sideboards can be returned within 14 days of delivery with prior approval. We keep 20% of the goods price, which covers collection and restocking; there are no other return charges. The rest is issued as a credit note once the sideboard is collected.
 
-[MAPLE-LD-SERVICE-01] itemId=design | Lee Studio (demo)
-DEMO-LD-DESIGN-01, living-and-dining layout and furniture selection, one fixed service fee of USD 1,000. The service scope, quantity and fee remain unchanged. Do not reprice or remove it as part of these five furniture changes. Product restocking terms do not apply to services; any service cancellation needs its own review.
-
-These are separate supplier and studio source notes. Combine the products and quantities agreed in the discussion when preparing the revised proposal; no consolidated revised project total is supplied here. The original approved quote remains unchanged until the normal review and confirmation flow. Do not net different items' payment actions or execute a payment from this request.`;
+[MAPLE-LD-SERVICE-01] Lee Studio (demo) · Design services
+Service: DEMO-LD-DESIGN-01, living-and-dining layout and furniture selection; fixed fee USD 1,000.`;
 
 /** Conversation stops at agreement on direction; there is no AI message or priced client approval. */
 export const HOME_DISCUSSION: readonly { actor: "client" | "designer"; text: string }[] = [
