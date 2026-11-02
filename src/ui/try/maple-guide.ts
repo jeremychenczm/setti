@@ -24,6 +24,8 @@ export interface MapleGuideData {
   simulatedDays?: number;
   /** Whether Emma has opened her inbox; unknown when it could not be read. */
   clientInboxOpened?: boolean;
+  /** Money records Emma has not seen in her inbox; unknown when it could not be read. */
+  clientUnread?: number;
 }
 
 export interface MapleGuideStep {
@@ -75,11 +77,24 @@ export function mapleGuideStep(data: MapleGuideData, currentRole: "designer" | "
     const notOrdered = changed.filter((line) => line.category === "furniture" && line.heldCents > 0 && line.steps.some((step) => step.kind === "supplier_confirmation"));
     const ordered = changed.some((line) => line.supplierEvents.some((event) => event.kind === "order_confirmed"));
     const days = data.simulatedDays ?? 0;
+    const newItems = notOrdered.length === 1 ? "the new item" : `the ${notOrdered.length} new items`;
+    // Right after confirming, Emma sees in her own inbox what Setti just did with her money.
+    if (payments.current && currentRole === "client" && !ordered && days < NOT_ORDERED_SKIP && (data.clientUnread ?? 0) > 0) return {
+      index: 3, role: "emma", destination: "inbox", action: "Open your Inbox",
+      title: "Emma checks what Setti did with her money",
+      detail: `Confirming V${latest.version} let Setti release the holds it no longer needs and hold ${newItems} on Emma's saved card in the PayPal Sandbox. The red number on Inbox counts these new records; open it to see each one, when PayPal confirmed it, and Setti's summary.`,
+    };
+    // The skip happens in Jordan's inbox, so the reminder is seen arriving there.
     if (payments.current && notOrdered.length && !ordered && days < NOT_ORDERED_SKIP) return {
-      index: 3, role: "jordan", destination: "order", orderId: latest.id, anchor: "payments", action: "Skip ahead 3 days", skipTo: NOT_ORDERED_SKIP,
+      index: 3, role: "jordan", destination: "inbox", action: "Skip ahead 3 days", skipTo: NOT_ORDERED_SKIP,
       secondary: { label: "Record the confirmations now", href: `/change-orders/${encodeURIComponent(latest.id)}#payments` },
       title: "What if Jordan is busy and forgets to order?",
-      detail: `Setti released the holds V${latest.version} no longer needs and held ${notOrdered.length === 1 ? "the new item" : `the ${notOrdered.length} new items`} on Emma's saved card, but no supplier order is recorded yet. Skip ahead 3 days to see the reminder Setti gives Jordan, or record the supplier confirmations now. Simulated time moves only the day Setti judges holds by; PayPal calls still happen now, in the Sandbox.`,
+      detail: `Setti released the holds V${latest.version} no longer needs and held ${newItems} on Emma's saved card, but no supplier order is recorded yet. Skip ahead 3 days here in Jordan's Inbox and watch Setti's reminder arrive, or record the supplier confirmations now. Simulated time moves only the day Setti judges holds by; PayPal calls still happen now, in the Sandbox.`,
+    };
+    if (payments.current && notOrdered.length && !ordered) return {
+      index: 3, role: "jordan", destination: "order", orderId: latest.id, anchor: "payments", action: "Record the supplier confirmations",
+      title: `Setti caught it: ${notOrdered.length === 1 ? "the new item is" : `${notOrdered.length} new items are`} still not ordered`,
+      detail: `Day ${days}: PayPal's 3-day honor period for ${notOrdered.length === 1 ? "this hold" : "these holds"} is over and no supplier order is recorded, so Setti's daily check put a reminder in Jordan's Inbox for each. Open a reminder, or go to the payments: save each supplier's confirmation, then capture.`,
     };
     const settled = payments.current && !!payments.plan && payments.plan.status !== "blocked" && changed.length > 0 && changed.every((line) => lineProgress(line, payments.operations).settled)
       && !payments.operations.some((operation) => operation.status === "pending" || operation.status === "unknown");
@@ -98,7 +113,7 @@ export function mapleGuideStep(data: MapleGuideData, currentRole: "designer" | "
     const progress = waiting ? lineProgress(waiting, payments.operations) : null;
     const clientNeeded = progress?.label === "Authorization needed" || progress?.label === "Additional authorization needed" || progress?.label === "Awaiting client approval";
     return { index: 3, role: available ? available.step.actor === "client" ? "emma" : "jordan" : clientNeeded ? "emma" : "jordan", destination: "order", orderId: latest.id, anchor: "payments", action: `Continue V${latest.version} payments`,
-      title: "Each item keeps its own payment progress", detail: (notOrdered.length && !ordered && days >= NOT_ORDERED_SKIP ? `${days} days on, Setti's inbox reminds Jordan that ${notOrdered.length === 1 ? "the new item is" : `${notOrdered.length} new items are`} still not ordered. ` : "") + (payments.plan?.status === "blocked" ? "Check unresolved existing operations before starting another payment. Pending and unknown results are not counted as completed." : available ? `${available.line.label}: ${available.step.note}` : progress?.next ?? payments.reason ?? "Open the recorded payment steps to see what is still needed."),
+      title: "Each item keeps its own payment progress", detail: (payments.plan?.status === "blocked" ? "Check unresolved existing operations before starting another payment. Pending and unknown results are not counted as completed." : available ? `${available.line.label}: ${available.step.note}` : progress?.next ?? payments.reason ?? "Open the recorded payment steps to see what is still needed."),
     };
   }
   const failed = [...snapshot.messages].reverse().find((message) => message.actor !== "assistant")?.aiState === "failed";

@@ -74,14 +74,14 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, onO
         account.role === "designer" ? readJson("/api/pricing/maple", controller.signal).then((value) => value as PricingWorkspace).catch(() => null) : Promise.resolve(null),
         paymentOrderId ? readJson(`/api/change-orders/${encodeURIComponent(paymentOrderId)}/payments`, controller.signal).then((value) => value as PaymentsWorkspace).catch(() => null) : Promise.resolve(null),
         readJson("/api/demo/clock", controller.signal).then((value) => value as { days?: number }).catch(() => null),
-        account.role === "client" ? readJson("/api/inbox/badge", controller.signal).then((value) => value as { opened?: boolean }).catch(() => null) : Promise.resolve(null),
+        account.role === "client" ? readJson("/api/inbox/badge", controller.signal).then((value) => value as { opened?: boolean; count?: number }).catch(() => null) : Promise.resolve(null),
       ]);
       if (controller.signal.aborted) return;
       const validPayments = payments?.orderId === paymentOrderId && Array.isArray(payments.lines) && Array.isArray(payments.operations) ? payments : null;
       const formStale = currentView === "pricing" ? document.getElementById("pricing-workspace")?.getAttribute("data-pricing-source-stale") : null;
       setData({ seedOrderId: seed.changeOrderId, scenario: seed.scenario, preparationPending: seed.scenario === HOME_SCENARIO && seed.status !== "ready", snapshot, pricing: pricing?.projectKey === "maple" ? pricing : null, payments: validPayments,
         pricingViewStale: formStale === "true" ? true : formStale === "false" ? false : undefined, simulatedDays: typeof clock?.days === "number" ? clock.days : 0,
-        clientInboxOpened: typeof inbox?.opened === "boolean" ? inbox.opened : undefined });
+        clientInboxOpened: typeof inbox?.opened === "boolean" ? inbox.opened : undefined, clientUnread: typeof inbox?.count === "number" ? inbox.count : undefined });
       setViewerId(account.id);
       setError(!paymentOrderId || validPayments ? null : "Payment records could not be refreshed. Open the version to check its saved status.");
     } catch {
@@ -113,12 +113,14 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, onO
   const changeCount = data.pricing?.review?.input.changes.length ?? 0;
   const reviewLabel = changeCount ? `Review the ${changeCount} change${changeCount === 1 ? "" : "s"}` : "Review the changes";
   const currentDestination = !switchNeeded && ((step.destination === "inbox" && currentView === "inbox") || (step.destination === "chat" && currentView === "chats") || (step.destination === "pricing" && currentView === "pricing") || (step.destination === "order" && currentView === "change-order" && currentOrderId === step.orderId));
-  const action = switchNeeded ? `Continue as ${nextName}` : skipping ? "Running each day's check…" : step.skipTo ? step.action : currentDestination ? step.destination === "pricing" ? step.anchor === "pricing-source-status" ? step.action : reviewLabel : step.destination === "order" ? step.anchor === "payments" ? "Go to payments below" : "Go to client review below" : step.action : step.action;
+  // A skip that belongs in the inbox opens it first, so the reminder is seen arriving.
+  const skipHere = !!step.skipTo && (step.destination !== "inbox" || currentView === "inbox");
+  const action = switchNeeded ? `Continue as ${nextName}` : skipping ? "Running each day's check…" : step.skipTo ? skipHere ? step.action : "Open your Inbox" : currentDestination ? step.destination === "pricing" ? step.anchor === "pricing-source-status" ? step.action : reviewLabel : step.destination === "order" ? step.anchor === "payments" ? "Go to payments below" : "Go to client review below" : step.action : step.action;
   const outcomes = data.payments && data.payments.orderId !== data.seedOrderId ? mapleChangeLines(data.payments) : [];
 
   function continueGuide() {
     if (skipping) return;
-    if (step.skipTo && !switchNeeded) { void skip(step.skipTo); return; }
+    if (step.skipTo && !switchNeeded && skipHere) { void skip(step.skipTo); return; }
     if (switchNeeded) onSwitchAccount(step.role);
     if (step.destination === "inbox") {
       if (currentView === "inbox") document.getElementById("inbox-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -164,13 +166,14 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, onO
     tools={<>{days > 0 && <span className={GUIDE_TOOL} title="Simulated time: Setti judges holds as if this many days had passed. PayPal calls still happen now, in the Sandbox.">Simulated time · day {days}</span>}<button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} aria-controls={detailsId} className={GUIDE_TOOL}>{expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}{expanded ? "Hide details" : "Money and story"}</button></>}>
     <PaymentSetupNotice embedded />
     {step.secondary && !switchNeeded && <a href={step.secondary.href} className="mt-1.5 inline-flex text-[11px] font-medium text-brand-700 underline underline-offset-2">{step.secondary.label}</a>}
-    <div id={detailsId} hidden={!expanded} className="mt-2.5 max-h-[28dvh] overflow-y-auto border-t border-[var(--primary-line)] pr-1 pt-2.5 text-[10px] leading-relaxed text-slate-500">
+    <div id={detailsId} hidden={!expanded} className="mt-2.5 max-h-[28dvh] overflow-y-auto border-t border-[var(--primary-line)] pr-1 pt-2.5 text-left text-[11px] leading-relaxed text-slate-500">
     {outcomes.length > 0 && <div className="mb-3 grid gap-2 sm:grid-cols-3">
       {outcomes.map((line) => {
         const progress = lineProgress(line, data.payments!.operations);
         const href = `/change-orders/${data.payments!.orderId}#payment-line-${line.side}-${line.itemId}`;
         const result = line.side === "baseline" && line.change === "replace" ? `Released ${money(line.releasedCents)} · still held ${money(line.heldCents)}` : line.change === "remove" ? `Refunded ${money(line.refundedCents)} · retained target ${money(line.targetCents)}` : `Captured ${money(line.capturedCents)} · held ${money(line.heldCents)}`;
-        return <Link href={href} key={`${line.side}:${line.itemId}`} className="min-w-0 rounded-lg border border-brand-100 bg-white px-3 py-2 hover:border-brand-300"><p className="truncate text-[11px] font-semibold text-slate-800">{line.label}{line.change === "replace" ? line.side === "baseline" ? " · old item" : " · replacement" : ""}</p><p className={`mt-1 text-[10px] font-medium ${progress.settled ? "text-emerald-700" : "text-amber-800"}`}>{progress.label}</p><p className="mt-1 text-[10px] leading-relaxed text-slate-500">{result}</p></Link>;
+        // A plain link: on the same page, the hash change opens the item's side card.
+        return <a href={href} key={`${line.side}:${line.itemId}`} className="min-w-0 rounded-lg border border-brand-100 bg-white px-3 py-2 hover:border-brand-300"><p className="truncate text-[11px] font-semibold text-slate-800">{line.label}{line.change === "replace" ? line.side === "baseline" ? " · old item" : " · replacement" : ""}</p><p className={`mt-1 text-[10px] font-medium ${progress.settled ? "text-emerald-700" : "text-amber-800"}`}>{progress.label}</p><p className="mt-1 text-[10px] leading-relaxed text-slate-500">{result}</p></a>;
       })}
     </div>}
       <p>{home ? `Emma confirmed the living-and-dining V${startingVersion}. ${data.preparationPending ? "The starting test payments are being prepared in the background; use the progress notice to see which records are complete." : "The sofa, coffee table, dining table and six chairs have individual Sandbox holds and have not been ordered. The sideboard's $1,200 test payment has been captured."} The $1,000 design fee is unchanged and unpaid. The sample conversation ends before Jordan requests a revised quote.` : "Prepared starting point: Emma confirmed V2; the lounge chair has an $800 hold and the wool rug has a completed $300 payment. These starting transactions were created on PayPal Sandbox with a test card. They are history prepared for this demo, not actions you just took."}</p>

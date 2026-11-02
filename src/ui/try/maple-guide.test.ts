@@ -231,13 +231,28 @@ describe("living-and-dining demo guide", () => {
     expect(step.detail).toContain("when the starting payment records are ready");
   });
 
-  it("offers to skip ahead 3 days while the new items are held and not ordered", () => {
+  it("offers to skip ahead 3 days in Jordan's inbox while the new items are held and not ordered", () => {
     expect(mapleGuideStep(heldNewItem(0), "designer")).toMatchObject({
-      index: 3, role: "jordan", action: "Skip ahead 3 days", skipTo: 3, title: "What if Jordan is busy and forgets to order?",
+      index: 3, role: "jordan", destination: "inbox", action: "Skip ahead 3 days", skipTo: 3, title: "What if Jordan is busy and forgets to order?",
       secondary: { label: "Record the confirmations now", href: "/change-orders/visitor-v3#payments" },
     });
     const after = mapleGuideStep(heldNewItem(3), "designer");
-    expect(after).toMatchObject({ index: 3, title: "Each item keeps its own payment progress", detail: expect.stringMatching(/^3 days on, Setti's inbox reminds Jordan that the new item is still not ordered\. /) });
+    expect(after).toMatchObject({ index: 3, role: "jordan", destination: "order", orderId: "visitor-v3", anchor: "payments", action: "Record the supplier confirmations", title: "Setti caught it: the new item is still not ordered" });
+    expect(after.detail).toMatch(/^Day 3: PayPal's 3-day honor period for this hold is over/);
     expect(after.skipTo).toBeUndefined();
+  });
+
+  it("first shows Emma, right after she confirms, what Setti did with her money", () => {
+    const data = heldNewItem(0);
+    data.clientUnread = 2;
+    expect(mapleGuideStep(data, "client")).toMatchObject({ index: 3, role: "emma", destination: "inbox", action: "Open your Inbox", title: "Emma checks what Setti did with her money" });
+    // Seen, or entered as the designer: on to Jordan.
+    expect(mapleGuideStep(data, "designer")).toMatchObject({ role: "jordan", title: "What if Jordan is busy and forgets to order?" });
+    data.clientUnread = 0;
+    expect(mapleGuideStep(data, "client")).toMatchObject({ role: "jordan", title: "What if Jordan is busy and forgets to order?" });
+    // Later money records do not send her back once an order is recorded.
+    data.clientUnread = 1;
+    data.payments!.lines[0].supplierEvents = [{ kind: "order_confirmed" } as PaymentLineView["supplierEvents"][number]];
+    expect(mapleGuideStep(data, "client").role).not.toBe("emma");
   });
 });
