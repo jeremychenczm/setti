@@ -3,13 +3,13 @@ import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PaymentActionError } from "./binding";
 import { callbackState } from "./callback-state";
-import { getAttentionResponse, getDemoClockResponse, getItemHoldsResponse, postDailyCheckResponse, postDemoClockResponse, postPayPalWebhookResponse, getPaymentsResponse, getServicesPaymentResponse, paypalRedirectResponse, postItemHoldsResponse, postPaymentsResponse, postServicesPaymentResponse } from "./http";
+import { getAttentionResponse, getDemoClockResponse, getInboxBadgeResponse, postInboxSeenResponse, getItemHoldsResponse, postDailyCheckResponse, postDemoClockResponse, postPayPalWebhookResponse, getPaymentsResponse, getServicesPaymentResponse, paypalRedirectResponse, postItemHoldsResponse, postPaymentsResponse, postServicesPaymentResponse } from "./http";
 
 const mock = vi.hoisted(() => ({
   startAuthorization: vi.fn(), startCapture: vi.fn(), startRelease: vi.fn(), startRefund: vi.fn(), checkPayment: vi.fn(), cancelPayment: vi.fn(),
   returnFromPayPal: vi.fn(), operationPage: vi.fn(), paymentsWorkspace: vi.fn(), recordSupplierOrder: vi.fn(), recordSupplierCredit: vi.fn(),
   startServicesCheckout: vi.fn(), checkServicesCheckout: vi.fn(), chargeServices: vi.fn(), lockPaymentBasis: vi.fn(), servicesPaymentView: vi.fn(), completeAuthorization: vi.fn(), cancelCheckout: vi.fn(),
-  holdApprovedItems: vi.fn(), checkItemHold: vi.fn(), cancelItemHold: vi.fn(), itemHoldsView: vi.fn(), cancelApprovedItem: vi.fn(), attentionView: vi.fn(), runDailyCheck: vi.fn(), skipAhead: vi.fn(), demoDays: vi.fn(), recordWebhookEvent: vi.fn(),
+  holdApprovedItems: vi.fn(), checkItemHold: vi.fn(), cancelItemHold: vi.fn(), itemHoldsView: vi.fn(), cancelApprovedItem: vi.fn(), attentionView: vi.fn(), inboxBadge: vi.fn(), markInboxOpened: vi.fn(), runDailyCheck: vi.fn(), skipAhead: vi.fn(), demoDays: vi.fn(), recordWebhookEvent: vi.fn(),
   paymentPreparationPending: vi.fn(),
   db: { transaction: (work: (tx: object) => unknown) => work({}) },
 }));
@@ -25,6 +25,7 @@ vi.mock("./item-holds", () => ({ holdApprovedItems: mock.holdApprovedItems, chec
 vi.mock("./item-holds-view", () => ({ itemHoldsView: mock.itemHoldsView }));
 vi.mock("./cancel-item", () => ({ cancelApprovedItem: mock.cancelApprovedItem }));
 vi.mock("./attention-view", () => ({ attentionView: mock.attentionView }));
+vi.mock("./inbox-view", () => ({ inboxBadge: mock.inboxBadge, markInboxOpened: mock.markInboxOpened, inboxView: vi.fn(), inboxFacts: vi.fn() }));
 vi.mock("./daily-check", () => ({ runDailyCheck: mock.runDailyCheck }));
 vi.mock("./webhook", () => ({ recordWebhookEvent: mock.recordWebhookEvent, paypalWebhookVerifier: () => null }));
 vi.mock("../try/clock", () => ({
@@ -372,6 +373,36 @@ describe("studio reminders HTTP boundary", () => {
     const response = await getAttentionResponse(get("jordan"));
     expect(await response.json()).toEqual({ items: [], checkedAt: "2026-11-01T00:00:00.000Z" });
     expect(mock.attentionView).toHaveBeenCalledWith(mock.db, sessionId, expect.objectContaining({ id: "jordan" }));
+  });
+});
+
+describe("inbox badge and read HTTP boundary", () => {
+  const cookie = (account: string | null, withSession = true) => [...(withSession ? [`setti-demo-chat=${sessionId}`] : []), ...(account ? [`setti-demo-account=${account}`] : [])].join("; ");
+  const badge = (account: string | null) => new NextRequest(`${origin}/api/inbox/badge`, { headers: { Cookie: cookie(account) } });
+  const seen = (body: unknown, account: string | null, { withSession = true, from = origin } = {}) => new NextRequest(`${origin}/api/inbox/seen`, {
+    method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json", Origin: from, Cookie: cookie(account, withSession) },
+  });
+  beforeEach(() => { vi.clearAllMocks(); mock.inboxBadge.mockResolvedValue({ role: "client", count: 3 }); mock.markInboxOpened.mockResolvedValue(undefined); });
+
+  it("counts for the signed-in account", async () => {
+    expect((await getInboxBadgeResponse(badge(null))).status).toBe(403);
+    expect(mock.inboxBadge).not.toHaveBeenCalled();
+    const response = await getInboxBadgeResponse(badge("emma"));
+    expect(await response.json()).toEqual({ role: "client", count: 3 });
+    expect(mock.inboxBadge).toHaveBeenCalledWith(mock.db, sessionId, expect.objectContaining({ id: "emma" }));
+  });
+
+  it("marks the inbox seen only from this app's pages, in the browser that owns the demo", async () => {
+    const through = "2026-11-01T20:00:00.000Z";
+    expect((await postInboxSeenResponse(seen({ through }, "emma", { withSession: false }))).status).toBe(403);
+    expect((await postInboxSeenResponse(seen({ through }, null))).status).toBe(403);
+    expect((await postInboxSeenResponse(seen({ through }, "emma", { from: "https://elsewhere.example" }))).status).toBe(403);
+    expect((await postInboxSeenResponse(seen({ through: "yesterday" }, "emma"))).status).toBe(400);
+    expect((await postInboxSeenResponse(seen({ through, reminderIds: ["anything"] }, "emma"))).status).toBe(400);
+    expect(mock.markInboxOpened).not.toHaveBeenCalled();
+    const response = await postInboxSeenResponse(seen({ through }, "emma"));
+    expect(await response.json()).toEqual({ seen: true });
+    expect(mock.markInboxOpened).toHaveBeenCalledWith(mock.db, sessionId, expect.objectContaining({ id: "emma" }), new Date(through));
   });
 });
 

@@ -7,24 +7,38 @@ import type { InboxSummary } from "@/ai/inbox-summary";
 import type { InboxView } from "@/payments/inbox-view";
 import type { MoneyEvent } from "@/payments/money-events";
 import { dateTime, money } from "../pricing/common";
+import { INBOX_SEEN } from "../workspace/useInboxBadge";
 import { LastCheck } from "./LastCheck";
 
 const PAYMENT_CHANGED = "setti:payment-changed";
+
+/** What the inbox showed is no longer new; the sidebar's number follows. */
+async function markSeen(view: InboxView) {
+  try {
+    const response = await fetch("/api/inbox/seen", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ through: view.readAt }) });
+    if (response.ok) window.dispatchEvent(new Event(INBOX_SEEN));
+  } catch { /* still new; the next visit marks it */ }
+}
 
 /**
  * The payment inbox. Setti watches every project's money: the designer sees
  * what needs doing today, the client sees where their money stands, each record
  * with when PayPal last confirmed it. Setti's summary on top is written by the
  * model from the same records and checked against them before it is shown.
+ * Records the reader had not seen are marked New for as long as the inbox stays open.
  */
 export function Inbox({ account }: { account: DemoAccount }) {
   const [view, setView] = useState<InboxView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fresh, setFresh] = useState<ReadonlySet<string>>(() => new Set());
   const load = useCallback(async () => {
     try {
       const response = await fetch("/api/inbox", { cache: "no-store" });
       if (!response.ok) throw new Error(`The inbox could not be loaded (${response.status}).`);
-      setView(await response.json() as InboxView); setError(null);
+      const next = await response.json() as InboxView;
+      setView(next); setError(null);
+      if (next.unread.length) setFresh((current) => new Set([...current, ...next.unread]));
+      void markSeen(next);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "The inbox could not be loaded."); }
   }, []);
   useEffect(() => {
@@ -49,7 +63,7 @@ export function Inbox({ account }: { account: DemoAccount }) {
       {error && <p role="alert" className="mb-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[12px] text-red-800">{error}</p>}
       {!view ? <p role="status" className="flex items-center gap-2 text-[12px] text-[var(--muted)]"><LoaderCircle className="h-4 w-4 animate-spin" />Reading the payment records…</p> : <>
         <Summary view={view} />
-        {view.role === "designer" ? <Reminders view={view} /> : <ClientMoney view={view} />}
+        {view.role === "designer" ? <Reminders view={view} fresh={fresh} /> : <ClientMoney view={view} fresh={fresh} />}
       </>}
     </div>
   </section>;
@@ -82,7 +96,11 @@ function Summary({ view }: { view: InboxView }) {
   </div>;
 }
 
-function Reminders({ view }: { view: InboxView }) {
+function NewMark() {
+  return <span className="ml-1.5 inline-block rounded-full bg-red-50 px-1.5 py-px align-[1px] text-[9px] font-semibold uppercase tracking-wide text-red-700">New</span>;
+}
+
+function Reminders({ view, fresh }: { view: InboxView; fresh: ReadonlySet<string> }) {
   return <section aria-labelledby="needs-you">
     <h2 id="needs-you" className="flex items-center gap-1.5 text-[12px] font-semibold"><AlarmClock className="h-3.5 w-3.5 text-[var(--primary)]" />Needs you today
       {view.reminders.length > 0 && <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">{view.reminders.length}</span>}</h2>
@@ -92,7 +110,7 @@ function Reminders({ view }: { view: InboxView }) {
         <a href={item.href} className="group flex items-start gap-3 rounded-xl border border-[var(--line)] px-4 py-3 hover:border-brand-200 hover:bg-brand-50/40">
           <span aria-hidden className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${item.urgency === "now" ? "bg-red-500" : "bg-amber-400"}`} />
           <span className="min-w-0 flex-1">
-            <span className="block text-[13px] font-medium text-[var(--ink)]">{item.title}</span>
+            <span className="block text-[13px] font-medium text-[var(--ink)]">{item.title}{fresh.has(item.id) && <NewMark />}</span>
             <span className="mt-0.5 block text-[12px] leading-relaxed text-slate-600">{item.detail}</span>
             <span className="mt-1 block text-[10px] text-[var(--muted)]">{item.projectName}</span>
           </span>
@@ -109,7 +127,7 @@ const EVENT = {
   refunded: { icon: ArrowDownLeft, verb: "Refunded", tone: "text-emerald-700" },
 } as const;
 
-function ClientMoney({ view }: { view: InboxView }) {
+function ClientMoney({ view, fresh }: { view: InboxView; fresh: ReadonlySet<string> }) {
   if (!view.project) return <p className="text-[12px] text-[var(--muted)]">No project is linked to this account.</p>;
   return <section aria-labelledby="your-money">
     <h2 id="your-money" className="text-[12px] font-semibold">Your money · {view.project.name}</h2>
@@ -117,16 +135,16 @@ function ClientMoney({ view }: { view: InboxView }) {
       { label: "Charged", cents: view.totals.chargedCents }, { label: "On hold now", cents: view.totals.heldCents }, { label: "Refunded", cents: view.totals.refundedCents },
     ].map((tile) => <div key={tile.label} className="rounded-lg bg-[var(--canvas)] p-2.5"><p className="text-[10px] text-[var(--muted)]">{tile.label}</p><p className="mt-0.5 text-[15px] font-semibold tabular-nums">{money(tile.cents)}</p></div>)}</div>}
     {view.events.length === 0 ? <p className="mt-3 text-[12px] text-[var(--muted)]">Nothing has been charged or held yet.</p>
-      : <ol className="mt-3 divide-y divide-[var(--line)] rounded-xl border border-[var(--line)]">{view.events.map((event) => <EventRow key={event.id} event={event} />)}</ol>}
+      : <ol className="mt-3 divide-y divide-[var(--line)] rounded-xl border border-[var(--line)]">{view.events.map((event) => <EventRow key={event.id} event={event} isNew={fresh.has(event.id)} />)}</ol>}
   </section>;
 }
 
-function EventRow({ event }: { event: MoneyEvent }) {
+function EventRow({ event, isNew }: { event: MoneyEvent; isNew: boolean }) {
   const { icon: Icon, verb, tone } = EVENT[event.kind];
   return <li className="flex items-start gap-3 px-4 py-3">
     <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${tone}`} />
     <div className="min-w-0 flex-1">
-      <p className="text-[13px]"><span className="font-medium">{event.itemLabel}</span> · <span className={tone}>{verb}</span> <span className="tabular-nums">{money(event.amountCents)}</span></p>
+      <p className="text-[13px]"><span className="font-medium">{event.itemLabel}</span> · <span className={tone}>{verb}</span> <span className="tabular-nums">{money(event.amountCents)}</span>{isNew && <NewMark />}</p>
       <p className="mt-0.5 text-[10px] text-[var(--muted)]">{dateTime(event.at)}{event.paypalId ? <> · PayPal <span className="font-mono">{event.paypalId}</span></> : null}</p>
       <p className="mt-0.5 text-[10px] text-slate-500">{event.checked
         ? `${event.checked.via === "webhook" ? "Confirmed by PayPal" : event.checked.via === "readback" ? "Checked with PayPal" : "Confirmed in PayPal's response"} · ${dateTime(event.checked.at)}${event.checked.status && event.checked.via !== "response" ? ` · PayPal says ${event.checked.status}` : ""}`

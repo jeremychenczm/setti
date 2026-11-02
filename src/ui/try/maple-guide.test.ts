@@ -149,6 +149,28 @@ describe("living-and-dining demo guide", () => {
     }
   });
 
+  it("starts a client's walkthrough with Emma's own inbox, then hands over to Jordan", () => {
+    const data = homeInitial();
+    data.clientInboxOpened = false;
+    data.preparationPending = true;
+    const first = mapleGuideStep(data, "client");
+    expect(first).toMatchObject({ index: 0, role: "emma", destination: "inbox", action: "Open your Inbox", title: "First, see where Emma's money stands" });
+    expect(first.detail).toMatch(/^Setti is making V1's starting payments in the PayPal Sandbox now/);
+    data.preparationPending = false;
+    expect(mapleGuideStep(data, "client").detail).toMatch(/^V1's starting payments were made in the PayPal Sandbox on Emma's saved test card\./);
+    // Entered as the designer, the walkthrough starts with Jordan as before.
+    expect(mapleGuideStep(data, "designer")).toMatchObject({ index: 0, role: "jordan", destination: "chat" });
+    // Opened, or not known: Jordan prepares the revised quote next.
+    for (const opened of [true, undefined]) {
+      data.clientInboxOpened = opened;
+      expect(mapleGuideStep(data, "client")).toMatchObject({ index: 0, role: "jordan", destination: "chat", action: "Continue the discussion" });
+    }
+    // Once Jordan's draft exists, the client is not sent back to the inbox.
+    data.clientInboxOpened = false;
+    data.snapshot.draft = draft();
+    expect(mapleGuideStep(data, "client")).toMatchObject({ index: 1, role: "jordan", destination: "pricing" });
+  });
+
   it("keeps the prepared approved V2 and its scripted draft out of visitor confirmation and payment progress", () => {
     const data = homeInitial();
     data.scenario = HOME_LEGACY_SCENARIO;

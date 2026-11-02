@@ -13,7 +13,7 @@ import { latestChatMessage } from "../chat/activity";
 import type { Person } from "../demo-data";
 import { ConversationList, type ChatPreview, type ProjectChat } from "./ConversationList";
 import { Sidebar, type View } from "./Sidebar";
-import { useAttention } from "./useAttention";
+import { useInboxBadge } from "./useInboxBadge";
 import { TrySeedNotice } from "../try/TrySeedNotice";
 
 const CaseChat = dynamic(() => import("../chat/CaseChat").then((m) => m.CaseChat), {
@@ -62,8 +62,8 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
   const [preparedCaseId, setPreparedCaseId] = useState<string | null>(initialPreparedCase);
   const [recordsTab, setRecordsTab] = useState<"quote" | "payments">(initialRecordsTab);
   const preparedProject = account.role === "designer" && preparedCaseId ? studioCase(preparedCaseId) : null;
-  // The studio's reminders, for the designer only.
-  const attention = useAttention(account.role === "designer");
+  // The designer's open reminders, or the client's money records not seen yet.
+  const inboxCount = useInboxBadge(account.id);
 
   useEffect(() => {
     function restoreRoute() {
@@ -171,12 +171,12 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
     <div className="flex h-dvh min-h-0 gap-2 bg-[var(--canvas)] p-2 text-[var(--ink)]">
       {/* The icon rail and the chat list are one panel, as in a messaging app; other modules keep only the rail. */}
       <div className="flex min-h-0 shrink-0 overflow-hidden rounded-xl bg-white shadow-sm">
-        <Sidebar view={view} onView={showView} account={account} onSwitchAccount={switchAccount} badges={{ inbox: attention.view?.items.length ?? 0 }} />
+        <Sidebar view={view} onView={showView} account={account} onSwitchAccount={switchAccount} badges={{ inbox: inboxCount }} />
         {view === "chats" && <div className="hidden min-h-0 border-l border-[var(--line)] lg:flex"><ConversationList projects={conversations} activeId={preparedProject?.id ?? activeId} onOpen={open} /></div>}
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
-        {view !== "projects" && !preparedProject && <TrySeedNotice projectKey={view === "chats" ? activeId : quoteId} account={account} onSwitchAccount={switchAccount} onOpenChat={() => { setActiveId(view === "quotes" ? quoteId : activeId); setView("chats"); }} currentView={view} />}
+        {view !== "projects" && !preparedProject && <TrySeedNotice projectKey={view === "chats" ? activeId : quoteId} account={account} onSwitchAccount={switchAccount} onOpenChat={() => { setActiveId(view === "quotes" ? quoteId : activeId); setView("chats"); }} onOpenInbox={() => showView("inbox")} currentView={view} />}
         <div className="flex min-h-0 min-w-0 flex-1 gap-2">
           {view === "projects" && account.role === "designer" && <StudioProjectsModule onOpenProject={openPreparedProject} />}
           {view === "inbox" && <InboxModule key={account.id} account={account} />}

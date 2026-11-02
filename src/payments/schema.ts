@@ -192,6 +192,19 @@ export const inboxSummaries = pgTable("inbox_summaries", {
 });
 
 /**
+ * When each account of a demo session last opened its inbox, and which reminders
+ * it showed then, so the sidebar can say what is new. Only the reader's own read
+ * marker: it never changes a money record or a reminder.
+ */
+export const inboxReads = pgTable("inbox_reads", {
+  sessionId: uuid("session_id").notNull(),
+  accountId: text("account_id").notNull(),
+  /** Records up to this moment have been shown. */
+  seenAt: timestamp("seen_at", { withTimezone: true }).notNull(),
+  reminderIds: jsonb("reminder_ids").$type<string[]>().notNull().default([]),
+}, (t) => [primaryKey({ columns: [t.sessionId, t.accountId] })]);
+
+/**
  * How a design-services hold is split across the approved service lines it pays
  * for, written together with the hold's operation. Each line is captured from
  * the hold separately, up to its amount. A record: never changed or deleted.

@@ -22,6 +22,8 @@ export interface MapleGuideData {
   payments: PaymentsWorkspace | null;
   /** Days the demo session skipped ahead. */
   simulatedDays?: number;
+  /** Whether Emma has opened her inbox; unknown when it could not be read. */
+  clientInboxOpened?: boolean;
 }
 
 export interface MapleGuideStep {
@@ -29,7 +31,7 @@ export interface MapleGuideStep {
   title: string;
   detail: string;
   role: AccountId;
-  destination: "chat" | "pricing" | "order";
+  destination: "chat" | "pricing" | "order" | "inbox";
   orderId?: string;
   anchor?: string;
   action: string;
@@ -100,6 +102,12 @@ export function mapleGuideStep(data: MapleGuideData, currentRole: "designer" | "
     };
   }
   const failed = [...snapshot.messages].reverse().find((message) => message.actor !== "assistant")?.aiState === "failed";
+  // Entered as the client, the walkthrough starts with Emma's own money before Jordan's quote.
+  if (home && currentRole === "client" && data.clientInboxOpened === false && !failed) return {
+    index: 0, role: "emma", destination: "inbox", action: "Open your Inbox",
+    title: "First, see where Emma's money stands",
+    detail: `${data.preparationPending ? "Setti is making V1's starting payments in the PayPal Sandbox now; each appears as PayPal completes it. " : "V1's starting payments were made in the PayPal Sandbox on Emma's saved test card. "}The red number on Inbox counts the money records she has not seen. Open it to read each record, when PayPal confirmed it, and Setti's AI summary. Then Jordan prepares the revised quote.`,
+  };
   if (home) return { ...chat, title: failed ? "The AI request needs attention" : "From the discussion to a revised quote", detail: failed ? "Your request is saved. Open the chat to inspect the error and retry it when ready." : !snapshot.aiConfigured ? "Read the sample discussion and supplier documents. Preparing a new AI estimate needs the server's model connection." : "Emma and Jordan have worked through five changes across the living and dining room. Read their discussion, then use Prepare the revised quote in Jordan's chat. AI reads the conversation and supplier documents to prepare the figures for review.", action: "Continue the discussion" };
   return { ...chat, title: failed ? "The AI request needs attention" : "Emma asks for one change affecting two items", detail: failed ? "The message is saved. Open the chat to inspect its error and retry the same request when ready. No successful draft is being assumed." : !snapshot.aiConfigured ? "The AI is not configured on this server. You can read the prepared history and payment evidence, but a new AI draft needs a working model connection." : "Ask to replace the lounge chair with a desk and return the rug. Start with the example or write your own request; you still choose when to send it." };
 }

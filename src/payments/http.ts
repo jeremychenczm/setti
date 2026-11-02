@@ -15,7 +15,7 @@ import { PaymentActionError } from "./binding";
 import { attentionView } from "./attention-view";
 import { cancelApprovedItem } from "./cancel-item";
 import { runDailyCheck } from "./daily-check";
-import { inboxFacts, inboxView } from "./inbox-view";
+import { inboxBadge, inboxFacts, inboxView, markInboxOpened } from "./inbox-view";
 import { paypalWebhookVerifier, recordWebhookEvent, type WebhookVerifier } from "./webhook";
 import { summarizeInbox } from "../ai/inbox-summary";
 import { DemoClockError, demoDays, MAX_SKIP_DAYS, skipAhead } from "../try/clock";
@@ -463,6 +463,28 @@ export async function getInboxResponse(req: NextRequest) {
   if (!account) return NextResponse.json({ code: "FORBIDDEN", error: "Choose an account to open its inbox." }, { status: 403, headers });
   try { return refreshDemoCookies(NextResponse.json(await inboxView(db(), readablePayPal(), session(req), account), { headers }), req); }
   catch (error) { return fail(error); }
+}
+
+/** The number on the sidebar's Inbox: the designer's open reminders, or the client's money records not seen yet. */
+export async function getInboxBadgeResponse(req: NextRequest) {
+  const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
+  if (!account) return NextResponse.json({ code: "FORBIDDEN", error: "Choose an account to open its inbox." }, { status: 403, headers });
+  try { return NextResponse.json(await inboxBadge(db(), session(req), account), { headers }); }
+  catch (error) { return fail(error); }
+}
+
+const seenSchema = z.strictObject({ through: z.iso.datetime() });
+
+/** The reader opened the inbox: what it showed, read at `through`, is no longer new. */
+export async function postInboxSeenResponse(req: NextRequest) {
+  const sessionId = session(req);
+  const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
+  if (!sessionId || !account) return NextResponse.json({ code: "FORBIDDEN", error: "Open the inbox from the browser that owns the demo." }, { status: 403, headers });
+  try {
+    const input = seenSchema.parse(await boundedJson(req));
+    await markInboxOpened(db(), sessionId, account, new Date(input.through));
+    return NextResponse.json({ seen: true }, { headers });
+  } catch (error) { return fail(error); }
 }
 
 /** The AI summary on top of the inbox, written from the same facts and checked against them; cached per set of facts. */

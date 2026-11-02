@@ -4,7 +4,8 @@
  * stands in their project: every charge, hold, release and refund, each with the
  * last time PayPal confirmed it. Both are read from recorded facts; opening the
  * client's inbox first reads its newest records back from PayPal. The AI summary
- * on top is written from the same facts (`inboxFacts`).
+ * on top is written from the same facts (`inboxFacts`). What the reader has not
+ * seen yet is marked as new (`unread`), and the sidebar counts it (`inboxBadge`).
  */
 import { canOpenProject, type DemoAccount } from "../accounts/demo";
 import { readLedger } from "../approval/store";
@@ -17,6 +18,7 @@ import { pricingCases } from "../pricing/schema";
 import { and, eq } from "drizzle-orm";
 import type { AttentionItem } from "./attention";
 import { attentionView } from "./attention-view";
+import { lastInboxRead, markInboxSeen, unreadIds } from "./inbox-reads";
 import { checkWithPayPal, moneyEvents, type MoneyEvent } from "./money-events";
 import type { PayPalPayments } from "./paypal";
 
@@ -32,6 +34,12 @@ export interface InboxView {
   project: { key: CaseKey; name: string } | null;
   events: MoneyEvent[];
   totals: { heldCents: number; chargedCents: number; refundedCents: number } | null;
+  /** When this view was read; opening the inbox marks records up to here as seen. */
+  readAt: string;
+  /** Events and reminders the reader had not seen when this view was read. */
+  unread: string[];
+  /** Whether the reader had opened the inbox before this view. */
+  opened: boolean;
 }
 
 const usd = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -53,15 +61,37 @@ async function moneyNow(db: Pick<Db, "select">, sessionId: string, key: CaseKey)
 }
 
 export async function inboxView(db: Db, paypal: PayPalPayments | null, sessionId: string | null, account: DemoAccount): Promise<InboxView> {
+  // Real time, taken first: a record completed while the view is read stays new.
+  const readAt = new Date().toISOString();
   const attention = await attentionView(db, sessionId, account);
-  const base = { reader: account.name.split(" ")[0], simulatedDays: attention.simulatedDays, lastCheck: attention.lastCheck };
-  if (account.role === "designer") return { ...base, role: "designer", reminders: attention.items, project: null, events: [], totals: null };
+  const read = sessionId ? await lastInboxRead(db, sessionId, account.id) : null;
+  const base = { reader: account.name.split(" ")[0], simulatedDays: attention.simulatedDays, lastCheck: attention.lastCheck, readAt, opened: read !== null };
+  if (account.role === "designer") return { ...base, role: "designer", reminders: attention.items, project: null, events: [], totals: null, unread: unreadIds(read, { events: [], reminders: attention.items }) };
   const key = account.projectKey;
-  if (!key || !sessionId || !canOpenProject(account, key)) return { ...base, role: "client", reminders: [], project: null, events: [], totals: null };
+  if (!key || !sessionId || !canOpenProject(account, key)) return { ...base, role: "client", reminders: [], project: null, events: [], totals: null, unread: [] };
   let events = await moneyEvents(db, sessionId, key);
   // The client sees what PayPal says now: the newest records are read back first.
   if (paypal && events.length) { await checkWithPayPal(db, paypal, events); events = await moneyEvents(db, sessionId, key); }
-  return { ...base, role: "client", reminders: [], project: { key, name: caseDocument(key).projectName }, events, totals: await moneyNow(db, sessionId, key) };
+  return { ...base, role: "client", reminders: [], project: { key, name: caseDocument(key).projectName }, events, totals: await moneyNow(db, sessionId, key), unread: unreadIds(read, { events, reminders: [] }) };
+}
+
+/**
+ * The reader opened the inbox read at `through`: its money records up to then,
+ * and the designer's reminders open now, are no longer new.
+ */
+export async function markInboxOpened(db: Db, sessionId: string, account: DemoAccount, through: Date): Promise<void> {
+  const reminderIds = account.role === "designer" ? (await attentionView(db, sessionId, account)).items.map((item) => item.id) : [];
+  await markInboxSeen(db, sessionId, account.id, { through, reminderIds });
+}
+
+/**
+ * The number on the sidebar's Inbox. The designer's counts the reminders still
+ * open, read or not: they go away when handled, not when seen. The client's
+ * counts money records completed since they last opened the inbox.
+ */
+export async function inboxBadge(db: Db, sessionId: string | null, account: DemoAccount): Promise<{ count: number; role: InboxView["role"]; opened: boolean }> {
+  const view = await inboxView(db, null, sessionId, account);
+  return { role: view.role, count: view.role === "designer" ? view.reminders.length : view.unread.length, opened: view.opened };
 }
 
 const VERB: Record<MoneyEvent["kind"], string> = { charged: "charged", held: "put on hold", released: "hold released", refunded: "refunded" };

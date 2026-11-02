@@ -18,12 +18,15 @@ import { GUIDE_TOOL, GuideBar } from "./GuideBar";
 import { useDemoSkip } from "./useDemoSkip";
 import { canOpenPreparedWorkspace, useTryPreparation } from "./TryPreparationProvider";
 import { paymentQuestionHref } from "../chat/payment-question";
+import { INBOX_SEEN } from "../workspace/useInboxBadge";
 
 export interface TrySeedNoticeProps {
   projectKey: CaseKey;
   account: DemoAccount;
   onSwitchAccount: (id: AccountId) => void;
   onOpenChat: () => void;
+  /** Shows the inbox in the current workspace; without it the guide opens the inbox page. */
+  onOpenInbox?: () => void;
   currentView: "chats" | "quotes" | "pricing" | "change-order" | "inbox";
   currentOrderId?: string;
 }
@@ -40,7 +43,7 @@ export function TrySeedNotice(props: TrySeedNoticeProps) {
   return props.projectKey === "willow" ? <WillowGuide {...props} /> : <MapleSeedNotice {...props} />;
 }
 
-function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, currentView, currentOrderId }: TrySeedNoticeProps) {
+function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, onOpenInbox, currentView, currentOrderId }: TrySeedNoticeProps) {
   const preparation = useTryPreparation();
   const seed = preparation.seed;
   const [data, setData] = useState<MapleGuideData | null>(null);
@@ -67,16 +70,18 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
       if (snapshot.projectKey !== "maple" || !Array.isArray(snapshot.messages) || !Array.isArray(snapshot.versions)) throw new Error("The guide received incomplete project records.");
       const approved = [...snapshot.versions].filter((version) => version.status === "approved").sort((a, b) => b.version - a.version)[0];
       const paymentOrderId = approved?.id ?? seed.changeOrderId;
-      const [pricing, payments, clock] = await Promise.all([
+      const [pricing, payments, clock, inbox] = await Promise.all([
         account.role === "designer" ? readJson("/api/pricing/maple", controller.signal).then((value) => value as PricingWorkspace).catch(() => null) : Promise.resolve(null),
         paymentOrderId ? readJson(`/api/change-orders/${encodeURIComponent(paymentOrderId)}/payments`, controller.signal).then((value) => value as PaymentsWorkspace).catch(() => null) : Promise.resolve(null),
         readJson("/api/demo/clock", controller.signal).then((value) => value as { days?: number }).catch(() => null),
+        account.role === "client" ? readJson("/api/inbox/badge", controller.signal).then((value) => value as { opened?: boolean }).catch(() => null) : Promise.resolve(null),
       ]);
       if (controller.signal.aborted) return;
       const validPayments = payments?.orderId === paymentOrderId && Array.isArray(payments.lines) && Array.isArray(payments.operations) ? payments : null;
       const formStale = currentView === "pricing" ? document.getElementById("pricing-workspace")?.getAttribute("data-pricing-source-stale") : null;
       setData({ seedOrderId: seed.changeOrderId, scenario: seed.scenario, preparationPending: seed.scenario === HOME_SCENARIO && seed.status !== "ready", snapshot, pricing: pricing?.projectKey === "maple" ? pricing : null, payments: validPayments,
-        pricingViewStale: formStale === "true" ? true : formStale === "false" ? false : undefined, simulatedDays: typeof clock?.days === "number" ? clock.days : 0 });
+        pricingViewStale: formStale === "true" ? true : formStale === "false" ? false : undefined, simulatedDays: typeof clock?.days === "number" ? clock.days : 0,
+        clientInboxOpened: typeof inbox?.opened === "boolean" ? inbox.opened : undefined });
       setViewerId(account.id);
       setError(!paymentOrderId || validPayments ? null : "Payment records could not be refreshed. Open the version to check its saved status.");
     } catch {
@@ -93,7 +98,8 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
     const update = () => { if (document.visibilityState === "visible") void refresh(); };
     const timer = setInterval(update, 5_000);
     window.addEventListener("focus", update);
-    return () => { clearInterval(timer); window.removeEventListener("focus", update); request.current?.abort(); busy.current = false; };
+    window.addEventListener(INBOX_SEEN, update);
+    return () => { clearInterval(timer); window.removeEventListener("focus", update); window.removeEventListener(INBOX_SEEN, update); request.current?.abort(); busy.current = false; };
   }, [projectKey, refresh]);
 
   if (projectKey !== "maple" || !data || viewerId !== account.id) return <PaymentSetupNotice />;
@@ -106,7 +112,7 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
   const nextName = step.role === "emma" ? "Emma" : "Jordan";
   const changeCount = data.pricing?.review?.input.changes.length ?? 0;
   const reviewLabel = changeCount ? `Review the ${changeCount} change${changeCount === 1 ? "" : "s"}` : "Review the changes";
-  const currentDestination = !switchNeeded && ((step.destination === "chat" && currentView === "chats") || (step.destination === "pricing" && currentView === "pricing") || (step.destination === "order" && currentView === "change-order" && currentOrderId === step.orderId));
+  const currentDestination = !switchNeeded && ((step.destination === "inbox" && currentView === "inbox") || (step.destination === "chat" && currentView === "chats") || (step.destination === "pricing" && currentView === "pricing") || (step.destination === "order" && currentView === "change-order" && currentOrderId === step.orderId));
   const action = switchNeeded ? `Continue as ${nextName}` : skipping ? "Running each day's check…" : step.skipTo ? step.action : currentDestination ? step.destination === "pricing" ? step.anchor === "pricing-source-status" ? step.action : reviewLabel : step.destination === "order" ? step.anchor === "payments" ? "Go to payments below" : "Go to client review below" : step.action : step.action;
   const outcomes = data.payments && data.payments.orderId !== data.seedOrderId ? mapleChangeLines(data.payments) : [];
 
@@ -114,6 +120,12 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, cur
     if (skipping) return;
     if (step.skipTo && !switchNeeded) { void skip(step.skipTo); return; }
     if (switchNeeded) onSwitchAccount(step.role);
+    if (step.destination === "inbox") {
+      if (currentView === "inbox") document.getElementById("inbox-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      else if (onOpenInbox && !switchNeeded) onOpenInbox();
+      else navigateGuidePage("/inbox", switchNeeded);
+      return;
+    }
     if (step.destination === "chat") {
       if (step.chatAction === "ask-payments") {
         try { window.location.assign(paymentQuestionHref(projectKey, crypto.randomUUID(), window.sessionStorage)); }

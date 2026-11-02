@@ -8,7 +8,8 @@ import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import { signOpeningForTest } from "../opening/testing";
 import { skipAhead } from "../try/clock";
 import { completeAuthorization } from "./authorize";
-import { inboxFacts, inboxView } from "./inbox-view";
+import { cancelApprovedItem } from "./cancel-item";
+import { inboxBadge, inboxFacts, inboxView, markInboxOpened } from "./inbox-view";
 import { holdApprovedItems } from "./item-holds";
 import { chargeServices, startServicesCheckout } from "./services";
 import { FakePayPal } from "./testing/fake-paypal";
@@ -23,7 +24,7 @@ describe.skipIf(!testDatabaseUrl)("the payment inbox", () => {
   let paypal: FakePayPal;
   beforeAll(async () => { handle = await openTestDb(); });
   beforeEach(async () => {
-    await truncate(handle.db, "projects", "chat_cases", "hold_checks", "renewal_notices", "demo_clocks");
+    await truncate(handle.db, "projects", "chat_cases", "hold_checks", "renewal_notices", "demo_clocks", "inbox_reads");
     session = randomUUID();
     paypal = new FakePayPal();
     await signOpeningForTest(handle.db, session, "willow", caseDocument("willow").lines.map((line) => line.itemId === "willow-sofa"
@@ -69,5 +70,39 @@ describe.skipIf(!testDatabaseUrl)("the payment inbox", () => {
     expect(view).toMatchObject({ role: "designer", reader: "Jordan", simulatedDays: 3, events: [], project: null });
     expect(view.reminders).toHaveLength(ITEMS);
     expect(inboxFacts(view)[0]).toEqual({ id: "reminders", text: "21 reminders across 1 project(s); 21 to handle today." });
+  });
+
+  it("counts the client's money records not seen yet, and after a visit only newer ones", async () => {
+    // Never opened: everything in it is new.
+    const first = await inboxView(handle.db, null, session, client);
+    expect(first.events.length).toBeGreaterThan(ITEMS);
+    expect(first.unread).toEqual(first.events.map((event) => event.id));
+    expect(first.opened).toBe(false);
+    expect(await inboxBadge(handle.db, session, client)).toEqual({ role: "client", count: first.events.length, opened: false });
+
+    await markInboxOpened(handle.db, session, client, new Date(first.readAt));
+    expect(await inboxBadge(handle.db, session, client)).toEqual({ role: "client", count: 0, opened: true });
+    // An older open tab cannot make seen records new again.
+    await markInboxOpened(handle.db, session, client, new Date(Date.parse(first.readAt) - 60_000));
+    expect((await inboxView(handle.db, null, session, client)).unread).toEqual([]);
+
+    await cancelApprovedItem(handle.db, paypal, session, "willow", { itemId: "willow-desk", reason: "unavailable", note: "", by: designer.name });
+    const after = await inboxView(handle.db, null, session, client);
+    const released = after.events.filter((event) => event.kind === "released");
+    expect(released).toHaveLength(1);
+    expect(after.unread).toEqual([released[0].id]);
+    expect(await inboxBadge(handle.db, session, client)).toEqual({ role: "client", count: 1, opened: true });
+  });
+
+  it("keeps counting the designer's open reminders after a visit, and marks only unseen ones new", async () => {
+    await skipAhead(handle.db, paypal, session, 3);
+    const view = await inboxView(handle.db, null, session, designer);
+    expect(view.unread).toEqual(view.reminders.map((item) => item.id));
+    await markInboxOpened(handle.db, session, designer, new Date(view.readAt));
+    expect((await inboxView(handle.db, null, session, designer)).unread).toEqual([]);
+    // Seen is not handled: the reminders still need doing.
+    expect(await inboxBadge(handle.db, session, designer)).toEqual({ role: "designer", count: ITEMS, opened: true });
+    // Each account keeps its own read marker.
+    expect((await inboxView(handle.db, null, session, client)).unread.length).toBeGreaterThan(0);
   });
 });

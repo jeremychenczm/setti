@@ -31,7 +31,8 @@ export function Sidebar({ view, onView, account, onSwitchAccount, badges = {} }:
         {itemsFor(account).map(({ view: v, label, icon: Icon }) => {
           const active = view === v;
           const count = badges[v] ?? 0;
-          const name = count ? `${label}, ${count} ${count === 1 ? "thing needs" : "things need"} you today` : label;
+          // The designer's number is what still needs doing; the client's is what is new.
+          const name = !count ? label : account.role === "designer" ? `${label}, ${count} ${count === 1 ? "thing needs" : "things need"} you today` : `${label}, ${count} new`;
           return <button key={v} onClick={() => onView(v)} aria-label={name} aria-current={active ? "page" : undefined} title={name}
             className="group flex w-[56px] flex-col items-center gap-1 rounded-lg py-1.5">
             <span className={`relative flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${active ? "bg-[var(--primary-fill)] text-[var(--on-primary)] shadow-sm" : "text-slate-500 group-hover:bg-white group-hover:text-[var(--ink)]"}`}><Icon className="h-[18px] w-[18px]" />
