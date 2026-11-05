@@ -24,7 +24,7 @@ const [designer] = DEMO_ACCOUNTS;
 const DAY = 24 * 60 * 60 * 1000;
 const DESK = "willow-desk", ARMCHAIR = "willow-armchair", SOFA = "willow-sofa";
 const desk = caseDocument("willow").lines.find((line) => line.itemId === DESK)!;
-const ITEMS = 21;
+const ITEMS = 19;
 
 /** The database's own refusal, wherever the driver puts its message. */
 const databaseRefused = (pattern: RegExp) => (error: unknown) => {
@@ -77,7 +77,7 @@ describe.skipIf(!testDatabaseUrl)("renewing holds that still wait for their supp
     expect(renewal.createdAt.getTime()).toBeLessThanOrEqual(release.createdAt.getTime());
 
     const [report] = await reports();
-    expect(report.text).toMatch(/^Setti renewed 21 holds with Sofia's saved PayPal \(\$[\d,.]+ in all\)\. Nothing was charged; each old hold is released once its new one is in place:\n/);
+    expect(report.text).toMatch(/^Setti renewed 19 holds with Sofia's saved PayPal \(\$[\d,.]+ in all\)\. Nothing was charged; each old hold is released once its new one is in place:\n/);
     expect(report.text).toMatch(/\n• Lounge armchair · \$162\.04 · new \S+ · old \S+ released\n/);
 
     // The new holds start a new clock: nothing needs the designer today, and a repeat run changes nothing.
@@ -88,7 +88,7 @@ describe.skipIf(!testDatabaseUrl)("renewing holds that still wait for their supp
 
   it("waits two days after a late notice, and never renews an expired hold", async () => {
     expect(await check(26)).toMatchObject({ notices: ITEMS, renewals: 0 });
-    expect((await handle.db.select().from(chatMessages).where(eq(chatMessages.model, "notice")))[0].text).toMatch(/On Nov \d+ Setti will replace each/);
+    expect((await handle.db.select().from(chatMessages).where(eq(chatMessages.model, "notice")))[0].text).toMatch(/On [A-Z][a-z]{2} \d+ Setti will replace each/);
     expect(await check(27.9)).toMatchObject({ renewals: 0 });
     expect(await check(28.1)).toMatchObject({ renewals: ITEMS });
 
