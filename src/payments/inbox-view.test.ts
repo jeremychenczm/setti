@@ -59,7 +59,10 @@ describe.skipIf(!testDatabaseUrl)("the payment inbox", () => {
 
     const facts = inboxFacts(view);
     expect(facts[0]).toMatchObject({ id: "money-now", text: expect.stringMatching(/^In Willow Residence: \$[\d,.]+ charged in total, \$[\d,.]+ on hold now, \$0\.00 refunded in total\.$/) });
-    expect(facts.length).toBe(21);
+    // The total, then where each item stands now, then the newest twenty records as history.
+    expect(facts.filter((fact) => fact.text.startsWith("Now · "))).toHaveLength(view.items.length);
+    expect(facts.length).toBe(1 + view.items.length + Math.min(20, view.events.length));
+    expect(facts.at(-1)!.text).toMatch(/^Earlier · /);
   });
 
   it("shows the designer the reminders of every project, on the session's clock", async () => {
