@@ -219,7 +219,7 @@ describe.skipIf(!testDatabaseUrl)("/try durable preparation with fake PayPal", (
     const session = await openWillowWorkspace(handle.db, null);
     const chat = createChatStore(handle.db);
     const sent = await chat.getCase(session, "willow");
-    expect(sent.opening).toMatchObject({ status: "sent", progress: { approved: 0, pending: 28 } });
+    expect(sent.opening).toMatchObject({ status: "sent", progress: { approved: 0, pending: 26 } });
     expect(await openWillowWorkspace(handle.db, session)).toBe(session);
     expect((await chat.getCase(session, "willow")).messages).toHaveLength(1);
     expect(await handle.db.select().from(trySeeds)).toHaveLength(0);

@@ -25,7 +25,7 @@ describe.skipIf(!testDatabaseUrl)("sending quote V1 from the project chat", () =
   it("starts as an empty chat with a draft V1 the client cannot see yet", async () => {
     const state = await store.getCase(sessionId, "willow");
     expect(state.messages).toEqual([]);
-    expect(state.opening).toMatchObject({ status: "draft", messageId: null, contentHash: null, lineCount: 28, totalCents: 869_278 });
+    expect(state.opening).toMatchObject({ status: "draft", messageId: null, contentHash: null, lineCount: 26, totalCents: 1_517_489 });
     expect((await store.getQuote(sessionId, "willow")).opening.status).toBe("draft");
   });
 
@@ -34,7 +34,7 @@ describe.skipIf(!testDatabaseUrl)("sending quote V1 from the project chat", () =
     const state = await send(id);
     expect(state.messages).toEqual([expect.objectContaining({ id, actor: "designer", text: "Here is the full quote for Willow Residence.", aiState: "none" })]);
     const hash = documentHash(openingDocument("willow"));
-    expect(state.opening).toMatchObject({ status: "sent", messageId: id, sentBy: "Jordan Lee", contentHash: hash, lineCount: 28 });
+    expect(state.opening).toMatchObject({ status: "sent", messageId: id, sentBy: "Jordan Lee", contentHash: hash, lineCount: 26 });
     const view = await store.getQuote(sessionId, "willow");
     expect(view.document).toEqual(openingDocument("willow"));
     expect(view.approval).toBeNull();

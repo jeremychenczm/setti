@@ -46,7 +46,7 @@ describe.skipIf(!testDatabaseUrl)("the designer's reminders from recorded holds"
     expect(await reminders(0)).toEqual([]);
     expect(await reminders(2.5)).toEqual([]);
     const tomorrow = await reminders(3.5);
-    expect(tomorrow.length).toBe(21);
+    expect(tomorrow.length).toBe(19);
     expect(tomorrow.every((entry) => entry.kind === "not_ordered" && entry.projectName === "Willow Residence")).toBe(true);
     expect(tomorrow.find((entry) => entry.itemId === DESK)).toMatchObject({ href: "/quotes/willow?hold=willow-desk#item-holds", detail: expect.stringMatching(/^Approved and held for 3 days/) });
 
@@ -57,14 +57,14 @@ describe.skipIf(!testDatabaseUrl)("the designer's reminders from recorded holds"
     });
     await cancelApprovedItem(handle.db, paypal, session, "willow", { itemId: ARMCHAIR, reason: "no_response", note: "", by: designer.name });
     const after = await reminders(3.5);
-    expect(after.length).toBe(20);
+    expect(after.length).toBe(18);
     expect(after.find((entry) => entry.itemId === ARMCHAIR)).toBeUndefined();
     expect(after.find((entry) => entry.itemId === DESK)).toMatchObject({ kind: "capture_ready" });
   });
 
   it("warns before the holds expire and says Setti renews them with the saved method", async () => {
     const soon = await reminders(23);
-    expect(soon.length).toBe(21);
+    expect(soon.length).toBe(19);
     expect(soon.every((entry) => entry.kind === "expiring" && /Setti renews it on .+ with the client's saved payment method/.test(entry.detail))).toBe(true);
   });
 

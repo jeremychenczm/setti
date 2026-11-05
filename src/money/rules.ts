@@ -242,7 +242,7 @@ export function addLine(change: AddChange, ctx: PlanContext): LineOutcome {
           lineId: change.lineId,
           amountCents: change.priceCents,
           via,
-          reason: "New furniture is held, then captured once the vendor confirms stock and price.",
+          reason: "New products are held, then captured once the vendor confirms stock and price.",
         }
       : {
           kind: "immediate_capture",

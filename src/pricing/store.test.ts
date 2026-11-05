@@ -299,7 +299,7 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
     expect(newChair).toBeDefined();
     expect(newChair.itemId).not.toBe(oldChair.itemId);
     expect(changed.find((line) => line.name === "Writing desk")?.itemId).toBe(baseline.find((line) => line.name === "Writing desk")?.itemId);
-    expect(issued.order.lines).toHaveLength(28);
+    expect(issued.order.lines).toHaveLength(26);
     expect(issued.order.baselineLines.find((line) => line.itemId === "willow-dining-chair")?.name).toBe("Dining chair");
   });
 

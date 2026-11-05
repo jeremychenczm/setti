@@ -179,7 +179,7 @@ export async function itemHoldsView(db: Db, sessionId: string | null, key: CaseK
   const oneByOne = client && !saved && !basis.orderId && !waiting && plan.status !== "blocked" && manualReviews.length === 0;
   for (const line of lines) line.canCheckout = oneByOne && (line.state === "to_hold" || line.state === "failed");
   const reason = manualReviews.length ? manualReviews[0].failureMessage ?? "Legacy PayPal orders require manual review before this project can place any further holds."
-    : !lines.length ? "The client has not approved a furniture item yet."
+    : !lines.length ? "The client has not approved a product yet."
     : toHoldCents === 0 ? null
       : !saved ? client ? "Hold each item with PayPal or a card below. Saving the method lets the studio hold the rest without another window."
         : "No payment method is saved. The client holds each item with PayPal or a card, or saves a method for the studio to use."

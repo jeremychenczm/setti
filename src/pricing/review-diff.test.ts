@@ -8,14 +8,14 @@ import { reviewSummary } from "./review-diff";
 import type { PricingWorkspace } from "./types";
 
 const quote = approvedForTest("willow");
-quote.lines = quote.lines.filter((line) => !["willow-office-chair", "willow-bulbs-e26"].includes(line.itemId));
+quote.lines = quote.lines.filter((line) => !["willow-office-chair", "willow-floor-lamp"].includes(line.itemId));
 const v1 = caseDocument("willow");
 const chair = v1.lines.find((line) => line.itemId === "willow-office-chair")!;
-const bulbs = v1.lines.find((line) => line.itemId === "willow-bulbs-e26")!;
+const lamp = v1.lines.find((line) => line.itemId === "willow-floor-lamp")!;
 const now = "2026-10-22T12:00:00.000Z";
 const draft: ChangeDraft = {
   id: "draft-1", projectKey: "willow", basedOnQuoteId: quote.id, basedOnVersion: 1, revision: 2, status: "needs_designer_review",
-  title: "Revised lines from quote V1", summary: "", changes: [v1Change(chair, "revised", "Too plain."), v1Change(bulbs, "carried", null)],
+  title: "Revised lines from quote V1", summary: "", changes: [v1Change(chair, "revised", "Too plain."), v1Change(lamp, "carried", null)],
   sourceMessageIds: [], sources: [], unresolved: [], constraints: [], deltaSubtotalCents: null, createdAt: now, updatedAt: now, model: "designer",
 };
 
@@ -34,12 +34,12 @@ describe("saved pricing review summary", () => {
       input.changes[1].after = { ...input.changes[1].after!, unitPriceCents: 399 };
     }))!;
     expect(summary).toMatchObject({ version: 2, stale: false, confirmed: 1 });
-    expect(summary.lines.map((line) => [line.name, line.kind, line.confirmed])).toEqual([["Office luxury chair", "revised", true], ["LED bulb E26, 800 lumen", "carried", false]]);
+    expect(summary.lines.map((line) => [line.name, line.kind, line.confirmed])).toEqual([["Office luxury chair", "revised", true], ["Floor lamp", "carried", false]]);
     expect(summary.lines[0].changes).toEqual([
       { label: "Name", before: "Office chair", after: "Office luxury chair" },
       { label: "Unit price", before: "$99.99", after: "$88.88" },
     ]);
-    expect(summary.lines[1].changes).toEqual([{ label: "Unit price", before: "$4.99", after: "$3.99" }]);
+    expect(summary.lines[1].changes).toEqual([{ label: "Unit price", before: "$79.99", after: "$3.99" }]);
     expect(summary.lines[0].fromV1).toEqual({ itemId: "willow-office-chair", kind: "revised", reason: "Too plain." });
   });
 
@@ -53,8 +53,8 @@ describe("saved pricing review summary", () => {
   it("shows a review carried onto a newer draft as unsaved, flagging lines that need a choice", () => {
     const older = workspace(() => {}, 1);
     const input = structuredClone(older.review!.input);
-    const carried = reviewSummary({ ...older, carryOver: { input, updated: ["Office chair"], kept: [], added: [], removed: ["Desk"], conflicts: [{ key: "change-1", name: "LED bulb E26, 800 lumen", mine: input.changes[1], latest: input.changes[1], changes: [] }] } })!;
-    expect(carried).toMatchObject({ stale: false, ready: false, carried: { updated: ["Office chair"], removed: ["Desk"], conflicts: ["LED bulb E26, 800 lumen"] } });
+    const carried = reviewSummary({ ...older, carryOver: { input, updated: ["Office chair"], kept: [], added: [], removed: ["Desk"], conflicts: [{ key: "change-1", name: "Floor lamp", mine: input.changes[1], latest: input.changes[1], changes: [] }] } })!;
+    expect(carried).toMatchObject({ stale: false, ready: false, carried: { updated: ["Office chair"], removed: ["Desk"], conflicts: ["Floor lamp"] } });
     expect(carried.lines.map((line) => line.needsChoice ?? false)).toEqual([false, true]);
   });
 
@@ -67,7 +67,7 @@ describe("saved pricing review summary", () => {
   it("keeps an edited carried line from claiming it is unchanged", () => {
     const edited = workspace((input) => { input.changes[1].after = { ...input.changes[1].after!, unitPriceCents: 399 }; });
     const stale = previewPricing(quote, draft, edited.review!.input).problems;
-    expect(stale).toContain("LED bulb E26, 800 lumen: this line no longer matches quote V1 (unit price). Update the price evidence to say what changed.");
+    expect(stale).toContain("Floor lamp: this line no longer matches quote V1 (unit price). Update the price evidence to say what changed.");
     const updated = structuredClone(edited.review!.input);
     updated.changes[1].priceEvidence = "Larkspur Lighting confirmed $3.99 per 2-pack on Oct 22.";
     expect(previewPricing(quote, draft, updated).problems.some((problem) => problem.includes("no longer matches quote V1"))).toBe(false);

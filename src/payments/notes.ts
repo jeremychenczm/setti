@@ -54,7 +54,7 @@ export async function noteFromDesigner(tx: Tx, operation: Scope, id: string, tex
 type Hold = Pick<PaymentOperation, "status" | "amountCents">;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
-const furnitureItems = (count: number) => `${count} furniture ${count === 1 ? "item" : "items"}`;
+const productItems = (count: number) => `${count} ${count === 1 ? "item" : "items"}`;
 
 /** What the client says about the furniture holds that followed their step. Only holds PayPal confirmed count as held. */
 async function heldFurniture(tx: Tx, projectId: string, holds: Hold[]): Promise<string> {
@@ -64,8 +64,8 @@ async function heldFurniture(tx: Tx, projectId: string, holds: Hold[]): Promise<
   const held = holds.filter((hold) => hold.status === "succeeded");
   const heldCents = held.reduce((total, hold) => total + hold.amountCents, 0);
   return held.length === holds.length
-    ? ` ${furnitureItems(held.length)} ${held.length === 1 ? "is" : "are"} held on ${on} (${usd(heldCents)}), to be charged as each supplier confirms.`
-    : ` ${held.length} of ${furnitureItems(holds.length)} are held on ${on} (${usd(heldCents)}); the rest still need a hold.`;
+    ? ` ${productItems(held.length)} ${held.length === 1 ? "is" : "are"} held on ${on} (${usd(heldCents)}), to be charged as each supplier confirms.`
+    : ` ${held.length} of ${productItems(holds.length)} are held on ${on} (${usd(heldCents)}); the rest still need a hold.`;
 }
 
 /**

@@ -17,7 +17,7 @@ import { links } from "../payments/testing/flows";
 import { demoDays, DemoClockError, skipAhead } from "./clock";
 
 const [designer] = DEMO_ACCOUNTS;
-const ITEMS = 21;
+const ITEMS = 19;
 
 describe.skipIf(!testDatabaseUrl)("a demo session's simulated time", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -65,7 +65,7 @@ describe.skipIf(!testDatabaseUrl)("a demo session's simulated time", () => {
     expect(runs.reduce((total, run) => total + run.renewals, 0)).toBe(ITEMS);
     expect(await handle.db.select().from(holdChecks).where(eq(holdChecks.sessionId, session))).toHaveLength(26);
     const notices = (await handle.db.select().from(chatMessages).where(eq(chatMessages.model, "notice"))).map((message) => message.text);
-    expect(notices).toEqual([expect.stringMatching(/^Heads-up for Sofia and Jordan: 21 holds end/), expect.stringMatching(/^Setti renewed 21 holds/)]);
+    expect(notices).toEqual([expect.stringMatching(/^Heads-up for Sofia and Jordan: 19 holds end/), expect.stringMatching(/^Setti renewed 19 holds/)]);
     const armchair = (await itemHoldsView(handle.db, session, "willow", designer)).items.find((line) => line.itemId === "willow-armchair")!;
     expect(armchair).toMatchObject({ state: "held", timing: { renewed: true } });
   });

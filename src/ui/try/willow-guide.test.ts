@@ -27,18 +27,18 @@ describe("Willow first-quote guide", () => {
     expect(step.detail).toContain("Lines left undecided can be signed later");
   });
 
-  it("proceeds to the selected service payment without requiring all 28 lines", () => {
+  it("proceeds to the selected service payment without requiring all 26 lines", () => {
     const data = approved();
     data.services = serviceView({ dueCents: 30_000, canPay: false, savedPayPal: false });
     const step = willowGuideStep(data, "designer");
     expect(step).toMatchObject({ index: 2, role: "sofia", anchor: "design-services" });
-    expect(step.detail).toContain("the same payment then holds each approved furniture item");
+    expect(step.detail).toContain("the same payment then holds each approved product");
   });
 
   it("asks Jordan to hold only what the services payment left unheld", () => {
     const data = approved();
     data.holds = holdsView({ items: [item(), item({ itemId: "lamp", label: "Lamp", state: "to_hold", heldCents: 0 })], toHoldCents: 10_000, canHold: true });
-    expect(willowGuideStep(data, "client")).toMatchObject({ index: 2, role: "jordan", title: "Hold the remaining furniture items", anchor: "item-holds" });
+    expect(willowGuideStep(data, "client")).toMatchObject({ index: 2, role: "jordan", title: "Hold the remaining products", anchor: "item-holds" });
   });
 
   it("does not infer any payment state from missing or mismatched version records", () => {

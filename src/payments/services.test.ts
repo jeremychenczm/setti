@@ -15,7 +15,7 @@ import { FakePayPal } from "./testing/fake-paypal";
 import { authorizeLine, CHAIR, links } from "./testing/flows";
 import { paymentsWorkspace } from "./workspace";
 
-const SOFA = "willow-sofa", COVER = "willow-cushion-cover", DESK = "willow-desk", CONSULTATION = "willow-consultation";
+const SOFA = "willow-sofa", TILE = "willow-entry-tile", DESK = "willow-desk", CONSULTATION = "willow-consultation";
 const SERVICES_CENTS = 453_000;
 
 describe.skipIf(!testDatabaseUrl)("design services: one hold, one capture per service", () => {
@@ -30,9 +30,9 @@ describe.skipIf(!testDatabaseUrl)("design services: one hold, one capture per se
   });
   afterAll(() => handle?.pool.end());
 
-  /** V1 signed with every line approved except the sofa (declined) and the cushion covers (undecided). */
+  /** V1 signed with every line approved except the sofa (declined) and the entry tile (undecided). */
   async function signMostOfV1() {
-    const decisions = caseDocument("willow").lines.filter((line) => line.itemId !== COVER).map((line) => line.itemId === SOFA
+    const decisions = caseDocument("willow").lines.filter((line) => line.itemId !== TILE).map((line) => line.itemId === SOFA
       ? { itemId: line.itemId, decision: "declined" as const, note: "Too big for the room." }
       : { itemId: line.itemId, decision: "approved" as const });
     await signOpeningForTest(handle.db, session, "willow", decisions);

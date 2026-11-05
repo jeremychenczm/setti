@@ -8,17 +8,18 @@ describe("Willow supplier quote integrity", () => {
   const products = lines.filter((line) => line.category === "furniture");
   const services = lines.filter((line) => line.category === "service");
 
-  it("contains 22 distinct supplier products and 6 simulated services", () => {
-    expect(lines).toHaveLength(28);
-    expect(products).toHaveLength(22);
+  it("contains 20 distinct supplier products and 6 simulated services", () => {
+    expect(lines).toHaveLength(26);
+    expect(products).toHaveLength(20);
     expect(services).toHaveLength(6);
-    expect(new Set(lines.map((line) => line.itemId)).size).toBe(28);
-    expect(new Set(products.map((line) => line.sku)).size).toBe(22);
+    expect(new Set(lines.map((line) => line.itemId)).size).toBe(26);
+    expect(new Set(products.map((line) => line.sku)).size).toBe(20);
   });
 
-  it("names four fictional suppliers and traces every product to one of their quotes", () => {
+  it("names seven fictional suppliers and traces every product to one of their quotes", () => {
     expect([...new Set(products.map((line) => line.vendor))].sort()).toEqual([
-      "Alder Row Furniture (demo)", "Larkspur Lighting (demo)", "Quillmark Office (demo)", "Saltmarsh Textiles (demo)",
+      "Alder Row Furniture (demo)", "Fieldstone Floor & Tile (demo)", "Harbor Paint Co (demo)", "Larkspur Lighting (demo)",
+      "Pinecrest Millwork (demo)", "Quillmark Office (demo)", "Saltmarsh Textiles (demo)",
     ]);
     for (const line of products) {
       expect(line.source.kind).toBe("demo");
@@ -30,10 +31,13 @@ describe("Willow supplier quote integrity", () => {
       expect(line.source.priceNote?.length).toBeGreaterThan(0);
       expect(line.returnPolicy).toContain("Demo supplier terms");
       expect(line.restockingFeeBps).toBeNull();
-      expect(line.nonReturnable).toBeNull();
-      expect(line.leadTimeDays).toBeNull();
       expect(line.specification.length).toBeGreaterThan(0);
     }
+    const madeToOrder = products.filter((line) => line.nonReturnable !== null);
+    expect(madeToOrder.map((line) => [line.itemId, line.customMade, line.nonReturnable])).toEqual([
+      ["willow-wall-paint", true, true], ["willow-office-shelving", true, true],
+    ]);
+    expect(products.filter((line) => line.leadTimeDays !== null).map((line) => [line.itemId, line.leadTimeDays])).toEqual([["willow-office-shelving", 35]]);
     expect(JSON.stringify(willowQuote)).not.toMatch(/ikea/i);
   });
 
@@ -57,9 +61,9 @@ describe("Willow supplier quote integrity", () => {
     const productTotals = calculateQuoteTotals(products);
     const serviceTotals = calculateQuoteTotals(services);
     const allTotals = calculateQuoteTotals(lines);
-    expect(productTotals).toMatchObject({ subtotalCents: 373_681, taxCents: 32_697, freightCents: 9_900, totalCents: 416_278 });
+    expect(productTotals).toMatchObject({ subtotalCents: 969_737, taxCents: 84_852, freightCents: 9_900, totalCents: 1_064_489 });
     expect(serviceTotals).toMatchObject({ subtotalCents: 453_000, taxCents: 0, freightCents: 0, totalCents: 453_000 });
-    expect(allTotals).toMatchObject({ lineCount: 28, subtotalCents: 826_681, taxCents: 32_697, freightCents: 9_900, totalCents: 869_278 });
+    expect(allTotals).toMatchObject({ lineCount: 26, subtotalCents: 1_422_737, taxCents: 84_852, freightCents: 9_900, totalCents: 1_517_489 });
     expect(lines.filter((line) => line.freightCents !== 0)).toEqual([lines[0]]);
     // $799 × 8.75% is $69.9125: the first line rounds to $69.91.
     expect(lines[0].taxCents).toBe(6_991);
@@ -70,22 +74,20 @@ describe("Willow supplier quote integrity", () => {
     expect(willowQuote.assumptions.join(" ")).toContain("not a supplier delivery quote");
   });
 
-  it("counts bulb packs separately from bulbs, covers and cushion inserts", () => {
-    const e26 = products.find((line) => line.itemId === "willow-bulbs-e26")!;
-    const e12 = products.find((line) => line.itemId === "willow-bulbs-e12")!;
-    expect([e26.unitLabel, e26.quantity, e26.unitPriceCents]).toEqual(["2-pack", 2, 499]);
-    expect([e12.unitLabel, e12.quantity, e12.unitPriceCents]).toEqual(["2-pack", 1, 799]);
-    expect(calculateLineTotals(e26).subtotalCents).toBe(998);
-    expect(calculateLineTotals(e12).subtotalCents).toBe(799);
-    expect(products.find((line) => line.itemId === "willow-cushion-cover")?.quantity).toBe(4);
-    expect(products.find((line) => line.itemId === "willow-inner-cushion")?.quantity).toBe(4);
-    expect(e12.specification).toContain("compatibility not yet verified");
+  it("quotes finish materials in the units they are sold in, supply only", () => {
+    const finish = (itemId: string) => products.find((line) => line.itemId === itemId)!;
+    expect(["willow-oak-flooring", "willow-entry-tile", "willow-wall-paint", "willow-downlights", "willow-office-shelving"]
+      .map((itemId) => [finish(itemId).unitLabel, finish(itemId).quantity, finish(itemId).unitPriceCents]))
+      .toEqual([["box", 20, 9_996], ["box", 4, 4_635], ["gallon", 9, 6_899], ["each", 6, 3_299], ["each", 1, 320_000]]);
+    expect(calculateLineTotals(finish("willow-oak-flooring")).subtotalCents).toBe(199_920);
+    expect(finish("willow-oak-flooring").specification).toContain("10% for cuts");
+    expect(finish("willow-entry-tile").specification).toContain("installation by the client's contractor");
+    expect(finish("willow-downlights").specification).toContain("licensed electrician");
+    expect(willowQuote.assumptions.join(" ")).toContain("Finish materials are supply only");
   });
 
   it("labels clearance prices and carries no approval: the client's signature approves V1", () => {
-    for (const itemId of ["willow-area-rug", "willow-cushion-cover"]) {
-      expect(products.find((line) => line.itemId === itemId)?.source.priceNote).toContain("Clearance");
-    }
+    expect(products.filter((line) => line.source.priceNote?.includes("Clearance")).map((line) => line.itemId)).toEqual(["willow-area-rug"]);
     expect(willowQuote.isDemo).toBe(true);
     expect(willowQuote.paymentNote).toContain("No PayPal authorization, charge or refund");
     for (const field of ["status", "approvedAt", "approvedBy", "signature"]) expect(willowQuote).not.toHaveProperty(field);

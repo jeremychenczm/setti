@@ -82,7 +82,7 @@ export function DesignServicesPayment({ projectKey, orderId, onPaid }: { project
 
   const paying = view.canPay && !!view.checkoutOptions && !readiness.blocked;
   const status = <>
-    {busy && busy !== "charge" && busy !== "check" && <p role="status" className="mt-3 flex items-center gap-1.5 text-[11px] text-[var(--muted)]"><LoaderCircle className="h-3 w-3 animate-spin" />{busy === "approve" || busy === "test_card" ? `Confirming with PayPal and capturing each service${holdsFurniture ? ", then holding each furniture item. This can take a little while" : ""}…` : busy === "remove" ? "Asking PayPal to delete the saved payment method…" : "Working with PayPal…"}</p>}
+    {busy && busy !== "charge" && busy !== "check" && <p role="status" className="mt-3 flex items-center gap-1.5 text-[11px] text-[var(--muted)]"><LoaderCircle className="h-3 w-3 animate-spin" />{busy === "approve" || busy === "test_card" ? `Confirming with PayPal and capturing each service${holdsFurniture ? ", then holding each product. This can take a little while" : ""}…` : busy === "remove" ? "Asking PayPal to delete the saved payment method…" : "Working with PayPal…"}</p>}
     {view.reason && !view.canPay && !view.canFinish && <p className="mt-3 text-[11px] text-[var(--muted)]">{view.reason}</p>}
     {view.checkout?.failureMessage && !charged && <p className="mt-3 text-[11px] text-amber-800">{view.checkout.failureMessage}</p>}
     {error && <p role="alert" className="mt-3 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-[12px] text-red-800">{error}</p>}
@@ -107,11 +107,11 @@ export function DesignServicesPayment({ projectKey, orderId, onPaid }: { project
         <h3 className="text-[12px] font-semibold">This payment</h3>
         <div aria-label="What this payment does" className="mt-2.5 space-y-1.5 text-[12px]">
           <div className="flex justify-between gap-3"><span>Design services · charged now</span><span className="font-semibold tabular-nums">{money(view.dueCents)}</span></div>
-          {furniture.count > 0 && <div className="flex justify-between gap-3"><span>Furniture · {furniture.count} {furniture.count === 1 ? "item" : "items"} {holdsFurniture ? "held now" : "held later"}</span><span className="tabular-nums">{money(furniture.cents)}</span></div>}
+          {furniture.count > 0 && <div className="flex justify-between gap-3"><span>Products · {furniture.count} {furniture.count === 1 ? "item" : "items"} {holdsFurniture ? "held now" : "held later"}</span><span className="tabular-nums">{money(furniture.cents)}</span></div>}
         </div>
         {furniture.count > 0 && <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">{holdsFurniture
           ? "Held on the same payment method, one PayPal authorization per item. Nothing is charged for an item until its supplier confirms it."
-          : "Without a saved payment method, you hold each furniture item yourself later."}</p>}
+          : "Without a saved payment method, you hold each product yourself later."}</p>}
         <div className="mt-3.5 border-t border-[var(--line)] pt-3.5">
           <PayMethodChooser options={view.checkoutOptions} disabled={!!busy || readiness.blocked} testCardBusy={busy === "test_card"} save={save} onSaveChange={setSave}
             onTestCard={() => void run("test_card", { action: "test_card", save }, (next) => next.dueCents === 0 ? "Paid with the Sandbox test card. Each design service was captured on PayPal." : next.canFinish ? "PayPal approved the test card. Finish charging the services below." : null)}

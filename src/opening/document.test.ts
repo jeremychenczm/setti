@@ -5,7 +5,7 @@ import { defaultOpening, documentHash, openingDocument, withoutApproval } from "
 describe("opening quote document", () => {
   it("carries the quote's lines and terms but no approval, signature or approval date", () => {
     const document = openingDocument("willow");
-    expect(document.lines).toHaveLength(28);
+    expect(document.lines).toHaveLength(26);
     expect(document.lines[0]).toMatchObject({ itemId: "willow-sofa", unitPriceCents: 79_900, freightCents: 9_900 });
     for (const field of ["status", "approvedAt", "approvedBy", "signature"]) expect(document).not.toHaveProperty(field);
     for (const line of document.lines) expect(line).not.toHaveProperty("approval");
@@ -21,7 +21,7 @@ describe("opening quote document", () => {
   });
 
   it("starts Willow as an unsent draft and Maple as the demo's approved V1", () => {
-    expect(defaultOpening("willow")).toMatchObject({ status: "draft", version: 1, lineCount: 28, totalCents: 869_278, messageId: null, contentHash: null });
+    expect(defaultOpening("willow")).toMatchObject({ status: "draft", version: 1, lineCount: 26, totalCents: 1_517_489, messageId: null, contentHash: null });
     expect(defaultOpening("maple")).toMatchObject({ status: "approved", lineCount: 3, totalCents: 150_000 });
   });
 });

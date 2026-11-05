@@ -91,7 +91,7 @@ export function PayMethodChooser({ options, paypal, testCardBusy, disabled, save
     </div>
     {options.canSave && <label className="flex items-start gap-2 text-[11px] leading-relaxed text-slate-600">
       <input type="checkbox" checked={save} disabled={disabled} onChange={(event) => onSaveChange(event.target.checked)} className="mt-0.5 accent-[var(--primary)]" />
-      <span>Save this payment method for the project. Approved furniture is held with it, one item at a time, without asking you again. You can remove it anytime.</span>
+      <span>Save this payment method for the project. Approved products are held with it, one at a time, without asking you again. You can remove it anytime.</span>
     </label>}
     {method !== "card" && options.paypalClientId && options.sandboxBuyer && <SandboxBuyer buyer={options.sandboxBuyer} />}
   </div>;

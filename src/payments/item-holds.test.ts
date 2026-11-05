@@ -16,7 +16,7 @@ import { FakePayPal } from "./testing/fake-paypal";
 import { links } from "./testing/flows";
 
 const [designer, client, otherClient] = DEMO_ACCOUNTS;
-const COVER = "willow-cushion-cover", DESK = "willow-desk", CONSULTATION = "willow-consultation";
+const TILE = "willow-entry-tile", DESK = "willow-desk", CONSULTATION = "willow-consultation";
 const FURNITURE = caseDocument("willow").lines.filter((line) => line.category === "furniture");
 
 describe.skipIf(!testDatabaseUrl)("holding approved items with saved PayPal", () => {
@@ -109,10 +109,10 @@ describe.skipIf(!testDatabaseUrl)("holding approved items with saved PayPal", ()
   });
 
   it("holds a line the client signs later, with the same saved PayPal", async () => {
-    await signOpeningForTest(handle.db, session, "willow", caseDocument("willow").lines.filter((line) => line.itemId !== COVER).map((line) => ({ itemId: line.itemId, decision: "approved" as const })));
+    await signOpeningForTest(handle.db, session, "willow", caseDocument("willow").lines.filter((line) => line.itemId !== TILE).map((line) => ({ itemId: line.itemId, decision: "approved" as const })));
     await payServices();
     expect(await hold()).toHaveLength(FURNITURE.length - 1);
-    await signOpeningForTest(handle.db, session, "willow", [{ itemId: COVER, decision: "approved" }]);
+    await signOpeningForTest(handle.db, session, "willow", [{ itemId: TILE, decision: "approved" }]);
     const later = await hold();
     expect(later).toHaveLength(1);
     expect(later[0]).toMatchObject({ status: "succeeded" });
@@ -120,12 +120,12 @@ describe.skipIf(!testDatabaseUrl)("holding approved items with saved PayPal", ()
   });
 
   it("keeps an older legacy-review warning visible after a later hold succeeded on that item", async () => {
-    await signOpeningForTest(handle.db, session, "willow", caseDocument("willow").lines.filter((line) => line.itemId !== COVER).map((line) => ({ itemId: line.itemId, decision: "approved" as const })));
+    await signOpeningForTest(handle.db, session, "willow", caseDocument("willow").lines.filter((line) => line.itemId !== TILE).map((line) => ({ itemId: line.itemId, decision: "approved" as const })));
     await payServices();
     const [succeeded] = await hold();
     const fundedLine = (await view()).items.find((line) => line.paypalAuthorizationId === succeeded.paypalResourceId)!;
     expect(fundedLine.state).toBe("held");
-    await signOpeningForTest(handle.db, session, "willow", [{ itemId: COVER, decision: "approved" }]);
+    await signOpeningForTest(handle.db, session, "willow", [{ itemId: TILE, decision: "approved" }]);
     expect(await view()).toMatchObject({ canHold: true, toHoldCents: expect.any(Number) });
 
     // Model the exact post-migration state without weakening a database trigger:

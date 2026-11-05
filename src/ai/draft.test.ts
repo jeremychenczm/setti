@@ -99,8 +99,8 @@ describe("server-validated change drafts", () => {
     expect(draft.changes[0].after?.unitPriceCents).toBeNull();
     expect(draft.deltaSubtotalCents).toBeNull();
   });
-  it("preserves purchase-unit counts for pack and hourly quote lines", () => {
-    for (const itemId of ["willow-bulbs-e26", "willow-consultation"]) {
+  it("preserves purchase-unit counts for boxed and hourly quote lines", () => {
+    for (const itemId of ["willow-oak-flooring", "willow-consultation"]) {
       const data = input();
       Object.assign(data.output.changes[0], { action: "quantity", itemId, quantity: 3, productOptionId: null });
       const change = buildDraft(data).draft!.changes[0];

@@ -15,7 +15,7 @@ import { bergmund, confirmChange } from "./testing/cases";
 import { FakePayPal } from "./testing/fake-paypal";
 import { CHAIR, links } from "./testing/flows";
 
-const SOFA = "willow-sofa", COVER = "willow-cushion-cover", DESK = "willow-desk", RUG = "willow-area-rug";
+const SOFA = "willow-sofa", TILE = "willow-entry-tile", DESK = "willow-desk", RUG = "willow-area-rug";
 const details = { description: "Willow Residence · Desk · V1 (Setti sandbox demo)", savePayPalDescription: "Setti · Willow Residence: holds for the items you approve (sandbox demo)" };
 
 describe.skipIf(!testDatabaseUrl)("payments for a V1 signed line by line", () => {
@@ -27,8 +27,8 @@ describe.skipIf(!testDatabaseUrl)("payments for a V1 signed line by line", () =>
     await truncate(handle.db, "projects", "chat_cases");
     session = randomUUID();
     paypal = new FakePayPal();
-    // Every line approved except the sofa (declined) and the cushion covers (left undecided).
-    const decisions = caseDocument("willow").lines.filter((line) => line.itemId !== COVER).map((line) => line.itemId === SOFA
+    // Every line approved except the sofa (declined) and the entry tile (left undecided).
+    const decisions = caseDocument("willow").lines.filter((line) => line.itemId !== TILE).map((line) => line.itemId === SOFA
       ? { itemId: line.itemId, decision: "declined" as const, note: "Too big for the room." }
       : { itemId: line.itemId, decision: "approved" as const });
     await signOpeningForTest(handle.db, session, "willow", decisions);
@@ -67,14 +67,14 @@ describe.skipIf(!testDatabaseUrl)("payments for a V1 signed line by line", () =>
   it("plans to fund exactly the approved V1 lines: holds for furniture, charges for design services", async () => {
     const { plan } = await lock();
     expect(plan).toMatchObject({ status: "not_authorized", version: 1, basedOnVersion: 0, blockers: [] });
-    expect(plan.lines).toHaveLength(26);
+    expect(plan.lines).toHaveLength(24);
     expect(plan.lines.map((line) => line.itemId)).not.toEqual(expect.arrayContaining([SOFA]));
-    expect(plan.lines.map((line) => line.itemId)).not.toEqual(expect.arrayContaining([COVER]));
+    expect(plan.lines.map((line) => line.itemId)).not.toEqual(expect.arrayContaining([TILE]));
     const services = plan.actions.filter((action) => action.kind === "capture");
     expect(services).toHaveLength(6);
     expect(services.every((action) => action.timing === "on_payment_execution")).toBe(true);
     expect(plan.money.chargeCents).toBe(453_000);
-    expect(plan.actions.filter((action) => action.kind === "new_authorization")).toHaveLength(20);
+    expect(plan.actions.filter((action) => action.kind === "new_authorization")).toHaveLength(18);
     expect(plan.money.newAuthorizationCents! + plan.money.chargeCents!).toBe(plan.quoteDeltaCents);
   });
 
@@ -107,7 +107,7 @@ describe.skipIf(!testDatabaseUrl)("payments for a V1 signed line by line", () =>
 
     it("refuses lines the client declined or left undecided", async () => {
       await expect(bound(SOFA)).rejects.toMatchObject({ message: expect.stringMatching(/has not approved this line of quote V1/) });
-      await expect(bound(COVER)).rejects.toMatchObject({ message: expect.stringMatching(/has not approved this line of quote V1/) });
+      await expect(bound(TILE)).rejects.toMatchObject({ message: expect.stringMatching(/has not approved this line of quote V1/) });
     });
 
     it("refuses a V1 binding with hashes the client did not sign", async () => {

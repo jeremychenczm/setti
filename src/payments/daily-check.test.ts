@@ -22,7 +22,7 @@ const [designer] = DEMO_ACCOUNTS;
 const DAY = 24 * 60 * 60 * 1000;
 const DESK = "willow-desk", ARMCHAIR = "willow-armchair", SOFA = "willow-sofa";
 const desk = caseDocument("willow").lines.find((line) => line.itemId === DESK)!;
-const ITEMS = 21;
+const ITEMS = 19;
 
 describe.skipIf(!testDatabaseUrl)("the daily check", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -56,8 +56,8 @@ describe.skipIf(!testDatabaseUrl)("the daily check", () => {
     const posted = await notices();
     expect(posted).toHaveLength(1);
     expect(posted[0]).toMatchObject({ actor: "assistant", replyToMessageId: null });
-    expect(posted[0].text).toMatch(/^Heads-up for Sofia and Jordan: 21 holds end .+, because PayPal holds last 29 days, and their suppliers haven't confirmed the orders yet:/);
-    expect(posted[0].text).toMatch(/• and 13 more: /);
+    expect(posted[0].text).toMatch(/^Heads-up for Sofia and Jordan: 19 holds end .+, because PayPal holds last 29 days, and their suppliers haven't confirmed the orders yet:/);
+    expect(posted[0].text).toMatch(/• and 11 more: /);
     expect(posted[0].text).toMatch(/Setti will replace each with a new hold of the same amount on Sofia's saved PayPal \(\$[\d,.]+ in all\), so nothing is charged and Sofia doesn't need to do anything\. If the project or any of these items has stopped, Jordan can cancel those holds before then\.$/);
     expect(await handle.db.select().from(renewalNotices)).toHaveLength(ITEMS);
     // The same day again announces nothing new.
@@ -77,7 +77,7 @@ describe.skipIf(!testDatabaseUrl)("the daily check", () => {
     await cancelApprovedItem(handle.db, paypal, session, "willow", { itemId: ARMCHAIR, reason: "no_response", note: "", by: designer.name });
     expect((await check(23)).notices).toBe(ITEMS - 2);
     const [notice] = await notices();
-    expect(notice.text).toMatch(/^Heads-up for Sofia and Jordan: 19 holds end/);
+    expect(notice.text).toMatch(/^Heads-up for Sofia and Jordan: 17 holds end/);
     expect(notice.text.includes("Writing desk") || notice.text.includes("Lounge armchair")).toBe(false);
   });
 

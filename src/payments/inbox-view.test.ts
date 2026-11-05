@@ -16,7 +16,7 @@ import { FakePayPal } from "./testing/fake-paypal";
 import { links } from "./testing/flows";
 
 const [designer, client] = DEMO_ACCOUNTS;
-const ITEMS = 21;
+const ITEMS = 19;
 
 describe.skipIf(!testDatabaseUrl)("the payment inbox", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -69,7 +69,7 @@ describe.skipIf(!testDatabaseUrl)("the payment inbox", () => {
     const view = await inboxView(handle.db, null, session, designer);
     expect(view).toMatchObject({ role: "designer", reader: "Jordan", simulatedDays: 3, events: [], project: null });
     expect(view.reminders).toHaveLength(ITEMS);
-    expect(inboxFacts(view)[0]).toEqual({ id: "reminders", text: "21 reminders across 1 project(s); 21 to handle today." });
+    expect(inboxFacts(view)[0]).toEqual({ id: "reminders", text: "19 reminders across 1 project(s); 19 to handle today." });
   });
 
   it("counts the client's money records not seen yet, and after a visit only newer ones", async () => {

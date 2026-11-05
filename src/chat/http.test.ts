@@ -49,7 +49,7 @@ describe("case chat HTTP boundary", () => {
     expect(response.headers.get("set-cookie")).toContain("SameSite=lax");
     const body = await response.json();
     expect(body.quote).toBeNull();
-    expect(body.opening).toMatchObject({ status: "draft", lineCount: 28 });
+    expect(body.opening).toMatchObject({ status: "draft", lineCount: 26 });
     expect(body.aiConfigured).toBe(false);
   });
   it("retains the session cookie across reloads", async () => {

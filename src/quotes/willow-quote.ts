@@ -29,6 +29,21 @@ const saltmarsh: Supplier = {
   quoteNumber: "SMT-Q-1123",
   returnPolicy: "Demo supplier terms: unused rugs and textiles may be returned within 30 days. Clearance items are final sale unless the supplier agrees otherwise. No restocking fee has been confirmed.",
 };
+const fieldstone: Supplier = {
+  name: "Fieldstone Floor & Tile (demo)",
+  quoteNumber: "FFT-Q-0612",
+  returnPolicy: "Demo supplier terms: full, unopened boxes may be returned within 30 days of delivery. Opened boxes and cut pieces cannot be returned. No restocking fee has been confirmed.",
+};
+const harborPaint: Supplier = {
+  name: "Harbor Paint Co (demo)",
+  quoteNumber: "HPC-Q-0215",
+  returnPolicy: "Demo supplier terms: paint is tinted to order and cannot be returned once mixed. Unopened, untinted products may be returned within 30 days.",
+};
+const pinecrest: Supplier = {
+  name: "Pinecrest Millwork (demo)",
+  quoteNumber: "PCM-Q-0730",
+  returnPolicy: "Demo supplier terms: built to site measurements and cannot be returned once fabrication starts. Changes after the shop drawing is approved need a revised quote.",
+};
 
 interface ProductInput {
   itemId: string;
@@ -41,6 +56,9 @@ interface ProductInput {
   unitLabel?: string;
   priceNote?: string;
   freightCents?: number;
+  leadTimeDays?: number;
+  customMade?: boolean;
+  nonReturnable?: boolean;
 }
 
 function product(supplier: Supplier, input: ProductInput): QuoteLine {
@@ -67,11 +85,11 @@ function product(supplier: Supplier, input: ProductInput): QuoteLine {
       checkedAt,
       priceNote: input.priceNote ?? "Supplier quote price dated October 17, 2026. Stock and the final price are confirmed when the order is placed.",
     },
-    leadTimeDays: null,
+    leadTimeDays: input.leadTimeDays ?? null,
     returnPolicy: supplier.returnPolicy,
     restockingFeeBps: null,
-    customMade: false,
-    nonReturnable: null,
+    customMade: input.customMade ?? false,
+    nonReturnable: input.nonReturnable ?? null,
   };
 }
 
@@ -149,11 +167,6 @@ const merchandise: QuoteLine[] = [
     specification: "Ash / white shade · adjustable height 47–59 in · shade width 15 in · E26 bulb sold separately",
     quantity: 1, unitPriceCents: 7_999,
   }),
-  product(larkspur, {
-    itemId: "willow-table-lamp", name: "Dimmable table lamp", room: "Entry", sku: "LKL-TL-ANT-10",
-    specification: "Anthracite · height 10 in · E12 bulb sold separately; final bulb fit and dimming compatibility need confirmation",
-    quantity: 1, unitPriceCents: 3_499,
-  }),
   product(saltmarsh, {
     itemId: "willow-area-rug", name: "Low-pile area rug", room: "Living room", sku: "SMT-RUG-OW-610",
     specification: "Off-white · 6 ft 7 in × 9 ft 10 in",
@@ -195,38 +208,35 @@ const merchandise: QuoteLine[] = [
     specification: "White · 48 7/8 × 19 5/8 × 37 3/8 in",
     quantity: 1, unitPriceCents: 39_900,
   }),
-  product(larkspur, {
-    itemId: "willow-work-lamp", name: "Work lamp", room: "Home office", sku: "LKL-WL-DGY-07",
-    specification: "Dark gray · adjustable arm · 7 in shade · E26 bulb sold separately",
-    quantity: 2, unitPriceCents: 1_999,
+  product(fieldstone, {
+    itemId: "willow-oak-flooring", name: "Engineered oak flooring", room: "Living room / Dining room", sku: "FFT-EOK-NAT-75",
+    specification: "Natural white oak, matte · 7 1/2 in wide planks, 1/2 in thick, click-lock floating floor · 23.3 sq ft per box · 20 boxes = 466 sq ft for about 420 sq ft of floor plus 10% for cuts · underlayment and installation by the client's contractor",
+    quantity: 20, unitLabel: "box", unitPriceCents: 9_996,
+    priceNote: "Supplier price $99.96 per box ($4.29 per sq ft). Quoted quantity counts boxes, not square feet.",
   }),
-  product(alderRow, {
-    itemId: "willow-mirror", name: "Wall mirror", room: "Entry", sku: "ARF-MIR-WHT-59",
-    specification: "White frame · 15 3/4 × 59 in",
-    quantity: 1, unitPriceCents: 6_999,
+  product(fieldstone, {
+    itemId: "willow-entry-tile", name: "Porcelain floor tile", room: "Entry", sku: "FFT-POR-GRY-1224",
+    specification: "Warm gray matte porcelain · 12 × 24 in · 8 tiles per box = 15.5 sq ft · 4 boxes = 62 sq ft for about 55 sq ft of floor plus 10% for cuts · setting materials, grout and installation by the client's contractor",
+    quantity: 4, unitLabel: "box", unitPriceCents: 4_635,
+    priceNote: "Supplier price $46.35 per box ($2.99 per sq ft). Quoted quantity counts boxes, not square feet.",
   }),
-  product(saltmarsh, {
-    itemId: "willow-cushion-cover", name: "Cushion cover", room: "Living room", sku: "SMT-CC-BLU-20",
-    specification: "Blue · 20 × 20 in · cover only, inner cushion quoted separately",
-    quantity: 4, unitPriceCents: 799,
-    priceNote: "Clearance price $7.99 each, previously $9.99, valid while the supplier's stock lasts. Recheck price and availability before ordering.",
-  }),
-  product(saltmarsh, {
-    itemId: "willow-inner-cushion", name: "Inner cushion", room: "Living room", sku: "SMT-CI-OW-20",
-    specification: "Off-white · 20 × 20 in · insert only, cover quoted separately",
-    quantity: 4, unitPriceCents: 1_200,
+  product(harborPaint, {
+    itemId: "willow-wall-paint", name: "Interior wall paint", room: "Living room · Dining room · Home office · Entry", sku: "HPC-INT-EGG-WW",
+    specification: "Eggshell acrylic, tinted to the approved warm white · about 350–400 sq ft per gallon per coat · 9 gallons for two coats on about 1,600 sq ft of walls · ceilings, trim, primer and painting labor not included",
+    quantity: 9, unitLabel: "gallon", unitPriceCents: 6_899,
+    customMade: true, nonReturnable: true,
   }),
   product(larkspur, {
-    itemId: "willow-bulbs-e26", name: "LED bulb E26, 800 lumen", room: "Living room / Home office", sku: "LKL-B26-800-2P",
-    specification: "Dimmable / globe opal · 2 bulbs per pack · 2 packs = 4 bulbs; fixture compatibility needs confirmation",
-    quantity: 2, unitLabel: "2-pack", unitPriceCents: 499,
-    priceNote: "Supplier price $4.99 per 2-pack, not per bulb. Quoted quantity 2 means 2 packs / 4 bulbs.",
+    itemId: "willow-downlights", name: "Recessed LED downlight", room: "Living room", sku: "LKL-RDL-4IN-5CC",
+    specification: "4 in canless wafer, IC-rated, dimmable · selectable 2700–5000 K · price per light · 6 lights; a licensed electrician installs them and confirms dimmer compatibility",
+    quantity: 6, unitPriceCents: 3_299,
   }),
-  product(larkspur, {
-    itemId: "willow-bulbs-e12", name: "LED bulb E12, 800 lumen", room: "Entry", sku: "LKL-B12-800-2P",
-    specification: "Dimmable / globe opal · 2700 K · 5.9 W · 2 in diameter · 2 bulbs per pack; table lamp fit and dimming compatibility not yet verified",
-    quantity: 1, unitLabel: "2-pack", unitPriceCents: 799,
-    priceNote: "Supplier price $7.99 per 2-pack, not per bulb. Quoted quantity 1 means 1 pack / 2 bulbs.",
+  product(pinecrest, {
+    itemId: "willow-office-shelving", name: "Built-in wall shelving", room: "Home office", sku: "PCM-BIS-96-PG",
+    specification: "Paint-grade birch plywood, painted to match the walls · 96 W × 12 D × 48 H in above the desk · adjustable shelves · fabricated to site measurements and delivered ready to fit; installation by the client's contractor",
+    quantity: 1, unitPriceCents: 320_000, leadTimeDays: 35,
+    customMade: true, nonReturnable: true,
+    priceNote: "Supplier price for fabrication and delivery, based on the designer's site measurements. Fabrication starts after the shop drawing is approved.",
   }),
 ];
 
@@ -253,15 +263,16 @@ export const willowQuote: QuoteDocument = {
   designerName: "Jordan Lee (demo designer)",
   currency: "USD",
   isDemo: true,
-  demoNotice: "Demo quote with 22 items from four fictional supplier quotes and 6 simulated studio services. The household, suppliers, products, prices and quantities are demonstration data, not real offers.",
+  demoNotice: "Demo quote with 20 items (furniture, lighting and finish materials) from seven fictional supplier quotes and 6 simulated studio services. The household, suppliers, products, prices and quantities are demonstration data, not real offers.",
   paymentNote: "This quote confirms no payment. No PayPal authorization, charge or refund is represented.",
   assumptions: [
-    "Suppliers, product names, SKUs and USD prices come from four fictional supplier quotes dated October 17, 2026. Stock and final prices are confirmed when each order is placed. Regular prices are used unless a line explicitly says clearance.",
+    "Suppliers, product names, SKUs and USD prices come from seven fictional supplier quotes dated October 17, 2026. Stock and final prices are confirmed when each order is placed. Regular prices are used unless a line explicitly says clearance.",
     "Merchandise tax is a test assumption of 8.75%, rounded once per line after multiplying quantity by unit price. This is not a conclusion about the applicable tax jurisdiction, taxable items or actual tax due.",
     "One $99 delivery budget allowance is assigned to the first merchandise line only. It is not a supplier delivery quote; destination, order size, delivery eligibility and any delivery tax have not been assessed.",
     "The six service rates and hours are simulated estimates. Zero service tax is a test assumption, not a tax conclusion. Services have not been performed and cancellation terms remain to be agreed.",
-    "For bulb rows, quantity counts 2-packs, not individual bulbs. Lamps, bulbs, remote controls and other components require final compatibility and installation review; this report does not certify a complete installation.",
-    "Supplier lead times, restocking charges and final return eligibility are unconfirmed. Each line's return terms summarize its supplier's quote and do not promise a refund or a release of funds.",
+    "Finish materials are supply only. Flooring and tile count boxes and include about 10% for cuts; paint counts gallons. Installation, site preparation, setting materials and electrical work are by the client's contractor and are not part of this quote.",
+    "Light fixtures and downlights need final compatibility and installation review by a licensed electrician; this report does not certify a complete installation.",
+    "Lead times are unconfirmed except the built-in shelving's 35-day fabrication time. Tinted paint and the built-in shelving are made to order and cannot be returned. Restocking charges and other return eligibility are unconfirmed; each line's return terms summarize its supplier's quote and do not promise a refund or a release of funds.",
   ],
   lines: [...merchandise, ...services],
 };

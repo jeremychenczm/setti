@@ -7,10 +7,10 @@ import { createPricingInput, validatePricingInput } from "./calculation";
 import { carryOverReview } from "./carry-over";
 
 const quote = approvedForTest("willow");
-quote.lines = quote.lines.filter((line) => !["willow-office-chair", "willow-bulbs-e26"].includes(line.itemId));
+quote.lines = quote.lines.filter((line) => !["willow-office-chair", "willow-floor-lamp"].includes(line.itemId));
 const v1 = caseDocument("willow");
 const chair = v1.lines.find((line) => line.itemId === "willow-office-chair")!;
-const bulbs = v1.lines.find((line) => line.itemId === "willow-bulbs-e26")!;
+const lamp = v1.lines.find((line) => line.itemId === "willow-floor-lamp")!;
 const dining = quote.lines.find((line) => line.itemId === "willow-dining-chair")!;
 const now = "2026-10-22T12:00:00.000Z";
 
@@ -53,13 +53,13 @@ describe("carrying a saved pricing review onto a newer draft", () => {
       input.changes[0].after = { ...input.changes[0].after!, unitPriceCents: 8_888 };
       input.changes[0].confirmed = true;
     });
-    const second = draft(2, [v1Change(chair, "revised", "Too plain."), diningQuantity(8), v1Change(bulbs, "carried", null)], ["Check the delivery date", "Confirm the bulb colour"]);
+    const second = draft(2, [v1Change(chair, "revised", "Too plain."), diningQuantity(8), v1Change(lamp, "carried", null)], ["Check the delivery date", "Confirm the bulb colour"]);
     const carried = carryOverReview(quote, proposed, saved, createPricingInput(quote, second));
-    expect(carried).toMatchObject({ kept: ["Office chair"], updated: ["Dining chair"], added: ["LED bulb E26, 800 lumen"], removed: [], conflicts: [] });
+    expect(carried).toMatchObject({ kept: ["Office chair"], updated: ["Dining chair"], added: ["Floor lamp"], removed: [], conflicts: [] });
     expect(carried.input.changes.map((change) => [change.key, change.after?.unitPriceCents ?? null, change.after?.quantity ?? null, change.confirmed])).toEqual([
       ["change-0", 8_888, chair.quantity, true],
       ["change-1", dining.unitPriceCents, 8, false],
-      ["change-2", bulbs.unitPriceCents, bulbs.quantity, false],
+      ["change-2", lamp.unitPriceCents, lamp.quantity, false],
     ]);
     expect(carried.input).toMatchObject({ title: "Willow V2 · study and dining", terms: "Prices hold for 14 days." });
     expect(carried.input.issues).toEqual([

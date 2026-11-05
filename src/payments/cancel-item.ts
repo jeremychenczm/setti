@@ -50,7 +50,7 @@ export async function cancelApprovedItem(db: Db, paypal: PayPalPayments, session
     const itemId = line && basis.businessItem(line);
     if (!line || !itemId) throw new PaymentActionError("NOT_FOUND", "This item is not part of the current agreement.");
     const [item] = await tx.select({ kind: items.kind, name: items.name }).from(items).where(eq(items.id, itemId));
-    if (item?.kind !== "furniture") throw new PaymentActionError("NOT_AVAILABLE", "Only an approved furniture item can be cancelled here.");
+    if (item?.kind !== "furniture") throw new PaymentActionError("NOT_AVAILABLE", "Only an approved product can be cancelled here.");
     const { ledger } = basis;
 
     let cancellation = ledger.cancellations.find((entry) => entry.itemId === itemId);

@@ -24,7 +24,7 @@ function plan(): FundingPlan {
       { itemId: "rug", side: "baseline", label: "Wool rug", kind: "refund", amountCents: 24_000, timing: "after_vendor_credit", reason: "Refund $240 after supplier credit; the reviewed $60 retained cost is deducted once." },
       { itemId: "design", side: "baseline", label: "Design services", kind: "capture", amountCents: 40_000, timing: "on_payment_execution", reason: "The unchanged design service needs separate funding." },
     ],
-    blockers: [], notices: ["This preview does not move money.", "Furniture funding remains subject to vendor confirmation."],
+    blockers: [], notices: ["This preview does not move money.", "Product funding remains subject to vendor confirmation."],
   };
 }
 

@@ -7,7 +7,7 @@ import { createPricingStore } from "../pricing/store";
 import { createOpeningStore } from "./store";
 import { signOpeningForTest } from "./testing";
 
-const SOFA = "willow-sofa", COVER = "willow-cushion-cover", RUG = "willow-area-rug", CHAIR = "willow-dining-chair";
+const SOFA = "willow-sofa", TILE = "willow-entry-tile", RUG = "willow-area-rug", CHAIR = "willow-dining-chair";
 
 describe.skipIf(!testDatabaseUrl)("revising declined V1 lines by hand", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -24,12 +24,12 @@ describe.skipIf(!testDatabaseUrl)("revising declined V1 lines by hand", () => {
   });
   afterAll(() => handle?.pool.end());
 
-  /** The sofa and rug are declined, the cushion covers left undecided, everything else approved. */
+  /** The sofa and rug are declined, the entry tile left undecided, everything else approved. */
   async function signMostLines() {
     await chat.sendQuote(session, "willow", { id: randomUUID(), text: "Here is quote V1.", sentBy: "Jordan Lee" });
     const view = await chat.getQuote(session, "willow");
     const declined: Record<string, string> = { [SOFA]: "Too big for the room.", [RUG]: "Prefer wool." };
-    return signOpeningForTest(handle.db, session, "willow", view.document.lines.filter((line) => line.itemId !== COVER)
+    return signOpeningForTest(handle.db, session, "willow", view.document.lines.filter((line) => line.itemId !== TILE)
       .map((line) => declined[line.itemId] ? { itemId: line.itemId, decision: "declined" as const, note: declined[line.itemId] } : { itemId: line.itemId, decision: "approved" as const }));
   }
 
@@ -39,7 +39,7 @@ describe.skipIf(!testDatabaseUrl)("revising declined V1 lines by hand", () => {
     expect(draft).toMatchObject({ model: "designer", basedOnVersion: 1 });
     expect(draft.changes.map((change) => [change.action, change.fromV1?.itemId, change.fromV1?.kind, change.fromV1?.reason])).toEqual([
       ["add", SOFA, "revised", "Too big for the room."],
-      ["add", COVER, "carried", null],
+      ["add", TILE, "carried", null],
     ]);
     expect(draft.changes[0].after).toMatchObject({ name: "Three-seat sofa", unitPriceCents: 79_900, quantity: 1 });
 
@@ -47,11 +47,11 @@ describe.skipIf(!testDatabaseUrl)("revising declined V1 lines by hand", () => {
     expect(again.draft.changes).toHaveLength(2);
     const both = await opening.revise(session, "willow", { itemId: RUG });
     expect(both.draft.id).toBe(draft.id);
-    expect(both.draft.changes.map((change) => change.fromV1?.itemId)).toEqual([SOFA, COVER, RUG]);
+    expect(both.draft.changes.map((change) => change.fromV1?.itemId)).toEqual([SOFA, TILE, RUG]);
     expect((await chat.getCase(session, "willow")).draft?.id).toBe(draft.id);
 
     await expect(opening.revise(session, "willow", { itemId: CHAIR })).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
-    await expect(opening.revise(session, "willow", { itemId: COVER })).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
+    await expect(opening.revise(session, "willow", { itemId: TILE })).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
   });
 
   it("fills the pricing review from V1 and freezes the client-facing origin into the new version", async () => {
@@ -67,25 +67,25 @@ describe.skipIf(!testDatabaseUrl)("revising declined V1 lines by hand", () => {
 
     sofa.after = { ...sofa.after!, name: "Compact two-seat sofa", sku: "ARF-SOFA-2S-BG", specification: "Beige-gray woven fabric · 72 W in", unitPriceCents: 64_900, taxCents: 5_679 };
     input.changes = input.changes.map((change) => ({ ...change, confirmed: true }));
-    input.terms = "The compact sofa replaces the declined three-seat sofa. The cushion covers still need your decision.";
+    input.terms = "The compact sofa replaces the declined three-seat sofa. The entry tile still needs your decision.";
     const saved = await pricing.saveReview(session, "willow", { sourceDraftId: workspace.sourceDraft!.id, sourceDraftRevision: workspace.sourceDraft!.revision, expectedVersion: null, input });
     expect(saved.preview?.problems).toEqual([]);
     const issued = await pricing.issueReview(session, "willow", { reviewId: saved.review!.id, expectedVersion: saved.review!.version });
     expect(issued.order.changes.map((change) => change.fromV1)).toEqual([
       { itemId: SOFA, kind: "revised", reason: "Too big for the room." },
-      { itemId: COVER, kind: "carried", reason: null },
+      { itemId: TILE, kind: "carried", reason: null },
     ]);
     expect(issued.order.lines.find((line) => line.name === "Compact two-seat sofa")?.unitPriceCents).toBe(64_900);
     expect(issued.order.changes[0].changesFromV1?.map((change) => change.label)).toEqual(["Name", "SKU", "Specification", "Unit price", "Tax"]);
     expect(issued.order.changes[1].changesFromV1).toEqual([]);
-    expect(issued.order.lines.find((line) => line.itemId === COVER)).toBeDefined();
+    expect(issued.order.lines.find((line) => line.itemId === TILE)).toBeDefined();
     expect((await chat.getQuote(session, "willow")).opening.closed).toBe(true);
   });
 
   it("keeps the draft in step when the client decides a carried line or the designer drops a revised one", async () => {
     const view = await signMostLines();
     await opening.revise(session, "willow", { itemId: SOFA });
-    await opening.sign(session, "willow", { signingId: randomUUID(), contentHash: view.opening.contentHash!, signature: "Sofia Martinez", acknowledged: true, decisions: [{ itemId: COVER, decision: "declined", note: "Not needed." }] });
+    await opening.sign(session, "willow", { signingId: randomUUID(), contentHash: view.opening.contentHash!, signature: "Sofia Martinez", acknowledged: true, decisions: [{ itemId: TILE, decision: "declined", note: "Not needed." }] });
     expect((await chat.getCase(session, "willow")).draft!.changes.map((change) => change.fromV1?.itemId)).toEqual([SOFA]);
     await opening.drop(session, "willow", { itemId: SOFA, by: "Jordan Lee" });
     expect((await chat.getCase(session, "willow")).draft!.changes).toEqual([]);

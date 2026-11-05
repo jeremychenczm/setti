@@ -55,7 +55,7 @@ describe.skipIf(!testDatabaseUrl)("after the client pays the design services", (
 
     const [handOff] = await clientMessages();
     expect(handOff).toMatchObject({ id: checkout.id, aiState: "none", model: null });
-    expect(handOff.text).toBe(`I've signed quote V1 and paid the design services (${usd(total(SERVICES))}). ${FURNITURE.length} furniture items are held on my PayPal (${usd(total(FURNITURE))}), to be charged as each supplier confirms. Over to you, Jordan.`);
+    expect(handOff.text).toBe(`I've signed quote V1 and paid the design services (${usd(total(SERVICES))}). ${FURNITURE.length} items are held on my PayPal (${usd(total(FURNITURE))}), to be charged as each supplier confirms. Over to you, Jordan.`);
     expect((await createChatStore(handle.db).getCase(session, "willow")).messages.at(-1)?.id).toBe(checkout.id);
 
     // A repeated settle finds nothing left to charge or hold, and says nothing new.
@@ -79,6 +79,6 @@ describe.skipIf(!testDatabaseUrl)("after the client pays the design services", (
     const { holds } = await settle();
     expect(holds.filter((operation) => operation.status !== "succeeded")).toHaveLength(1);
     const heldCents = holds.filter((operation) => operation.status === "succeeded").reduce((sum, operation) => sum + operation.amountCents, 0);
-    expect((await clientMessages())[0].text).toContain(`${FURNITURE.length - 1} of ${FURNITURE.length} furniture items are held on my PayPal (${usd(heldCents)}); the rest still need a hold.`);
+    expect((await clientMessages())[0].text).toContain(`${FURNITURE.length - 1} of ${FURNITURE.length} items are held on my PayPal (${usd(heldCents)}); the rest still need a hold.`);
   });
 });

@@ -117,7 +117,7 @@ interface Groups {
 }
 
 const PREVIEW_NOTICE = "This is a payment plan preview. No authorization, charge, release or refund has been executed.";
-const VENDOR_NOTICE = "Authorization and capture are separate steps. Furniture funding remains subject to vendor confirmation.";
+const VENDOR_NOTICE = "Authorization and capture are separate steps. Product funding remains subject to vendor confirmation.";
 
 /**
  * Pure, conservative preview. It never calls PayPal or treats approval as payment.

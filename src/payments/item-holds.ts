@@ -77,7 +77,7 @@ export async function startItemCheckout(db: Db, paypal: PayPalPayments, sessionI
     if (basis.plan.status === "blocked") throw new PaymentActionError("PLAN_BLOCKED", "Resolve the funding blockers before holding items.", basis.plan.blockers);
     if (!action || !itemId) throw new PaymentActionError("NOT_AVAILABLE", "This item needs no new hold under the current agreement.");
     const [item] = await tx.select({ kind: items.kind }).from(items).where(eq(items.id, itemId));
-    if (item?.kind !== "furniture") throw new PaymentActionError("NOT_AVAILABLE", "Only approved furniture items are held one by one.");
+    if (item?.kind !== "furniture") throw new PaymentActionError("NOT_AVAILABLE", "Only approved products are held one by one.");
     const saved = await activeSavedMethod(tx, basis.projectId);
     if (saved) throw new PaymentActionError("NOT_AVAILABLE", "A payment method is saved for this project. Hold the items with it instead.");
     const prefix = `item-checkout:${basis.key}:${itemId}:`;
