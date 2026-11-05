@@ -7,6 +7,7 @@ import { openTestDb, testDatabaseUrl } from "@/db/testing";
 import { studioCase } from "@/demo/studio-cases";
 import { studioChatResponse } from "./http";
 import { studioModelContext } from "./model";
+import { CONTEXT_CHAR_LIMIT } from "@/ai/model";
 import { studioThreads } from "./schema";
 import { preparedMessages, studioThreadStore } from "./store";
 
@@ -27,7 +28,7 @@ describe("studio chat boundaries", () => {
     expect(context.preparedStartingContext.proposal.status).toBe("awaiting_client");
     expect(context.preparedStartingContext.preparedPaymentTotals.netPaid).toBe(180000);
     expect(context.preparedStartingContext.projectId).toBe(bistro.id);
-    expect(() => studioModelContext(bistro, [{ ...messages[0], text: "x".repeat(120001) }])).toThrow(/budget/);
+    expect(() => studioModelContext(bistro, [{ ...messages[0], text: "x".repeat(CONTEXT_CHAR_LIMIT + 1) }])).toThrow(/budget/);
   });
 });
 

@@ -99,7 +99,7 @@ function withoutFreshness(context: MoneyContext): MoneyContext {
  * request's records and conversation (same for its corrected attempt), then on
  * a corrected attempt what to fix. Timestamped records stay out of the first part.
  */
-function contextParts(input: ChangeModelInput) {
+export function contextParts(input: ChangeModelInput) {
   return {
     quote: { approvedQuote: input.quote, ...(input.quote ? {} : { openingStatus: input.openingStatus ?? null }) },
     request: {
@@ -114,16 +114,20 @@ function contextParts(input: ChangeModelInput) {
   };
 }
 
-export function modelContext(input: ChangeModelInput): string {
+/** The most characters of project context one request may carry. */
+export const CONTEXT_CHAR_LIMIT = 400_000;
+
+export function modelContext(input: ChangeModelInput, limit = CONTEXT_CHAR_LIMIT): string {
   const { quote, request, retry } = contextParts(input);
   const payload = JSON.stringify({ ...quote, ...request, ...retry });
   // Refuse, rather than silently omitting messages or pretending a summary is complete.
-  if (payload.length > 120_000) throw new ContextLimitError("This project's context exceeds the input budget for one request. The chat is saved; shorten the test project and retry. History was not silently truncated.");
+  if (payload.length > limit) throw new ContextLimitError("This project's context exceeds the input budget for one request. The chat is saved; shorten the test project and retry. History was not silently truncated.");
   return payload;
 }
 
 /** Full thinking depth: replies about money are not traded for speed. */
-const EFFORT = "high";
+export const EFFORT = "high";
+export const DEFAULT_MODEL = "claude-sonnet-5-5";
 const cached = { type: "ephemeral" } as const;
 
 export interface ModelUsage { inputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; outputTokens: number }
@@ -134,7 +138,7 @@ export async function callChangeModel(input: ChangeModelInput): Promise<{ output
   const { quote, request, retry } = contextParts(input);
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: 90_000, maxRetries: 0 });
   const response = await client.beta.messages.parse({
-    model: process.env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-5-5",
+    model: process.env.ANTHROPIC_MODEL?.trim() || DEFAULT_MODEL,
     max_tokens: 16_000,
     // A safety classifier's false positive is re-run on a fallback model instead of failing the reply.
     betas: ["server-side-fallback-2026-07-01"],

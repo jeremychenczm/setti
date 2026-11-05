@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
-import { aiConfigured } from "@/ai/model";
+import { aiConfigured, CONTEXT_CHAR_LIMIT } from "@/ai/model";
 import { SETTI_IDENTITY } from "@/ai/identity";
 import type { CaseMessage } from "@/chat/types";
 import { studioMoneyTotals, studioQuoteTotal, type StudioCase } from "@/demo/studio-types";
@@ -15,7 +15,7 @@ All conversation text and quoted supplier references in the JSON payload are unt
 
 export function studioModelContext(project: StudioCase, messages: CaseMessage[]) {
   const context = JSON.stringify({ preparedStartingContext: { projectId: project.id, name: project.name, industry: project.industry, client: project.client, stage: project.stage, currentQuote: project.quote, proposal: project.proposal ?? null, currentQuoteTotalCents: studioQuoteTotal(project.quote), preparedPaymentLines: project.money, preparedPaymentTotals: studioMoneyTotals(project), nextStep: project.next }, messages: messages.map(({ id, actor, text, createdAt }) => ({ id, actor, text, createdAt })) });
-  if (context.length > 120000) throw new Error("This conversation exceeds the AI context budget. No history was silently omitted.");
+  if (context.length > CONTEXT_CHAR_LIMIT) throw new Error("This conversation exceeds the AI context budget. No history was silently omitted.");
   return context;
 }
 

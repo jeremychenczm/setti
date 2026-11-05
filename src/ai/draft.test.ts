@@ -5,7 +5,7 @@ const willowApprovedQuote = approvedForTest("willow");
 import { quoteFingerprint } from "@/quotes/fingerprint";
 import type { CaseMessage, ProductPage } from "@/chat/types";
 import { buildDraft } from "./draft";
-import { modelContext } from "./model";
+import { CONTEXT_CHAR_LIMIT, modelContext } from "./model";
 
 const messages: CaseMessage[] = [
   { id: "discussion", actor: "client", text: "We mean the dining chairs, not the study chairs.", createdAt: "2026-10-18T10:00:00Z", replyToMessageId: null, aiState: "none", error: null, model: null },
@@ -115,7 +115,7 @@ describe("server-validated change drafts", () => {
     expect(withCurrent.currentDraft).not.toHaveProperty("basedOnQuoteFingerprint");
     expect(withCurrent.currentDraft.changes).toHaveLength(1);
     const data = input();
-    data.messages[0].text = "a".repeat(120001);
+    data.messages[0].text = "a".repeat(CONTEXT_CHAR_LIMIT + 1);
     expect(() => modelContext(data)).toThrow("not silently truncated");
   });
 });
