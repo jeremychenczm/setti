@@ -27,7 +27,7 @@ function oracleOutput(testCase: DraftCase, input: ChangeModelInput): ChangeModel
   if (expected.outcome === "cancel") return { ...base, intent: "cancel", message: "I withdrew the current draft; V1 stays as signed.", changes: [] };
   if (expected.outcome === "no_draft") return { ...base, intent: expected.intents?.[0] ?? "clarify", message: expected.reference ?? "Could you tell me which item you mean?", changes: [] };
   return {
-    ...base, intent: "draft", title: "Revised quote draft", message: "I drafted the requested changes for your review. Please check the prices and terms.",
+    ...base, intent: "draft", title: "Revised quote draft", message: expected.reference ?? "I drafted the requested changes for your review. Please check the prices and terms.",
     changes: (expected.changes ?? []).map((change) => ({
       action: change.action, itemId: change.itemId, quantity: change.action === "remove" ? null : change.quantity ?? null,
       productOptionId: change.productOptionId ?? null, description: `Requested ${change.action}.`, sourceMessageIds: [input.triggerId],
