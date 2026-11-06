@@ -88,6 +88,18 @@ The server checks the selected demo account as well as the owning browser sessio
 | Quote reports | Real AG Grid reports; the Maple and Willow quote contents are demo data |
 | Not in this build | Hosted demo, procurement timeline, supplier integration and real user authentication |
 
+## AI quality
+
+[`evals/`](evals/README.md) runs Setti's three AI features through the same code the app uses, on 50 fictional cases graded in code against answer keys written before any model answered. The cases lean hard: several changes in one thread, corrections and withdrawn decisions, quotes up to 295 lines (315,000 characters), and 11 cases with instructions injected into supplier pages, quote fields or the chat. With Claude Sonnet 5.5 at high effort on the Claude API, 5 November 2026:
+
+| Feature | Runs | Passed | Passed on the first try |
+|---|---|---|---|
+| Change drafts | 65 | 65 | 62 of 64 model runs |
+| Money answers | 14 | 14 | 14 |
+| Client inbox summaries | 21 | 21 | 21 |
+
+The first round found two prompt problems (a change a client said the designer had approved by phone was drafted, and totals were left out beside a one-item question), and the second found a server check that read "settled" as a payment word. All three were fixed and measured again; [evals/README.md](evals/README.md#results) has both rounds, what changed and the limits of a set this size.
+
 ## Sandbox evidence
 
 `npm run sandbox:proof` runs one complete change through the app against the PayPal Sandbox, reads every PayPal resource back and writes the results to `evidence/` (see [probes/README.md](probes/README.md#app-level-proof)).
@@ -115,6 +127,7 @@ All project scopes, approvals and signatures are **demo data**. Maple's prices, 
 | `src/try/` | Private visitors and saved runs; explicit, resumable Maple preparation through the normal business services; a payment-free Willow quote entry. |
 | `src/demo/`, `src/ui/try/` | Labelled sample supplier materials, read-only cases, the entry page and role-aware guides derived from saved project state. |
 | `src/chat/`, `src/ai/` | Project chat, AI change drafts and money answers grounded in the PayPal ledger. |
+| `evals/` | AI evals for change drafts, money answers and inbox summaries, run through the app's own entry points. See [evals/README.md](evals/README.md). |
 | `src/pricing/`, `src/approval/` | Designer pricing review, frozen client change orders, client confirmation and the funding plan. |
 | `src/payments/` | PayPal Sandbox execution: authorize, capture, release, refund, supplier gates, fee read-back and recovery of lost answers. |
 | `src/money/` | Pure money rules: what each change does to held or captured money, the over-capture allowance, the reauthorization window, refund promises, and a ledger snapshot. Amounts are integer cents. |
