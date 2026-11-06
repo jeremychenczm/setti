@@ -35,7 +35,9 @@ export function hasEastAsianScript(text: string): boolean {
 
 /** A payment result stated as fact, separate from amounts: a draft reply may quote prices but never payment results. */
 export function hasPaymentStatusClaim(text: string): boolean {
-  return /\b(?:unpaid|unrefunded|uncaptured|unsettled|paid|captured|charged|refunded|held|authorized|authorised|released|credited|collected|settled|debited|voided)\b/iu.test(text)
+  return /\b(?:unpaid|unrefunded|uncaptured|paid|captured|charged|refunded|held|authorized|authorised|released|credited|collected|debited|voided)\b/iu.test(text)
+    // "Settled" also means decided ("the changes we settled"), so it counts only next to money words or as "settled up".
+    || /\b(?:payments?|balances?|bills?|invoices?|accounts?|refunds?|charges?|money|funds|deposits?|amounts?|totals?)\b.{0,35}\b(?:un)?settled\b|\b(?:un)?settled\b\s+(?:up\b|in full\b|.{0,25}\b(?:payments?|balances?|bills?|invoices?|accounts?|in paypal)\b)/iu.test(text)
     || /\b(?:payment|refund|money|funds)\b.{0,35}\b(?:received|reached|arrived)\b|\breceived\b.{0,35}\b(?:payment|refund|money|funds)\b/iu.test(text)
     || /(?:already|not yet|no longer|fully|completed|succeeded|still|remaining|has been|have been).{0,35}(?:paid|captur|charg|refund|held|hold|authoriz|releas)|(?:paid|captur|charg|refund|authoriz|releas).{0,35}(?:completed|succeeded|pending|failed|unknown)/iu.test(text);
 }

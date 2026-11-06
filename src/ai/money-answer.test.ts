@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { amountsIn, buildMoneyAnswer, hasUnsupportedMoneyClaim, isMoneyQuestion, UNVERIFIED_MONEY_TEXT, verifyMoneyAnswer } from "./money-answer";
+import { amountsIn, buildMoneyAnswer, hasPaymentStatusClaim, hasUnsupportedMoneyClaim, isMoneyQuestion, UNVERIFIED_MONEY_TEXT, verifyMoneyAnswer } from "./money-answer";
 import type { MoneyAnswerRow, MoneyContext } from "./money-types";
 
 function evidence(): MoneyContext {
@@ -49,6 +49,12 @@ describe("recorded money answers", () => {
   });
   it.each(["Which item or payment should I check?", "Do you mean the quote or the payment?"])("allows procedural clarification without a payment-status assertion: %s", (text) => {
     expect(hasUnsupportedMoneyClaim(text)).toBe(false);
+  });
+  it.each(["Your balance is settled.", "The payment was settled yesterday.", "Everything is settled up.", "The deposit is still unsettled.", "It was settled in full."])("treats settled as a payment word next to money: %s", (text) => {
+    expect(hasPaymentStatusClaim(text)).toBe(true);
+  });
+  it.each(["I drafted the four settled changes: eight dining chairs and no bedroom rug.", "These are the changes we settled in this thread.", "The side tables are not settled yet; the client is still deciding."])("reads settled as decided when no money word is near: %s", (text) => {
+    expect(hasPaymentStatusClaim(text)).toBe(false);
   });
 });
 
