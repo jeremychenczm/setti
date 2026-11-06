@@ -302,6 +302,13 @@
       "when": 1793590279474,
       "tag": "0042_inbox_reads",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1793938176894,
+      "tag": "0043_demo_activity",
+      "breakpoints": true
     }
   ]
 }

@@ -10,6 +10,8 @@ import { DEMO_SESSION_COOKIE as SESSION_COOKIE, DEMO_VISITOR_COOKIE as VISITOR_C
 import { refreshDemoCookies } from "@/http/demo-cookies";
 import { paypalLinks } from "@/payments/http";
 import { sandboxPayPal, sandboxTestCard } from "@/payments/server";
+import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
+import { demoEnd, endDemo, markDemoEnded } from "./activity";
 import { TRY_PROJECT_HREF, openWillowWorkspace, prepareTry, readTryRuns, readTrySeed, resumeTry, startTry } from "./service";
 
 const uuid = z.uuid();
@@ -43,11 +45,24 @@ function retainIdentity(response: NextResponse, req: NextRequest, session: strin
   return refreshDemoCookies(response, req);
 }
 async function state(session: string | null, visitorId: string | null, href = TRY_PROJECT_HREF) {
-  const [seed, previousRuns] = await Promise.all([readTrySeed(db(), session), readTryRuns(db(), visitorId, session)]);
-  return { seed, href, previousRuns, hasWorkspace: !!session, scenario: seed?.scenario ?? HOME_SCENARIO };
+  const [seed, previousRuns, demoEnded] = await Promise.all([readTrySeed(db(), session), readTryRuns(db(), visitorId, session), session ? demoEnd(db(), session).catch(() => null) : null]);
+  return { seed, href, previousRuns, hasWorkspace: !!session, scenario: seed?.scenario ?? HOME_SCENARIO, demoEnded };
+}
+/**
+ * End & reset ends the demo itself: it is recorded at once, and its holds are
+ * released in the background (PayPal calls can take a while). Whatever is not
+ * released yet, the next daily check releases.
+ */
+async function endOnReset(session: string) {
+  try { await markDemoEnded(db(), session, "visitor"); } catch { return; }
+  let paypal: ReturnType<typeof sandboxPayPal>;
+  try { paypal = sandboxPayPal(); } catch { return; }
+  void endDemo(db(), paypal, session, "visitor").catch(() => undefined);
 }
 export async function getTryResponse(req: NextRequest) {
-  try { return refreshDemoCookies(NextResponse.json(await state(identity(req, SESSION_COOKIE), identity(req, VISITOR_COOKIE)), { headers }), req); }
+  const session = identity(req, SESSION_COOKIE);
+  noteRequest(session);
+  try { return refreshDemoCookies(NextResponse.json(await state(session, identity(req, VISITOR_COOKIE)), { headers }), req); }
   catch { return failure("STORAGE_UNAVAILABLE", "Demo storage is unavailable. Make sure the database is running and migrated.", 503); }
 }
 export async function postTryResponse(req: NextRequest) {
@@ -58,6 +73,8 @@ export async function postTryResponse(req: NextRequest) {
   try { body = startSchema.parse(text ? JSON.parse(text) : {}); }
   catch { return failure("INVALID_REQUEST", "Choose a supported demo action and scenario.", 400); }
   if (body.action === "end") {
+    const ending = identity(req, SESSION_COOKIE);
+    if (ending) await endOnReset(ending);
     const response = NextResponse.json({ reset: true, href: "/try" }, { headers });
     const options = { ...privateDemoCookieOptions(req.nextUrl.protocol), maxAge: 0, expires: new Date(0) };
     response.cookies.set(SESSION_COOKIE, "", options);
@@ -66,6 +83,7 @@ export async function postTryResponse(req: NextRequest) {
     return response;
   }
   const current = identity(req, SESSION_COOKIE), visitorId = identity(req, VISITOR_COOKIE);
+  noteRequest(current);
   try {
     if (body.action === "workspace") {
       const session = await openWillowWorkspace(db(), current), visitor = visitorId ?? randomUUID();
@@ -78,6 +96,8 @@ export async function postTryResponse(req: NextRequest) {
     }
     if (body.action === "prepare") {
       if (!current || current !== body.runId) return failure("FORBIDDEN", "Resume this private run before preparing it.", 403);
+      const ended = await refuseIfEnded(current);
+      if (ended) return ended;
       const saved = await readTrySeed(db(), current);
       if (saved && saved.scenario !== HOME_SCENARIO) return failure("RETIRED", "This older walkthrough can no longer be prepared. Start the current walkthrough from /try.", 410);
       const result = await prepareTry({ db: db(), paypal: sandboxPayPal(), testCard: sandboxTestCard(), links: paypalLinks(req), perHour: perHour() }, current, body.runId);

@@ -1,12 +1,15 @@
 /** Why the studio cancelled an approved item before it was charged, and how each reason reads. Shared by the server and the page. */
 export const CANCELLATION_REASONS = ["unavailable", "no_response", "client_asked", "other"] as const;
 export type CancellationReason = (typeof CANCELLATION_REASONS)[number];
+/** The designer's reasons, and the one Setti records itself when a demo ends with items still on hold. */
+export type ItemCancellationReason = CancellationReason | "demo_ended";
 
-export const CANCELLATION_REASON_TEXT: Record<CancellationReason, string> = {
+export const CANCELLATION_REASON_TEXT: Record<ItemCancellationReason, string> = {
   unavailable: "Out of stock or discontinued",
   no_response: "Supplier didn't respond",
   client_asked: "Client asked to cancel",
   other: "Other",
+  demo_ended: "The demo ended",
 };
 
 /** Why, in the designer's own voice to the client. */

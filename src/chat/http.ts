@@ -1,3 +1,4 @@
+import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
 import { takeAiBudget } from "@/http/ai-budget";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
@@ -40,7 +41,9 @@ function snapshot(state: StoredCase, req: NextRequest): CaseSnapshot {
 
 function session(req: NextRequest): string {
   const parsed = uuid.safeParse(req.cookies.get(cookieName)?.value);
-  return parsed.success ? parsed.data : randomUUID();
+  if (!parsed.success) return randomUUID();
+  noteRequest(parsed.data);
+  return parsed.data;
 }
 
 function respond(req: NextRequest, sessionId: string, body: unknown, status = 200) {
@@ -96,6 +99,8 @@ export async function getCaseResponse(req: NextRequest, rawKey: string) {
 export async function postCaseResponse(req: NextRequest, rawKey: string, retry = false) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404 });
   const sessionId = session(req);
+  const ended = await refuseIfEnded(sessionId);
+  if (ended) return ended;
   let persisted = false;
   try {
     const body = await boundedJson(req);
@@ -141,6 +146,8 @@ export async function postCaseResponse(req: NextRequest, rawKey: string, retry =
 export async function postQuoteResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404 });
   const sessionId = session(req);
+  const ended = await refuseIfEnded(sessionId);
+  if (ended) return ended;
   try {
     const input = quoteSchema.parse(await boundedJson(req));
     const refusal = accountRefusal(req, rawKey);
@@ -194,6 +201,8 @@ function openingFailure(req: NextRequest, sessionId: string, error: unknown, inv
 export async function postQuoteSignResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404 });
   const sessionId = session(req);
+  const ended = await refuseIfEnded(sessionId);
+  if (ended) return ended;
   try {
     const input = signSchema.parse(await boundedJson(req));
     const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
@@ -208,6 +217,8 @@ export async function postQuoteSignResponse(req: NextRequest, rawKey: string) {
 export async function postQuoteDropResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404 });
   const sessionId = session(req);
+  const ended = await refuseIfEnded(sessionId);
+  if (ended) return ended;
   try {
     const { itemId } = dropSchema.parse(await boundedJson(req));
     const refusal = accountRefusal(req, rawKey);
@@ -224,6 +235,8 @@ export async function postQuoteDropResponse(req: NextRequest, rawKey: string) {
 export async function postQuoteReviseResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404 });
   const sessionId = session(req);
+  const ended = await refuseIfEnded(sessionId);
+  if (ended) return ended;
   try {
     const { itemId } = dropSchema.parse(await boundedJson(req));
     const refusal = accountRefusal(req, rawKey);

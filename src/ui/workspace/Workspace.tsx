@@ -15,6 +15,7 @@ import { ConversationList, type ChatPreview, type ProjectChat } from "./Conversa
 import { Sidebar, type View } from "./Sidebar";
 import { useInboxBadge } from "./useInboxBadge";
 import { TrySeedNotice } from "../try/TrySeedNotice";
+import { DemoEndedNotice } from "../try/DemoEndedNotice";
 
 const CaseChat = dynamic(() => import("../chat/CaseChat").then((m) => m.CaseChat), {
   loading: () => <div role="status" className="flex flex-1 items-center justify-center rounded-xl bg-white text-[13px] text-[var(--muted)]">Loading conversation…</div>,
@@ -176,6 +177,7 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
+        <DemoEndedNotice />
         {view !== "projects" && !preparedProject && <TrySeedNotice projectKey={view === "chats" ? activeId : quoteId} account={account} onSwitchAccount={switchAccount} onOpenChat={() => { setActiveId(view === "quotes" ? quoteId : activeId); setView("chats"); }} onOpenInbox={() => showView("inbox")} currentView={view} />}
         <div className="flex min-h-0 min-w-0 flex-1 gap-2">
           {view === "projects" && account.role === "designer" && <StudioProjectsModule onOpenProject={openPreparedProject} />}

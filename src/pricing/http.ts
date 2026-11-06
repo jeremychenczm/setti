@@ -1,3 +1,4 @@
+import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -37,7 +38,9 @@ function clientRefusal(req: NextRequest, session: string) {
 
 function sessionId(req: NextRequest): string {
   const parsed = uuid.safeParse(req.cookies.get("setti-demo-chat")?.value);
-  return parsed.success ? parsed.data : randomUUID();
+  if (!parsed.success) return randomUUID();
+  noteRequest(parsed.data);
+  return parsed.data;
 }
 
 function respond(req: NextRequest, session: string, body: unknown, status = 200) {
@@ -93,6 +96,8 @@ export async function savePricingResponse(req: NextRequest, rawKey: string) {
   const session = sessionId(req);
   const refusal = clientRefusal(req, session);
   if (refusal) return refusal;
+  const ended = await refuseIfEnded(session);
+  if (ended) return ended;
   try {
     const input = saveSchema.parse(await boundedJson(req));
     return respond(req, session, await pricingStore().saveReview(session, rawKey, input));
@@ -104,6 +109,8 @@ export async function issuePricingResponse(req: NextRequest, rawKey: string) {
   const session = sessionId(req);
   const refusal = clientRefusal(req, session);
   if (refusal) return refusal;
+  const ended = await refuseIfEnded(session);
+  if (ended) return ended;
   try {
     const input = issueSchema.parse(await boundedJson(req));
     return respond(req, session, await pricingStore().issueReview(session, rawKey, input));
@@ -116,6 +123,8 @@ export async function postLineChangeResponse(req: NextRequest, rawKey: string) {
   const session = sessionId(req);
   const refusal = clientRefusal(req, session);
   if (refusal) return refusal;
+  const ended = await refuseIfEnded(session);
+  if (ended) return ended;
   try {
     const { draft } = await startLineChange(pricingDb(), session, rawKey, lineSchema.parse(await boundedJson(req)));
     return respond(req, session, { href: `/pricing/${rawKey}`, draftId: draft.id, revision: draft.revision });

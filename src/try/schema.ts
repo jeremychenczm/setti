@@ -42,6 +42,24 @@ export const trySeeds = pgTable("try_seeds", {
   index("try_seeds_visitor_id").on(t.visitorId),
 ]);
 
+export type DemoEndReason = "idle" | "visitor";
+
+/**
+ * When a demo session was last used, and whether it has ended. Any request with
+ * the session's cookie counts as use (noted at most once an hour). A demo ends
+ * after IDLE_DAYS without use, or when its visitor ends it; its open holds are
+ * then released and the project stays as a read-only record.
+ */
+export const demoActivity = pgTable("demo_activity", {
+  sessionId: uuid("session_id").primaryKey(),
+  lastActiveAt: timestamp("last_active_at", { withTimezone: true }).notNull().defaultNow(),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  endReason: text("end_reason").$type<DemoEndReason>(),
+}, (t) => [
+  check("demo_activity_end", sql`(${t.endedAt} IS NULL) = (${t.endReason} IS NULL) AND (${t.endReason} IS NULL OR ${t.endReason} IN ('idle', 'visitor'))`),
+  index("demo_activity_last_active_at").on(t.lastActiveAt),
+]);
+
 /**
  * How far a demo session has skipped ahead, in whole days. Its reminders,
  * notices and renewals are worked out as if that much time had passed, so a

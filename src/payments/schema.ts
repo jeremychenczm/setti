@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { boolean, check, integer, jsonb, pgTable, primaryKey, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { items, paymentOperations, paypalAuthorizations, projects, revisions } from "../db/schema";
 import { changeOrders } from "../pricing/schema";
-import type { CancellationReason } from "./cancellation";
+import type { ItemCancellationReason } from "./cancellation";
 
 /**
  * What the supplier confirmed, recorded by the designer for one business item
@@ -100,12 +100,12 @@ export const itemCancellations = pgTable("item_cancellations", {
   /** The client-confirmed version in force when the item was cancelled: its revision, and its change order unless it was the signed V1. */
   revisionId: uuid("revision_id").notNull().references(() => revisions.id),
   changeOrderId: uuid("change_order_id").references(() => changeOrders.id),
-  reason: text("reason").$type<CancellationReason>().notNull(),
+  reason: text("reason").$type<ItemCancellationReason>().notNull(),
   note: text("note").notNull().default(""),
   cancelledBy: text("cancelled_by").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
-  check("item_cancellations_reason", sql`${t.reason} IN ('unavailable', 'no_response', 'client_asked', 'other')`),
+  check("item_cancellations_reason", sql`${t.reason} IN ('unavailable', 'no_response', 'client_asked', 'other', 'demo_ended')`),
   check("item_cancellations_note", sql`length(${t.note}) <= 1000 AND (${t.reason} <> 'other' OR length(btrim(${t.note})) > 0)`),
   check("item_cancellations_by", sql`length(btrim(${t.cancelledBy})) > 0`),
 ]);
@@ -135,6 +135,8 @@ export const holdChecks = pgTable("hold_checks", {
   notices: integer("notices").notNull().default(0),
   /** Holds this run renewed with the client's saved payment method. */
   renewals: integer("renewals").notNull().default(0),
+  /** Demo sessions this run ended after a week without use. */
+  endedDemos: integer("ended_demos").notNull().default(0),
   /** What the run could not check or settle; empty when everything was checked. */
   problems: jsonb("problems").$type<string[]>().notNull().default([]),
 }, (t) => [

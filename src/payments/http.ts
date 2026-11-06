@@ -1,3 +1,4 @@
+import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { paymentPreparationPending, PREPARATION_MESSAGE } from "../try/preparation";
@@ -91,7 +92,9 @@ function db() {
 
 function session(req: NextRequest): string | null {
   const parsed = uuid.safeParse(req.cookies.get("setti-demo-chat")?.value);
-  return parsed.success ? parsed.data : null;
+  if (!parsed.success) return null;
+  noteRequest(parsed.data);
+  return parsed.data;
 }
 
 /** PayPal sends the buyer back here; SETTI_PUBLIC_URL overrides the request origin when the app runs behind a proxy. */
@@ -162,6 +165,8 @@ export async function postPaymentsResponse(req: NextRequest, id: string) {
   if (!uuid.safeParse(id).success) return NextResponse.json({ code: "NOT_FOUND", error: "This change order could not be found." }, { status: 404, headers });
   const sessionId = session(req);
   if (!sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "This share link is read-only. Payment steps run only from the browser that owns the demo case." }, { status: 403, headers });
+  const ended = await refuseIfEnded(sessionId);
+  if (ended) return ended;
   try {
     const input = actionSchema.parse(await boundedJson(req));
     const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
@@ -294,6 +299,8 @@ export async function postServicesPaymentResponse(req: NextRequest, rawKey: stri
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
   const sessionId = session(req);
   if (!sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "Payment steps run only from the browser that owns the demo case." }, { status: 403, headers });
+  const ended = await refuseIfEnded(sessionId);
+  if (ended) return ended;
   try {
     const input = servicesSchema.parse(await boundedJson(req));
     const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
@@ -369,6 +376,8 @@ export async function postItemHoldsResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
   const sessionId = session(req);
   if (!sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "Payment steps run only from the browser that owns the demo case." }, { status: 403, headers });
+  const ended = await refuseIfEnded(sessionId);
+  if (ended) return ended;
   try {
     const input = holdSchema.parse(await boundedJson(req));
     const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
@@ -514,6 +523,8 @@ export async function getDemoClockResponse(req: NextRequest) {
 export async function postDemoClockResponse(req: NextRequest) {
   const sessionId = session(req);
   if (!sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "Skip ahead from the browser that owns the demo." }, { status: 403, headers });
+  const ended = await refuseIfEnded(sessionId);
+  if (ended) return ended;
   try {
     const input = clockSchema.parse(await boundedJson(req));
     const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);

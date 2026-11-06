@@ -12,6 +12,10 @@
  *    saved payment method: a new hold first, then the old one is voided (see
  *    renew.ts). Both people are told what was renewed, by PayPal id.
  *
+ * Before all of this, the studio-wide run ends every demo unused for a week
+ * and releases its holds (see try/activity.ts); an ended demo gets no notices
+ * or renewals.
+ *
  * Renewals move holds, never charges. Every run is recorded with what it found.
  */
 import { randomUUID } from "node:crypto";
@@ -19,8 +23,9 @@ import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { DEMO_ACCOUNTS } from "../accounts/demo";
 import { chatCases, chatMessages } from "../chat/schema";
 import type { Db } from "../db/client";
-import { holdChecks, paymentOperations, paypalAuthorizations, projects, renewalNotices, savedPaymentMethods } from "../db/schema";
+import { demoActivity, holdChecks, paymentOperations, paypalAuthorizations, projects, renewalNotices, savedPaymentMethods } from "../db/schema";
 import { pricingCases } from "../pricing/schema";
+import { closeIdleDemos } from "../try/activity";
 import { renewalNotice, renewalNoticesDue } from "./attention";
 import { holdClock } from "./hold-clock";
 import { itemHoldsView } from "./item-holds-view";
@@ -40,6 +45,8 @@ export interface DailyCheckResult {
   notices: number;
   /** Holds this run renewed with the client's saved payment method. */
   renewals: number;
+  /** Demos this run ended after a week without use. */
+  endedDemos: number;
   problems: string[];
 }
 
@@ -71,9 +78,19 @@ export async function runDailyCheck(db: Db, paypal: PayPalPayments, options: { n
   const [run] = await db.insert(holdChecks).values({ checkedAt: now, sessionId: options.sessionId ?? null }).returning();
   const problems: string[] = [];
 
-  const scopes = await db.select({ caseId: chatCases.id, sessionId: chatCases.sessionId, projectKey: chatCases.projectKey, projectId: pricingCases.projectId, clientName: projects.clientName })
+  // 0. Demos unused for a week end, and their holds are released. A demo's own skip-ahead run never ends it.
+  let endedDemos = 0;
+  if (!options.sessionId) {
+    const closed = await closeIdleDemos(db, paypal, now);
+    endedDemos = closed.ended;
+    problems.push(...closed.problems);
+  }
+  const ended = new Set((await db.select({ sessionId: demoActivity.sessionId }).from(demoActivity).where(isNotNull(demoActivity.endedAt))).map((row) => row.sessionId));
+
+  const allScopes = await db.select({ caseId: chatCases.id, sessionId: chatCases.sessionId, projectKey: chatCases.projectKey, projectId: pricingCases.projectId, clientName: projects.clientName })
     .from(chatCases).innerJoin(pricingCases, eq(pricingCases.caseId, chatCases.id)).innerJoin(projects, eq(projects.id, pricingCases.projectId))
     .where(options.sessionId ? eq(chatCases.sessionId, options.sessionId) : undefined);
+  const scopes = allScopes.filter((scope) => !ended.has(scope.sessionId));
   const projectIds = [...new Set(scopes.map((scope) => scope.projectId))];
   const open = projectIds.length ? await db.select().from(paypalAuthorizations)
     .where(and(inArray(paypalAuthorizations.projectId, projectIds), inArray(paypalAuthorizations.status, [...OPEN]), isNotNull(paypalAuthorizations.itemId))) : [];
@@ -136,8 +153,8 @@ export async function runDailyCheck(db: Db, paypal: PayPalPayments, options: { n
     }
   }
 
-  await db.update(holdChecks).set({ finishedAt: new Date(), holds: open.length, readbacks, notices, renewals, problems }).where(eq(holdChecks.id, run.id));
-  return { id: run.id, checkedAt: now.toISOString(), holds: open.length, readbacks, notices, renewals, problems };
+  await db.update(holdChecks).set({ finishedAt: new Date(), holds: open.length, readbacks, notices, renewals, endedDemos, problems }).where(eq(holdChecks.id, run.id));
+  return { id: run.id, checkedAt: now.toISOString(), holds: open.length, readbacks, notices, renewals, endedDemos, problems };
 }
 
 /** The latest finished run that covers this session: its own demo run, or a studio-wide one. */

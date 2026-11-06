@@ -1,7 +1,7 @@
 import type { FundingPlan } from "@/approval/funding";
 import type { CaseKey } from "@/chat/types";
 import type { SettlementView } from "./fees";
-import type { CancellationReason } from "./cancellation";
+import type { ItemCancellationReason } from "./cancellation";
 import type { SavedMethodView } from "./saved-methods";
 
 export type RecordedSettlement = SettlementView & { observedAt: string | null };
@@ -78,7 +78,7 @@ export interface SupplierEventView {
 
 /** Why and when the studio cancelled an item; shown wherever the item's payments are. */
 export interface ItemCancellationView {
-  reason: CancellationReason;
+  reason: ItemCancellationReason;
   reasonText: string;
   note: string;
   by: string;

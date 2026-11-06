@@ -43,7 +43,7 @@ describe("/try HTTP boundaries", () => {
     mock.openWillowWorkspace.mockResolvedValue(session);
   });
 
-  it.each(["http:", "https:"])("ends a demo over %s by expiring only its three browser cookies without storage or payment work", async (protocol) => {
+  it.each(["http:", "https:"])("ends a demo over %s: records the end, leaves the release of its holds to the background, and expires its three browser cookies", async (protocol) => {
     const req = new NextRequest(protocol + "//localhost:3002/api/try", {
       method: "POST", body: JSON.stringify({ action: "end" }),
       headers: { Origin: protocol + "//localhost:3002", "Content-Type": "application/json",
@@ -59,7 +59,8 @@ describe("/try HTTP boundaries", () => {
         expires: new Date(0), secure: protocol === "https:", httpOnly: name !== "setti-demo-account" });
       expect(response.cookies.get(name)?.domain).toBeUndefined();
     }
-    for (const fn of Object.values(mock)) expect(fn).not.toHaveBeenCalled();
+    // Ending records the end in storage; it never starts, resumes or prepares a run.
+    for (const fn of [mock.startTry, mock.readTrySeed, mock.readTryRuns, mock.prepareTry, mock.resumeTry, mock.openWillowWorkspace, mock.sandboxTestCard]) expect(fn).not.toHaveBeenCalled();
   });
 
   it("can end an empty browser session even when storage is unavailable", async () => {

@@ -10,6 +10,7 @@ import { signOpeningForTest } from "../opening/testing";
 import { attentionView } from "./attention-view";
 import { completeAuthorization } from "./authorize";
 import { cancelApprovedItem } from "./cancel-item";
+import { noteActivity } from "../try/activity";
 import { runDailyCheck } from "./daily-check";
 import { holdApprovedItems } from "./item-holds";
 import { itemHoldsView } from "./item-holds-view";
@@ -54,7 +55,11 @@ describe.skipIf(!testDatabaseUrl)("renewing holds that still wait for their supp
   afterAll(() => handle?.pool.end());
 
   const later = (days: number) => new Date(Date.now() + days * DAY);
-  const check = (days: number) => runDailyCheck(handle.db, paypal, { now: later(days) });
+  // The visitor is still using the demo on each check day, so the check does not end it as idle.
+  const check = async (days: number) => {
+    await noteActivity(handle.db, session, later(days));
+    return runDailyCheck(handle.db, paypal, { now: later(days) });
+  };
   const holdsOf = async (name: string) => (await handle.db.select({ hold: paypalAuthorizations }).from(paypalAuthorizations)
     .innerJoin(items, eq(items.id, paypalAuthorizations.itemId)).where(and(eq(items.name, name), isNotNull(paypalAuthorizations.itemId))))
     .map(({ hold }) => hold).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());

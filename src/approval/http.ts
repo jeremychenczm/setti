@@ -1,3 +1,4 @@
+import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { ACCOUNT_COOKIE, accountOrDefault, clientOf } from "@/accounts/demo";
@@ -19,7 +20,9 @@ class HttpError extends Error { constructor(message: string, readonly status: nu
 
 function session(req: NextRequest): string | null {
   const parsed = uuid.safeParse(req.cookies.get("setti-demo-chat")?.value);
-  return parsed.success ? parsed.data : null;
+  if (!parsed.success) return null;
+  noteRequest(parsed.data);
+  return parsed.data;
 }
 
 /** Only the project's client account confirms a version; anyone else in the session reads it. */
@@ -73,6 +76,8 @@ export async function postApprovalResponse(req: NextRequest, id: string) {
   if (!uuid.safeParse(id).success) return NextResponse.json({ code: "NOT_FOUND", error: "Change order not found." }, { status: 404, headers });
   const sessionId = session(req);
   if (!sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "This shared link is view-only. Confirm from the demo session that owns the project." }, { status: 403, headers });
+  const ended = await refuseIfEnded(sessionId);
+  if (ended) return ended;
   try {
     const input = schema.parse(await boundedJson(req));
     const current = await approvalStore().getWorkspace(sessionId, id);

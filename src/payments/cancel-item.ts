@@ -16,7 +16,7 @@ import type { Db } from "../db/client";
 import { itemCancellations, items } from "../db/schema";
 import { attempt, openHolds, runEach } from "./actions";
 import { PaymentActionError } from "./binding";
-import { CANCELLATION_REASONS, cancellationMessage, type CancellationReason } from "./cancellation";
+import { CANCELLATION_REASONS, cancellationMessage, type CancellationReason, type ItemCancellationReason } from "./cancellation";
 import { noteFromDesigner } from "./notes";
 import { insertOperation, type PaymentOperation } from "./operations";
 import type { PayPalPayments } from "./paypal";
@@ -30,15 +30,21 @@ export interface CancelItemInput {
   itemId: string;
   /** Which side of a replacement the line is; V1 lines are always the baseline. */
   side?: "baseline" | "proposed";
-  reason: CancellationReason;
+  reason: ItemCancellationReason;
   note: string;
   /** The designer's name, as the chat shows it. */
   by: string;
 }
 
-export async function cancelApprovedItem(db: Db, paypal: PayPalPayments, sessionId: string, key: CaseKey, input: CancelItemInput): Promise<{ cancellation: ItemCancellation; operations: PaymentOperation[] }> {
+/**
+ * With `system`, Setti itself cancels the item when a demo ends: the reason is
+ * demo_ended and the caller tells both people once, for the whole project,
+ * instead of a message in the designer's name per item.
+ */
+export async function cancelApprovedItem(db: Db, paypal: PayPalPayments, sessionId: string, key: CaseKey, input: CancelItemInput, options: { system?: boolean } = {}): Promise<{ cancellation: ItemCancellation; operations: PaymentOperation[] }> {
   const note = input.note.trim(), by = input.by.trim();
-  if (!CANCELLATION_REASONS.includes(input.reason)) throw new PaymentActionError("INVALID_INPUT", "Choose why the item is cancelled.");
+  const allowed = options.system ? input.reason === "demo_ended" : (CANCELLATION_REASONS as readonly string[]).includes(input.reason);
+  if (!allowed) throw new PaymentActionError("INVALID_INPUT", "Choose why the item is cancelled.");
   if (note.length > 1_000) throw new PaymentActionError("INVALID_INPUT", "Keep the note under 1,000 characters.");
   if (input.reason === "other" && !note) throw new PaymentActionError("INVALID_INPUT", "Say why the item is cancelled.");
   if (!by) throw new PaymentActionError("INVALID_INPUT", "The designer's name is missing.");
@@ -68,7 +74,7 @@ export async function cancelApprovedItem(db: Db, paypal: PayPalPayments, session
       }).returning();
       const heldCents = openHolds(ledger, itemId).reduce((total, { heldCents: held }) => total + held, 0);
       // The client hears it from the designer, in the chat, once: the cancellation's id is the message id.
-      await noteFromDesigner(tx, binding, cancellation.id, cancellationMessage({ itemName: item.name, reason: input.reason, note, heldCents }));
+      if (!options.system) await noteFromDesigner(tx, binding, cancellation.id, cancellationMessage({ itemName: item.name, reason: input.reason as CancellationReason, note, heldCents }));
     }
 
     // One void per hold still open: an open void is resumed, a failed one is tried again.

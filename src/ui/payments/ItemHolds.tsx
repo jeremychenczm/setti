@@ -245,8 +245,8 @@ function ItemDrawer({ line, now, designer, checkout, canHoldAll, busy, blocked, 
       onError: () => { if (popup.current) void send(`check:${line.itemId}`, { action: "check", operationId: popup.current }); },
     }} />;
   else if ((line.state === "to_hold" || line.state === "failed") && canHoldAll) next = <p className={note}>Hold it with the saved payment method using the Hold button under the table.</p>;
-  if (line.cancellation) next = line.heldCents > 0 && designer ? <>
-    <button type="button" disabled={disabled} onClick={() => void onCancelItem(line.cancellation!.reason, line.cancellation!.note)} className={primary}>{busy === `cancel-item:${line.itemId}` ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Release the {money(line.heldCents)} hold again</button>
+  if (line.cancellation) next = line.heldCents > 0 && designer && line.cancellation.reason !== "demo_ended" ? <>
+    <button type="button" disabled={disabled} onClick={() => void onCancelItem(line.cancellation!.reason as CancellationReason, line.cancellation!.note)} className={primary}>{busy === `cancel-item:${line.itemId}` ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Release the {money(line.heldCents)} hold again</button>
     <p className={note}>PayPal has not confirmed the release yet. Nothing was charged for this item.</p>
   </> : <p className={note}>{line.heldCents > 0 ? "The studio is releasing this hold on PayPal. Nothing was charged for this item." : "Cancelled. Nothing was charged, and nothing is held for it now."}</p>;
   else if (cancelling) next = <CancelItemForm itemName={line.label} heldCents={line.heldCents} designer={DESIGNER} disabled={disabled} busy={busy === `cancel-item:${line.itemId}`}

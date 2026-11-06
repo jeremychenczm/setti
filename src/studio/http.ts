@@ -1,3 +1,4 @@
+import { noteRequest } from "@/http/demo-activity";
 import { takeAiBudget } from "@/http/ai-budget";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
@@ -21,6 +22,7 @@ export async function studioChatResponse(req: NextRequest, id: string) {
   if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
   if (accountOrDefault(req.cookies.get(ACCOUNT_COOKIE)?.value).role !== "designer") return NextResponse.json({ error: "This project belongs to the designer's studio." }, { status: 403 });
   const cookie = z.uuid().safeParse(req.cookies.get(DEMO_SESSION_COOKIE)?.value);
+  if (cookie.success) noteRequest(cookie.data);
   const session = cookie.success ? cookie.data : randomUUID();
   const response = (body: unknown, status = 200) => {
     const res = NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });

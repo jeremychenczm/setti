@@ -15,6 +15,7 @@ import { holdApprovedItems } from "./item-holds";
 import { lockOpeningVersion } from "./opening";
 import { chargeServices, startServicesCheckout } from "./services";
 import { recordOpeningSupplierOrder } from "./supplier";
+import { noteActivity } from "../try/activity";
 import { FakePayPal } from "./testing/fake-paypal";
 import { links } from "./testing/flows";
 
@@ -45,7 +46,11 @@ describe.skipIf(!testDatabaseUrl)("the daily check", () => {
   afterAll(() => handle?.pool.end());
 
   const later = (days: number) => new Date(Date.now() + days * DAY);
-  const check = (days: number, sessionId?: string) => runDailyCheck(handle.db, paypal, { now: later(days), ...(sessionId ? { sessionId } : {}) });
+  // The visitor is still using the demo on each check day, so the check does not end it as idle.
+  const check = async (days: number, sessionId?: string) => {
+    await noteActivity(handle.db, session, later(days));
+    return runDailyCheck(handle.db, paypal, { now: later(days), ...(sessionId ? { sessionId } : {}) });
+  };
   const notices = () => handle.db.select().from(chatMessages).where(eq(chatMessages.model, "notice"));
   const holdOf = async (name: string) => (await handle.db.select({ hold: paypalAuthorizations }).from(paypalAuthorizations)
     .innerJoin(items, eq(items.id, paypalAuthorizations.itemId)).where(and(eq(items.name, name), isNotNull(paypalAuthorizations.itemId))))[0].hold;
