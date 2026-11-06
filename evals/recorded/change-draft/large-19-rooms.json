@@ -1,0 +1,64 @@
+{
+  "flow": "change-draft",
+  "case": "large-19-rooms",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "6a905d6faa1cdc894740",
+          "output": {
+            "intent": "draft",
+            "message": "I drafted three changes for your review: one nightstand in guest bedroom 2, the chalk white Terrace hex at 6 boxes for the primary bath floor, and removal of the office built-in shelving. This is a draft only, not an order or payment, and it needs your review before it goes to the client.",
+            "title": "Guest bedroom 2 nightstand, primary bath floor tile swap, office shelving removal",
+            "changes": [
+              {
+                "action": "quantity",
+                "itemId": "cr-guest-bedroom-2-nightstand",
+                "quantity": 1,
+                "productOptionId": null,
+                "description": "Reduce the guest bedroom 2 nightstands from two to one.",
+                "sourceMessageIds": [
+                  "m1",
+                  "t"
+                ]
+              },
+              {
+                "action": "replace",
+                "itemId": "cr-primary-bath-floor-tile",
+                "quantity": 6,
+                "productOptionId": "terrace-hex-white",
+                "description": "Replace the gray hex floor tile with Terrace hex in chalk white, 6 boxes.",
+                "sourceMessageIds": [
+                  "m2",
+                  "t"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "cr-office-built-in-shelving",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the office built-in wall shelving.",
+                "sourceMessageIds": [
+                  "m3",
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [
+              "Does 6 boxes of the 10.8 sq ft Terrace hex cover the primary bath floor, given the original tile came in 10.0 sq ft boxes?"
+            ],
+            "constraints": [
+              "The built-in shelving was custom made to site measurements and is non-returnable once fabrication starts, so its removal depends on supplier approval.",
+              "The client must confirm the revised quote before any change takes effect."
+            ],
+            "money": null
+          }
+        }
+      ]
+    }
+  ]
+}

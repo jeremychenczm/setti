@@ -1,0 +1,63 @@
+{
+  "flow": "change-draft",
+  "case": "large-long-thread",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "71d2cb8314f95bb469ed",
+          "output": {
+            "intent": "draft",
+            "message": "Drafted three changes for your review: 32 cabinet pulls instead of 28, removing the dining pendant, and one marble side table instead of two. The bed was briefly discussed but the client kept the upholstered bed, so it is not included. This draft is not an order or a payment.",
+            "title": "Cabinet pulls to 32, remove dining pendant, one marble side table",
+            "changes": [
+              {
+                "action": "quantity",
+                "itemId": "hl-cabinet-pulls",
+                "quantity": 32,
+                "productOptionId": null,
+                "description": "Increase brass cabinet pulls from 28 to 32 for the two extra island drawers.",
+                "sourceMessageIds": [
+                  "m15",
+                  "m16"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "hl-dining-pendant",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the dining pendant because the client's grandmother's chandelier will hang over the dining table.",
+                "sourceMessageIds": [
+                  "m53",
+                  "m54"
+                ]
+              },
+              {
+                "action": "quantity",
+                "itemId": "hl-side-table",
+                "quantity": 1,
+                "productOptionId": null,
+                "description": "Reduce the marble side tables in the living room from two to one.",
+                "sourceMessageIds": [
+                  "m72",
+                  "m73"
+                ]
+              }
+            ],
+            "unresolved": [],
+            "constraints": [
+              "The client must confirm the revised quote before any of these changes take effect.",
+              "The pulls stay the same unlacquered brass, 6 in center to center.",
+              "The dining pendant is removed from the quote only; whether it was already ordered is not assumed here."
+            ],
+            "money": null
+          }
+        }
+      ]
+    }
+  ]
+}

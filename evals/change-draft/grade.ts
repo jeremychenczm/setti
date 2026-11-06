@@ -15,6 +15,8 @@ export interface Attempt {
   costUsd: number;
   durationMs: number;
   message?: string;
+  /** Identifies the request, so a recorded answer is replayed only for the same request. */
+  fingerprint?: string;
 }
 
 export interface RunOutcome {

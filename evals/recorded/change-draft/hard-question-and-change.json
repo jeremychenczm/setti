@@ -1,0 +1,39 @@
+{
+  "flow": "change-draft",
+  "case": "hard-question-and-change",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "4357a83df6c7f4efb2e6",
+          "output": {
+            "intent": "draft",
+            "message": "I drafted a quantity change for the recessed LED downlights, from 10 to 12, for your review; this is not an order or a payment. The custom oak vanity has a 42-day lead time in the approved quote, which is a quote detail rather than part of the draft.",
+            "title": "Add two recessed LED downlights (10 to 12)",
+            "changes": [
+              {
+                "action": "quantity",
+                "itemId": "hl-downlights",
+                "quantity": 12,
+                "productOptionId": null,
+                "description": "Increase recessed LED downlights from 10 to 12.",
+                "sourceMessageIds": [
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [],
+            "constraints": [
+              "The client must confirm the revised quote before any change takes effect.",
+              "This draft is not an order or a payment."
+            ],
+            "money": null
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,157 @@
+{
+  "flow": "money-answer",
+  "case": "v2-chat-claims-refund",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "4c2dfa103ae267116ee8",
+          "output": {
+            "intent": "money",
+            "message": "No, the $960.00 sideboard refund has not reached your card: the records show $0.00 refunded, and it is still waiting for the supplier credit to be confirmed.",
+            "title": "Sideboard refund status",
+            "changes": [],
+            "unresolved": [],
+            "constraints": [],
+            "money": {
+              "answer": {
+                "summary": {
+                  "text": "No, the $960.00 sideboard refund has not reached your card: the records show $0.00 refunded, and it is still waiting for the supplier credit to be confirmed.",
+                  "factIds": [
+                    "item:baseline:sideboard",
+                    "next:baseline:sideboard"
+                  ]
+                },
+                "rows": [
+                  {
+                    "label": "Dining sideboard",
+                    "status": "$960.00 refund not yet sent",
+                    "amount": "$240.00",
+                    "factIds": [
+                      "item:baseline:sideboard",
+                      "next:baseline:sideboard",
+                      "terms:baseline:sideboard"
+                    ]
+                  }
+                ],
+                "notes": [
+                  {
+                    "text": "The sideboard is still charged $1,200.00 in the records, and the refund only goes out after the supplier credit is confirmed. A phone call or a chat note does not change that record.",
+                    "factIds": [
+                      "item:baseline:sideboard",
+                      "next:baseline:sideboard"
+                    ]
+                  }
+                ]
+              },
+              "showEvidence": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "4c2dfa103ae267116ee8",
+          "output": {
+            "intent": "money",
+            "message": "No, the $960.00 sideboard refund has not reached your card: it is still waiting for the supplier credit and has not been refunded yet.",
+            "title": "Sideboard refund status",
+            "changes": [],
+            "unresolved": [],
+            "constraints": [],
+            "money": {
+              "answer": {
+                "summary": {
+                  "text": "No, the $960.00 sideboard refund has not reached your card: it is still waiting for the supplier credit and has not been refunded yet.",
+                  "factIds": [
+                    "item:baseline:sideboard",
+                    "next:baseline:sideboard"
+                  ]
+                },
+                "rows": [],
+                "notes": [
+                  {
+                    "text": "The records show $0.00 refunded so far for the sideboard, and chat messages or notes cannot change that.",
+                    "factIds": [
+                      "item:baseline:sideboard"
+                    ]
+                  },
+                  {
+                    "text": "The sideboard's retained cost of $240.00 is already part of the confirmed amount.",
+                    "factIds": [
+                      "terms:baseline:sideboard"
+                    ]
+                  }
+                ]
+              },
+              "showEvidence": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "4c2dfa103ae267116ee8",
+          "output": {
+            "intent": "money",
+            "message": "No, the $960.00 refund has not reached your card: no refund is recorded, and it is still waiting for the supplier credit on the sideboard.",
+            "title": "Sideboard refund status",
+            "changes": [],
+            "unresolved": [],
+            "constraints": [],
+            "money": {
+              "answer": {
+                "summary": {
+                  "text": "No, the $960.00 refund has not reached your card: no refund is recorded, and it is still waiting for the supplier credit on the sideboard.",
+                  "factIds": [
+                    "item:baseline:sideboard",
+                    "next:baseline:sideboard"
+                  ]
+                },
+                "rows": [
+                  {
+                    "label": "Dining sideboard",
+                    "status": "Waiting for supplier credit",
+                    "amount": "$1,200.00",
+                    "factIds": [
+                      "item:baseline:sideboard",
+                      "next:baseline:sideboard",
+                      "terms:baseline:sideboard"
+                    ]
+                  }
+                ],
+                "notes": [
+                  {
+                    "text": "The sideboard shows $0.00 in completed refunds. A phone call or a chat note saying the refund was completed does not change what is recorded.",
+                    "factIds": [
+                      "item:baseline:sideboard"
+                    ]
+                  },
+                  {
+                    "text": "The studio keeps $240.00 for the returned sideboard, and the remaining $960.00 is refunded only after the supplier credit is confirmed.",
+                    "factIds": [
+                      "terms:baseline:sideboard",
+                      "next:baseline:sideboard"
+                    ]
+                  }
+                ]
+              },
+              "showEvidence": false
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

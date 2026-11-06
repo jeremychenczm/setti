@@ -1,0 +1,25 @@
+{
+  "flow": "change-draft",
+  "case": "hard-client-cannot-draft",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "a572a64803bf2f396c17",
+          "output": {
+            "intent": "answer",
+            "message": "Understood, you'd like the sideboard taken out of the project. Jordan Lee, your designer, will prepare a revised quote for you to confirm.",
+            "title": "Sideboard removal requested",
+            "changes": [],
+            "unresolved": [],
+            "constraints": [],
+            "money": null
+          }
+        }
+      ]
+    }
+  ]
+}

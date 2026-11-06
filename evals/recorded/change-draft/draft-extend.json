@@ -1,0 +1,59 @@
+{
+  "flow": "change-draft",
+  "case": "draft-extend",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "760ebb4e956da2c95847",
+          "output": {
+            "intent": "draft",
+            "message": "I updated the draft to keep the dining chairs at eight and the oak sideboard removed, and added removal of the round entry mirror, which the client asked for in their message. The draft needs your review and is not an order or a payment.",
+            "title": "Dining chairs, sideboard and entry mirror",
+            "changes": [
+              {
+                "action": "quantity",
+                "itemId": "hl-dining-chair",
+                "quantity": 8,
+                "productOptionId": null,
+                "description": "Increase upholstered dining chairs from 6 to 8.",
+                "sourceMessageIds": [
+                  "m1"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "hl-sideboard",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the oak sideboard.",
+                "sourceMessageIds": [
+                  "m1"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "hl-entry-mirror",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the round entry mirror.",
+                "sourceMessageIds": [
+                  "m2",
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [],
+            "constraints": [
+              "The client must confirm the revised quote before it takes effect."
+            ],
+            "money": null
+          }
+        }
+      ]
+    }
+  ]
+}

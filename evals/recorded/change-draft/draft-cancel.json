@@ -1,0 +1,25 @@
+{
+  "flow": "change-draft",
+  "case": "draft-cancel",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "b55747df5644e9340e53",
+          "output": {
+            "intent": "cancel",
+            "message": "I've withdrawn the current draft, so the dining chair and oak sideboard changes are dropped and V1 stays as signed. This only cancels the unapproved draft; it is not an order, payment or refund.",
+            "title": "Keep V1 as signed",
+            "changes": [],
+            "unresolved": [],
+            "constraints": [],
+            "money": null
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "flow": "change-draft",
+  "case": "large-over-limit",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": []
+    }
+  ]
+}

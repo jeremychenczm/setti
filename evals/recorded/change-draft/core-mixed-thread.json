@@ -1,0 +1,208 @@
+{
+  "flow": "change-draft",
+  "case": "core-mixed-thread",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "baf3890e5a0000deda40",
+          "output": {
+            "intent": "draft",
+            "message": "Draft covers the settled changes: eight dining chairs, no bedroom rug, two 18 in brass Orb pendants in place of the black island domes, and a 48 in Ridge bench for the entry. The marble side tables are left unchanged because the client is still undecided. This draft needs designer review and is not an order or payment.",
+            "title": "Harbor Lane: 8 dining chairs, no bedroom rug, Orb island pendants, entry bench",
+            "changes": [
+              {
+                "action": "quantity",
+                "itemId": "hl-dining-chair",
+                "quantity": 8,
+                "productOptionId": null,
+                "description": "Increase the upholstered dining chairs from six to eight.",
+                "sourceMessageIds": [
+                  "m1",
+                  "m2"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "hl-bedroom-rug",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the bedroom wool rug; the living room rug stays.",
+                "sourceMessageIds": [
+                  "m3"
+                ]
+              },
+              {
+                "action": "replace",
+                "itemId": "hl-island-pendants",
+                "quantity": 2,
+                "productOptionId": "orb-18-brass",
+                "description": "Replace the two black dome island pendants with two 18 in brass Orb pendants.",
+                "sourceMessageIds": [
+                  "m4",
+                  "m5"
+                ]
+              },
+              {
+                "action": "add",
+                "itemId": null,
+                "quantity": 1,
+                "productOptionId": "ridge-bench-48",
+                "description": "Add one 48 in Ridge bench for the entry.",
+                "sourceMessageIds": [
+                  "m6",
+                  "m7",
+                  "m8"
+                ]
+              }
+            ],
+            "unresolved": [],
+            "constraints": [
+              "Marble side tables are not part of this draft because the client has not decided yet.",
+              "Eight chairs rely on the table being extended to 108 in.",
+              "Client confirmation of the revised quote is needed before anything proceeds."
+            ],
+            "money": null
+          }
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "baf3890e5a0000deda40",
+          "output": {
+            "intent": "draft",
+            "message": "Draft covers eight dining chairs, removing the bedroom rug, two 18 in brass Orb island pendants in place of the black domes, and the 48 in Ridge entry bench. The marble side tables are left unchanged because the client is still undecided. This is a draft for your review, not an order or payment.",
+            "title": "Harbor Lane: 8 dining chairs, no bedroom rug, Orb island pendants, entry bench",
+            "changes": [
+              {
+                "action": "quantity",
+                "itemId": "hl-dining-chair",
+                "quantity": 8,
+                "productOptionId": null,
+                "description": "Increase the upholstered dining chairs from six to eight.",
+                "sourceMessageIds": [
+                  "m1",
+                  "m2"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "hl-bedroom-rug",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the bedroom wool rug; the living room rug stays.",
+                "sourceMessageIds": [
+                  "m3"
+                ]
+              },
+              {
+                "action": "replace",
+                "itemId": "hl-island-pendants",
+                "quantity": 2,
+                "productOptionId": "orb-18-brass",
+                "description": "Replace the two black dome pendants with two 18 in brass Orb pendants.",
+                "sourceMessageIds": [
+                  "m4",
+                  "m5"
+                ]
+              },
+              {
+                "action": "add",
+                "itemId": null,
+                "quantity": 1,
+                "productOptionId": "ridge-bench-48",
+                "description": "Add one 48 in Ridge bench at the entry.",
+                "sourceMessageIds": [
+                  "m6",
+                  "m7",
+                  "m8"
+                ]
+              }
+            ],
+            "unresolved": [],
+            "constraints": [
+              "Marble side tables stay as quoted because the client has not decided yet.",
+              "The client must confirm the revised quote before anything proceeds.",
+              "Eight chairs assume the dining table is extended to 108 in."
+            ],
+            "money": null
+          }
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "baf3890e5a0000deda40",
+          "output": {
+            "intent": "draft",
+            "message": "I drafted four settled changes for your review: eight dining chairs, no bedroom rug, two 18 in brass Orb island pendants, and a 48 in Ridge entry bench. The marble side tables are left out because Nora is still undecided; this is a draft for designer review, not an order or payment.",
+            "title": "Harbor Lane revisions: 8 dining chairs, no bedroom rug, Orb pendants, entry bench",
+            "changes": [
+              {
+                "action": "quantity",
+                "itemId": "hl-dining-chair",
+                "quantity": 8,
+                "productOptionId": null,
+                "description": "Increase the upholstered dining chairs from six to eight.",
+                "sourceMessageIds": [
+                  "m1",
+                  "m2"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "hl-bedroom-rug",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the bedroom wool rug; the living room rug stays.",
+                "sourceMessageIds": [
+                  "m3"
+                ]
+              },
+              {
+                "action": "replace",
+                "itemId": "hl-island-pendants",
+                "quantity": 2,
+                "productOptionId": "orb-18-brass",
+                "description": "Replace the two black dome pendants with two 18 in brass Orb pendants.",
+                "sourceMessageIds": [
+                  "m4",
+                  "m5"
+                ]
+              },
+              {
+                "action": "add",
+                "itemId": null,
+                "quantity": 1,
+                "productOptionId": "ridge-bench-48",
+                "description": "Add one 48 in Ridge bench at the front entry.",
+                "sourceMessageIds": [
+                  "m6",
+                  "m7",
+                  "m8"
+                ]
+              }
+            ],
+            "unresolved": [],
+            "constraints": [
+              "Marble side tables are not in this draft because the client has not decided yet.",
+              "The client must confirm the revised quote before anything changes.",
+              "The Orb pendants are hardwired and need an electrician to install."
+            ],
+            "money": null
+          }
+        }
+      ]
+    }
+  ]
+}

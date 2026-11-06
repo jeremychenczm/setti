@@ -1,0 +1,43 @@
+{
+  "flow": "change-draft",
+  "case": "hard-backsplash-area",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "213c4a428d0a4481a24b",
+          "output": {
+            "intent": "draft",
+            "message": "I drafted a replacement of the zellige backsplash tile with Terrace hex in sage, 8 boxes: 72 sq ft plus 10% for cuts is about 79.2 sq ft, and the tile is sold in full 10.8 sq ft boxes. This draft needs your review and is not an order or a payment.",
+            "title": "Backsplash: switch to sage Terrace hex tile, 8 boxes",
+            "changes": [
+              {
+                "action": "replace",
+                "itemId": "hl-backsplash-tile",
+                "quantity": 8,
+                "productOptionId": "terrace-hex-sage",
+                "description": "Replace the 6 boxes of white zellige with 8 boxes of sage Terrace hex for about 72 sq ft plus 10% for cuts.",
+                "sourceMessageIds": [
+                  "m1",
+                  "m2",
+                  "m3",
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [],
+            "constraints": [
+              "Quantity is rounded up to full boxes because the tile is sold by the 10.8 sq ft box only.",
+              "The original zellige terms allow return of full, unopened boxes within 30 days with no restocking fee confirmed, so return eligibility needs checking.",
+              "The client still needs to confirm the revised quote before anything proceeds."
+            ],
+            "money": null
+          }
+        }
+      ]
+    }
+  ]
+}

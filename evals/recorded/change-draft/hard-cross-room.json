@@ -1,0 +1,54 @@
+{
+  "flow": "change-draft",
+  "case": "hard-cross-room",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "1f769ba6b374442e8d35",
+          "output": {
+            "intent": "draft",
+            "message": "Draft for designer review: remove the cottage bath exhaust fan and raise the primary bath wall sconces from two to three. This is not an order or payment; please confirm the cottage bath window and that the third primary bath sconce matches the existing ones.",
+            "title": "Cottage bath fan removal and primary bath third sconce",
+            "changes": [
+              {
+                "action": "remove",
+                "itemId": "cr-cottage-bath-exhaust-fan",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the exhaust fan from the cottage bath because the room has a window.",
+                "sourceMessageIds": [
+                  "m1",
+                  "t"
+                ]
+              },
+              {
+                "action": "quantity",
+                "itemId": "cr-primary-bath-sconce",
+                "quantity": 3,
+                "productOptionId": null,
+                "description": "Increase the primary bath wall sconces from two to three.",
+                "sourceMessageIds": [
+                  "m2",
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [
+              "Does the cottage bath window meet ventilation requirements without a fan?",
+              "Is the third primary bath sconce wiring location confirmed on site?"
+            ],
+            "constraints": [
+              "Draft needs designer review and client confirmation before it takes effect.",
+              "Only the cottage bath fan and primary bath sconce changes are included."
+            ],
+            "money": null
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,174 @@
+{
+  "flow": "change-draft",
+  "case": "large-10-rooms",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "466cc0f6062e79731b2d",
+          "output": {
+            "intent": "draft",
+            "message": "I drafted the three changes for your review: den oak flooring to 20 boxes, powder room sconces down to one, and the kitchen counter stools removed. This is a draft for designer review only, not an order or a payment.",
+            "title": "Den flooring to 20 boxes, one powder room sconce, remove kitchen counter stools",
+            "changes": [
+              {
+                "action": "quantity",
+                "itemId": "cr-den-oak-flooring",
+                "quantity": 20,
+                "productOptionId": null,
+                "description": "Increase den engineered oak flooring from 18 to 20 boxes.",
+                "sourceMessageIds": [
+                  "m1",
+                  "t"
+                ]
+              },
+              {
+                "action": "quantity",
+                "itemId": "cr-powder-room-sconce",
+                "quantity": 1,
+                "productOptionId": null,
+                "description": "Reduce powder room wall sconces from 2 to 1.",
+                "sourceMessageIds": [
+                  "m2",
+                  "t"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "cr-kitchen-counter-stool",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the 3 kitchen counter stools from the quote.",
+                "sourceMessageIds": [
+                  "m3",
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [],
+            "constraints": [
+              "Client must confirm the revised quote before any change takes effect.",
+              "Any payment steps follow only after the client confirms the revised quote."
+            ],
+            "money": null
+          }
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "466cc0f6062e79731b2d",
+          "output": {
+            "intent": "draft",
+            "message": "This draft raises the den oak flooring to 20 boxes, reduces the powder room wall sconces to one, and removes the kitchen counter stools. It is for your review and is not an order or payment; please check the items below before sending it to the client.",
+            "title": "Den flooring to 20 boxes, one powder room sconce, remove kitchen counter stools",
+            "changes": [
+              {
+                "action": "quantity",
+                "itemId": "cr-den-oak-flooring",
+                "quantity": 20,
+                "productOptionId": null,
+                "description": "Increase den engineered oak flooring from 18 to 20 boxes.",
+                "sourceMessageIds": [
+                  "m1",
+                  "t"
+                ]
+              },
+              {
+                "action": "quantity",
+                "itemId": "cr-powder-room-sconce",
+                "quantity": 1,
+                "productOptionId": null,
+                "description": "Reduce powder room wall sconces from 2 to 1.",
+                "sourceMessageIds": [
+                  "m2",
+                  "t"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "cr-kitchen-counter-stool",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the 3 kitchen counter stools from the quote.",
+                "sourceMessageIds": [
+                  "m3",
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [
+              "Does the 20-box den flooring count already include the 10% allowance for cuts?"
+            ],
+            "constraints": [
+              "Draft needs designer review and client confirmation before it changes the approved quote.",
+              "Stool removal and sconce reduction depend on supplier return eligibility under the 30-day unused-item terms."
+            ],
+            "money": null
+          }
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "466cc0f6062e79731b2d",
+          "output": {
+            "intent": "draft",
+            "message": "I drafted three changes for your review: den oak flooring to 20 boxes, powder room sconces down to one, and the kitchen counter stools removed. This is a draft for designer review, not an order or a payment.",
+            "title": "Den flooring to 20 boxes, one powder room sconce, remove kitchen counter stools",
+            "changes": [
+              {
+                "action": "quantity",
+                "itemId": "cr-den-oak-flooring",
+                "quantity": 20,
+                "productOptionId": null,
+                "description": "Increase den engineered oak flooring from 18 to 20 boxes.",
+                "sourceMessageIds": [
+                  "m1",
+                  "t"
+                ]
+              },
+              {
+                "action": "quantity",
+                "itemId": "cr-powder-room-sconce",
+                "quantity": 1,
+                "productOptionId": null,
+                "description": "Reduce powder room wall sconces from 2 to 1.",
+                "sourceMessageIds": [
+                  "m2",
+                  "t"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "cr-kitchen-counter-stool",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the 3 kitchen counter stools.",
+                "sourceMessageIds": [
+                  "m3",
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [],
+            "constraints": [
+              "The client must confirm the revised quote before it takes effect.",
+              "The den floor area and the 10% cut allowance for 20 boxes should be confirmed on site."
+            ],
+            "money": null
+          }
+        }
+      ]
+    }
+  ]
+}

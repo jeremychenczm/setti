@@ -1,0 +1,102 @@
+{
+  "flow": "inbox-summary",
+  "case": "client-refund",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 1; its prompt and checks did not change in round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "d1f4f34467c1c33dbd97",
+          "output": [
+            {
+              "text": "In Maple Ave, $5,020.00 has been charged in total, $1,610.00 is on hold now, and $960.00 has been refunded in total.",
+              "factIds": [
+                "money-now"
+              ]
+            },
+            {
+              "text": "The held money is $1,250.00 for the Round dining table and $360.00 for the Small round side table.",
+              "factIds": [
+                "now-6",
+                "now-7"
+              ]
+            },
+            {
+              "text": "The $960.00 refund was for the Dining sideboard, and earlier holds on the Three-seat sofa, Fixed six-person dining table and Large rectangular coffee table were released.",
+              "factIds": [
+                "now-3",
+                "now-4",
+                "now-5",
+                "now-8"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "d1f4f34467c1c33dbd97",
+          "output": [
+            {
+              "text": "In Maple Ave, $5,020.00 has been charged in total, $1,610.00 is on hold now, and $960.00 has been refunded in total.",
+              "factIds": [
+                "money-now"
+              ]
+            },
+            {
+              "text": "The money on hold is $1,250.00 for the Round dining table and $360.00 for the Small round side table.",
+              "factIds": [
+                "now-6",
+                "now-7"
+              ]
+            },
+            {
+              "text": "The $960.00 refund was for the Dining sideboard.",
+              "factIds": [
+                "now-3",
+                "op-016"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "d1f4f34467c1c33dbd97",
+          "output": [
+            {
+              "text": "In Maple Ave, $5,020.00 has been charged in total, $1,610.00 is on hold now, and $960.00 has been refunded in total.",
+              "factIds": [
+                "money-now"
+              ]
+            },
+            {
+              "text": "The money on hold now is $1,250.00 for the round dining table and $360.00 for the small round side table.",
+              "factIds": [
+                "now-6",
+                "now-7"
+              ]
+            },
+            {
+              "text": "The $960.00 refund was for the dining sideboard.",
+              "factIds": [
+                "now-3",
+                "op-016"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

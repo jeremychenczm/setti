@@ -14,6 +14,7 @@ import { DEFAULT_MODEL } from "@/ai/model";
 import { inboxFacts, itemsNow, type InboxView } from "@/payments/inbox-view";
 import type { SummarySentence } from "@/payments/schema";
 import { runHeadless } from "../lib/claude-code";
+import { answersFromTrace, fingerprint, loadRecording, replayer, saveRun, type Replayer } from "../lib/replay";
 import { stateErrors } from "./grade";
 import { SCENARIOS, truthOf, type Scenario } from "./scenarios";
 
@@ -25,6 +26,15 @@ for (let i = 2; i < process.argv.length; i++) {
   if (next && !next.startsWith("--")) { args.set(arg.slice(2), next); i++; } else args.set(arg.slice(2), "true");
 }
 const backendName = args.get("backend") ?? "claude-code";
+if (!["claude-code", "api", "replay"].includes(backendName)) throw new Error(`Unknown backend ${backendName}`);
+/** --record saves each graded run's model answers to evals/recorded/; --from-traces <dir> replays a results folder's traces once to record them. */
+const recordRuns = args.has("record");
+const fromTraces = args.get("from-traces");
+const source = args.get("source") ?? `Claude API, ${process.env.ANTHROPIC_MODEL?.trim() || DEFAULT_MODEL}, effort high, ${new Date().toISOString().slice(0, 10)}`;
+const replayProblems: string[] = [];
+const SUMMARY_SCHEMA = betaZodOutputFormat(summaryOutputSchema).schema;
+/** Everything that decides the model's answer to one summary call. */
+const summaryFingerprint = (request: SummaryRequest) => fingerprint("summary", process.env.ANTHROPIC_MODEL?.trim() || DEFAULT_MODEL, "high", SUMMARY_SYSTEM_PROMPT, SUMMARY_SCHEMA, request);
 if (backendName === "api" && existsSync(".env.local")) process.loadEnvFile(".env.local");
 const label = args.get("label");
 const reps = Number(args.get("reps") ?? 3);
@@ -44,10 +54,18 @@ writeFileSync(join(flow, "_state.json"), JSON.stringify({
   perf_fields: [{ id: "cost_usd", label: "API-equiv $" }, { id: "in_tokens", label: "In tokens" }, { id: "out_tokens", label: "Out tokens" }, { id: "latency_s", label: "Latency", unit: "s" }],
 }, null, 2));
 
-interface Attempt { sentences: SummarySentence[] | null; kind: string; message?: string; costUsd: number; durationMs: number; inTokens: number; outTokens: number }
+interface Attempt { sentences: SummarySentence[] | null; kind: string; message?: string; costUsd: number; durationMs: number; inTokens: number; outTokens: number; fingerprint?: string }
 
-function model(record: (attempt: Attempt) => void): SummaryModel {
-  if (backendName === "api") return async (request) => {
+function model(recordAttempt: (attempt: Attempt) => void, replay?: Replayer): SummaryModel {
+  let current = "";
+  const record = (attempt: Attempt) => recordAttempt({ ...attempt, fingerprint: current });
+  const fingerprinted = (call: SummaryModel): SummaryModel => async (request) => { current = summaryFingerprint(request); return call(request); };
+  if (backendName === "replay") return fingerprinted(async () => {
+    const sentences = summaryOutputSchema.shape.sentences.parse(replay!.answer(current));
+    record({ sentences, kind: "ok", costUsd: 0, durationMs: 0, inTokens: 0, outTokens: 0 });
+    return { sentences, model: "replay" };
+  });
+  if (backendName === "api") return fingerprinted(async (request) => {
     const started = Date.now();
     const result = await callSummaryModel(request);
     const usage = result.usage;
@@ -55,8 +73,8 @@ function model(record: (attempt: Attempt) => void): SummaryModel {
     const costUsd = usage ? (usage.inputTokens * 2 + usage.outputTokens * 10 + usage.cacheReadTokens * 0.2 + usage.cacheWriteTokens * 2.5) / 1e6 : 0;
     record({ sentences: result.sentences, kind: "ok", costUsd, durationMs: Date.now() - started, inTokens: usage ? usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens : 0, outTokens: usage?.outputTokens ?? 0 });
     return result;
-  };
-  return async (request: SummaryRequest) => {
+  });
+  return fingerprinted(async (request: SummaryRequest) => {
     const result = await runHeadless({ model: process.env.ANTHROPIC_MODEL?.trim() || DEFAULT_MODEL, effort: "high", system: SUMMARY_SYSTEM_PROMPT, user: JSON.stringify(request), schema: betaZodOutputFormat(summaryOutputSchema).schema, timeoutMs: 300_000 });
     const usage = result.usage;
     const base = { costUsd: result.costUsd, durationMs: result.durationMs, inTokens: usage ? usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens : 0, outTokens: usage?.outputTokens ?? 0 };
@@ -65,7 +83,7 @@ function model(record: (attempt: Attempt) => void): SummaryModel {
     record({ sentences: parsed.success ? parsed.data.sentences : null, kind: parsed.success ? "ok" : "error", message: parsed.success ? undefined : parsed.error.message, ...base });
     if (!parsed.success) throw new Error("The model did not return a complete summary.");
     return { sentences: parsed.data.sentences, model: result.model };
-  };
+  });
 }
 
 /** The scenario's records as the ledger rows the inbox reads, so its own item-by-item code runs on them. */
@@ -99,9 +117,16 @@ async function runJob(scenario: Scenario, rep: number) {
   const { view: inbox, truth } = view(scenario);
   const request = { audience: "client" as const, reader: "Emma (the client)", facts: inboxFacts(inbox) };
   const attempts: Attempt[] = [];
+  const recorded = loadRecording("inbox-summary", scenario.id)?.runs.find((run) => run.rep === rep);
+  let replay: Replayer | undefined;
+  if (backendName === "replay") {
+    replay = fromTraces
+      ? replayer({ rep, pass: 0, attempts: answersFromTrace(join(fromTraces, "traces", `${scenario.id}_rep${rep}.json`)).map((output) => ({ fingerprint: "", output })) }, { learn: true })
+      : replayer(recorded);
+  }
   let written: Awaited<ReturnType<typeof writeCheckedSummary>> | null = null;
   let failure: string | null = null;
-  try { written = await writeCheckedSummary(request, model((attempt) => attempts.push(attempt))); }
+  try { written = await writeCheckedSummary(request, model((attempt) => attempts.push(attempt), replay)); }
   catch (error) { failure = error instanceof Error ? error.message : String(error); }
   writeFileSync(join(out, "traces", `${scenario.id}_rep${rep}.json`), JSON.stringify([
     { role: "system", content: SUMMARY_SYSTEM_PROMPT },
@@ -109,6 +134,11 @@ async function runJob(scenario: Scenario, rep: number) {
     ...attempts.map((attempt) => ({ role: "assistant", content: attempt.sentences ? JSON.stringify(attempt.sentences, null, 2) : `[${attempt.kind}] ${attempt.message ?? ""}` })),
     { role: "assistant", content: `Shown: ${written?.written ? written.written.sentences.map((sentence) => sentence.text).join(" ") : "no summary"}${written && !written.written ? `\nProblems: ${written.problems.join(" | ")}` : ""}` },
   ], null, 2));
+  if (replay?.stale) {
+    replayProblems.push(`${scenario.id} #${rep}: stale recording (${replay.stale})`);
+    console.log(`  STALE ${scenario.id} #${rep} · ${replay.stale}`);
+    return;
+  }
   if (failure) {
     appendFileSync(join(out, "errors.jsonl"), `${JSON.stringify({ prompt_id: scenario.id, rep, failure_class: "error", message: failure.slice(0, 300) })}\n`);
     console.log(`  ! ${scenario.id} #${rep}: ${failure.slice(0, 120)}`);
@@ -128,16 +158,27 @@ async function runJob(scenario: Scenario, rep: number) {
     meta: { attempts: attempts.length, facts: request.facts.length, true_held_cents: truth.heldCents },
   };
   appendFileSync(resultsPath, `${JSON.stringify(row)}\n`);
+  if (backendName === "replay" && !fromTraces && recorded && recorded.pass !== row.grade.pass) replayProblems.push(`${scenario.id} #${rep}: recorded ${recorded.pass ? "PASS" : "FAIL"}, replayed ${row.grade.pass ? "PASS" : "FAIL"}`);
+  if (recordRuns && (backendName === "api" || fromTraces)) {
+    saveRun("inbox-summary", scenario.id, source, { rep, pass: row.grade.pass, attempts: attempts.map((attempt) => ({ fingerprint: attempt.fingerprint!, output: attempt.sentences })) });
+  }
   console.log(`  ${pass ? "PASS" : "FAIL"} ${scenario.id} #${rep} · ${row.explanation.pass.slice(0, 400)}`);
 }
 
 async function main() {
   const only = args.get("cases")?.split(",").map((id) => id.trim()).filter(Boolean);
-  const jobs = SCENARIOS.filter((scenario) => !only || only.includes(scenario.id)).flatMap((scenario) => Array.from({ length: reps }, (_, rep) => ({ scenario, rep }))).filter((job) => !done.has(`${job.scenario.id}#${job.rep}`));
+  const repsOf = (scenario: Scenario) => backendName === "replay" && !fromTraces
+    ? (loadRecording("inbox-summary", scenario.id)?.runs.map((run) => run.rep) ?? [0])
+    : Array.from({ length: reps }, (_, rep) => rep);
+  const jobs = SCENARIOS.filter((scenario) => !only || only.includes(scenario.id)).flatMap((scenario) => repsOf(scenario).map((rep) => ({ scenario, rep }))).filter((job) => !done.has(`${job.scenario.id}#${job.rep}`));
   console.log(`inbox-summary eval · backend ${backendName}${label ? ` · ${label}` : ""} · ${jobs.length} runs`);
   await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, async () => { for (let job = jobs.shift(); job; job = jobs.shift()) await runJob(job.scenario, job.rep); }));
   const rows = readFileSync(resultsPath, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { grade: { pass: number; raw_state_error: number }; cost_usd: number });
-  console.log(`\n${rows.filter((row) => row.grade.pass).length}/${rows.length} passed · first attempts with a state error: ${rows.filter((row) => row.grade.raw_state_error).length} · API-equivalent $${rows.reduce((sum, row) => sum + row.cost_usd, 0).toFixed(2)}`);
+  console.log(`\n${rows.filter((row) => row.grade.pass).length}/${rows.length} passed · first attempts with a state error: ${rows.filter((row) => row.grade.raw_state_error).length} · API-equivalent ${rows.reduce((sum, row) => sum + row.cost_usd, 0).toFixed(2)}`);
+  if (backendName === "replay" && !fromTraces) {
+    if (replayProblems.length) { console.log(`\nReplay does not match the recording:\n${replayProblems.map((problem) => `  ${problem}`).join("\n")}`); process.exitCode = 1; }
+    else console.log("Replay matches the recording: every run graded as recorded, with no model call.");
+  }
 }
 
 void main();

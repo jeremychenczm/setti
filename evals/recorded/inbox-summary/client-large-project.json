@@ -1,0 +1,108 @@
+{
+  "flow": "inbox-summary",
+  "case": "client-large-project",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 1; its prompt and checks did not change in round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "21832ea848ae9d8ce0a3",
+          "output": [
+            {
+              "text": "In Maple Ave, $9,480.00 has been charged in total, $7,725.00 is on hold now, and $50.00 has been refunded in total.",
+              "factIds": [
+                "money-now"
+              ]
+            },
+            {
+              "text": "The holds now cover Interior wall paint ($1,475.00), Sideboard ($1,250.00) and Office chair ($1,100.00), among other items.",
+              "factIds": [
+                "now-8",
+                "now-16",
+                "now-13"
+              ]
+            },
+            {
+              "text": "Holds of $1,175.00 on Bookcases, $650.00 on Floor lamp and $575.00 on the Glass-door shelf unit were released earlier.",
+              "factIds": [
+                "now-1",
+                "now-6",
+                "now-7",
+                "op-028",
+                "op-027",
+                "op-026"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "21832ea848ae9d8ce0a3",
+          "output": [
+            {
+              "text": "In Maple Ave, $9,480.00 has been charged in total, $7,725.00 is on hold now, and $50.00 has been refunded in total.",
+              "factIds": [
+                "money-now"
+              ]
+            },
+            {
+              "text": "The holds now cover items like Interior wall paint ($1,475.00), Sideboard ($1,250.00) and Office chair ($1,100.00).",
+              "factIds": [
+                "now-8",
+                "now-16",
+                "now-13"
+              ]
+            },
+            {
+              "text": "Earlier, $50.00 was refunded on the Walnut coffee table, and the holds on Bookcases ($1,175.00), Floor lamp ($650.00) and Glass-door shelf unit ($575.00) were released.",
+              "factIds": [
+                "op-029",
+                "op-028",
+                "op-027",
+                "op-026"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "21832ea848ae9d8ce0a3",
+          "output": [
+            {
+              "text": "In Maple Ave, $9,480.00 has been charged in total, $7,725.00 is on hold now, and $50.00 has been refunded in total.",
+              "factIds": [
+                "money-now"
+              ]
+            },
+            {
+              "text": "The holds now cover items like Interior wall paint ($1,475.00), Sideboard ($1,250.00) and Office chair ($1,100.00).",
+              "factIds": [
+                "now-8",
+                "now-16",
+                "now-13"
+              ]
+            },
+            {
+              "text": "Earlier, $50.00 was refunded on the Walnut coffee table.",
+              "factIds": [
+                "op-029"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,261 @@
+{
+  "flow": "change-draft",
+  "case": "hard-maple-walkthrough",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "283a79534d4c9c20c714",
+          "output": {
+            "intent": "draft",
+            "message": "This draft swaps in the compact 200 cm sofa, two small round side tables for the coffee table, and the 110 cm round dining table, reduces the dining chairs to four, and removes the sideboard, with design services unchanged. It is a draft for your review, not an order or payment; please check the round table and chair clearances against the measured plan.",
+            "title": "Maple Ave revised quote: lighter living and dining layout",
+            "changes": [
+              {
+                "action": "replace",
+                "itemId": "sofa",
+                "quantity": 1,
+                "productOptionId": "maple-ld:compact-sofa",
+                "description": "Replace the 230 cm sofa with one compact 200 × 90 cm straight sofa, no chaise.",
+                "sourceMessageIds": [
+                  "discussion-5",
+                  "discussion-16"
+                ]
+              },
+              {
+                "action": "replace",
+                "itemId": "coffee-table",
+                "quantity": 2,
+                "productOptionId": "maple-ld:small-side-table",
+                "description": "Replace the large coffee table with two separate round light oak side tables.",
+                "sourceMessageIds": [
+                  "discussion-7",
+                  "discussion-8",
+                  "discussion-17",
+                  "discussion-18"
+                ]
+              },
+              {
+                "action": "replace",
+                "itemId": "dining-table",
+                "quantity": 1,
+                "productOptionId": "maple-ld:round-dining-table",
+                "description": "Replace the rectangular table with one fixed 110 cm round light oak table for four.",
+                "sourceMessageIds": [
+                  "discussion-11",
+                  "discussion-16"
+                ]
+              },
+              {
+                "action": "quantity",
+                "itemId": "dining-chairs",
+                "quantity": 4,
+                "productOptionId": null,
+                "description": "Keep the existing dining chairs but reduce the total from six to four.",
+                "sourceMessageIds": [
+                  "discussion-13",
+                  "discussion-17",
+                  "discussion-18"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "sideboard",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the sideboard with no replacement cabinet.",
+                "sourceMessageIds": [
+                  "discussion-13",
+                  "discussion-15"
+                ]
+              }
+            ],
+            "unresolved": [
+              "Does the 110 cm round table leave enough chair clearance in the measured plan?"
+            ],
+            "constraints": [
+              "Design services stay unchanged at the fixed fee and scope.",
+              "The client will check and confirm the revised quote before anything proceeds.",
+              "The sideboard return needs prior supplier approval, and any retained cost and credit depend on the supplier's terms.",
+              "The sofa, tables and dining chairs have not been ordered, so changing them should carry no supplier cancellation cost."
+            ],
+            "money": null
+          }
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "283a79534d4c9c20c714",
+          "output": {
+            "intent": "draft",
+            "message": "This draft swaps the sofa for the compact 200 cm one, replaces the coffee table with two round side tables, swaps the dining table for the 110 cm round one, cuts the dining chairs from six to four and removes the sideboard, with design services unchanged. Please check the round table and chair clearances against the measured plan; it is a review draft, not an order or payment.",
+            "title": "Revised Maple living & dining quote: compact layout",
+            "changes": [
+              {
+                "action": "replace",
+                "itemId": "sofa",
+                "quantity": 1,
+                "productOptionId": "maple-ld:compact-sofa",
+                "description": "Replace the 230 cm sofa with one compact 200 × 90 cm straight sofa, no chaise.",
+                "sourceMessageIds": [
+                  "discussion-3",
+                  "discussion-5",
+                  "discussion-16"
+                ]
+              },
+              {
+                "action": "replace",
+                "itemId": "coffee-table",
+                "quantity": 2,
+                "productOptionId": "maple-ld:small-side-table",
+                "description": "Replace the large coffee table with two separate round light oak side tables.",
+                "sourceMessageIds": [
+                  "discussion-7",
+                  "discussion-8",
+                  "discussion-17",
+                  "discussion-18"
+                ]
+              },
+              {
+                "action": "replace",
+                "itemId": "dining-table",
+                "quantity": 1,
+                "productOptionId": "maple-ld:round-dining-table",
+                "description": "Replace the rectangular dining table with one fixed 110 cm round light oak table for four.",
+                "sourceMessageIds": [
+                  "discussion-9",
+                  "discussion-10",
+                  "discussion-11"
+                ]
+              },
+              {
+                "action": "quantity",
+                "itemId": "dining-chairs",
+                "quantity": 4,
+                "productOptionId": null,
+                "description": "Keep the existing dining chairs but reduce the total from six to four.",
+                "sourceMessageIds": [
+                  "discussion-13",
+                  "discussion-17",
+                  "discussion-18"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "sideboard",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the sideboard with no replacement.",
+                "sourceMessageIds": [
+                  "discussion-13",
+                  "discussion-15"
+                ]
+              }
+            ],
+            "unresolved": [
+              "Do the 110 cm round table and four chairs fit the measured plan with enough clearance?"
+            ],
+            "constraints": [
+              "Design services stay unchanged at the agreed fixed scope and fee.",
+              "The sideboard return needs prior supplier approval, and the supplier keeps 20% of its goods price.",
+              "The client must confirm the revised quote before any change takes effect."
+            ],
+            "money": null
+          }
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "283a79534d4c9c20c714",
+          "output": {
+            "intent": "draft",
+            "message": "This draft swaps in the compact 200 cm sofa, two round side tables for the coffee table, and the 110 cm round dining table, cuts the dining chairs from six to four, removes the sideboard and leaves design services unchanged. It is a draft for your review, not an order or payment, and the round table position and chair clearances still need checking against the measured plan.",
+            "title": "Maple Ave revised quote: compact living and dining layout",
+            "changes": [
+              {
+                "action": "replace",
+                "itemId": "sofa",
+                "quantity": 1,
+                "productOptionId": "maple-ld:compact-sofa",
+                "description": "Replace the 230 cm sofa with one compact 200 × 90 cm straight sofa, no chaise.",
+                "sourceMessageIds": [
+                  "discussion-3",
+                  "discussion-5",
+                  "discussion-16"
+                ]
+              },
+              {
+                "action": "replace",
+                "itemId": "coffee-table",
+                "quantity": 2,
+                "productOptionId": "maple-ld:small-side-table",
+                "description": "Replace the large coffee table with two separate round light oak side tables.",
+                "sourceMessageIds": [
+                  "discussion-7",
+                  "discussion-8",
+                  "discussion-17",
+                  "discussion-18"
+                ]
+              },
+              {
+                "action": "replace",
+                "itemId": "dining-table",
+                "quantity": 1,
+                "productOptionId": "maple-ld:round-dining-table",
+                "description": "Replace the rectangular dining table with one fixed 110 cm round light oak table for four.",
+                "sourceMessageIds": [
+                  "discussion-9",
+                  "discussion-10",
+                  "discussion-11"
+                ]
+              },
+              {
+                "action": "quantity",
+                "itemId": "dining-chairs",
+                "quantity": 4,
+                "productOptionId": null,
+                "description": "Keep the existing dining chairs but reduce the total from six to four.",
+                "sourceMessageIds": [
+                  "discussion-13",
+                  "discussion-17",
+                  "discussion-18"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "sideboard",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the sideboard with no replacement cabinet.",
+                "sourceMessageIds": [
+                  "discussion-13",
+                  "discussion-15"
+                ]
+              }
+            ],
+            "unresolved": [
+              "Does the 110 cm round table and its four chairs clear the walkways in the measured plan?"
+            ],
+            "constraints": [
+              "Design services stay unchanged at the fixed scope and fee.",
+              "The sideboard return is subject to supplier approval, a 20% retained cost and credit-note timing.",
+              "The client will check the revised quote before confirming it."
+            ],
+            "money": null
+          }
+        }
+      ]
+    }
+  ]
+}

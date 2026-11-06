@@ -1,0 +1,49 @@
+{
+  "flow": "change-draft",
+  "case": "hard-negation",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "8635c1c045b74745506a",
+          "output": {
+            "intent": "draft",
+            "message": "I've drafted removal of the arc floor lamp and the round entry mirror, and left both rugs unchanged as you asked. This draft needs your review and is not an order.",
+            "title": "Remove arc floor lamp and round entry mirror",
+            "changes": [
+              {
+                "action": "remove",
+                "itemId": "hl-floor-lamp",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the arc floor lamp from the living room.",
+                "sourceMessageIds": [
+                  "t"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "hl-entry-mirror",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the round entry mirror from the entry.",
+                "sourceMessageIds": [
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [],
+            "constraints": [
+              "Both the living room rug and the bedroom rug stay unchanged.",
+              "The client must confirm the revised quote before it takes effect."
+            ],
+            "money": null
+          }
+        }
+      ]
+    }
+  ]
+}

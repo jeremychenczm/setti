@@ -1,0 +1,106 @@
+{
+  "flow": "inbox-summary",
+  "case": "client-all-settled",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 1; its prompt and checks did not change in round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "07b9ce9e411b2a811744",
+          "output": [
+            {
+              "text": "In Maple Ave, $6,630.00 has been charged in total, with $0.00 on hold now and $0.00 refunded in total.",
+              "factIds": [
+                "money-now"
+              ]
+            },
+            {
+              "text": "Your compact sofa ($2,100.00), round dining table ($1,250.00) and dining sideboard ($1,200.00) are charged, among others.",
+              "factIds": [
+                "now-1",
+                "now-6",
+                "now-3"
+              ]
+            },
+            {
+              "text": "Earlier holds on the three-seat sofa ($2,400.00), fixed dining table ($1,400.00) and coffee table ($650.00) were released.",
+              "factIds": [
+                "now-8",
+                "now-4",
+                "now-5"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "07b9ce9e411b2a811744",
+          "output": [
+            {
+              "text": "In Maple Ave, $6,630.00 has been charged in total, nothing is on hold now, and $0.00 has been refunded.",
+              "factIds": [
+                "money-now"
+              ]
+            },
+            {
+              "text": "Your compact sofa ($2,100.00), round dining table ($1,250.00) and small round side table ($360.00) are all charged.",
+              "factIds": [
+                "now-1",
+                "now-6",
+                "now-7"
+              ]
+            },
+            {
+              "text": "The earlier holds on the three-seat sofa ($2,400.00), fixed dining table ($1,400.00) and coffee table ($650.00) were released.",
+              "factIds": [
+                "now-8",
+                "now-4",
+                "now-5"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "07b9ce9e411b2a811744",
+          "output": [
+            {
+              "text": "In Maple Ave, $6,630.00 has been charged in total, with $0.00 on hold now and $0.00 refunded in total.",
+              "factIds": [
+                "money-now"
+              ]
+            },
+            {
+              "text": "Your sofa at $2,100.00, round dining table at $1,250.00 and small round side table at $360.00 are charged, with nothing on hold.",
+              "factIds": [
+                "now-1",
+                "now-6",
+                "now-7"
+              ]
+            },
+            {
+              "text": "The earlier holds on the three-seat sofa ($2,400.00), fixed dining table ($1,400.00) and coffee table ($650.00) were released.",
+              "factIds": [
+                "now-8",
+                "now-4",
+                "now-5"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

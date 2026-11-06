@@ -16,6 +16,7 @@ import type { DraftCase } from "../change-draft/cases";
 import type { Attempt } from "../change-draft/grade";
 import { CASES, type MoneyCase } from "./cases";
 import { assertsClaim } from "./grade";
+import { answersFromTrace, loadRecording, replayer, saveRun, type Replayer } from "../lib/replay";
 
 const args = new Map<string, string>();
 for (let i = 2; i < process.argv.length; i++) {
@@ -25,7 +26,12 @@ for (let i = 2; i < process.argv.length; i++) {
   if (next && !next.startsWith("--")) { args.set(arg.slice(2), next); i++; } else args.set(arg.slice(2), "true");
 }
 const backendName = (args.get("backend") ?? "claude-code") as BackendName;
-if (!["claude-code", "api", "null"].includes(backendName)) throw new Error(`Unknown backend ${backendName}`);
+if (!["claude-code", "api", "null", "replay"].includes(backendName)) throw new Error(`Unknown backend ${backendName}`);
+/** --record saves each graded run's model answers to evals/recorded/; --from-traces <dir> replays a results folder's traces once to record them. */
+const recordRuns = args.has("record");
+const fromTraces = args.get("from-traces");
+const source = args.get("source") ?? `Claude API, ${process.env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-5-5"}, effort high, ${new Date().toISOString().slice(0, 10)}`;
+const replayProblems: string[] = [];
 if (backendName === "api" && existsSync(".env.local")) process.loadEnvFile(".env.local");
 const reps = Number(args.get("reps") ?? 1);
 const stabilityReps = Number(args.get("stability-reps") ?? 3);
@@ -86,10 +92,17 @@ async function runJob(testCase: MoneyCase, rep: number) {
     failAi: async (_s, _k, _m, _r, error) => { saved.failed = error; return state; },
   };
   const placeholder = { expected: { outcome: "no_draft" } } as unknown as DraftCase;
+  const recorded = loadRecording("money-answer", testCase.id)?.runs.find((run) => run.rep === rep);
+  let replay: Replayer | undefined;
+  if (backendName === "replay") {
+    replay = fromTraces
+      ? replayer({ rep, pass: 0, attempts: answersFromTrace(join(fromTraces, "traces", `${testCase.id}_rep${rep}.json`)).map((output) => ({ fingerprint: "", output })) }, { learn: true })
+      : replayer(recorded);
+  }
   try {
     await runCaseAi(store, "eval-session", "maple", trigger.id, {
       configured: () => true, readPage: async () => { throw new Error("No pages in money cases."); },
-      callModel: backend(backendName, placeholder, (attempt) => attempts.push(attempt), { timeoutMs: 600_000, contextLimit: 400_000 }),
+      callModel: backend(backendName, placeholder, (attempt) => attempts.push(attempt), { timeoutMs: 600_000, contextLimit: 400_000, replay }),
     });
   } catch { /* the saved outcome records what Setti showed or reported */ }
   writeFileSync(join(out, "traces", `${testCase.id}_rep${rep}.json`), JSON.stringify([
@@ -101,6 +114,11 @@ async function runJob(testCase: MoneyCase, rep: number) {
     ]),
     { role: "assistant", content: `Shown by Setti: ${JSON.stringify(saved, null, 2)}` },
   ], null, 2));
+  if (replay?.stale) {
+    replayProblems.push(`${testCase.id} #${rep}: stale recording (${replay.stale})`);
+    console.log(`  STALE ${testCase.id} #${rep} · ${replay.stale}`);
+    return;
+  }
   const infra = attempts.find((attempt) => attempt.kind === "error" || attempt.kind === "timeout");
   const costUsd = attempts.reduce((sum, attempt) => sum + attempt.costUsd, 0);
   if (infra) {
@@ -117,6 +135,10 @@ async function runJob(testCase: MoneyCase, rep: number) {
     latency_s: Number((attempts.reduce((sum, attempt) => sum + attempt.durationMs, 0) / 1000).toFixed(1)), meta: { backend: backendName, attempts: attempts.length },
   };
   appendFileSync(resultsPath, `${JSON.stringify(row)}\n`);
+  if (backendName === "replay" && !fromTraces && recorded && recorded.pass !== graded.scores.pass) replayProblems.push(`${testCase.id} #${rep}: recorded ${recorded.pass ? "PASS" : "FAIL"}, replayed ${graded.scores.pass ? "PASS" : "FAIL"}`);
+  if (recordRuns && (backendName === "api" || fromTraces)) {
+    saveRun("money-answer", testCase.id, source, { rep, pass: graded.scores.pass, attempts: attempts.map((attempt) => ({ fingerprint: attempt.fingerprint!, output: attempt.output })) });
+  }
   console.log(`  ${graded.scores.pass ? "PASS" : "FAIL"} ${testCase.id} #${rep} · ${graded.explanation.slice(0, 420)}`);
 }
 
@@ -138,11 +160,18 @@ function regrade() {
 async function main() {
   if (args.has("regrade")) return regrade();
   const selected = CASES.filter((entry) => !only || only.includes(entry.id));
-  const jobs = selected.flatMap((testCase) => Array.from({ length: testCase.stability ? Math.max(reps, stabilityReps) : reps }, (_, rep) => ({ testCase, rep }))).filter((job) => !done.has(`${job.testCase.id}#${job.rep}`));
+  const repsOf = (testCase: MoneyCase) => backendName === "replay" && !fromTraces
+    ? (loadRecording("money-answer", testCase.id)?.runs.map((run) => run.rep) ?? [0])
+    : Array.from({ length: testCase.stability ? Math.max(reps, stabilityReps) : reps }, (_, rep) => rep);
+  const jobs = selected.flatMap((testCase) => repsOf(testCase).map((rep) => ({ testCase, rep }))).filter((job) => !done.has(`${job.testCase.id}#${job.rep}`));
   console.log(`money-answer eval · backend ${backendName} · ${jobs.length} runs`);
   await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, async () => { for (let job = jobs.shift(); job; job = jobs.shift()) await runJob(job.testCase, job.rep); }));
   const rows = existsSync(resultsPath) ? readFileSync(resultsPath, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { grade: { pass: number }; cost_usd: number }) : [];
-  console.log(`\n${rows.filter((row) => row.grade.pass).length}/${rows.length} passed · API-equivalent $${rows.reduce((sum, row) => sum + row.cost_usd, 0).toFixed(2)}`);
+  console.log(`\n${rows.filter((row) => row.grade.pass).length}/${rows.length} passed · API-equivalent ${rows.reduce((sum, row) => sum + row.cost_usd, 0).toFixed(2)}`);
+  if (backendName === "replay" && !fromTraces) {
+    if (replayProblems.length) { console.log(`\nReplay does not match the recording:\n${replayProblems.map((problem) => `  ${problem}`).join("\n")}`); process.exitCode = 1; }
+    else console.log("Replay matches the recording: every run graded as recorded, with no model call.");
+  }
 }
 
 void main();

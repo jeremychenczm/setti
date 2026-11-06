@@ -1,0 +1,114 @@
+{
+  "flow": "change-draft",
+  "case": "hard-flooring-area",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "7d07669dfe144d831acc",
+          "output": {
+            "intent": "draft",
+            "message": "I drafted raising the engineered oak flooring from 28 to 32 boxes to cover the extra 64 sq ft plus the same 10% for cuts. Please check the 64 sq ft figure before sending. This is a draft for your review, not an order or payment.",
+            "title": "Increase oak flooring to 32 boxes for closet opening",
+            "changes": [
+              {
+                "action": "quantity",
+                "itemId": "hl-oak-flooring",
+                "quantity": 32,
+                "productOptionId": null,
+                "description": "64 sq ft plus 10% for cuts is about 70.4 sq ft, or 4 more 22.0 sq ft boxes, making 32 in total.",
+                "sourceMessageIds": [
+                  "m1",
+                  "m2",
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [],
+            "constraints": [
+              "The 64 sq ft closet area is approximate, so the box count may need adjusting once it is measured.",
+              "Opened boxes and cut pieces of flooring cannot be returned under the supplier terms.",
+              "The client must confirm the revised quote before it takes effect."
+            ],
+            "money": null
+          }
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "7d07669dfe144d831acc",
+          "output": {
+            "intent": "draft",
+            "message": "I drafted raising the engineered oak flooring from 28 to 32 boxes to cover the extra 64 sq ft plus the same 10% for cuts. This draft needs your review and is not an order or a payment; please confirm the closet floor area is final.",
+            "title": "Increase oak flooring to 32 boxes for closet opening floor area",
+            "changes": [
+              {
+                "action": "quantity",
+                "itemId": "hl-oak-flooring",
+                "quantity": 32,
+                "productOptionId": null,
+                "description": "Raise oak flooring from 28 to 32 boxes for about 64 extra sq ft plus 10% for cuts.",
+                "sourceMessageIds": [
+                  "m1",
+                  "m2",
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [
+              "Is the closet opening floor area of about 64 sq ft final or still approximate?"
+            ],
+            "constraints": [
+              "Flooring is sold in whole 22.0 sq ft boxes, so the extra area rounds up to 4 more boxes.",
+              "Opened boxes and cut pieces cannot be returned under the supplier terms.",
+              "The client must confirm the revised quote before anything proceeds."
+            ],
+            "money": null
+          }
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "7d07669dfe144d831acc",
+          "output": {
+            "intent": "draft",
+            "message": "I drafted the oak flooring quantity going from 28 to 32 boxes to cover the extra 64 sq ft plus the same 10% for cuts. Please check the area figure before sending it to the client. This draft is for designer review and is not an order or payment.",
+            "title": "Increase engineered oak flooring to 32 boxes for the closet opening",
+            "changes": [
+              {
+                "action": "quantity",
+                "itemId": "hl-oak-flooring",
+                "quantity": 32,
+                "productOptionId": null,
+                "description": "Raise flooring from 28 to 32 boxes: about 624 sq ft plus 10% for cuts, at 22.0 sq ft per box, rounded up.",
+                "sourceMessageIds": [
+                  "m1",
+                  "m2",
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [],
+            "constraints": [
+              "The 64 sq ft closet area is approximate, so the box count should be rechecked if it is measured differently.",
+              "Opened boxes and cut pieces cannot be returned under the supplier terms.",
+              "The client needs to confirm the revised quote before it takes effect."
+            ],
+            "money": null
+          }
+        }
+      ]
+    }
+  ]
+}

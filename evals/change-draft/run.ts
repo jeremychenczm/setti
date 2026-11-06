@@ -19,6 +19,7 @@ import type { ChatStore, StoredCase } from "@/chat/types";
 import { backend, type BackendName } from "./backends";
 import { CASES, type DraftCase } from "./cases";
 import { grade, type RunOutcome } from "./grade";
+import { answersFromTrace, loadRecording, replayer, saveRun, type Replayer } from "../lib/replay";
 
 const args = new Map<string, string>();
 for (let i = 2; i < process.argv.length; i++) {
@@ -28,7 +29,12 @@ for (let i = 2; i < process.argv.length; i++) {
   if (next && !next.startsWith("--")) { args.set(arg.slice(2), next); i++; } else args.set(arg.slice(2), "true");
 }
 const backendName = (args.get("backend") ?? "claude-code") as BackendName;
-if (!["claude-code", "api", "oracle", "null"].includes(backendName)) throw new Error(`Unknown backend ${backendName}`);
+if (!["claude-code", "api", "oracle", "null", "replay"].includes(backendName)) throw new Error(`Unknown backend ${backendName}`);
+/** --record saves each graded run's model answers to evals/recorded/; --from-traces <dir> replays a results folder's traces once to record them. */
+const recordRuns = args.has("record");
+const fromTraces = args.get("from-traces");
+const source = args.get("source") ?? `Claude API, ${process.env.ANTHROPIC_MODEL?.trim() || "claude-sonnet-5-5"}, effort high, ${new Date().toISOString().slice(0, 10)}`;
+const replayProblems: string[] = [];
 // The api backend calls the model with the server's own key, read from .env.local and never written anywhere.
 if (backendName === "api" && existsSync(".env.local")) process.loadEnvFile(".env.local");
 const reps = Number(args.get("reps") ?? 1);
@@ -84,7 +90,10 @@ function memoryStore(state: StoredCase, outcome: RunOutcome): ChatStore {
 }
 
 interface Job { testCase: DraftCase; rep: number }
-const jobs: Job[] = selected.flatMap((testCase) => Array.from({ length: testCase.stability ? Math.max(reps, stabilityReps) : reps }, (_, rep) => ({ testCase, rep })))
+const repsOf = (testCase: DraftCase) => backendName === "replay" && !fromTraces
+  ? (loadRecording("change-draft", testCase.id)?.runs.map((run) => run.rep) ?? [0])
+  : Array.from({ length: testCase.stability ? Math.max(reps, stabilityReps) : reps }, (_, rep) => rep);
+const jobs: Job[] = selected.flatMap((testCase) => repsOf(testCase).map((rep) => ({ testCase, rep })))
   .filter((job) => !done.has(`${job.testCase.id}#${job.rep}`));
 
 async function runJob({ testCase, rep }: Job): Promise<void> {
@@ -94,13 +103,20 @@ async function runJob({ testCase, rep }: Job): Promise<void> {
   const current = testCase.current ? testCase.current(quote, messages) : null;
   const trigger = messages.at(-1)!;
   const outcome: RunOutcome = { attempts: [] };
+  const recorded = loadRecording("change-draft", testCase.id)?.runs.find((run) => run.rep === rep);
+  let replay: Replayer | undefined;
+  if (backendName === "replay") {
+    replay = fromTraces
+      ? replayer({ rep, pass: 0, attempts: answersFromTrace(join(fromTraces, "traces", `${testCase.id}_rep${rep}.json`)).map((output) => ({ fingerprint: "", output })) }, { learn: true })
+      : replayer(recorded);
+  }
   const state: StoredCase = { id: `eval-${testCase.id}`, projectKey: "willow", messages, draft: current, activeMessageId: null, quote };
   const started = Date.now();
   try {
     await runCaseAi(memoryStore(state, outcome), "eval-session", "willow", trigger.id, {
       configured: () => true,
       readPage: async (url) => { const found = pages.find((entry) => entry.url === url); if (!found) throw new Error("This page is not part of the eval case."); return structuredClone(found); },
-      callModel: backend(backendName, testCase, (attempt) => outcome.attempts.push(attempt), { timeoutMs, contextLimit }),
+      callModel: backend(backendName, testCase, (attempt) => outcome.attempts.push(attempt), { timeoutMs, contextLimit, replay }),
     });
   } catch { /* the outcome records what Setti saved or reported */ }
   const wallMs = Date.now() - started;
@@ -123,6 +139,11 @@ async function runJob({ testCase, rep }: Job): Promise<void> {
   const costUsd = outcome.attempts.reduce((sum, attempt) => sum + attempt.costUsd, 0);
   const modelSeconds = outcome.attempts.reduce((sum, attempt) => sum + attempt.durationMs, 0) / 1000;
 
+  if (replay?.stale) {
+    replayProblems.push(`${testCase.id} #${rep}: stale recording (${replay.stale})`);
+    console.log(`  STALE ${testCase.id} #${rep} · ${replay.stale}`);
+    return;
+  }
   if (infra) {
     appendFileSync(join(out, "errors.jsonl"), `${JSON.stringify({ prompt_id: testCase.id, rep, failure_class: infra.kind, message: infra.message, attempts: outcome.attempts.length, cost_usd: costUsd, at: new Date().toISOString() })}\n`);
     console.log(`  ! ${testCase.id} #${rep}: ${infra.kind} ${infra.message?.slice(0, 120) ?? ""}`);
@@ -138,6 +159,10 @@ async function runJob({ testCase, rep }: Job): Promise<void> {
     meta: { run_id: randomUUID(), backend: backendName, outcome: graded.outcome, intent: graded.intent, refused: graded.refused, attempts: outcome.attempts.length, violations: graded.violations, twin_of: testCase.twinOf ?? null, wall_s: Math.round(wallMs / 1000), context_limit: contextLimit },
   };
   appendFileSync(resultsPath, `${JSON.stringify(row)}\n`);
+  if (backendName === "replay" && !fromTraces && recorded && recorded.pass !== graded.scores.pass) replayProblems.push(`${testCase.id} #${rep}: recorded ${recorded.pass ? "PASS" : "FAIL"}, replayed ${graded.scores.pass ? "PASS" : "FAIL"}`);
+  if (recordRuns && (backendName === "api" || fromTraces)) {
+    saveRun("change-draft", testCase.id, source, { rep, pass: graded.scores.pass, attempts: outcome.attempts.map((attempt) => ({ fingerprint: attempt.fingerprint!, output: attempt.output })) });
+  }
   console.log(`  ${graded.scores.pass ? "PASS" : "FAIL"} ${testCase.id} #${rep} · ${graded.explanation}`);
 }
 
@@ -150,7 +175,11 @@ async function main() {
   const rows = readFileSync(resultsPath, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { prompt_id: string; grade: { pass: number }; cost_usd: number; tags: string[] });
   const passed = rows.filter((row) => row.grade.pass).length;
   const cost = rows.reduce((sum, row) => sum + row.cost_usd, 0);
-  console.log(`\n${passed}/${rows.length} runs passed · API-equivalent cost $${cost.toFixed(2)} · results in ${out}`);
+  console.log(`\n${passed}/${rows.length} runs passed · API-equivalent cost ${cost.toFixed(2)} · results in ${out}`);
+  if (backendName === "replay" && !fromTraces) {
+    if (replayProblems.length) { console.log(`\nReplay does not match the recording:\n${replayProblems.map((problem) => `  ${problem}`).join("\n")}`); process.exitCode = 1; }
+    else console.log("Replay matches the recording: every run graded as recorded, with no model call.");
+  }
 }
 
 void main();

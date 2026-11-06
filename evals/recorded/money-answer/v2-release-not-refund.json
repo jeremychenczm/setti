@@ -1,0 +1,70 @@
+{
+  "flow": "money-answer",
+  "case": "v2-release-not-refund",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "306bfd2e18df3cfafe3f",
+          "output": {
+            "intent": "money",
+            "message": "Your original sofa's $2,400.00 hold was released, not refunded, because it was never charged; the revised quote replaced it with the compact sofa.",
+            "title": "Original sofa hold released, no refund",
+            "changes": [],
+            "unresolved": [],
+            "constraints": [],
+            "money": {
+              "answer": {
+                "summary": {
+                  "text": "Your original sofa's $2,400.00 hold was released, not refunded, because it was never charged; the revised quote replaced it with the compact sofa.",
+                  "factIds": [
+                    "item:baseline:sofa",
+                    "terms:baseline:sofa"
+                  ]
+                },
+                "rows": [
+                  {
+                    "label": "Three-seat sofa (original)",
+                    "status": "$2,400.00 hold released",
+                    "amount": "$0.00",
+                    "factIds": [
+                      "item:baseline:sofa"
+                    ]
+                  },
+                  {
+                    "label": "Compact sofa (new)",
+                    "status": "$2,100.00 on hold",
+                    "amount": "$0.00",
+                    "factIds": [
+                      "item:proposed:sofa",
+                      "next:proposed:sofa"
+                    ]
+                  }
+                ],
+                "notes": [
+                  {
+                    "text": "A released hold is not a refund: no money was charged for the original sofa, so there was nothing to refund.",
+                    "factIds": [
+                      "item:baseline:sofa"
+                    ]
+                  },
+                  {
+                    "text": "The compact sofa has its own separate hold and is not yet charged; that waits for the supplier's confirmation.",
+                    "factIds": [
+                      "item:proposed:sofa",
+                      "next:proposed:sofa"
+                    ]
+                  }
+                ]
+              },
+              "showEvidence": false
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

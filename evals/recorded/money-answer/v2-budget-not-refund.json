@@ -1,0 +1,60 @@
+{
+  "flow": "money-answer",
+  "case": "v2-budget-not-refund",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "f95d59eddd997e7227df",
+          "output": {
+            "intent": "money",
+            "message": "No, the $2,060.00 is the drop in the quote total from V1 to V2, not money coming back to you.",
+            "title": "Is the lower quote a refund?",
+            "changes": [],
+            "unresolved": [],
+            "constraints": [],
+            "money": {
+              "answer": {
+                "summary": {
+                  "text": "No, the $2,060.00 is the drop in the quote total from V1 to V2, not money coming back to you.",
+                  "factIds": [
+                    "budget"
+                  ]
+                },
+                "rows": [],
+                "notes": [
+                  {
+                    "text": "The only refund planned is $960.00 for the dining sideboard, and it waits for the supplier credit because the item has not been returned yet.",
+                    "factIds": [
+                      "item:baseline:sideboard",
+                      "next:baseline:sideboard",
+                      "terms:baseline:sideboard"
+                    ]
+                  },
+                  {
+                    "text": "No refunds have been completed so far: $0.00 refunded.",
+                    "factIds": [
+                      "scope"
+                    ]
+                  },
+                  {
+                    "text": "Holds released on the old sofa, coffee table and dining table were never charged, so those releases are not refunds.",
+                    "factIds": [
+                      "item:baseline:sofa",
+                      "item:baseline:coffee-table",
+                      "item:baseline:dining-table"
+                    ]
+                  }
+                ]
+              },
+              "showEvidence": false
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

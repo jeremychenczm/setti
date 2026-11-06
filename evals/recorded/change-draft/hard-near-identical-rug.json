@@ -1,0 +1,118 @@
+{
+  "flow": "change-draft",
+  "case": "hard-near-identical-rug",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "c02964485deeb1742699",
+          "output": {
+            "intent": "draft",
+            "message": "I drafted a replacement of the 8 × 10 ft bedroom rug with the Dune rug in oat, same size, without the border, as Nora chose. Please check that the rug pad is handled separately, since the Dune page lists it as sold separately while the current rug includes one. This draft is for your review and is not an order or payment.",
+            "title": "Bedroom rug swap to Dune rug, oat 8 × 10 ft",
+            "changes": [
+              {
+                "action": "replace",
+                "itemId": "hl-bedroom-rug",
+                "quantity": 1,
+                "productOptionId": "dune-810-oat",
+                "description": "Replace the bedroom wool rug with the Dune rug in oat, 8 × 10 ft, plain without border.",
+                "sourceMessageIds": [
+                  "m1",
+                  "m3",
+                  "m5",
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [
+              "Should a rug pad be added, since the Dune page says the pad is sold separately and the current rug includes one?"
+            ],
+            "constraints": [
+              "The Dune rug is woven to order in 3–4 weeks, per the product page.",
+              "The client must confirm the revised quote before any change takes effect."
+            ],
+            "money": null
+          }
+        }
+      ]
+    },
+    {
+      "rep": 1,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "c02964485deeb1742699",
+          "output": {
+            "intent": "draft",
+            "message": "I drafted a replacement of the bedroom rug (8 × 10 ft) with the Dune rug in oat, 8 × 10 ft, as Nora chose in the chat. This is a draft for your review, not an order or payment; please check the rug pad and lead time below.",
+            "title": "Swap bedroom rug to Dune rug, oat, 8 × 10 ft",
+            "changes": [
+              {
+                "action": "replace",
+                "itemId": "hl-bedroom-rug",
+                "quantity": 1,
+                "productOptionId": "dune-810-oat",
+                "description": "Replace the current bedroom wool rug with the Dune rug in plain oat, 8 × 10 ft.",
+                "sourceMessageIds": [
+                  "m1",
+                  "m3",
+                  "m5",
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [
+              "The Dune page says the rug pad is sold separately, while the current rug includes one; should a pad be added?"
+            ],
+            "constraints": [
+              "The Dune rug is woven to order in 3–4 weeks, so delivery timing should be shared with the client.",
+              "The client must confirm the revised quote before anything proceeds."
+            ],
+            "money": null
+          }
+        }
+      ]
+    },
+    {
+      "rep": 2,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "c02964485deeb1742699",
+          "output": {
+            "intent": "draft",
+            "message": "I drafted a replacement of the bedroom rug (8 × 10 ft) with the plain oat Dune rug (8 × 10 ft) from Saltmarsh Textiles for your review. This is a draft only, not an order or payment, and the rug pad and lead time need your check.",
+            "title": "Swap bedroom rug to Dune rug, oat, 8 × 10 ft",
+            "changes": [
+              {
+                "action": "replace",
+                "itemId": "hl-bedroom-rug",
+                "quantity": 1,
+                "productOptionId": "dune-810-oat",
+                "description": "Replace the oat 8 × 10 ft bedroom wool rug with the plain oat Dune rug, 8 × 10 ft.",
+                "sourceMessageIds": [
+                  "m1",
+                  "m3",
+                  "m5",
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [
+              "Does the client still want a rug pad, since the current rug includes one and the Dune page sells it separately?"
+            ],
+            "constraints": [
+              "The Dune rug is woven to order in 3–4 weeks per the supplier page.",
+              "The client chose the plain oat version, not the one with the ivory border."
+            ],
+            "money": null
+          }
+        }
+      ]
+    }
+  ]
+}

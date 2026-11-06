@@ -119,7 +119,8 @@ function existingDraft(quote: ApprovedQuoteReport, messages: CaseMessage[]): Cha
     },
     quote, messages: messages.slice(0, 2), pages: [], current: null, triggerId: "m1", model: "claude-sonnet-5-5", now: "2026-10-21T15:08:00.000Z",
   });
-  return built.draft!;
+  // A fixed id keeps the request, and so its recorded fingerprint, the same on every run.
+  return { ...built.draft!, id: "eval-existing-draft" };
 }
 
 // ---- A long project thread: decisions scattered between everyday coordination ----

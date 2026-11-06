@@ -1,0 +1,51 @@
+{
+  "flow": "change-draft",
+  "case": "large-05-rooms",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "144bd92198cb6e2c9bda",
+          "output": {
+            "intent": "draft",
+            "message": "This draft changes the family room lounge chairs from two to three and removes the living room media console. It is for your review and is not an order or a payment; please check that the third chair matches the existing family room chairs, including dye-lot.",
+            "title": "Third family room lounge chair and remove living room media console",
+            "changes": [
+              {
+                "action": "quantity",
+                "itemId": "cr-family-room-lounge-chair",
+                "quantity": 3,
+                "productOptionId": null,
+                "description": "Increase the family room lounge chairs from two to three.",
+                "sourceMessageIds": [
+                  "m1",
+                  "t"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "cr-living-room-media-console",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the living room media console because the TV goes over the fireplace.",
+                "sourceMessageIds": [
+                  "m2",
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [],
+            "constraints": [
+              "The client must confirm the revised quote before anything is final.",
+              "Only the living room media console is removed; the family room media console stays."
+            ],
+            "money": null
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -6,10 +6,11 @@
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { CHANGE_SYSTEM_PROMPT, DEFAULT_MODEL, EFFORT, callChangeModel, changeModelOutputSchema, contextParts, modelContext, type ChangeModelInput, type ChangeModelOutput } from "@/ai/model";
 import { runHeadless } from "../lib/claude-code";
+import { fingerprint, type Replayer } from "../lib/replay";
 import type { DraftCase } from "./cases";
 import type { Attempt } from "./grade";
 
-export type BackendName = "claude-code" | "api" | "oracle" | "null";
+export type BackendName = "claude-code" | "api" | "oracle" | "null" | "replay";
 type CallModel = typeof callChangeModel;
 
 /** Sonnet 5.5 list prices per million tokens, for the api backend's cost column. */
@@ -18,6 +19,19 @@ const PRICE = { input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 };
 function userText(input: ChangeModelInput): string {
   const { quote, request, retry } = contextParts(input);
   return [JSON.stringify(quote), JSON.stringify(request), ...(retry ? [JSON.stringify(retry)] : [])].join("\n\n");
+}
+
+const CHANGE_SCHEMA = betaZodOutputFormat(changeModelOutputSchema).schema;
+
+/**
+ * Everything that decides the model's answer to one change-model call. A page's
+ * fetchedAt is left out: it is when the page was read, so it differs on every run
+ * while the page itself does not.
+ */
+export function changeFingerprint(input: ChangeModelInput): string {
+  const parts = contextParts(input);
+  const request = { ...parts.request, productPages: parts.request.productPages.map((page) => ({ ...page, fetchedAt: undefined })) };
+  return fingerprint("change", process.env.ANTHROPIC_MODEL?.trim() || DEFAULT_MODEL, EFFORT, CHANGE_SYSTEM_PROMPT, CHANGE_SCHEMA, { ...parts, request });
 }
 
 /** A model answer built from the answer key: should pass every case. */
@@ -38,12 +52,20 @@ function oracleOutput(testCase: DraftCase, input: ChangeModelInput): ChangeModel
 /** A model that never does the work: every draft case should fail. */
 const NULL_OUTPUT: ChangeModelOutput = { intent: "answer", message: "I can help with that.", title: "", changes: [], unresolved: [], constraints: [], money: null };
 
-export function backend(name: BackendName, testCase: DraftCase, record: (attempt: Attempt) => void, options: { timeoutMs: number; contextLimit: number }): CallModel {
+export function backend(name: BackendName, testCase: DraftCase, recordAttempt: (attempt: Attempt) => void, options: { timeoutMs: number; contextLimit: number; replay?: Replayer }): CallModel {
   let n = 0;
   return async (input) => {
     n += 1;
     const problems = input.previousAttemptProblems?.length ? input.previousAttemptProblems : null;
     const started = Date.now();
+    const requestFingerprint = changeFingerprint(input);
+    const record = (attempt: Omit<Attempt, "fingerprint">) => recordAttempt({ ...attempt, fingerprint: requestFingerprint });
+    if (name === "replay") {
+      modelContext(input, options.contextLimit);
+      const output = changeModelOutputSchema.parse(options.replay!.answer(requestFingerprint)) as ChangeModelOutput;
+      record({ n, problems, kind: "ok", output, model: "replay", usage: null, costUsd: 0, durationMs: Date.now() - started });
+      return { output, model: "replay" };
+    }
     if (name === "oracle" || name === "null") {
       modelContext(input, options.contextLimit);
       const output = name === "oracle" ? oracleOutput(testCase, input) : NULL_OUTPUT;

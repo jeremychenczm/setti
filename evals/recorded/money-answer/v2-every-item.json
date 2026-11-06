@@ -1,0 +1,149 @@
+{
+  "flow": "money-answer",
+  "case": "v2-every-item",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "38d478878b406ee53a01",
+          "output": {
+            "intent": "money",
+            "message": "Design services and the sideboard are charged, the new items and the dining chairs are on hold, the replaced items have had their holds released, and the $960.00 sideboard refund is still waiting for the supplier credit.",
+            "title": "Payment status of every item and the sideboard refund",
+            "changes": [],
+            "unresolved": [],
+            "constraints": [],
+            "money": {
+              "answer": {
+                "summary": {
+                  "text": "Design services and the sideboard are charged, the new items and the dining chairs are on hold, the replaced items have had their holds released, and the $960.00 sideboard refund is still waiting for the supplier credit.",
+                  "factIds": [
+                    "item:baseline:design",
+                    "item:baseline:sofa",
+                    "item:proposed:sofa",
+                    "item:baseline:coffee-table",
+                    "item:proposed:coffee-table",
+                    "item:baseline:dining-table",
+                    "item:proposed:dining-table",
+                    "item:baseline:dining-chairs",
+                    "item:baseline:sideboard",
+                    "next:baseline:sideboard"
+                  ]
+                },
+                "rows": [
+                  {
+                    "label": "Design services",
+                    "status": "Charged",
+                    "amount": "$1,000.00",
+                    "factIds": [
+                      "item:baseline:design"
+                    ]
+                  },
+                  {
+                    "label": "Sofa (original)",
+                    "status": "Hold released",
+                    "amount": "$0.00",
+                    "factIds": [
+                      "item:baseline:sofa"
+                    ]
+                  },
+                  {
+                    "label": "Compact sofa (new)",
+                    "status": "On hold",
+                    "amount": "$0.00",
+                    "factIds": [
+                      "item:proposed:sofa",
+                      "next:proposed:sofa"
+                    ]
+                  },
+                  {
+                    "label": "Coffee table (original)",
+                    "status": "Hold released",
+                    "amount": "$0.00",
+                    "factIds": [
+                      "item:baseline:coffee-table"
+                    ]
+                  },
+                  {
+                    "label": "Small round side table (new)",
+                    "status": "On hold",
+                    "amount": "$0.00",
+                    "factIds": [
+                      "item:proposed:coffee-table",
+                      "next:proposed:coffee-table"
+                    ]
+                  },
+                  {
+                    "label": "Dining table (original)",
+                    "status": "Hold released",
+                    "amount": "$0.00",
+                    "factIds": [
+                      "item:baseline:dining-table"
+                    ]
+                  },
+                  {
+                    "label": "Round dining table (new)",
+                    "status": "On hold",
+                    "amount": "$0.00",
+                    "factIds": [
+                      "item:proposed:dining-table",
+                      "next:proposed:dining-table"
+                    ]
+                  },
+                  {
+                    "label": "Upholstered dining chairs",
+                    "status": "On hold",
+                    "amount": "$0.00",
+                    "factIds": [
+                      "item:baseline:dining-chairs",
+                      "next:baseline:dining-chairs"
+                    ]
+                  },
+                  {
+                    "label": "Dining sideboard",
+                    "status": "Charged, $960.00 refund waiting",
+                    "amount": "$1,200.00",
+                    "factIds": [
+                      "item:baseline:sideboard",
+                      "next:baseline:sideboard"
+                    ]
+                  }
+                ],
+                "notes": [
+                  {
+                    "text": "Before the $960.00 sideboard refund can go out, the supplier credit must be confirmed; the sideboard has not been returned yet, and another item's supplier confirmation does not count.",
+                    "factIds": [
+                      "next:baseline:sideboard",
+                      "terms:baseline:sideboard"
+                    ]
+                  },
+                  {
+                    "text": "A released hold is not a refund; the three replaced items were never charged.",
+                    "factIds": [
+                      "item:baseline:sofa",
+                      "item:baseline:coffee-table",
+                      "item:baseline:dining-table"
+                    ]
+                  },
+                  {
+                    "text": "Items on hold are authorized, not charged; charging each waits for its own supplier confirmation.",
+                    "factIds": [
+                      "next:proposed:sofa",
+                      "next:proposed:coffee-table",
+                      "next:proposed:dining-table",
+                      "next:baseline:dining-chairs"
+                    ]
+                  }
+                ]
+              },
+              "showEvidence": false
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

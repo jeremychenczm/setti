@@ -1,0 +1,28 @@
+{
+  "flow": "change-draft",
+  "case": "lang-ambiguous-rug",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "96389cfa6622d98e4e33",
+          "output": {
+            "intent": "clarify",
+            "message": "Which rug do you want to swap: the 9 × 12 ft living room rug or the 8 × 10 ft bedroom rug, and what smaller size or product should replace it? Once I know, I can prepare a draft for designer review; it is not an order or a payment.",
+            "title": "Clarify which rug to replace with a smaller one",
+            "changes": [],
+            "unresolved": [
+              "Is the rug to replace the living room rug (9 × 12 ft) or the bedroom rug (8 × 10 ft)?",
+              "What smaller size or product link should the replacement rug be?"
+            ],
+            "constraints": [],
+            "money": null
+          }
+        }
+      ]
+    }
+  ]
+}

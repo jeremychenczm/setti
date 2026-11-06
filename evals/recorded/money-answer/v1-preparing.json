@@ -1,0 +1,52 @@
+{
+  "flow": "money-answer",
+  "case": "v1-preparing",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "runs": [
+    {
+      "rep": 0,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "25db4e7ac47c709fb9ea",
+          "output": {
+            "intent": "money",
+            "message": "No charge is recorded for your design fee so far: the agreed fee is $1,000.00, but the recorded charged amount is $0.00 and payment setup is not finished.",
+            "title": "Design fee payment status",
+            "changes": [],
+            "unresolved": [],
+            "constraints": [],
+            "money": {
+              "answer": {
+                "summary": {
+                  "text": "No charge is recorded for your design fee so far: the agreed fee is $1,000.00, but the recorded charged amount is $0.00 and payment setup is not finished.",
+                  "factIds": [
+                    "item:baseline:design",
+                    "next:baseline:design"
+                  ]
+                },
+                "rows": [],
+                "notes": [
+                  {
+                    "text": "The starting payment setup is still in progress, so a missing record does not mean the fee is unpaid or settled.",
+                    "factIds": [
+                      "payment-preparation",
+                      "next:baseline:design"
+                    ]
+                  },
+                  {
+                    "text": "No payment response from PayPal has been found for this quote yet, and approving the quote is not a payment.",
+                    "factIds": [
+                      "no-provider-records"
+                    ]
+                  }
+                ]
+              },
+              "showEvidence": false
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
