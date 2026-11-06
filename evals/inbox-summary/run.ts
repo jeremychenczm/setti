@@ -25,6 +25,7 @@ for (let i = 2; i < process.argv.length; i++) {
   if (next && !next.startsWith("--")) { args.set(arg.slice(2), next); i++; } else args.set(arg.slice(2), "true");
 }
 const backendName = args.get("backend") ?? "claude-code";
+if (backendName === "api" && existsSync(".env.local")) process.loadEnvFile(".env.local");
 const label = args.get("label");
 const reps = Number(args.get("reps") ?? 3);
 const concurrency = Number(args.get("concurrency") ?? 4);
@@ -49,7 +50,10 @@ function model(record: (attempt: Attempt) => void): SummaryModel {
   if (backendName === "api") return async (request) => {
     const started = Date.now();
     const result = await callSummaryModel(request);
-    record({ sentences: result.sentences, kind: "ok", costUsd: 0, durationMs: Date.now() - started, inTokens: 0, outTokens: 0 });
+    const usage = result.usage;
+    // Sonnet 5.5 list prices per million tokens: input $2, output $10, cache read $0.20, five-minute cache write $2.50.
+    const costUsd = usage ? (usage.inputTokens * 2 + usage.outputTokens * 10 + usage.cacheReadTokens * 0.2 + usage.cacheWriteTokens * 2.5) / 1e6 : 0;
+    record({ sentences: result.sentences, kind: "ok", costUsd, durationMs: Date.now() - started, inTokens: usage ? usage.inputTokens + usage.cacheReadTokens + usage.cacheWriteTokens : 0, outTokens: usage?.outputTokens ?? 0 });
     return result;
   };
   return async (request: SummaryRequest) => {
@@ -128,7 +132,8 @@ async function runJob(scenario: Scenario, rep: number) {
 }
 
 async function main() {
-  const jobs = SCENARIOS.flatMap((scenario) => Array.from({ length: reps }, (_, rep) => ({ scenario, rep }))).filter((job) => !done.has(`${job.scenario.id}#${job.rep}`));
+  const only = args.get("cases")?.split(",").map((id) => id.trim()).filter(Boolean);
+  const jobs = SCENARIOS.filter((scenario) => !only || only.includes(scenario.id)).flatMap((scenario) => Array.from({ length: reps }, (_, rep) => ({ scenario, rep }))).filter((job) => !done.has(`${job.scenario.id}#${job.rep}`));
   console.log(`inbox-summary eval · backend ${backendName}${label ? ` · ${label}` : ""} · ${jobs.length} runs`);
   await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, async () => { for (let job = jobs.shift(); job; job = jobs.shift()) await runJob(job.scenario, job.rep); }));
   const rows = readFileSync(resultsPath, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { grade: { pass: number; raw_state_error: number }; cost_usd: number });

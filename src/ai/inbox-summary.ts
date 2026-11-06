@@ -32,7 +32,8 @@ export interface SummaryRequest {
   previousAttemptProblems?: string[];
 }
 
-export type SummaryModel = (request: SummaryRequest) => Promise<{ sentences: SummarySentence[]; model: string }>;
+export interface SummaryUsage { inputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; outputTokens: number }
+export type SummaryModel = (request: SummaryRequest) => Promise<{ sentences: SummarySentence[]; model: string; usage?: SummaryUsage }>;
 
 export interface InboxSummary { sentences: SummarySentence[]; model: string; at: string }
 
@@ -63,7 +64,11 @@ export const callSummaryModel: SummaryModel = async (request) => {
     output_config: { format: betaZodOutputFormat(summaryOutputSchema), effort: "high" },
   });
   if (response.stop_reason !== "end_turn" || !response.parsed_output) throw new Error("The model did not return a complete summary.");
-  return { sentences: summaryOutputSchema.parse(response.parsed_output).sentences, model: response.model };
+  const usage = response.usage;
+  return {
+    sentences: summaryOutputSchema.parse(response.parsed_output).sentences, model: response.model,
+    usage: { inputTokens: usage.input_tokens, cacheReadTokens: usage.cache_read_input_tokens ?? 0, cacheWriteTokens: usage.cache_creation_input_tokens ?? 0, outputTokens: usage.output_tokens },
+  };
 };
 
 /** A PayPal resource id: 12-20 capitals and digits, with at least one of each. */

@@ -29,6 +29,8 @@ for (let i = 2; i < process.argv.length; i++) {
 }
 const backendName = (args.get("backend") ?? "claude-code") as BackendName;
 if (!["claude-code", "api", "oracle", "null"].includes(backendName)) throw new Error(`Unknown backend ${backendName}`);
+// The api backend calls the model with the server's own key, read from .env.local and never written anywhere.
+if (backendName === "api" && existsSync(".env.local")) process.loadEnvFile(".env.local");
 const reps = Number(args.get("reps") ?? 1);
 const stabilityReps = Number(args.get("stability-reps") ?? 3);
 const concurrency = Number(args.get("concurrency") ?? 3);
