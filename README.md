@@ -146,7 +146,7 @@ Setti keeps watching the holds after everyone has signed.
 | Money answers | 14 | 14 | 14 |
 | Client inbox summaries | 21 | 21 | 21 |
 
-The first round found two prompt problems (a change a client said the designer had approved by phone was drafted, and totals were left out beside a one-item question), and the second found a server check that read "settled" as a payment word. All three were fixed and measured again; [evals/README.md](evals/README.md#results) has both rounds, what changed and the limits of a set this size.
+The first round found two prompt problems (a change a client said the designer had approved by phone was drafted, and totals were left out beside a one-item question), and the second found a server check that read "settled" as a payment word. All three were fixed and measured again; [evals/README.md](evals/README.md#results) has both rounds, what changed and the limits of a set this size. The model answers behind these numbers are committed in [`evals/recorded/`](evals/recorded), and CI replays them through the same checks on every push without calling the model (`npm run eval:replay`).
 
 ## Sandbox evidence
 

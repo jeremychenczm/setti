@@ -94,3 +94,11 @@ A round of all three takes about three minutes and costs about $2.20–2.40 at l
 Other backends: `oracle` (change drafts) and `null` (change drafts and money answers), which call no model, and `claude-code`, which sends the same prompt and schema through a local Claude Code login and was used while developing the cases. The results above are from `api` only.
 
 `npx tsx evals/catalog.ts` regenerates CASES.md from the case files. The grader tests run with `npm test`.
+
+## Replay without the model
+
+The model answers behind the results above are committed in [`recorded/`](recorded), one file per case: round 2 for change drafts and money answers, round 1 for inbox summaries, whose prompt and checks did not change. `npm run eval:replay` feeds them back through the same server checks and graders and confirms that every run grades as recorded. It calls no model and costs nothing, and CI runs it on every push.
+
+Each recorded answer carries a fingerprint of its request: the system prompt, model, effort, output schema and the project data sent. When the code would now send a different request, for example after a prompt change, the run is reported as stale instead of graded and the replay fails; the eval then has to be run against the model again, and `--record` on an `api` run saves the new answers. A product page's read time is left out of the fingerprint, since it changes on every run while the page does not.
+
+The recordings were made from the saved traces of those API runs, with fingerprints computed by the code at that point. The two existing-draft cases now give their draft a fixed id; in the live run the id was random.
