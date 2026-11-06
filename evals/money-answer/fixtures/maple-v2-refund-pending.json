@@ -1,0 +1,625 @@
+{
+  "capturedAt": "2026-11-05T08:24:00.748Z",
+  "quote": {
+    "id": "8ccd986a-d76c-44f9-9b8e-e476572f5495",
+    "room": "Living & dining room",
+    "lines": [
+      {
+        "itemId": "design",
+        "name": "Design services",
+        "vendor": "Lee Studio (demo)",
+        "category": "service",
+        "room": "Living & dining room",
+        "sku": "DEMO-LD-DESIGN-01",
+        "specification": "Living-and-dining layout and furniture selection; fixed scope and fee",
+        "quantity": 1,
+        "unitLabel": "fixed fee",
+        "unitPriceCents": 100000,
+        "taxCents": 0,
+        "freightCents": 0,
+        "source": {
+          "kind": "demo",
+          "name": "Fictional studio service agreement",
+          "note": "Local fictional scenario terms; not an uploaded or supplier-issued agreement.",
+          "priceNote": "One fixed fee of USD 1,000; unchanged in this revision.",
+          "reference": "MAPLE-LD-SERVICE-01"
+        },
+        "leadTimeDays": null,
+        "returnPolicy": "Fictional service terms: this furniture revision leaves the agreed service scope and USD 1,000 fee unchanged; any service cancellation needs a separate review.",
+        "restockingFeeBps": 0,
+        "customMade": false,
+        "nonReturnable": false,
+        "approval": {
+          "status": "approved",
+          "approvedBy": "Emma Park",
+          "approvedAt": "2026-11-02T04:57:11.573Z",
+          "signature": "Emma Park",
+          "isDemo": true
+        }
+      },
+      {
+        "itemId": "sofa",
+        "name": "Compact sofa",
+        "vendor": "Alder Room (demo)",
+        "category": "furniture",
+        "room": "Living & dining room",
+        "sku": "DEMO-LD-SOFA-200",
+        "specification": "Straight compact sofa, 200 × 90 × 80 cm; warm neutral fabric; no chaise",
+        "quantity": 1,
+        "unitLabel": "each",
+        "unitPriceCents": 210000,
+        "taxCents": 0,
+        "freightCents": 0,
+        "source": {
+          "kind": "estimate",
+          "reference": "8ccd986a-d76c-44f9-9b8e-e476572f5495:sofa",
+          "name": "Alder Room (demo)",
+          "note": "Designer-reviewed price in the client-confirmed demo V2.",
+          "checkedAt": "2026-11-02T04:56:59.767Z"
+        },
+        "leadTimeDays": 21,
+        "returnPolicy": "Local fictional supplier terms: cancel an unplaced order without a retained cost. No supplier order is placed by this draft. Standard unused goods can be returned within 14 days with prior approval, retaining 15% of the goods price.",
+        "restockingFeeBps": 1500,
+        "customMade": false,
+        "nonReturnable": false,
+        "approval": {
+          "status": "approved",
+          "approvedBy": "Emma Park",
+          "approvedAt": "2026-11-02T04:57:11.573Z",
+          "signature": "Emma Park",
+          "isDemo": true
+        }
+      },
+      {
+        "itemId": "coffee-table",
+        "name": "Small round side table",
+        "vendor": "Orbit Workshop (demo)",
+        "category": "furniture",
+        "room": "Living & dining room",
+        "sku": "DEMO-LD-SIDE-40",
+        "specification": "Movable light oak round side table, 40 cm diameter × 50 cm high; light enough to lift; quoted per individual side table",
+        "quantity": 2,
+        "unitLabel": "each",
+        "unitPriceCents": 18000,
+        "taxCents": 0,
+        "freightCents": 0,
+        "source": {
+          "kind": "estimate",
+          "reference": "8ccd986a-d76c-44f9-9b8e-e476572f5495:coffee-table",
+          "name": "Orbit Workshop (demo)",
+          "note": "Designer-reviewed price in the client-confirmed demo V2.",
+          "checkedAt": "2026-11-02T04:56:59.767Z"
+        },
+        "leadTimeDays": 14,
+        "returnPolicy": "Local fictional supplier terms: cancel an unplaced order without a retained cost. No supplier order is placed by this draft. Standard unused goods can be returned within 14 days with prior approval, retaining 10% of the goods price.",
+        "restockingFeeBps": 1000,
+        "customMade": false,
+        "nonReturnable": false,
+        "approval": {
+          "status": "approved",
+          "approvedBy": "Emma Park",
+          "approvedAt": "2026-11-02T04:57:11.573Z",
+          "signature": "Emma Park",
+          "isDemo": true
+        }
+      },
+      {
+        "itemId": "dining-table",
+        "name": "Round dining table",
+        "vendor": "Common Table Co (demo)",
+        "category": "furniture",
+        "room": "Living & dining room",
+        "sku": "DEMO-LD-ROUND-110",
+        "specification": "Fixed round light oak dining table, 110 cm diameter × 75 cm high, four seats; no extension",
+        "quantity": 1,
+        "unitLabel": "each",
+        "unitPriceCents": 125000,
+        "taxCents": 0,
+        "freightCents": 0,
+        "source": {
+          "kind": "estimate",
+          "reference": "8ccd986a-d76c-44f9-9b8e-e476572f5495:dining-table",
+          "name": "Common Table Co (demo)",
+          "note": "Designer-reviewed price in the client-confirmed demo V2.",
+          "checkedAt": "2026-11-02T04:56:59.767Z"
+        },
+        "leadTimeDays": 21,
+        "returnPolicy": "Local fictional supplier terms: cancel an unplaced order without a retained cost. No supplier order is placed by this draft. Standard unused goods can be returned within 14 days with prior approval, retaining 15% of the goods price.",
+        "restockingFeeBps": 1500,
+        "customMade": false,
+        "nonReturnable": false,
+        "approval": {
+          "status": "approved",
+          "approvedBy": "Emma Park",
+          "approvedAt": "2026-11-02T04:57:11.573Z",
+          "signature": "Emma Park",
+          "isDemo": true
+        }
+      },
+      {
+        "itemId": "dining-chairs",
+        "name": "Upholstered dining chairs",
+        "vendor": "Gather Seating (demo)",
+        "category": "furniture",
+        "room": "Living & dining room",
+        "sku": "DEMO-LD-CHAIR-01",
+        "specification": "Matching light oak frame, warm neutral upholstery; 45 cm W × 53 cm D × 80 cm H; seat height 46 cm",
+        "quantity": 4,
+        "unitLabel": "each",
+        "unitPriceCents": 18000,
+        "taxCents": 0,
+        "freightCents": 0,
+        "source": {
+          "kind": "estimate",
+          "reference": "8ccd986a-d76c-44f9-9b8e-e476572f5495:dining-chairs",
+          "name": "Gather Seating (demo)",
+          "note": "Designer-reviewed price in the client-confirmed demo V2.",
+          "checkedAt": "2026-11-02T04:56:59.767Z"
+        },
+        "leadTimeDays": 14,
+        "returnPolicy": "Fictional terms: reduce the quantity before supplier confirmation at no retained cost. After delivery, unused chairs may be returned with prior approval within 14 days, retaining 10% of the returned goods price. These chairs have not been ordered.",
+        "restockingFeeBps": 1000,
+        "customMade": false,
+        "nonReturnable": false,
+        "approval": {
+          "status": "approved",
+          "approvedBy": "Emma Park",
+          "approvedAt": "2026-11-02T04:57:11.573Z",
+          "signature": "Emma Park",
+          "isDemo": true
+        }
+      },
+      {
+        "itemId": "old-cost-77d559c2-49b9-4e1f-9e0e-4b464dd638f3-change-4",
+        "name": "Old item retention and handling cost: Dining sideboard",
+        "vendor": "Still House Storage (demo)",
+        "category": "service",
+        "room": "Living & dining room",
+        "sku": "OLD-COST-change-4",
+        "specification": "MAPLE-LD-SIDEBOARD-01: arrange return of the sideboard; retain USD 240 total (20% of USD 1,200), including all handling, tax and delivery. The planned USD 960 refund waits for supplier credit. This proposal does not record a return, credit or refund as completed.. This line includes every verified cost and applicable tax for keeping, cancelling or returning the old item. It is charged as one amount, with no further tax or delivery.",
+        "quantity": 1,
+        "unitLabel": "total",
+        "unitPriceCents": 24000,
+        "taxCents": 0,
+        "freightCents": 0,
+        "source": {
+          "kind": "estimate",
+          "reference": "8ccd986a-d76c-44f9-9b8e-e476572f5495:old-cost-77d559c2-49b9-4e1f-9e0e-4b464dd638f3-change-4",
+          "name": "Still House Storage (demo)",
+          "note": "Designer-reviewed price in the client-confirmed demo V2.",
+          "checkedAt": "2026-11-02T04:56:59.767Z"
+        },
+        "leadTimeDays": null,
+        "returnPolicy": "This line is the designer-verified total cost of handling the old item. This change order's terms and old-item notes govern how it is handled or returned.",
+        "restockingFeeBps": null,
+        "customMade": false,
+        "nonReturnable": null,
+        "approval": {
+          "status": "approved",
+          "approvedBy": "Emma Park",
+          "approvedAt": "2026-11-02T04:57:11.573Z",
+          "signature": "Emma Park",
+          "isDemo": true
+        }
+      }
+    ],
+    "isDemo": true,
+    "status": "approved",
+    "version": 2,
+    "currency": "USD",
+    "projectId": "maple",
+    "signature": "Emma Park",
+    "approvedAt": "2026-11-02T04:57:11.573Z",
+    "approvedBy": "Emma Park",
+    "clientName": "Emma Park",
+    "demoNotice": "Demo client confirmation of a frozen quote; this is not identity verification or a payment receipt.",
+    "assumptions": [
+      "Local fictional Maple supplier documents: use the selected lines' quantities, per-item USD prices and listed return/cancellation terms. Whole-line tax and delivery are explicitly USD 0 in this demo. Include only the retained old-item costs listed for this proposed scope. Any planned refund requires its separate supplier-credit record and PayPal result. These proposed terms require designer review and client confirmation; they are not stock, order, return or payment receipts. Unchanged lines, including design services, keep their approved scope and price.",
+      "Design services stay unchanged at the agreed fixed scope and fee.",
+      "The client must confirm the revised quote before anything is acted on.",
+      "The sideboard return needs prior supplier approval and keeps a retained cost under its return terms.",
+      "Any supplier credit and refund for the sideboard follow only after the client confirms.",
+      "Demo walkthrough: review checks are preselected for convenience. Prices reference local fictional supplier documents. These checks do not establish actual measurements, supplier approval, orders or payments; those need their own evidence."
+    ],
+    "paymentNote": "Client confirmation records scope and prices. Authorization, capture and refund are separate payment records.",
+    "projectName": "Maple Ave",
+    "designerName": "Jordan Lee"
+  },
+  "moneyContext": {
+    "projectKey": "maple",
+    "quoteId": "8ccd986a-d76c-44f9-9b8e-e476572f5495",
+    "version": 2,
+    "checkedAt": "2026-11-05T08:24:00.694Z",
+    "providerRecordedAt": "2026-11-02T04:57:40.576Z",
+    "mode": "recorded_sandbox",
+    "facts": [
+      {
+        "id": "budget",
+        "text": {
+          "en": "The client-confirmed V2 quote is $5,670.00, compared with $7,730.00 in V1; the budget change is −$2,060.00. This difference is not an amount already charged or a checkout amount."
+        },
+        "sourceIds": [
+          "quote",
+          "approval"
+        ]
+      },
+      {
+        "id": "approval",
+        "text": {
+          "en": "The demo client confirmed this frozen V2 on 2026-11-02T04:57:11.573Z. Scope approval and PayPal buyer authorization are separate; the AI cannot approve or move money."
+        },
+        "sourceIds": [
+          "approval"
+        ]
+      },
+      {
+        "id": "item:baseline:design",
+        "text": {
+          "en": "Design services (baseline): this version's target is $1,000.00; currently held $0.00, completed captures $1,000.00, completed refunds $0.00, released authorization $0.00, net captured $1,000.00. A released authorization is not a refund of captured money."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "capture:008cc0d1-08f4-45ae-b502-cb6140e51f90"
+        ]
+      },
+      {
+        "id": "next:baseline:design",
+        "text": {
+          "en": "Design services: recorded net captures match the approved target of $1,000.00 and no authorization remains. This only describes this item's recorded state."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "capture:008cc0d1-08f4-45ae-b502-cb6140e51f90"
+        ]
+      },
+      {
+        "id": "item:baseline:sofa",
+        "text": {
+          "en": "Three-seat sofa (baseline): this version's target is $0.00; currently held $0.00, completed captures $0.00, completed refunds $0.00, released authorization $2,400.00, net captured $0.00. A released authorization is not a refund of captured money."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "hold:6fb12b09-b0b0-4057-aeb0-e9c6b8a074e6"
+        ]
+      },
+      {
+        "id": "next:baseline:sofa",
+        "text": {
+          "en": "Three-seat sofa: recorded net captures match the approved target of $0.00 and no authorization remains. This only describes this item's recorded state."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "hold:6fb12b09-b0b0-4057-aeb0-e9c6b8a074e6"
+        ]
+      },
+      {
+        "id": "terms:baseline:sofa",
+        "text": {
+          "en": "Three-seat sofa: the client-confirmed old-item handling is not_ordered; the retained old-item cost is $0.00. This amount is already included in the confirmed target and must not be deducted a second time."
+        },
+        "sourceIds": [
+          "quote",
+          "approval"
+        ]
+      },
+      {
+        "id": "item:proposed:sofa",
+        "text": {
+          "en": "Compact sofa (proposed): this version's target is $2,100.00; currently held $2,100.00, completed captures $0.00, completed refunds $0.00, released authorization $0.00, net captured $0.00. A released authorization is not a refund of captured money. This new purchase has its own authorization; another item's released hold or refund does not pay for this authorization."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "hold:4182cb72-52f0-46c1-8643-ad075aba3bdc"
+        ]
+      },
+      {
+        "id": "next:proposed:sofa",
+        "text": {
+          "en": "Compact sofa: the amount is authorized, not charged. Capture waits for this item's supplier confirmation."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "hold:4182cb72-52f0-46c1-8643-ad075aba3bdc"
+        ]
+      },
+      {
+        "id": "item:baseline:coffee-table",
+        "text": {
+          "en": "Large rectangular coffee table (baseline): this version's target is $0.00; currently held $0.00, completed captures $0.00, completed refunds $0.00, released authorization $650.00, net captured $0.00. A released authorization is not a refund of captured money."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "hold:e4e5aeb3-43fb-419a-8c84-34c724fc616e"
+        ]
+      },
+      {
+        "id": "next:baseline:coffee-table",
+        "text": {
+          "en": "Large rectangular coffee table: recorded net captures match the approved target of $0.00 and no authorization remains. This only describes this item's recorded state."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "hold:e4e5aeb3-43fb-419a-8c84-34c724fc616e"
+        ]
+      },
+      {
+        "id": "terms:baseline:coffee-table",
+        "text": {
+          "en": "Large rectangular coffee table: the client-confirmed old-item handling is not_ordered; the retained old-item cost is $0.00. This amount is already included in the confirmed target and must not be deducted a second time."
+        },
+        "sourceIds": [
+          "quote",
+          "approval"
+        ]
+      },
+      {
+        "id": "item:proposed:coffee-table",
+        "text": {
+          "en": "Small round side table (proposed): this version's target is $360.00; currently held $360.00, completed captures $0.00, completed refunds $0.00, released authorization $0.00, net captured $0.00. A released authorization is not a refund of captured money. This new purchase has its own authorization; another item's released hold or refund does not pay for this authorization."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "hold:bcf94654-92c5-4b8d-b874-b9dc340398bf"
+        ]
+      },
+      {
+        "id": "next:proposed:coffee-table",
+        "text": {
+          "en": "Small round side table: the amount is authorized, not charged. Capture waits for this item's supplier confirmation."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "hold:bcf94654-92c5-4b8d-b874-b9dc340398bf"
+        ]
+      },
+      {
+        "id": "item:baseline:dining-table",
+        "text": {
+          "en": "Fixed six-person dining table (baseline): this version's target is $0.00; currently held $0.00, completed captures $0.00, completed refunds $0.00, released authorization $1,400.00, net captured $0.00. A released authorization is not a refund of captured money."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "hold:67e09fb8-aa45-4e43-bddb-8e7744e26fde"
+        ]
+      },
+      {
+        "id": "next:baseline:dining-table",
+        "text": {
+          "en": "Fixed six-person dining table: recorded net captures match the approved target of $0.00 and no authorization remains. This only describes this item's recorded state."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "hold:67e09fb8-aa45-4e43-bddb-8e7744e26fde"
+        ]
+      },
+      {
+        "id": "terms:baseline:dining-table",
+        "text": {
+          "en": "Fixed six-person dining table: the client-confirmed old-item handling is not_ordered; the retained old-item cost is $0.00. This amount is already included in the confirmed target and must not be deducted a second time."
+        },
+        "sourceIds": [
+          "quote",
+          "approval"
+        ]
+      },
+      {
+        "id": "item:proposed:dining-table",
+        "text": {
+          "en": "Round dining table (proposed): this version's target is $1,250.00; currently held $1,250.00, completed captures $0.00, completed refunds $0.00, released authorization $0.00, net captured $0.00. A released authorization is not a refund of captured money. This new purchase has its own authorization; another item's released hold or refund does not pay for this authorization."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "hold:7071b9b5-fb93-48fa-b611-beaacfe3878b"
+        ]
+      },
+      {
+        "id": "next:proposed:dining-table",
+        "text": {
+          "en": "Round dining table: the amount is authorized, not charged. Capture waits for this item's supplier confirmation."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "hold:7071b9b5-fb93-48fa-b611-beaacfe3878b"
+        ]
+      },
+      {
+        "id": "item:baseline:dining-chairs",
+        "text": {
+          "en": "Upholstered dining chairs (baseline): this version's target is $720.00; currently held $1,080.00, completed captures $0.00, completed refunds $0.00, released authorization $0.00, net captured $0.00. A released authorization is not a refund of captured money."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "hold:e2aeb848-c89a-4786-bf02-18cdae9ca50f"
+        ]
+      },
+      {
+        "id": "next:baseline:dining-chairs",
+        "text": {
+          "en": "Upholstered dining chairs: the amount is authorized, not charged. Capture waits for this item's supplier confirmation."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "hold:e2aeb848-c89a-4786-bf02-18cdae9ca50f"
+        ]
+      },
+      {
+        "id": "terms:baseline:dining-chairs",
+        "text": {
+          "en": "Upholstered dining chairs: the client-confirmed old-item handling is not_ordered; the retained old-item cost is $0.00. This amount is already included in the confirmed target and must not be deducted a second time."
+        },
+        "sourceIds": [
+          "quote",
+          "approval"
+        ]
+      },
+      {
+        "id": "item:baseline:sideboard",
+        "text": {
+          "en": "Dining sideboard (baseline): this version's target is $240.00; currently held $0.00, completed captures $1,200.00, completed refunds $0.00, released authorization $0.00, net captured $1,200.00. A released authorization is not a refund of captured money."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "hold:28bd0400-a65e-4103-9d60-04cb37705eec",
+          "capture:5f3b5e0a-2f23-4504-87c2-f0c7517cfb1a"
+        ]
+      },
+      {
+        "id": "next:baseline:sideboard",
+        "text": {
+          "en": "Dining sideboard: $960.00 remains to be refunded after the supplier credit is confirmed; it has not been returned yet. Another item's supplier confirmation does not satisfy this condition."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "hold:28bd0400-a65e-4103-9d60-04cb37705eec",
+          "capture:5f3b5e0a-2f23-4504-87c2-f0c7517cfb1a"
+        ]
+      },
+      {
+        "id": "terms:baseline:sideboard",
+        "text": {
+          "en": "Dining sideboard: the client-confirmed old-item handling is returned; the retained old-item cost is $240.00. This amount is already included in the confirmed target and must not be deducted a second time."
+        },
+        "sourceIds": [
+          "quote",
+          "approval"
+        ]
+      },
+      {
+        "id": "scope",
+        "text": {
+          "en": "For the shown payment items only: held $4,790.00, completed captures $2,200.00, completed refunds $0.00, released authorization $4,450.00, net captured $2,200.00. These are recorded Sandbox results, not a complete project settlement or a real-time PayPal balance. Pending results are not completed money."
+        },
+        "sourceIds": [
+          "quote",
+          "approval",
+          "capture:008cc0d1-08f4-45ae-b502-cb6140e51f90",
+          "hold:6fb12b09-b0b0-4057-aeb0-e9c6b8a074e6",
+          "hold:4182cb72-52f0-46c1-8643-ad075aba3bdc",
+          "hold:e4e5aeb3-43fb-419a-8c84-34c724fc616e",
+          "hold:bcf94654-92c5-4b8d-b874-b9dc340398bf",
+          "hold:67e09fb8-aa45-4e43-bddb-8e7744e26fde",
+          "hold:7071b9b5-fb93-48fa-b611-beaacfe3878b",
+          "hold:e2aeb848-c89a-4786-bf02-18cdae9ca50f",
+          "hold:28bd0400-a65e-4103-9d60-04cb37705eec",
+          "capture:5f3b5e0a-2f23-4504-87c2-f0c7517cfb1a"
+        ]
+      },
+      {
+        "id": "record-freshness",
+        "text": {
+          "en": "This answer reads stored Sandbox evidence at 2026-11-05T08:24:00.694Z; the most recent recorded provider response is 2026-11-02T04:57:40.576Z. No live PayPal query was made for this answer. Supplier confirmations are designer-entered demo records."
+        },
+        "sourceIds": [
+          "quote"
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "id": "quote",
+        "kind": "quote",
+        "label": "Client-confirmed V2 quote",
+        "href": "/change-orders/8ccd986a-d76c-44f9-9b8e-e476572f5495",
+        "recordedAt": "2026-11-02T04:56:59.767Z"
+      },
+      {
+        "id": "approval",
+        "kind": "approval",
+        "label": "Client confirmation · V2",
+        "href": "/change-orders/8ccd986a-d76c-44f9-9b8e-e476572f5495",
+        "recordedAt": "2026-11-02T04:57:11.573Z"
+      },
+      {
+        "id": "capture:008cc0d1-08f4-45ae-b502-cb6140e51f90",
+        "kind": "payment",
+        "label": "PayPal capture 7VW90108R8197591S · completed",
+        "href": "/change-orders/8ccd986a-d76c-44f9-9b8e-e476572f5495#payment-line-baseline-design",
+        "recordedAt": "2026-11-02T04:56:35.853Z"
+      },
+      {
+        "id": "hold:6fb12b09-b0b0-4057-aeb0-e9c6b8a074e6",
+        "kind": "payment",
+        "label": "PayPal authorization 8C56731184871190M · voided",
+        "href": "/change-orders/8ccd986a-d76c-44f9-9b8e-e476572f5495#payment-line-baseline-sofa",
+        "recordedAt": "2026-11-02T04:56:33.309Z"
+      },
+      {
+        "id": "hold:4182cb72-52f0-46c1-8643-ad075aba3bdc",
+        "kind": "payment",
+        "label": "PayPal authorization 39S59921MU2372448 · created",
+        "href": "/change-orders/8ccd986a-d76c-44f9-9b8e-e476572f5495#payment-line-proposed-sofa",
+        "recordedAt": "2026-11-02T04:57:17.458Z"
+      },
+      {
+        "id": "hold:e4e5aeb3-43fb-419a-8c84-34c724fc616e",
+        "kind": "payment",
+        "label": "PayPal authorization 3F799381KR325830C · voided",
+        "href": "/change-orders/8ccd986a-d76c-44f9-9b8e-e476572f5495#payment-line-baseline-coffee-table",
+        "recordedAt": "2026-11-02T04:56:33.393Z"
+      },
+      {
+        "id": "hold:bcf94654-92c5-4b8d-b874-b9dc340398bf",
+        "kind": "payment",
+        "label": "PayPal authorization 2UF80098BY1145020 · created",
+        "href": "/change-orders/8ccd986a-d76c-44f9-9b8e-e476572f5495#payment-line-proposed-coffee-table",
+        "recordedAt": "2026-11-02T04:57:17.613Z"
+      },
+      {
+        "id": "hold:67e09fb8-aa45-4e43-bddb-8e7744e26fde",
+        "kind": "payment",
+        "label": "PayPal authorization 605870739A2641028 · voided",
+        "href": "/change-orders/8ccd986a-d76c-44f9-9b8e-e476572f5495#payment-line-baseline-dining-table",
+        "recordedAt": "2026-11-02T04:56:33.672Z"
+      },
+      {
+        "id": "hold:7071b9b5-fb93-48fa-b611-beaacfe3878b",
+        "kind": "payment",
+        "label": "PayPal authorization 7SY829425K1519117 · created",
+        "href": "/change-orders/8ccd986a-d76c-44f9-9b8e-e476572f5495#payment-line-proposed-dining-table",
+        "recordedAt": "2026-11-02T04:57:17.147Z"
+      },
+      {
+        "id": "hold:e2aeb848-c89a-4786-bf02-18cdae9ca50f",
+        "kind": "payment",
+        "label": "PayPal authorization 8PC85197BT889662C · created",
+        "href": "/change-orders/8ccd986a-d76c-44f9-9b8e-e476572f5495#payment-line-baseline-dining-chairs",
+        "recordedAt": "2026-11-02T04:56:33.701Z"
+      },
+      {
+        "id": "hold:28bd0400-a65e-4103-9d60-04cb37705eec",
+        "kind": "payment",
+        "label": "PayPal authorization 38P93462TD3925733 · captured",
+        "href": "/change-orders/8ccd986a-d76c-44f9-9b8e-e476572f5495#payment-line-baseline-sideboard",
+        "recordedAt": "2026-11-02T04:56:33.703Z"
+      },
+      {
+        "id": "capture:5f3b5e0a-2f23-4504-87c2-f0c7517cfb1a",
+        "kind": "payment",
+        "label": "PayPal capture 2HS07705D12721906 · completed",
+        "href": "/change-orders/8ccd986a-d76c-44f9-9b8e-e476572f5495#payment-line-baseline-sideboard",
+        "recordedAt": "2026-11-02T04:56:37.693Z"
+      }
+    ],
+    "mandatoryFactIds": [
+      "record-freshness"
+    ]
+  }
+}
