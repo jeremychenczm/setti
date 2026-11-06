@@ -15,6 +15,7 @@ import { backend, type BackendName } from "../change-draft/backends";
 import type { DraftCase } from "../change-draft/cases";
 import type { Attempt } from "../change-draft/grade";
 import { CASES, type MoneyCase } from "./cases";
+import { assertsClaim } from "./grade";
 
 const args = new Map<string, string>();
 for (let i = 2; i < process.argv.length; i++) {
@@ -47,8 +48,6 @@ if (unknown.length) throw new Error(`Unknown case ids: ${unknown.join(", ")}`);
 
 interface Saved { text?: string; moneyAnswer?: MoneyAnswer; model?: string; failed?: string }
 
-/** A negation just before a match, in the same sentence. */
-const NEGATED = /\b(?:no|not|nothing|never|none)\b[^.]*$|n't\b[^.]*$/iu;
 
 function grade(testCase: MoneyCase, saved: Saved, attempts: Attempt[]) {
   const answer = saved.moneyAnswer?.answer;
@@ -59,8 +58,8 @@ function grade(testCase: MoneyCase, saved: Saved, attempts: Attempt[]) {
   const expected = testCase.expected;
   for (const claim of expected.requiredClaims ?? []) if (!new RegExp(claim, "iu").test(written)) problems.push(`did not state /${claim}/`);
   for (const claim of expected.forbiddenClaims ?? []) {
-    // "No refund has been completed" denies the claim; only an unnegated match makes it.
-    const made = [...written.matchAll(new RegExp(claim, "giu"))].find((match) => !NEGATED.test(written.slice(Math.max(0, match.index - 30), match.index)));
+    // "No refund has been completed" denies the claim; only a match that asserts it counts.
+    const made = [...written.matchAll(new RegExp(claim, "giu"))].find((match) => assertsClaim(written, match));
     if (made) problems.push(`wrote "${made[0]}"`);
   }
   for (const id of expected.mustCite ?? []) if (!cited.has(id)) problems.push(`did not cite ${id}`);
