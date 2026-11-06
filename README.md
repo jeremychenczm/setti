@@ -22,7 +22,7 @@ New preparation starts only after choosing a role; an already started setup cont
 - **PayPal** or **Pay Later**: log in to the PayPal window as `sb-jhaqe53477496@personal.example.com` with the password `W=3qAuJc`.
 - **Card**: choose **Pay with the test card**. Setti approves PayPal's Sandbox Visa `4012 0000 3333 0026` on the server, so there is nothing to type.
 
-When finished, select **End demo & reset** to clear this browser's demo identity and return to `/try`. Your next start gets a fresh private workspace with Maple's agreed V1 and sample discussion, without the previous run's revisions. Saved project records and PayPal Sandbox audit records remain; ending a demo does not undo payments. Refreshing, switching roles, returning from PayPal or selecting **Demo home** keeps the current run available to continue.
+When finished, select **End demo & reset** to clear this browser's demo identity and return to `/try`. Your next start gets a fresh private workspace with Maple's agreed V1 and sample discussion, without the previous run's revisions. Ending a demo releases its open holds on PayPal and keeps its project and PayPal Sandbox records as a read-only record; charged payments are not undone. Refreshing, switching roles, returning from PayPal or selecting **Demo home** keeps the current run available to continue.
 
 To run it yourself (Node.js 22 or later, Docker):
 
@@ -101,7 +101,7 @@ On **Payments**, every item carries one status, worked out from that item's own 
 | | `Hold release required` | Rare: the item is fully paid while a hold is still open, so the designer releases it. | — |
 | **Settled** | `Payment completed` | None. Exactly the confirmed amount was charged. | Sideboard at V1 ($1,200) and the design services |
 | | `Hold released` | None. The money was never charged, so this is not a refund. | Original sofa, coffee table and dining table after V2 |
-| | `Cancelled by the studio` | None. The designer's reason is posted in the chat; until PayPal confirms the release, the status reads `Cancelled · hold not released yet`. | Any uncharged hold the designer cancels |
+| | `Cancelled by the studio` | None. The designer's reason is posted in the chat; until PayPal confirms the release, the status reads `Cancelled · hold not released yet`. | Any uncharged hold the designer cancels, and every item still on hold when a demo ends |
 | | `No payment required` | None. Nothing is due for the item under this version. | — |
 | **Going back** | `Awaiting supplier credit` | The supplier credits the studio and the designer records it. The new version needs less than was charged. | Sideboard after V2: $1,200 charged, $240 kept under the supplier's return terms, $960 to refund |
 | | `Refund required` | The designer sends the refund. | Sideboard once the credit is recorded |
@@ -117,6 +117,7 @@ Setti keeps watching the holds after everyone has signed.
 - **AI summaries** open both inboxes. The server checks every amount and status in a summary against the entries it cites, and shows no summary when one still fails after a rewrite.
 - **A daily check** (Render cron, 15:00 UTC) reads back holds past their 29 days and renews a furniture hold still waiting for its supplier on day 25 with the client's saved payment method: a new hold first, then the old one released. Both people get a chat notice three days before.
 - **Cancel a hold.** The designer can cancel the hold on any uncharged item, with a reason; PayPal releases the money and the reason is posted in the chat.
+- **A demo left alone for a week ends.** The daily check cancels its items still on hold, releases them on PayPal and posts one notice; charged payments stay, and the project remains as a read-only record. **End demo & reset** does the same at once. A visit with the demo cookie counts as activity.
 - **Skip ahead 3 days** in the walkthrough guide moves a simulated clock so the reminders appear. PayPal calls still happen now, in the Sandbox.
 - **Limits.** Each visitor can ask the AI 40 times an hour (`SETTI_AI_PER_HOUR`), the whole demo 500 times a day (`SETTI_AI_PER_DAY`), and the server starts at most 30 new Maple runs an hour (`SETTI_TRY_PER_HOUR`).
 
