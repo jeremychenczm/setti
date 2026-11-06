@@ -1,12 +1,26 @@
 # Setti
 
-A project chat for independent interior designers that keeps every dollar in sync with what was agreed: when a client changes their mind after money has already moved, one approval turns into the right PayPal actions (release a hold, capture less, refund minus the restocking fee, charge the difference), each tracked on its own.
+Design evolves through conversation. Setti's AI spots changes, drafts revised quotes, and links approvals to PayPal authorizations, captures, and refunds—freeing designers to focus on design.
 
-> **Status: hackathon build, PayPal Sandbox only.** AI change drafts, designer pricing review, client confirmation and the PayPal Sandbox payment steps (authorize, capture, release, refund) run end to end. See [what is real](#what-is-real) and the [Sandbox evidence](#sandbox-evidence).
+**Live demo: <https://setti.onrender.com/try>** · PayPal Sandbox, so no real money moves
+
+Independent interior designers settle the design with their clients in one project chat. When the design changes after money has already moved, one approval turns into the right PayPal step for each item: release a hold, capture less, refund minus what the supplier keeps, or hold the difference.
+
+> **Status: hackathon build, PayPal Sandbox only.** AI change drafts, designer pricing review, client confirmation and the PayPal Sandbox payment steps (authorize, capture, release, refund) run end to end, and PayPal's webhooks confirm each step. See [what is real](#what-is-real), the [Sandbox evidence](#sandbox-evidence) and [AI quality](#ai-quality).
 
 ## Try it
 
-Open **`/try`** and select **I'm a designer** to enter as Jordan or **I'm a client** to enter as Emma. Both entrances use the same Maple Ave project in your private workspace. New preparation starts only after choosing a role; an already started setup continues in the background while the app is open.
+Open **<https://setti.onrender.com/try>** in any browser; there is no account to create. Pick a side of the same private project and switch whenever you like:
+
+- **I'm a designer** opens Jordan's studio. The Maple Ave living-and-dining project has an agreed V1, real Sandbox holds on its furniture and a 19-message discussion waiting for an AI revision.
+- **I'm a client** opens the project as Emma, who reviews the revised quote, signs it and pays.
+
+New preparation starts only after choosing a role; an already started setup continues in the background while the app is open.
+
+**Sandbox test accounts.** These are PayPal Sandbox test values and move no real money. The payment page shows them too, with copy buttons.
+
+- **PayPal** or **Pay Later**: log in to the PayPal window as `sb-jhaqe53477496@personal.example.com` with the password `W=3qAuJc`.
+- **Card**: choose **Pay with the test card**. Setti approves PayPal's Sandbox Visa `4012 0000 3333 0026` on the server, so there is nothing to type.
 
 When finished, select **End demo & reset** to clear this browser's demo identity and return to `/try`. Your next start gets a fresh private workspace with Maple's agreed V1 and sample discussion, without the previous run's revisions. Saved project records and PayPal Sandbox audit records remain; ending a demo does not undo payments. Refreshing, switching roles, returning from PayPal or selecting **Demo home** keeps the current run available to continue.
 
@@ -73,6 +87,39 @@ On **Approved items**, a hold with a saved method can require the buyer again. T
 
 The server checks the selected demo account as well as the owning browser session. Only the project's client starts or leaves its checkout; designer-only payment and supplier actions are refused from client accounts. These are demo roles, not real identity authentication.
 
+## Payment statuses
+
+On **Payments**, every item carries one status, worked out from that item's own PayPal records. The table follows the money, and says who moves it on.
+
+| Money | Status | Next step | In the Maple walkthrough |
+|---|---|---|---|
+| **Not held yet** | `Authorization needed` | The client approves a hold through PayPal. `Additional authorization needed` means an existing hold covers only part of a larger new amount. | A V2 item whose hold did not go through |
+| | `Payment required` | The client pays. Design services are charged rather than held. | Design services before they are paid |
+| | `Awaiting client approval` | The client finishes the PayPal window they opened. | — |
+| **Held, not charged** | `Awaiting supplier confirmation` | The designer records the supplier's order. Nothing is charged before that. | Sofa, coffee table, dining table and chairs at V1; after V2, the compact sofa, two side tables and round table |
+| | `Ready for capture` | The designer charges the confirmed amount. Charging less releases the rest of the hold in the same step. | Chairs: $1,080 held for six, $720 charged for four, $360 released |
+| | `Hold release required` | Rare: the item is fully paid while a hold is still open, so the designer releases it. | — |
+| **Settled** | `Payment completed` | None. Exactly the confirmed amount was charged. | Sideboard at V1 ($1,200) and the design services |
+| | `Hold released` | None. The money was never charged, so this is not a refund. | Original sofa, coffee table and dining table after V2 |
+| | `Cancelled by the studio` | None. The designer's reason is posted in the chat; until PayPal confirms the release, the status reads `Cancelled · hold not released yet`. | Any uncharged hold the designer cancels |
+| | `No payment required` | None. Nothing is due for the item under this version. | — |
+| **Going back** | `Awaiting supplier credit` | The supplier credits the studio and the designer records it. The new version needs less than was charged. | Sideboard after V2: $1,200 charged, $240 kept under the supplier's return terms, $960 to refund |
+| | `Refund required` | The designer sends the refund. | Sideboard once the credit is recorded |
+| | `Refund completed` | None. The item's net payment matches its confirmed amount. | Sideboard: $960 refunded, $240 kept |
+| **Being checked** | `… in progress`, `Capture pending at PayPal`, `Refund pending at PayPal`, `… outcome unknown` | Setti checks the existing operation with PayPal before anything is repeated. | Only after an interrupted call |
+
+## Inbox, reminders and renewals
+
+Setti keeps watching the holds after everyone has signed.
+
+- **Jordan's Inbox** lists what needs the designer today, one line per item: a hold whose supplier order is still not recorded after three days, an item ready to charge, a hold close to PayPal's 29-day limit, a hold that failed, expired or could not be renewed, and a PayPal result Setti could not confirm.
+- **Emma's Inbox** is her money: every hold, charge, release and refund, with its PayPal ID and time. Opening it reads the latest entries back from PayPal, and once PayPal's webhook for a step arrives, the entry says **Confirmed by PayPal**.
+- **AI summaries** open both inboxes. The server checks every amount and status in a summary against the entries it cites, and shows no summary when one still fails after a rewrite.
+- **A daily check** (Render cron, 15:00 UTC) reads back holds past their 29 days and renews a furniture hold still waiting for its supplier on day 25 with the client's saved payment method: a new hold first, then the old one released. Both people get a chat notice three days before.
+- **Cancel a hold.** The designer can cancel the hold on any uncharged item, with a reason; PayPal releases the money and the reason is posted in the chat.
+- **Skip ahead 3 days** in the walkthrough guide moves a simulated clock so the reminders appear. PayPal calls still happen now, in the Sandbox.
+- **Limits.** Each visitor can ask the AI 40 times an hour (`SETTI_AI_PER_HOUR`), the whole demo 500 times a day (`SETTI_AI_PER_DAY`), and the server starts at most 30 new Maple runs an hour (`SETTI_TRY_PER_HOUR`).
+
 ## What is real
 
 | Part | Status |
@@ -86,7 +133,8 @@ The server checks the selected demo account as well as the owning browser sessio
 | Designer pricing review, client change orders and confirmation | Real, saved in Postgres and frozen by content hash; the client signs as a demo identity without a login |
 | Supplier order confirmations and credits | Demo records entered by the designer |
 | Quote reports | Real AG Grid reports; the Maple and Willow quote contents are demo data |
-| Not in this build | Hosted demo, procurement timeline, supplier integration and real user authentication |
+| PayPal webhooks | Each event is verified with PayPal's verify-webhook-signature, stored once and matched to its payment step. Webhooks confirm what Setti recorded; they never move money |
+| Not in this build | Procurement timeline, supplier integration and real user authentication |
 
 ## AI quality
 
@@ -112,9 +160,9 @@ Open **Quotes** in the sidebar, or `/quotes/maple` and `/quotes/willow`. The rep
 
 Willow's V1 starts as the designer's draft. Signed in as Jordan Lee, open the Willow chat and select **+** → **Send quote V1**: the server freezes its own copy with a SHA-256 hash and posts it as a quote card. Clients see quotes under **Proposals** only after they are sent. Switch accounts from the avatar at the bottom left of the sidebar.
 
-Signed in as Sofia Martinez, select **Review quote**. Select a line to approve or decline it (a decline needs a reason) or to ask about it; a question goes to the chat right away, tagged with the line. **Approve all remaining** fills in the rest, and one typed signature records every chosen line against the locked V1. Lines left undecided can be signed later; signed decisions cannot be changed. Only the approved lines become the baseline: AI drafts and new versions start from them, and nothing is charged by signing.
+Signed in as Sofia Martinez, select **Review quote**. Select a line to approve or decline it (a decline needs a reason) or to ask about it; a question goes to the chat right away, tagged with the line. Every undecided line starts ticked: **Approve ticked** approves them together, and **Review & sign** records one typed signature for every chosen line against the locked V1. Lines left undecided can be signed later; signed decisions cannot be changed. Only the approved lines become the baseline: AI drafts and new versions start from them, and nothing is charged by signing.
 
-Back as Jordan Lee, **To resolve** on the quote lists declined lines with the client's reason and undecided lines with their questions. **Revise** puts a declined line on a designer draft, filled in from V1, and opens the pricing page to edit it by hand; AI drafts come from discussing the change with the client in the chat. **Drop** (or **Withdraw** for an undecided line) removes the line without a client signature, since it was never agreed. Undecided lines come along into the next version for the client's decision, so issuing it closes V1 without leaving anything behind. If the draft changes after you save a pricing review, the review is carried onto the new draft field by field: values only the draft changed are updated, values you edited stay, and where both changed the same value the pricing page asks which to keep. **Send to client** freezes the next version and posts it to the chat as a quote card, which marks V1 as replaced; the client confirms it from that card.
+Back as Jordan Lee, **To resolve** on the quote lists declined lines with the client's reason and undecided lines with their questions. **Revise** puts a declined line on a designer draft, filled in from V1, and opens the pricing page to edit it by hand; AI drafts come from discussing the change with the client in the chat. **Drop** (or **Withdraw** for an undecided line) removes the line without a client signature, since it was never agreed. Undecided lines come along into the next version for the client's decision, so issuing it closes V1 without leaving anything behind. If the draft changes after you save a pricing review, the review is carried onto the new draft field by field: values only the draft changed are updated, values you edited stay, and where both changed the same value the pricing page asks which to keep. **Send to Sofia as V2** freezes the next version and posts it to the chat as a quote card, which marks V1 as replaced; the client confirms it from that card.
 
 Willow has **26 lines: 20 products (furniture, lighting and supply-only finish materials: flooring, tile, paint, downlights and built-in shelving) from seven fictional supplier quotes, and six simulated design services**. Installation is by the client's contractor and is not in the quote. Each product's details name its supplier quote, price note and return terms. Suppliers, products and prices are invented; service rates, an 8.75% goods-only tax assumption and a single $99 delivery budget are test inputs, not supplier commitments or a location-specific tax calculation.
 
