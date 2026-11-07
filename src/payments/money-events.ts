@@ -39,6 +39,22 @@ async function projectOf(db: Pick<Db, "select">, sessionId: string, key: CaseKey
   return row?.projectId ?? null;
 }
 
+/**
+ * The last time PayPal confirmed an operation's result. `calls` are its successful
+ * PayPal calls and `pushed` its verified webhooks, both newest first.
+ */
+export function lastConfirmation(
+  operationId: string,
+  calls: readonly { operationId: string; step: string; resourceStatus: string | null; createdAt: Date }[],
+  pushed: readonly { operationId: string | null; resourceStatus: string | null; receivedAt: Date }[],
+): MoneyEvent["checked"] {
+  const last = calls.find((call) => call.operationId === operationId);
+  const event = pushed.find((entry) => entry.operationId === operationId);
+  // PayPal telling Setti itself, through a verified webhook, is the strongest confirmation.
+  return event ? { at: event.receivedAt.toISOString(), via: "webhook", status: event.resourceStatus }
+    : last ? { at: last.createdAt.toISOString(), via: READ_STEPS.includes(last.step as PayPalStep) ? "readback" : "response", status: last.resourceStatus } : null;
+}
+
 export async function moneyEvents(db: Pick<Db, "select">, sessionId: string | null, key: CaseKey): Promise<MoneyEvent[]> {
   if (!sessionId) return [];
   const projectId = await projectOf(db, sessionId, key);
@@ -53,11 +69,7 @@ export async function moneyEvents(db: Pick<Db, "select">, sessionId: string | nu
   const label = (itemId: string | null) => itemId ? names.get(itemId) ?? "An item" : "Design services";
 
   return operations.flatMap((operation): MoneyEvent[] => {
-    const last = calls.find((call) => call.operationId === operation.id);
-    const event = pushed.find((entry) => entry.operationId === operation.id);
-    // PayPal telling Setti itself, through a verified webhook, is the strongest confirmation.
-    const checked = event ? { at: event.receivedAt.toISOString(), via: "webhook" as const, status: event.resourceStatus }
-      : last ? { at: last.createdAt.toISOString(), via: READ_STEPS.includes(last.step as PayPalStep) ? "readback" as const : "response" as const, status: last.resourceStatus } : null;
+    const checked = lastConfirmation(operation.id, calls, pushed);
     const base = { id: operation.id, amountCents: operation.amountCents, at: operation.updatedAt.toISOString(), checked };
     switch (operation.kind) {
       case "authorize":
