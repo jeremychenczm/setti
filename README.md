@@ -149,6 +149,10 @@ Setti keeps watching the holds after everyone has signed.
 
 The first round found two prompt problems (a change a client said the designer had approved by phone was drafted, and totals were left out beside a one-item question), and the second found a server check that read "settled" as a payment word. All three were fixed and measured again; [evals/README.md](evals/README.md#results) has both rounds, what changed and the limits of a set this size. The model answers behind these numbers are committed in [`evals/recorded/`](evals/recorded), and CI replays them through the same checks on every push without calling the model (`npm run eval:replay`).
 
+## Security
+
+[SECURITY.md](SECURITY.md) lists nine ways someone could try to move money or make Setti misreport it, from prompt injection to forged PayPal webhooks, with the code that stops each one and the tests that show it.
+
 ## Sandbox evidence
 
 `npm run sandbox:proof` runs one complete change through the app against the PayPal Sandbox, reads every PayPal resource back and writes the results to `evidence/` (see [probes/README.md](probes/README.md#app-level-proof)).
