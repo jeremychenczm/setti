@@ -146,4 +146,4 @@ export const HOME_DISCUSSION: readonly { actor: "client" | "designer"; text: str
   { actor: "client", text: "Great, send me the revised quote when it's ready. I'll check it before confirming." },
 ];
 
-export const HOME_DESIGNER_REQUEST = "@AI Prepare the revised quote from our discussion.";
+export const HOME_DESIGNER_REQUEST = "@Coordinator Prepare the revised quote from our discussion.";

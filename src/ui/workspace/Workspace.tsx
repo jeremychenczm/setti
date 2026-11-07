@@ -43,7 +43,7 @@ const designer = DEMO_ACCOUNTS.find((person) => person.role === "designer")!;
 
 /** How the chat list names a message: "You" for the signed-in account, otherwise the sender's first name. */
 function chatPreview(account: DemoAccount, client: Person, message: { actor: CaseMessage["actor"]; text: string; at: string }): ChatPreview {
-  const from = message.actor === "assistant" ? "Setti" : message.actor === account.role ? "You" : (message.actor === "designer" ? designer : client).name.split(" ")[0];
+  const from = message.actor === "assistant" ? "Coordinator" : message.actor === account.role ? "You" : (message.actor === "designer" ? designer : client).name.split(" ")[0];
   return { from, text: message.text.replace(/\s+/g, " ").trim(), at: message.at };
 }
 

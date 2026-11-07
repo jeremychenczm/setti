@@ -30,7 +30,7 @@ type Checked = { ok: true; reply: Reply } | { ok: false; problems: string[]; fal
 
 /** System notices used only when Setti's own reply failed verification twice; they never speak as Setti. */
 function unverifiedDraftNotice(changeCount: number): string {
-  return `Setti drafted ${changeCount} proposed change${changeCount === 1 ? "" : "s"} for designer review, but its reply did not pass verification, so this summary comes from the draft. Prices, taxes, delivery, old-item handling and any refund plan need verification. The draft does not approve orders or execute payments.`;
+  return `Coordinator drafted ${changeCount} proposed change${changeCount === 1 ? "" : "s"} for designer review, but its reply did not pass verification, so this summary comes from the draft. Prices, taxes, delivery, old-item handling and any refund plan need verification. The draft does not approve orders or execute payments.`;
 }
 const CLIENT_REQUEST_NOTICE = "Your request is saved in this chat. Jordan prepares and checks the revised quote, then sends it for your confirmation. No draft was created or cancelled and no payment was made.";
 
@@ -45,7 +45,7 @@ export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKe
   try {
     const triggerIndex = state.messages.findIndex((message) => message.id === messageId);
     const trigger = state.messages[triggerIndex];
-    if (!trigger || trigger.actor === "assistant" || !isAiInvocation(trigger.text)) throw new Error("Only your own @AI messages can be retried.");
+    if (!trigger || trigger.actor === "assistant" || !isAiInvocation(trigger.text)) throw new Error("Only your own @Coordinator messages can be retried.");
     if (!deps.configured()) throw new Error("The model API is not configured. Set the server key and restart, then retry this message. No AI draft was created.");
     // Before the client approves V1 there is nothing to change yet; Setti still answers, from where V1 stands.
     const openingStatus = state.opening && state.opening.status !== "approved" ? state.opening.status : null;
@@ -55,7 +55,7 @@ export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKe
     const urls = [...new Set(messages.filter((message) => message.actor !== "assistant").flatMap((message) => messageUrls(message.text)))];
     const moneyQuestion = isMoneyQuestion(trigger.text);
     const moneyContext = quote && store.readMoneyContext ? await store.readMoneyContext(sessionId, key) : null;
-    if (quote && moneyContext && (moneyContext.quoteId !== quote.id || moneyContext.version !== quote.version || moneyContext.projectKey !== key)) throw new Error("The approved version for this project has changed. Send a new @AI request.");
+    if (quote && moneyContext && (moneyContext.quoteId !== quote.id || moneyContext.version !== quote.version || moneyContext.projectKey !== key)) throw new Error("The approved version for this project has changed. Send a new @Coordinator request.");
     // A read-only money question must not fetch stale product links or be blocked by their count.
     const deferPages = !quote || moneyQuestion || urls.length > 4;
     const pages = deferPages ? [] : await Promise.all(urls.map(async (url) => {
@@ -128,13 +128,13 @@ export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKe
     if (checked.ok) return await store.completeAi(sessionId, key, messageId, runId, { ...checked.reply, model: result.model });
     // Twice unverified: show only what the records establish, as a system notice rather than in Setti's voice.
     if (checked.fallback) return await store.completeAi(sessionId, key, messageId, runId, { ...checked.fallback, model: "system" });
-    throw new Error("Setti's reply did not pass verification against this project's records, so nothing was saved. Retry, or rephrase the request.");
+    throw new Error("Coordinator's reply did not pass verification against this project's records, so nothing was saved. Retry, or rephrase the request.");
   } catch (error) {
     // Never persist API error bodies, secrets, SQL, or upstream request headers; the server log keeps the cause for diagnosis.
-    if (process.env.NODE_ENV !== "test") console.error("Setti reply failed:", error instanceof Error ? `${error.name}: ${error.message.slice(0, 300)}` : "unknown error");
+    if (process.env.NODE_ENV !== "test") console.error("Coordinator reply failed:", error instanceof Error ? `${error.name}: ${error.message.slice(0, 300)}` : "unknown error");
     let userError = "The AI request or result validation failed, so the draft was not updated. Check the model configuration and network, then retry.";
     if (error instanceof Error && !error.message.match(/(?:api[_ -]?key|bearer|sk-ant-|select |insert |postgres|password)/iu)) {
-      if (/^(The approved version for this project|This project's context|This test version|The model API is not configured|The model did not return|Only your own @AI|Setti's reply did not pass verification)/u.test(error.message)) userError = error.message;
+      if (/^(The approved version for this project|This project's context|This test version|The model API is not configured|The model did not return|Only your own @Coordinator|Coordinator's reply did not pass verification)/u.test(error.message)) userError = error.message;
     }
     await store.failAi(sessionId, key, messageId, runId, userError);
     throw new CaseAiError(userError);

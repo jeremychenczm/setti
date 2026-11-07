@@ -13,7 +13,7 @@ const message = (id: string, text: string, actor: "client" | "designer" = "clien
 const messages: CaseMessage[] = [
   message("chair-request", "Swap the window chair for this desk, just one. https://shop.example.com/desk"),
   message("rug-request", "Return the rug too."),
-  message("request", "@AI Put the chair-to-desk swap and the rug return we just discussed into one change.", "designer"),
+  message("request", "@Coordinator Put the chair-to-desk swap and the rug return we just discussed into one change.", "designer"),
 ];
 // Synthetic source input; real product-page retrieval has separate tests.
 const page: ProductPage = {
@@ -87,7 +87,7 @@ describe("one draft for multiple original items", () => {
   it("updates one item's quantity while retaining the other item's removal relative to V1", () => {
     const first = buildDraft(input()).draft!;
     const data = input(first);
-    data.messages.push(message("correction", "@AI Make it two desks; still return the rug."));
+    data.messages.push(message("correction", "@Coordinator Make it two desks; still return the rug."));
     data.triggerId = "correction";
     data.output.changes[0].quantity = 2;
     data.output.changes[0].sourceMessageIds.push("correction");
@@ -105,7 +105,7 @@ describe("one draft for multiple original items", () => {
   it("can withdraw only the rug change without cancelling the chair replacement draft", () => {
     const current = buildDraft(input()).draft!;
     const data = input(current);
-    data.messages.push(message("keep-rug", "@AI Keep the rug after all; keep the chair-to-desk swap."));
+    data.messages.push(message("keep-rug", "@Coordinator Keep the rug after all; keep the chair-to-desk swap."));
     data.triggerId = "keep-rug";
     data.output.changes = [data.output.changes[0]];
     const revised = buildDraft(data).draft!;

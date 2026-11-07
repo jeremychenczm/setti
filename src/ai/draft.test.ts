@@ -9,7 +9,7 @@ import { CONTEXT_CHAR_LIMIT, modelContext } from "./model";
 
 const messages: CaseMessage[] = [
   { id: "discussion", actor: "client", text: "We mean the dining chairs, not the study chairs.", createdAt: "2026-10-18T10:00:00Z", replyToMessageId: null, aiState: "none", error: null, model: null },
-  { id: "request", actor: "designer", text: "@AI Change them to this one, 4 chairs, keep the rest. https://shop.example/chair", createdAt: "2026-10-18T10:01:00Z", replyToMessageId: null, aiState: "running", error: null, model: null },
+  { id: "request", actor: "designer", text: "@Coordinator Change them to this one, 4 chairs, keep the rest. https://shop.example/chair", createdAt: "2026-10-18T10:01:00Z", replyToMessageId: null, aiState: "running", error: null, model: null },
 ];
 // Deliberately synthetic product input: real source retrieval is tested separately.
 const page: ProductPage = {

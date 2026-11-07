@@ -57,7 +57,7 @@ describe.skipIf(!testDatabaseUrl)("persistent studio conversations", () => {
 
   it("allows one AI run and one reply even when completion or the POST is repeated", async () => {
     const id = session();
-    const input = { id: randomUUID(), text: "@AI What should we confirm next?" };
+    const input = { id: randomUUID(), text: "@Coordinator What should we confirm next?" };
     const run = await store.append(id, bistro, input);
     await expect(store.append(id, bistro, { id: randomUUID(), text: "Another message" })).rejects.toThrow(/working/);
     const replies = await Promise.allSettled([store.finish(id, bistro, input.id, run.runId!, { text: "Check the tile sample.", model: "test-provider" }), store.finish(id, bistro, input.id, run.runId!, { text: "Duplicate response", model: "test-provider" })]);
@@ -68,7 +68,7 @@ describe.skipIf(!testDatabaseUrl)("persistent studio conversations", () => {
 
   it("recovers an interrupted AI request and rejects the old run's late response", async () => {
     const id = session();
-    const input = { id: randomUUID(), text: "@AI Summarise this scope." };
+    const input = { id: randomUUID(), text: "@Coordinator Summarise this scope." };
     const old = await store.append(id, bistro, input);
     await connection.db.update(studioThreads).set({ activeSince: new Date(Date.now() - 125000) }).where(and(eq(studioThreads.sessionId, id), eq(studioThreads.projectId, bistro.id)));
     expect((await store.read(id, bistro)).find((message) => message.id === input.id)?.aiState).toBe("failed");
@@ -80,7 +80,7 @@ describe.skipIf(!testDatabaseUrl)("persistent studio conversations", () => {
 
   it("keeps failed requests retryable without letting an old request override newer discussion", async () => {
     const id = session();
-    const input = { id: randomUUID(), text: "@AI Review the wall lining." };
+    const input = { id: randomUUID(), text: "@Coordinator Review the wall lining." };
     const first = await store.append(id, bistro, input);
     await store.finish(id, bistro, input.id, first.runId!, { error: "Provider unavailable" });
     const retry = await store.append(id, bistro, input);

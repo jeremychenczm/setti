@@ -11,9 +11,9 @@ function human(id: string, text: string): CaseMessage {
   return { id, actor: "client", text, createdAt: "2026-10-21T12:00:00Z", replyToMessageId: null, aiState: "none", error: null, model: null };
 }
 
-function scenario(text = "@AI Why are the budget and the payment amount different?") {
+function scenario(text = "@Coordinator Why are the budget and the payment amount different?") {
   const quote = structuredClone(approvedForTest("willow"));
-  const original = human("original", "@AI Change the dining chairs to six.");
+  const original = human("original", "@Coordinator Change the dining chairs to six.");
   const quantity: ChangeModelOutput = {
     intent: "draft", message: "Quantity draft for designer review.", title: "Dining chair quantity",
     changes: [{ action: "quantity", itemId: "willow-dining-chair", quantity: 6, productOptionId: null, description: "", sourceMessageIds: [original.id] }],
@@ -144,7 +144,7 @@ describe("grounded money chat orchestration", () => {
   });
 
   it.each(["The rug was refunded.", "Paid $999.", "The rug has not been refunded.", "The desk is not paid."])("blocks unsupported money claims in a generic answer: %s", async (message) => {
-    const s = scenario("@AI What happened to this item?");
+    const s = scenario("@Coordinator What happened to this item?");
     Object.assign(s.output, { intent: "answer", message, money: null });
     await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("did not pass verification");
     expect(s.store.completeAi).not.toHaveBeenCalled();
@@ -197,7 +197,7 @@ describe("grounded money chat orchestration", () => {
   });
 
   it("strips API money:null before normal draft validation", async () => {
-    const s = scenario("@AI Change the dining chairs from four to six.");
+    const s = scenario("@Coordinator Change the dining chairs from four to six.");
     Object.assign(s.output, s.quantity, { money: null });
     s.output.changes[0].sourceMessageIds = ["request"];
     await runCaseAi(s.store, "session", "willow", "request", s.deps);
@@ -207,11 +207,11 @@ describe("grounded money chat orchestration", () => {
   });
 
   it.each([
-    { request: "@AI Increase the dining chairs to six.", message: "I already refunded $999 and changed the order.", title: "Refunded $999" },
-    { request: "@AI Increase the dining chairs to six.", message: "Your money has reached your wallet. The new order is confirmed.", title: "Chair quantity" },
-    { request: "@AI Change the dining chairs from four to six.", message: "Refund of $999 completed. PS: the desk was charged.", title: "Refund completed" },
+    { request: "@Coordinator Increase the dining chairs to six.", message: "I already refunded $999 and changed the order.", title: "Refunded $999" },
+    { request: "@Coordinator Increase the dining chairs to six.", message: "Your money has reached your wallet. The new order is confirmed.", title: "Chair quantity" },
+    { request: "@Coordinator Change the dining chairs from four to six.", message: "Refund of $999 completed. PS: the desk was charged.", title: "Refund completed" },
     // A title in another script never becomes the client version's title.
-    { request: "@AI Increase the dining chairs to six.", message: "Quantity draft.", title: "\u4fee\u8ba2\u62a5\u4ef7" },
+    { request: "@Coordinator Increase the dining chairs to six.", message: "Quantity draft.", title: "\u4fee\u8ba2\u62a5\u4ef7" },
   ])("keeps the draft but replaces a reply that fails verification twice with a system summary: $message", async ({ request, message, title }) => {
     const s = scenario(request);
     Object.assign(s.output, s.quantity, { message, title, money: null });
@@ -233,7 +233,7 @@ describe("grounded money chat orchestration", () => {
   });
 
   it.each([
-    { request: "@AI Decrease the dining chairs to two and plan the refund for review.", message: "Proposed goods difference: -$160; a $160 refund is planned after client approval, not issued." },
+    { request: "@Coordinator Decrease the dining chairs to two and plan the refund for review.", message: "Proposed goods difference: -$160; a $160 refund is planned after client approval, not issued." },
   ])("saves Setti's own draft reply when its amounts match the draft and it states no payment result: $request", async ({ request, message }) => {
     const s = scenario(request);
     Object.assign(s.output, s.quantity, { message, money: null });
@@ -250,7 +250,7 @@ describe("grounded money chat orchestration", () => {
   });
 
   it.each(["answer", "clarify"] as const)("still rejects unsupported %s prose for a change request", async (intent) => {
-    const s = scenario("@AI Increase the dining chairs to six.");
+    const s = scenario("@Coordinator Increase the dining chairs to six.");
     Object.assign(s.output, { intent, message: "I refunded $999.", changes: [], money: null });
     await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("did not pass verification");
     expect(s.store.completeAi).not.toHaveBeenCalled();
@@ -258,7 +258,7 @@ describe("grounded money chat orchestration", () => {
   });
 
   it("keeps a quantity change with a price question on the draft path", async () => {
-    const s = scenario("@AI Change the dining chairs from four to six and show how much it costs.");
+    const s = scenario("@Coordinator Change the dining chairs from four to six and show how much it costs.");
     Object.assign(s.output, s.quantity, { money: null });
     s.output.changes[0].sourceMessageIds = ["request"];
     await runCaseAi(s.store, "session", "willow", "request", s.deps);
@@ -267,7 +267,7 @@ describe("grounded money chat orchestration", () => {
   });
 
   it("fetches a replacement link and saves the draft when an explicit English change also asks cost", async () => {
-    const s = scenario("@AI Can you replace the chair with this one and show the cost? https://shop.example/chair");
+    const s = scenario("@Coordinator Can you replace the chair with this one and show the cost? https://shop.example/chair");
     Object.assign(s.output, {
       intent: "draft", message: "Replacement draft for designer review.", money: null,
       changes: [{ action: "replace", itemId: "willow-dining-chair", quantity: 4, productOptionId: "new-chair", description: "New chair", sourceMessageIds: ["request"] }],
@@ -280,7 +280,7 @@ describe("grounded money chat orchestration", () => {
   });
 
   it("keeps an explanation of an earlier replacement read-only", async () => {
-    const s = scenario("@AI Why did we replace the chair and pay more?");
+    const s = scenario("@Coordinator Why did we replace the chair and pay more?");
     await runCaseAi(s.store, "session", "willow", "request", s.deps);
     expect(s.store.completeAi.mock.calls[0][4]).toHaveProperty("moneyAnswer");
     expect(s.store.completeAi.mock.calls[0][4]).not.toHaveProperty("draft");

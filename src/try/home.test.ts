@@ -87,7 +87,7 @@ describe.skipIf(!testDatabaseUrl)("living-and-dining durable scenario", () => {
     expect(chat.activeMessageId).toBeNull();
     expect(chat.messages.filter((message) => message.model === "demo-scenario-discussion").map(({ actor, text }) => ({ actor, text }))).toEqual(HOME_DISCUSSION);
     expect(chat.messages.filter((message) => message.model === "demo-supplier-notes")).toEqual([expect.objectContaining({ actor: "designer", text: HOME_SUPPLIER_NOTES })]);
-    expect(chat.messages.filter((message) => message.model === "demo-scenario-discussion").every((message) => !message.text.startsWith("@AI"))).toBe(true);
+    expect(chat.messages.filter((message) => message.model === "demo-scenario-discussion").every((message) => !message.text.startsWith("@Coordinator"))).toBe(true);
     const calls = paypal.calls.length;
     await appendHomeDiscussion(handle.db, run.session, saved.document);
     expect((await createChatStore(handle.db).getCase(run.session, "maple")).messages).toHaveLength(chat.messages.length);

@@ -58,10 +58,10 @@ describe("Maple living-and-dining scenario", () => {
     expect(HOME_DISCUSSION.length).toBeLessThanOrEqual(20);
     expect(new Set(HOME_DISCUSSION.map((message) => message.actor))).toEqual(new Set(["client", "designer"]));
     const discussion = HOME_DISCUSSION.map((message) => message.text).join(" ");
-    expect(discussion).not.toMatch(/@AI|\$|USD|restocking fee is \d|writing desk|wool rug|lounge chair/i);
+    expect(discussion).not.toMatch(/@Coordinator|\$|USD|restocking fee is \d|writing desk|wool rug|lounge chair/i);
     expect(HOME_DISCUSSION.at(-1)).toMatchObject({ actor: "client" });
     expect(HOME_DISCUSSION.at(-1)!.text).toContain("check it before confirming");
-    expect(HOME_DESIGNER_REQUEST.startsWith("@AI ")).toBe(true);
+    expect(HOME_DESIGNER_REQUEST.startsWith("@Coordinator ")).toBe(true);
     expect(HOME_DESIGNER_REQUEST).toContain("our discussion");
     expect(HOME_DESIGNER_REQUEST.length).toBeLessThan(80);
     // The request must ask the model to read the evidence, not supply the calculated answer.

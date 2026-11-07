@@ -16,7 +16,7 @@ import { TRY_PROJECT_HREF, openWillowWorkspace, prepareTry, readTryRuns, readTry
 
 const uuid = z.uuid();
 const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
-// Only the current walkthrough starts. Retired scenarios wrote scripted "@AI" exchanges, so they stay out of the product.
+// Only the current walkthrough starts. Retired scenarios wrote scripted agent exchanges, so they stay out of the product.
 const startSchema = z.union([
   z.strictObject({ action: z.literal("start").optional(), scenario: z.literal(HOME_SCENARIO).optional(), restart: z.boolean().optional() }),
   z.strictObject({ action: z.literal("prepare"), runId: uuid }),

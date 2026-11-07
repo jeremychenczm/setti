@@ -107,7 +107,7 @@ export function verifyMoneyAnswer(context: MoneyContext, body: MoneyAnswerBody):
     for (const id of sentence.factIds) cited.add(id);
     if (EAST_ASIAN_SCRIPT.test(sentence.text)) problems.push(`${label} is not in English.`);
     if (/https?:\/\//iu.test(sentence.text)) problems.push(`${label} contains a link; the server adds the evidence links.`);
-    if (ACTION_CLAIM.test(sentence.text)) problems.push(`${label} says Setti performed a payment action; Setti cannot move money or approve anything.`);
+    if (ACTION_CLAIM.test(sentence.text)) problems.push(`${label} says Coordinator performed a payment action; Coordinator cannot move money or approve anything.`);
     const amounts = amountsIn(sentence.text);
     const terms = STATUS_TERMS.filter((term) => term.said.test(sentence.text));
     if ((amounts.length || terms.length) && !texts.length) problems.push(`${label} states an amount or payment status without citing the facts it rests on.`);
@@ -122,8 +122,8 @@ export function verifyMoneyAnswer(context: MoneyContext, body: MoneyAnswerBody):
   return problems;
 }
 
-/** Shown, as a system notice, when Setti's written answer did not pass verification twice. */
-export const UNVERIFIED_MONEY_TEXT = "Setti's written answer did not pass verification against the saved records, so it was not shown. These are the recorded facts it selected.";
+/** Shown, as a system notice, when Coordinator's written answer did not pass verification twice. */
+export const UNVERIFIED_MONEY_TEXT = "Coordinator's written answer did not pass verification against the saved records, so it was not shown. These are the recorded facts it selected.";
 
 const sentenceOf = (sentence: MoneyAnswerSentence): MoneyAnswerSentence => ({ text: sentence.text.trim(), factIds: [...new Set(sentence.factIds)] });
 /** A stored copy with trimmed text and each citation once. */

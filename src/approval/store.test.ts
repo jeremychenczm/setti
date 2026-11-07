@@ -32,7 +32,7 @@ describe.skipIf(!testDatabaseUrl)("whole-document client decisions", () => {
     const state = await chat.getCase(session, "maple"), quote = state.quote!;
     const chair = quote.lines.find((line) => line.itemId === "chair")!;
     const id = randomUUID();
-    await chat.appendMessage(session, "maple", { id, actor: "client", text: `@AI set chairs to ${quantity ?? chair.quantity + 1}` });
+    await chat.appendMessage(session, "maple", { id, actor: "client", text: `@Coordinator set chairs to ${quantity ?? chair.quantity + 1}` });
     const run = await chat.beginAi(session, "maple", id);
     if (run.status !== "started") throw new Error("Expected AI run");
     const result = buildDraft({ quote, messages: run.state.messages, pages: [], current: null, triggerId: id, model: "test-model", output: {
@@ -149,7 +149,7 @@ describe.skipIf(!testDatabaseUrl)("whole-document client decisions", () => {
 
   it("recovers an expired AI lease but blocks confirmation while a live run is active", async () => {
     const order = await issue(await draftAndReview()), chat = createChatStore(handle.db), store = createApprovalStore(handle.db), messageId = randomUUID();
-    await chat.appendMessage(session, "maple", { id: messageId, actor: "client", text: "@AI Explain this draft." });
+    await chat.appendMessage(session, "maple", { id: messageId, actor: "client", text: "@Coordinator Explain this draft." });
     await chat.beginAi(session, "maple", messageId);
     expect((await store.getWorkspace(session, order.id))?.canDecide).toBe(false);
     await expect(store.decide(session, order.id, command(order))).rejects.toMatchObject({ code: "CASE_BUSY" });

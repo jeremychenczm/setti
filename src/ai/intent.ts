@@ -1,5 +1,5 @@
-/** @AI or @Setti; @Change Agent is the assistant's earlier name and still works. */
-const invocation = /^\s*@(?:ai|setti|change[\s-]?agent)(?=$|[\s,:.!?])/iu;
+/** A message addressed to the project's agent starts with @Coordinator. */
+const invocation = /^\s*@coordinator(?=$|[\s,:.!?])/iu;
 
 export function isAiInvocation(text: string): boolean {
   return invocation.test(text);

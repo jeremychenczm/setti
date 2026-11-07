@@ -27,7 +27,7 @@ export interface ScriptedChange {
 
 /** The words each person writes along the way. */
 export interface ScriptedCopy {
-  /** The client's message after "@AI". */
+  /** The message after "@Coordinator". */
   request: string;
   /** The AI draft's reply and title. */
   reply: string;
@@ -70,7 +70,7 @@ export async function confirmScriptedChanges(
   });
   const words = { ...testCopy(lines.map((line) => line.name), changes), ...copy };
   const id = randomUUID();
-  await chat.appendMessage(session, key, { id, actor, text: `@AI ${words.request}` });
+  await chat.appendMessage(session, key, { id, actor, text: `@Coordinator ${words.request}` });
   const run = await chat.beginAi(session, key, id);
   if (run.status !== "started") throw new Error("Expected an AI run");
   const result = buildDraft({

@@ -22,7 +22,7 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
   });
   afterAll(() => handle?.pool.end());
 
-  function human(text = "@AI Please help with this change."): AppendMessageInput {
+  function human(text = "@Coordinator Please help with this change."): AppendMessageInput {
     return { id: randomUUID(), actor: "client", text };
   }
 
@@ -44,7 +44,7 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
   }
 
   it("keeps the running reply's stage on the case only while that run is active", async () => {
-    const input = human("@AI explain the quote");
+    const input = human("@Coordinator explain the quote");
     await store.appendMessage(sessionId, "maple", input);
     const run = await start(input.id);
     expect((await store.getCase(sessionId, "maple")).activeRunStage).toBe("reading");
@@ -91,7 +91,7 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     const firstRun = await start(first.id);
     const existing = draft(first.id);
     await store.completeAi(sessionId, "maple", first.id, firstRun.runId, { text: "Review draft", draft: existing, model: "test-model" });
-    const question = human("@AI Explain this project's recorded payments.");
+    const question = human("@Coordinator Explain this project's recorded payments.");
     await store.appendMessage(sessionId, "maple", question);
     const run = await start(question.id);
     const context = await store.readMoneyContext!(sessionId, "maple");
@@ -109,7 +109,7 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
   });
 
   it("rejects money answers for a stale approved version and never couples them to draft writes", async () => {
-    const question = human("@AI Explain my payments.");
+    const question = human("@Coordinator Explain my payments.");
     await store.appendMessage(sessionId, "maple", question);
     const run = await start(question.id);
     const context = await store.readMoneyContext!(sessionId, "maple");
@@ -188,7 +188,7 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     const initialRun = await start(first.id);
     const originalDraft = draft(first.id);
     await store.completeAi(sessionId, "maple", first.id, initialRun.runId, { text: "Initial draft.", draft: originalDraft, model: "test-model" });
-    const second = human("@AI Explain the current draft.");
+    const second = human("@Coordinator Explain the current draft.");
     await store.appendMessage(sessionId, "maple", second);
     const failedRun = await start(second.id);
     const failed = await store.failAi(sessionId, "maple", second.id, failedRun.runId, "Provider temporarily unavailable");
@@ -223,7 +223,7 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
 
   it("marks a blocked AI trigger failed while leaving the active trigger intact", async () => {
     const first = human();
-    const second = human("@AI And could you explain the delivery cost?");
+    const second = human("@Coordinator And could you explain the delivery cost?");
     await store.appendMessage(sessionId, "maple", first);
     await store.appendMessage(sessionId, "maple", second);
     const run = await start(second.id);
@@ -240,7 +240,7 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     await store.appendMessage(sessionId, "maple", older);
     const oldRun = await start(older.id);
     await store.failAi(sessionId, "maple", older.id, oldRun.runId, "An earlier error");
-    const newer = human("@AI Use this updated direction instead.");
+    const newer = human("@Coordinator Use this updated direction instead.");
     await store.appendMessage(sessionId, "maple", newer);
     const newRun = await start(newer.id);
     const currentDraft = draft(newer.id, "New direction");
@@ -249,23 +249,23 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     expect((await store.getCase(sessionId, "maple")).draft).toEqual(currentDraft);
   });
 
-  it("uses the shared invocation syntax for @Change Agent and natural @AI commands", async () => {
-    const input = human("@Change Agent: set the quantity to 4");
+  it("uses the shared invocation syntax for natural @Coordinator commands", async () => {
+    const input = human("@Coordinator: set the quantity to 4");
     await store.appendMessage(sessionId, "maple", input);
     const run = await start(input.id);
     await store.completeAi(sessionId, "maple", input.id, run.runId, { text: "The quantity proposal is ready.", model: "test-model" });
-    const incidentalMention = human("The previous note mentioned @AI, but this is not a command.");
+    const incidentalMention = human("The previous note mentioned @Coordinator, but this is not a command.");
     await store.appendMessage(sessionId, "maple", incidentalMention);
     await expect(store.beginAi(sessionId, "maple", incidentalMention.id)).rejects.toMatchObject({ code: "INVALID_AI_TRIGGER" });
     // A completed original request remains idempotent even after a later human message.
     expect((await store.beginAi(sessionId, "maple", input.id)).status).toBe("completed");
-    const next = human("@AI set the quantity to 6");
+    const next = human("@Coordinator set the quantity to 6");
     await store.appendMessage(sessionId, "maple", next);
     expect((await store.beginAi(sessionId, "maple", next.id)).status).toBe("started");
   });
 
   it("rejects an old failed trigger after a newer ordinary human correction", async () => {
-    const trigger = human("@AI Change the chair quantity to 6.");
+    const trigger = human("@Coordinator Change the chair quantity to 6.");
     await store.appendMessage(sessionId, "maple", trigger);
     const run = await start(trigger.id);
     await store.failAi(sessionId, "maple", trigger.id, run.runId, "Temporary provider failure");
@@ -284,7 +284,7 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     await store.appendMessage(sessionId, "maple", initial);
     const firstRun = await start(initial.id);
     await store.completeAi(sessionId, "maple", initial.id, firstRun.runId, { text: "Draft ready.", draft: draft(initial.id), model: "test-model" });
-    const cancel = human("@AI Discard the unapproved draft and keep the original quote.");
+    const cancel = human("@Coordinator Discard the unapproved draft and keep the original quote.");
     await store.appendMessage(sessionId, "maple", cancel);
     const cancelRun = await start(cancel.id);
     const cleared = await store.completeAi(sessionId, "maple", cancel.id, cancelRun.runId, { text: "The unapproved draft was discarded. No order or payment was changed.", draft: null, model: "test-model" });

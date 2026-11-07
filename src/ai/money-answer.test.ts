@@ -38,10 +38,10 @@ describe("recorded money answers", () => {
     context.sources[0].href = "https://evil.example/pay";
     expect(() => buildMoneyAnswer(context, ["budget"])).toThrow();
   });
-  it.each(["@AI Why was the desk charged when the rug is not refunded yet?", "@AI Explain the holds and refunds.", "@AI Where is my money?", "@AI Check this budget and payment status", "@AI Why did we replace the chair and pay more?", "@AI Please explain why replacing the chair cost more."])('recognizes a read-only money question: %s', (text) => {
+  it.each(["@Coordinator Why was the desk charged when the rug is not refunded yet?", "@Coordinator Explain the holds and refunds.", "@Coordinator Where is my money?", "@Coordinator Check this budget and payment status", "@Coordinator Why did we replace the chair and pay more?", "@Coordinator Please explain why replacing the chair cost more."])('recognizes a read-only money question: %s', (text) => {
     expect(isMoneyQuestion(text)).toBe(true);
   });
-  it.each(["@AI Change the dining chairs from four to six, keep the rest.", "@AI Return the rug and replace the chair with a desk.", "@AI Return the rug, make it two desks", "@AI, change the dining chairs from four to six and show how much it costs.", "@AI Can you replace the chair and show the cost?", "@AI Could you please replace the chair and show the cost?", "@AI Please replace the chair and show the cost."])('keeps natural change requests on the draft path: %s', (text) => {
+  it.each(["@Coordinator Change the dining chairs from four to six, keep the rest.", "@Coordinator Return the rug and replace the chair with a desk.", "@Coordinator Return the rug, make it two desks", "@Coordinator, change the dining chairs from four to six and show how much it costs.", "@Coordinator Can you replace the chair and show the cost?", "@Coordinator Could you please replace the chair and show the cost?", "@Coordinator Please replace the chair and show the cost."])('keeps natural change requests on the draft path: %s', (text) => {
     expect(isMoneyQuestion(text)).toBe(false);
   });
   it.each(["You already paid $999.", "The refund completed.", "The authorization result is unknown.", "The rug has not been refunded.", "The desk is not paid.", "Payment has not been received.", "\u9000\u6b3e\u5b8c\u6210\u3002"])("blocks unsupported payment prose: %s", (text) => {

@@ -2,7 +2,7 @@
 import type { PricingInput, PricingItem } from "@/pricing/types";
 import type { QuoteDocument } from "@/quotes/types";
 
-export const MAPLE_MIXED_CHANGE_MESSAGE = "@AI Please draft one change: replace the Lounge chair with one light oak writing desk, and return the Wool rug. Use the Maple sample desk; Jordan will review its sample supplier details on the pricing page. Keep all other items unchanged.";
+export const MAPLE_MIXED_CHANGE_MESSAGE = "@Coordinator Please draft one change: replace the Lounge chair with one light oak writing desk, and return the Wool rug. Use the Maple sample desk; Jordan will review its sample supplier details on the pricing page. Keep all other items unchanged.";
 
 export const MAPLE_SAMPLE_MATERIALS = {
   reference: "MAPLE-SAMPLE-Q1",

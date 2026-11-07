@@ -102,10 +102,10 @@ export function mapleGuideStep(data: MapleGuideData, currentRole: "designer" | "
       const latestRecord = payments.operations.reduce((value, operation) => Math.max(value, Date.parse(operation.updatedAt) || 0), 0);
       const explanation = [...snapshot.messages].reverse().find((message) => message.moneyAnswer?.quoteId === latest.id && Date.parse(message.moneyAnswer.checkedAt) >= latestRecord);
       const explained = !!explanation;
-      return { index: 4, role: currentRole === "client" ? "emma" : "jordan", destination: "chat", action: snapshot.activeMessageId ? "View conversation" : explained ? "View payment explanation" : "Ask @AI about payments", complete: explained,
+      return { index: 4, role: currentRole === "client" ? "emma" : "jordan", destination: "chat", action: snapshot.activeMessageId ? "View conversation" : explained ? "View payment explanation" : "Ask Coordinator about payments", complete: explained,
         chatAction: !explained && !snapshot.activeMessageId ? "ask-payments" : undefined, anchor: explanation ? `case-message-${explanation.id}` : undefined,
         title: snapshot.activeMessageId ? "The AI is preparing the payment explanation" : explained ? "The recorded payment explanation is available" : "Explain why the quote difference is not today's payment",
-        detail: snapshot.activeMessageId ? "The money records remain saved while the model selects relevant evidence. Wait for the result in the chat; no payment is executed by this question." : explained ? "Open the evidence answer in the chat and follow its source links. These are recorded Sandbox results for the shown items, not a full-project settlement." : "Select Ask @AI about payments to send the question in your chat. The AI selects evidence from the stored PayPal results; the answer is not a live PayPal balance check.",
+        detail: snapshot.activeMessageId ? "The money records remain saved while the model selects relevant evidence. Wait for the result in the chat; no payment is executed by this question." : explained ? "Open the evidence answer in the chat and follow its source links. These are recorded Sandbox results for the shown items, not a full-project settlement." : "Select Ask Coordinator about payments to send the question in your chat. The AI selects evidence from the stored PayPal results; the answer is not a live PayPal balance check.",
       };
     }
     const available = changed.flatMap((line) => line.steps.filter((step) => step.available).map((step) => ({ line, step })))[0];

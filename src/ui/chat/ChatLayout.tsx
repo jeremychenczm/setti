@@ -45,7 +45,7 @@ export function ChatComposer({ inputRef, text, onTextChange, disabled, onSubmit,
   leadingAction?: ReactNode;
 }) {
   return <div className="rounded-2xl border border-[var(--line)] bg-[var(--canvas)] px-3 py-2.5 focus-within:border-brand-200">
-    <textarea ref={inputRef} aria-label="Project message" value={text} onChange={(event) => onTextChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); onSubmit(); } }} disabled={disabled} placeholder="Discuss this case, paste a product link, or ask @AI…" maxLength={8000} rows={2} className="max-h-40 min-h-[44px] w-full resize-y bg-transparent text-[13px] leading-relaxed outline-none placeholder:text-[var(--muted)] disabled:opacity-60" />
+    <textarea ref={inputRef} aria-label="Project message" value={text} onChange={(event) => onTextChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); onSubmit(); } }} disabled={disabled} placeholder="Discuss this case, paste a product link, or ask @Coordinator…" maxLength={8000} rows={2} className="max-h-40 min-h-[44px] w-full resize-y bg-transparent text-[13px] leading-relaxed outline-none placeholder:text-[var(--muted)] disabled:opacity-60" />
     <div className="mt-1 flex flex-wrap items-center gap-2">
       {leadingAction}
       <button disabled={disabled} onClick={onMentionAi} title="Mention AI" className="flex items-center gap-1 rounded-full bg-white px-2.5 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-brand-50 disabled:opacity-50"><AtSign className="h-3 w-3" />AI</button>
