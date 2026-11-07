@@ -12,22 +12,14 @@ import type { Db } from "../db/client";
 import { paymentOperations, paypalAuthorizations, paypalRefunds } from "../db/schema";
 import { noteInCase } from "./notes";
 import {
-  claimOperation, databaseMessage, insertOperation, recordCall, recordFailure, updateOperation,
-  type OperationBinding, type PaymentOperation, type PaypalCapture,
+  claimOperation, databaseMessage, recordCall, recordFailure, updateOperation,
+  type PaymentOperation, type PaypalCapture,
 } from "./operations";
 import type { PayPalPayments, PayPalResult, RefundReceipt } from "./paypal";
 import { formatCents, refundMoneyStatus, verifyRefund } from "./receipts";
 import { settlementDetails } from "./fees";
 
 export type PaypalRefund = typeof paypalRefunds.$inferSelect;
-
-/** Writes down a refund of one capture, once per business event. Nothing is sent to PayPal yet. */
-export async function requestRefund(
-  db: Pick<Db, "select" | "insert" | "update">,
-  input: { businessKey: string; projectId: string; captureId: string; amountCents: number; binding?: OperationBinding; supplierEventId?: string | null },
-): Promise<PaymentOperation> {
-  return insertOperation(db, { kind: "refund", ...input });
-}
 
 /** Runs a refund operation once; finished operations are returned without calling PayPal again. */
 export async function executeRefund(db: Db, paypal: PayPalPayments, operationId: string): Promise<PaymentOperation> {

@@ -13,8 +13,8 @@ import { eq } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { paymentOperations, paypalAuthorizations, paypalCaptures } from "../db/schema";
 import {
-  claimOperation, databaseMessage, insertOperation, recordCall, recordFailure, updateOperation,
-  type OperationBinding, type PaymentOperation, type PaypalAuthorization, type PaypalCapture,
+  claimOperation, databaseMessage, recordCall, recordFailure, updateOperation,
+  type PaymentOperation, type PaypalAuthorization, type PaypalCapture,
 } from "./operations";
 import type { CaptureReceipt, PayPalFailure, PayPalPayments, PayPalResult } from "./paypal";
 import { noteInCase } from "./notes";
@@ -22,14 +22,6 @@ import { captureMoneyStatus, formatCents, verifyCapture } from "./receipts";
 import { settlementDetails } from "./fees";
 
 export type { PaymentOperation } from "./operations";
-
-/** Writes down a capture to be made, once per business event. Nothing is sent to PayPal yet. */
-export async function requestCapture(
-  db: Pick<Db, "select" | "insert" | "update">,
-  input: { businessKey: string; projectId: string; authorizationId: string; amountCents: number; finalCapture?: boolean; binding?: OperationBinding },
-): Promise<PaymentOperation> {
-  return insertOperation(db, { kind: "capture", ...input });
-}
 
 /**
  * Runs a capture operation once. Finished operations (succeeded or failed) are

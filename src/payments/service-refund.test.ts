@@ -8,7 +8,7 @@ import type { FrozenChangeOrder } from "../pricing/types";
 import { startRefund } from "./actions";
 import { completeAuthorization } from "./authorize";
 import { businessItem, lockConfirmedVersion } from "./binding";
-import { requestRefund } from "./refund";
+import { requestRefund } from "./testing/requests";
 import { chargeServices, startServicesCheckout } from "./services";
 import { confirmChange, shown } from "./testing/cases";
 import { FakePayPal } from "./testing/fake-paypal";

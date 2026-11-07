@@ -1,8 +1,12 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { sendRevision } from "../quotes/revisions";
+import { freezeRevision } from "../pricing/bridge";
 import { approvals, items, projects, revisionLines, revisions } from "./schema";
 import { openTestDb, testDatabaseUrl, truncate } from "./testing";
+
+/** Freezes and sends a draft revision in its own transaction; returns the content hash approvals must carry. */
+const sendRevision = (db: Awaited<ReturnType<typeof openTestDb>>["db"], revisionId: string) =>
+  db.transaction((tx) => freezeRevision(tx, revisionId));
 
 /** Drizzle wraps driver errors; the database's own message is on `cause`. */
 async function expectRejected(promise: Promise<unknown>, pattern: RegExp) {
@@ -141,6 +145,6 @@ describe.skipIf(!testDatabaseUrl)("quote revisions", () => {
 
   it("will not send an empty revision", async () => {
     const [empty] = await handle.db.insert(revisions).values({ projectId, number: 1 }).returning();
-    await expect(sendRevision(handle.db, empty.id)).rejects.toThrow(/has no lines/);
+    await expect(sendRevision(handle.db, empty.id)).rejects.toThrow(/at least one quoted line/);
   });
 });

@@ -6,7 +6,7 @@ import { paymentOperations, paypalCaptures, paypalRefunds } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import type { FrozenChangeOrder } from "../pricing/types";
 import { checkPayment, startCapture, startRefund } from "./actions";
-import { requestRefund } from "./refund";
+import { requestRefund } from "./testing/requests";
 import { recordSupplierCredit } from "./supplier";
 import { confirmChange, shown } from "./testing/cases";
 import { FakePayPal } from "./testing/fake-paypal";

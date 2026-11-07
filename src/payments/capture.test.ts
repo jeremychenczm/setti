@@ -2,8 +2,8 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { paymentOperations, paypalAuthorizations, paypalCalls, paypalCaptures, projects } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
-import { executeCapture, refreshCapture, requestCapture } from "./capture";
-import { holdSummary } from "./holds";
+import { executeCapture, refreshCapture } from "./capture";
+import { holdSummary, requestCapture } from "./testing/requests";
 import { FakePayPal } from "./testing/fake-paypal";
 
 describe.skipIf(!testDatabaseUrl)("capture executor", () => {

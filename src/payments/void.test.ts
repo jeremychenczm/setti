@@ -2,10 +2,10 @@ import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { paymentOperations, paypalAuthorizations, paypalCaptures, projects } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
-import { executeCapture, requestCapture } from "./capture";
-import { holdSummary } from "./holds";
+import { executeCapture } from "./capture";
 import { FakePayPal } from "./testing/fake-paypal";
-import { executeVoid, requestVoid } from "./void";
+import { executeVoid } from "./void";
+import { holdSummary, requestCapture, requestVoid } from "./testing/requests";
 
 describe.skipIf(!testDatabaseUrl)("void executor", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;

@@ -14,7 +14,7 @@ import { pricingCases } from "./schema";
 
 export type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
-/** Same freeze sequence as sendRevision, inside the caller's transaction rather than a nested one. */
+/** Freezes a draft revision inside the caller's transaction: lock it, hash its lines, then mark it sent. */
 export async function freezeRevision(tx: Transaction, revisionId: string): Promise<string> {
   const [revision] = await tx.select().from(revisions).where(eq(revisions.id, revisionId)).for("update");
   if (!revision || revision.status !== "draft") throw new PricingStoreError("PRICING_CONFLICT", "The business revision is no longer a draft.");

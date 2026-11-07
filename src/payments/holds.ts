@@ -3,9 +3,6 @@
  * on a voided authorization, so the released amount is worked out here from
  * what was actually captured.
  */
-import { eq } from "drizzle-orm";
-import type { Db } from "../db/client";
-import { paypalAuthorizations, paypalCaptures } from "../db/schema";
 
 export interface HoldSummary {
   authorizedCents: number;
@@ -24,24 +21,4 @@ export function summarizeHold(input: { authorizedCents: number; capturedCents: n
     heldCents: input.closed ? 0 : uncaptured,
     releasedCents: input.closed ? Math.max(uncaptured - (input.pendingCaptureCents ?? 0), 0) : 0,
   };
-}
-
-export async function holdSummary(db: Db, authorizationId: string): Promise<HoldSummary> {
-  const [authorization] = await db.select().from(paypalAuthorizations).where(eq(paypalAuthorizations.id, authorizationId));
-  if (!authorization) throw new Error(`Authorization ${authorizationId} does not exist`);
-
-  const captures = await db
-    .select({ amountCents: paypalCaptures.amountCents, finalCapture: paypalCaptures.finalCapture, status: paypalCaptures.status })
-    .from(paypalCaptures)
-    .where(eq(paypalCaptures.authorizationId, authorizationId));
-
-  const completed = captures.filter((capture) => capture.status === "completed");
-  const closed = ["voided", "expired", "captured"].includes(authorization.status) || completed.some((capture) => capture.finalCapture)
-    || !!(authorization.expiresAt && authorization.expiresAt.getTime() <= Date.now());
-  return summarizeHold({
-    authorizedCents: authorization.amountCents,
-    capturedCents: completed.reduce((total, capture) => total + capture.amountCents, 0),
-    pendingCaptureCents: captures.filter((capture) => capture.status === "pending").reduce((total, capture) => total + capture.amountCents, 0),
-    closed,
-  });
 }

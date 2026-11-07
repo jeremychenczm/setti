@@ -6,7 +6,8 @@ import { paymentOperations, paypalAuthorizations, paypalCaptures, paypalRefunds,
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import type { FrozenChangeOrder } from "../pricing/types";
 import { startCapture, startRelease } from "./actions";
-import { executeCapture, requestCapture } from "./capture";
+import { executeCapture } from "./capture";
+import { requestCapture } from "./testing/requests";
 import { recordSupplierOrder } from "./supplier";
 import { bergmund, confirmChange, shown } from "./testing/cases";
 import { FakePayPal } from "./testing/fake-paypal";

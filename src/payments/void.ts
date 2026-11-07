@@ -7,26 +7,13 @@
 import { eq } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { paymentOperations, paypalAuthorizations } from "../db/schema";
-import { holdSummary } from "./holds";
 import {
-  claimOperation, findOperation, insertOperation, recordCall, recordFailure, updateOperation,
-  type OperationBinding, type PaymentOperation, type PaypalAuthorization,
+  claimOperation, recordCall, recordFailure, updateOperation,
+  type PaymentOperation, type PaypalAuthorization,
 } from "./operations";
 import type { AuthorizationReceipt, PayPalPayments, PayPalResult } from "./paypal";
 import { noteInCase } from "./notes";
 import { formatCents, holdStatus } from "./receipts";
-
-/** Writes down a void, once per business event. The amount recorded is what is still held right now. */
-export async function requestVoid(
-  db: Db,
-  input: { businessKey: string; projectId: string; authorizationId: string; binding?: OperationBinding },
-): Promise<PaymentOperation> {
-  const existing = await findOperation(db, input.businessKey);
-  if (existing) return insertOperation(db, { kind: "void", ...input, amountCents: existing.amountCents });
-  const { heldCents } = await holdSummary(db, input.authorizationId);
-  if (heldCents <= 0) throw new Error(`Nothing is left on hold on authorization ${input.authorizationId}`);
-  return insertOperation(db, { kind: "void", ...input, amountCents: heldCents });
-}
 
 /** Runs a void operation once; finished operations are returned without calling PayPal. */
 export async function executeVoid(db: Db, paypal: PayPalPayments, operationId: string): Promise<PaymentOperation> {
