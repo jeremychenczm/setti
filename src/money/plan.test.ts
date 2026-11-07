@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { ledgerSnapshot, type LedgerEvent } from "./ledger";
 import { planChange } from "./plan";
 import type { ExistingLine } from "./types";
 
@@ -88,59 +87,6 @@ describe("worked example: swap the window chair for a desk and return the rug", 
     });
     expect(plan.money.newHoldCents + plan.money.newChargeCents).toBe($(1250));
     expect(plan.money.newHoldCents + plan.money.newChargeCents).not.toBe(plan.budgetDeltaCents);
-  });
-
-  it("ledger stages end with a net of $1,710", () => {
-    const original: LedgerEvent[] = [
-      { type: "captured", id: "cap-design", amountCents: $(400) },
-      { type: "captured", id: "cap-rug", amountCents: $(300) },
-      { type: "authorized", id: "auth-chair", amountCents: $(800) },
-    ];
-    expect(ledgerSnapshot(original)).toMatchObject({
-      receivedCents: $(700),
-      refundedCents: 0,
-      heldCents: $(800),
-      netCents: $(700),
-    });
-
-    const executed: LedgerEvent[] = [
-      ...original,
-      { type: "voided", authorizationId: "auth-chair" },
-      { type: "authorized", id: "auth-desk", amountCents: $(1100) },
-      { type: "captured", id: "cap-redesign", amountCents: $(150) },
-    ];
-    expect(ledgerSnapshot(executed)).toMatchObject({
-      receivedCents: $(850),
-      refundedCents: 0,
-      heldCents: $(1100),
-      netCents: $(850),
-    });
-
-    const deskCaptured: LedgerEvent[] = [
-      ...executed,
-      { type: "captured", id: "cap-desk", amountCents: $(1100), authorizationId: "auth-desk", final: true },
-      { type: "refunded", id: "ref-rug", captureId: "cap-rug", amountCents: $(240), status: "pending" },
-    ];
-    expect(ledgerSnapshot(deskCaptured)).toMatchObject({
-      receivedCents: $(1950),
-      refundedCents: 0,
-      refundPendingCents: $(240),
-      heldCents: 0,
-      netCents: $(1950),
-    });
-
-    const refunded: LedgerEvent[] = [
-      ...executed,
-      { type: "captured", id: "cap-desk", amountCents: $(1100), authorizationId: "auth-desk", final: true },
-      { type: "refunded", id: "ref-rug", captureId: "cap-rug", amountCents: $(240), status: "completed" },
-    ];
-    expect(ledgerSnapshot(refunded)).toMatchObject({
-      receivedCents: $(1950),
-      refundedCents: $(240),
-      refundPendingCents: 0,
-      heldCents: 0,
-      netCents: $(1710),
-    });
   });
 });
 

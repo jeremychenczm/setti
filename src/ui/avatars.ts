@@ -1,17 +1,5 @@
 import { STUDIO_CASES } from "@/demo/studio-cases";
 
-/** Portraits in public/avatars, for the walkthrough's own people. */
-export const AVATARS = [
-  "designer",
-  "client",
-  "project-manager",
-  "supplier",
-  "budget-manager",
-  "contractor",
-  "consultant",
-  "report-specialist",
-].map((name) => `/avatars/${name}.webp`);
-
 /** Soft backgrounds with a readable ink, in the portraits' palette. */
 export const MONOGRAM_TONES = [
   { background: "#f9dcc4", ink: "#7a3d12" },

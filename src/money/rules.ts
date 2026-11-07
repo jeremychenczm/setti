@@ -15,8 +15,10 @@
  * new line            | furniture: new hold; service: charge on approval
  */
 import { assertCents, overCaptureAllowance, restockingFee } from "./limits";
-import { DEFAULT_REFUND_PROMISE_BUSINESS_DAYS } from "./refundPromise";
 import type { Cents, ExistingLine, LineChange, MoneyAction, PlanContext } from "./types";
+
+/** Business days after the vendor credit lands within which a returned item's refund is promised. */
+const DEFAULT_REFUND_PROMISE_BUSINESS_DAYS = 5;
 
 export interface LineOutcome {
   actions: MoneyAction[];
