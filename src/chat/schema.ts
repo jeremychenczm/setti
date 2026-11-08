@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { check, integer, jsonb, pgTable, primaryKey, serial, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import type { AiStage, AiState, CaseKey, ChangeDraft, HumanActor } from "./types";
 import type { MoneyAnswer } from "../ai/money-types";
+import type { QuoteAnswer } from "../ai/quote-query";
 
 /** Demo conversations are independent of real projects, quotes and payments. */
 export const chatCases = pgTable("chat_cases", {
@@ -35,6 +36,8 @@ export const chatMessages = pgTable("chat_messages", {
   error: text("error"),
   model: text("model"),
   moneyAnswer: jsonb("money_answer").$type<MoneyAnswer>(),
+  /** A quote lookup's matching lines, computed by the server from the approved quote. */
+  quoteAnswer: jsonb("quote_answer").$type<QuoteAnswer>(),
   /** The V1 line a message asks about, shown as a tag that opens that line. */
   aboutItemId: text("about_item_id"),
   lastRunId: uuid("last_run_id"),

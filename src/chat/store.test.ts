@@ -8,6 +8,7 @@ import { preapprovedQuote } from "./cases";
 import { quoteFingerprint } from "../quotes/fingerprint";
 import type { AppendMessageInput, ChangeDraft, ChatStore } from "./types";
 import { buildMoneyAnswer } from "../ai/money-answer";
+import { runQuoteQuery } from "../ai/quote-query";
 
 describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -117,6 +118,19 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     await expect(store.completeAi(sessionId, "maple", question.id, run.runId, { ...answer, moneyAnswer: { ...answer.moneyAnswer, quoteId: randomUUID(), version: 9 }, model: "test-model" })).rejects.toMatchObject({ code: "STALE_BASELINE" });
     await expect(store.completeAi(sessionId, "maple", question.id, run.runId, { ...answer, draft: null, model: "test-model" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
     expect((await store.getCase(sessionId, "maple")).messages).toHaveLength(1);
+  });
+
+  it("stores a quote lookup's lines with the reply and refuses one computed on another version", async () => {
+    const question = human("@Coordinator Which items are over $500?");
+    await store.appendMessage(sessionId, "maple", question);
+    const run = await start(question.id);
+    const quoteAnswer = runQuoteQuery(preapprovedQuote("maple")!, { filters: [{ field: "lineTotal", op: "gt", value: "500" }], sort: null, limit: null });
+    await expect(store.completeAi(sessionId, "maple", question.id, run.runId, { text: "Lines over $500.", quoteAnswer: { ...quoteAnswer, version: 9 }, model: "test-model" })).rejects.toMatchObject({ code: "STALE_BASELINE" });
+    await expect(store.completeAi(sessionId, "maple", question.id, run.runId, { text: "Lines over $500.", quoteAnswer, draft: null, model: "test-model" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    await store.completeAi(sessionId, "maple", question.id, run.runId, { text: "Lines over $500.", quoteAnswer, model: "test-model" });
+    const reply = (await createChatStore(handle.db).getCase(sessionId, "maple")).messages.find((m) => m.replyToMessageId === question.id);
+    expect(reply).toMatchObject({ text: "Lines over $500.", moneyAnswer: null, quoteAnswer });
+    expect(reply?.quoteAnswer?.rows.map((row) => row.itemId)).toEqual(["chair"]);
   });
 
   it("requires the full baseline fingerprint on newly completed AI drafts", async () => {

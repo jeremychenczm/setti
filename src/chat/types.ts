@@ -1,5 +1,6 @@
 import type { ApprovedQuoteReport, QuoteLine } from "@/quotes/types";
 import type { MoneyAnswer, MoneyContext } from "../ai/money-types";
+import type { QuoteAnswer } from "../ai/quote-query";
 import type { OpeningQuote, QuoteView } from "../opening/types";
 import type { ChangeSource } from "../pricing/types";
 
@@ -17,6 +18,7 @@ export interface CaseMessage {
   error: string | null;
   model: string | null;
   moneyAnswer?: MoneyAnswer | null;
+  quoteAnswer?: QuoteAnswer | null;
   /** The V1 line this message asks about. */
   aboutItemId?: string | null;
 }
@@ -199,6 +201,6 @@ export interface ChatStore {
   sendQuote(sessionId: string, projectKey: CaseKey, input: SendQuoteInput): Promise<StoredCase>;
   getQuote(sessionId: string, projectKey: CaseKey): Promise<QuoteView>;
   beginAi(sessionId: string, projectKey: CaseKey, messageId: string): Promise<BeginAiResult>;
-  completeAi(sessionId: string, projectKey: CaseKey, messageId: string, runId: string, result: { text: string; draft?: ChangeDraft | null; moneyAnswer?: MoneyAnswer; model: string }): Promise<StoredCase>;
+  completeAi(sessionId: string, projectKey: CaseKey, messageId: string, runId: string, result: { text: string; draft?: ChangeDraft | null; moneyAnswer?: MoneyAnswer; quoteAnswer?: QuoteAnswer; model: string }): Promise<StoredCase>;
   failAi(sessionId: string, projectKey: CaseKey, messageId: string, runId: string, error: string): Promise<StoredCase>;
 }

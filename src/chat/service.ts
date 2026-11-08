@@ -6,6 +6,7 @@ import { aiConfigured, callChangeModel, type ChangeModelOutput } from "@/ai/mode
 import { buildDraft, draftReplyProblems, InvalidAiOutputError } from "@/ai/draft";
 import { readProductPage } from "@/ai/product-page";
 import { answerFactIds, buildMoneyAnswer, hasUnsupportedMoneyClaim, isMoneyQuestion, verifyMoneyAnswer } from "@/ai/money-answer";
+import { quoteMessageProblems, quoteQueryProblems, runQuoteQuery, type QuoteAnswer } from "@/ai/quote-query";
 import type { MoneyAnswer } from "@/ai/money-types";
 import { HOME_EVIDENCE_PAGE, isHomeQuote } from "@/demo/home-evidence";
 
@@ -24,11 +25,12 @@ export interface DraftDependencies {
   configured: () => boolean;
 }
 
-type Reply = { text: string; draft?: ChangeDraft | null; moneyAnswer?: MoneyAnswer };
+type Reply = { text: string; draft?: ChangeDraft | null; moneyAnswer?: MoneyAnswer; quoteAnswer?: QuoteAnswer };
 /** A model result either passes verification, or says what to fix and what the records alone can still show. */
 type Checked = { ok: true; reply: Reply } | { ok: false; problems: string[]; fallback?: Reply };
 
 /** System notices used only when Setti's own reply failed verification twice; they never speak as Setti. */
+const UNVERIFIED_QUOTE_TEXT = "Coordinator's sentence about this lookup did not pass verification, so only the matching quote lines are shown.";
 function unverifiedDraftNotice(changeCount: number): string {
   return `Coordinator drafted ${changeCount} proposed change${changeCount === 1 ? "" : "s"} for designer review, but its reply did not pass verification, so this summary comes from the draft. Prices, taxes, delivery, old-item handling and any refund plan need verification. The draft does not approve orders or execute payments.`;
 }
@@ -70,7 +72,7 @@ export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKe
       const failed = (problems: string[], fallback?: Reply): Checked => ({ ok: false, problems, fallback });
       if (output.intent === "money") {
         if (!quote || !moneyContext) return failed(["This project has no recorded payments to explain yet: answer without money mode."]);
-        if (output.changes.length || !output.money) return failed(["A money answer sets changes=[] and gives money.answer."]);
+        if (output.changes.length || !output.money || output.quoteQuery != null) return failed(["A money answer sets changes=[], quoteQuery=null and gives money.answer."]);
         // The facts the answer cites are the evidence shown under it.
         const known = new Set(moneyContext.facts.map((fact) => fact.id));
         const cited = answerFactIds(output.money.answer);
@@ -80,9 +82,21 @@ export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKe
         if (problems.length) return failed(problems, shown.length ? buildMoneyAnswer(moneyContext, shown) : undefined);
         return { ok: true, reply: buildMoneyAnswer(moneyContext, shown, output.money.answer, output.money.showEvidence) };
       }
+      if (output.intent === "quote") {
+        if (!quote) return failed(["Quote V1 is not approved yet, so there are no approved lines to look up: answer where V1 stands instead."]);
+        if (output.changes.length || output.money != null || !output.quoteQuery) return failed(["A quote lookup sets changes=[], money=null and gives quoteQuery."]);
+        const queryProblems = quoteQueryProblems(output.quoteQuery);
+        if (queryProblems.length) return failed(queryProblems);
+        // The lines come from the server; only the sentence above them is the model's.
+        const quoteAnswer = runQuoteQuery(quote, output.quoteQuery);
+        const messageProblems = quoteMessageProblems(output.message, output.quoteQuery);
+        if (messageProblems.length) return failed(messageProblems, { text: UNVERIFIED_QUOTE_TEXT, quoteAnswer });
+        return { ok: true, reply: { text: output.message, quoteAnswer } };
+      }
       const drafting = output.intent === "draft" || output.intent === "cancel";
       const problems: string[] = [];
       if (output.money != null) problems.push("Set money=null unless intent is money.");
+      if (output.quoteQuery != null) problems.push("Set quoteQuery=null unless intent is quote.");
       if (moneyQuestion && moneyContext && output.intent !== "clarify") problems.push("This question asks to explain recorded money: use intent=money with facts from moneyEvidence, or clarify what to check.");
       if (!quote && drafting) problems.push("Quote V1 is not approved yet, so there is nothing to change: answer where V1 stands instead.");
       if (!requesterMayDraft && drafting) problems.push("The client cannot create or cancel drafts in this project: use intent=answer to acknowledge what they asked for and say the designer will prepare a revised quote for them to confirm.");
@@ -92,6 +106,7 @@ export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKe
       if (deferPages && urls.length > 4 && output.intent === "draft") throw new Error("This test version reads at most 4 different product links per project. Your message is saved; no links or chat history were dropped.");
       const draftOutput = { ...output };
       delete draftOutput.money;
+      delete draftOutput.quoteQuery;
       let generated: ReturnType<typeof buildDraft>;
       try { generated = buildDraft({ output: draftOutput, quote, messages, pages, current: state.draft, triggerId: messageId, model }); }
       catch (error) {

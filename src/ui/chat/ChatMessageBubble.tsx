@@ -6,6 +6,7 @@ import type { CaseMessage } from "@/chat/types";
 import type { Person } from "../demo-data";
 import { Avatar } from "../workspace/primitives";
 import { MoneyAnswerCard } from "./MoneyAnswerCard";
+import { QuoteAnswerCard } from "./QuoteAnswerCard";
 
 export function timeLabel(value: string): string {
   const date = new Date(value);
@@ -36,6 +37,7 @@ export function ChatMessageBubble({ message, person, own, highlighted, unsaved, 
           {!(assistant && message.moneyAnswer?.answer) &&<p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed">{linkedText(message.text)}</p>}
           {attachment}
           {assistant && message.moneyAnswer && <MoneyAnswerCard answer={message.moneyAnswer} messageId={message.id} />}
+          {assistant && message.quoteAnswer && <QuoteAnswerCard answer={message.quoteAnswer} />}
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] text-[var(--muted)]"><time dateTime={message.createdAt}>{timeLabel(message.createdAt)}</time>{unsaved && <span>{running ? "Sending…" : "Not saved yet"}</span>}{assistant && <span>{notice ? "Automatic notice · not written by AI" : message.model ? `AI · ${message.model}` : "AI response"}</span>}{message.aiState === "failed" && <span className="text-red-600">AI request failed</span>}</div>
           {message.aiState === "failed" && <div className="mt-2 border-t border-red-100 pt-2 text-[11px] text-red-700"><p>{message.error ?? "The AI did not complete this request."}</p>{canRetryAi ? <button onClick={onRetry} disabled={running} className="mt-1 flex items-center gap-1 font-medium hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Retry AI request</button> : <p className="mt-1">Newer discussion exists. Send a new @Coordinator request.</p>}</div>}
         </div>
