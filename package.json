@@ -18,7 +18,8 @@
     "db:down": "docker compose down",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "eval:replay": "tsx --tsconfig tsconfig.json evals/change-draft/run.ts --backend replay --fresh && tsx --tsconfig tsconfig.json evals/money-answer/run.ts --backend replay --fresh && tsx --tsconfig tsconfig.json evals/inbox-summary/run.ts --backend replay --fresh"
+    "eval:replay": "tsx --tsconfig tsconfig.json evals/change-draft/run.ts --backend replay --fresh && tsx --tsconfig tsconfig.json evals/money-answer/run.ts --backend replay --fresh && tsx --tsconfig tsconfig.json evals/inbox-summary/run.ts --backend replay --fresh",
+    "eval:page": "tsx --tsconfig tsconfig.json evals/page-data.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",

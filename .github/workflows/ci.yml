@@ -45,4 +45,6 @@ jobs:
       - run: npm test
       # Replays the recorded model answers in evals/recorded/ through the same checks and graders; no model is called.
       - run: npm run eval:replay
+      # The /ai-quality page shows the recorded answers; its committed data must match them.
+      - run: npm run eval:page && git diff --exit-code src/ui/ai-quality/eval-data.json
       - run: npm run build

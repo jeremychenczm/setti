@@ -101,4 +101,6 @@ The model answers behind the results above are committed in [`recorded/`](record
 
 Each recorded answer carries a fingerprint of its request: the system prompt, model, effort, output schema and the project data sent. When the code would now send a different request, for example after a prompt change, the run is reported as stale instead of graded and the replay fails; the eval then has to be run against the model again, and `--record` on an `api` run saves the new answers. A product page's read time is left out of the fingerprint, since it changes on every run while the page does not.
 
+The AI quality page (`/ai-quality` on the hosted demo) shows every case with its answer key and these recorded answers. `npm run eval:page` writes its data, `src/ui/ai-quality/eval-data.json`, from the case files and `recorded/`; run it after recording new answers and commit the data with them. CI fails when the data no longer matches the recordings.
+
 The recordings were made from the saved traces of those API runs, with fingerprints computed by the code at that point. The two existing-draft cases now give their draft a fixed id; in the live run the id was random.
