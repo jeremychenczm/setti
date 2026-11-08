@@ -239,7 +239,7 @@ describe("payment HTTP boundaries", () => {
   it("refuses callbacks reconstructed from the public operation and order ids", async () => {
     for (const state of ["", "&state=untrusted", `&state=${callbackState(operationId, "return")}`]) {
       const response = await paypalRedirectResponse(new NextRequest(`${origin}/api/payments/paypal/cancel?op=${operationId}&token=ORDER-1${state}`), "cancel");
-      expect(response.headers.get("location")).toBe(`${origin}/`);
+      expect(response.headers.get("location")).toBe(`${origin}/try`);
     }
     expect(mock.returnFromPayPal).not.toHaveBeenCalled();
     expect(mock.operationPage).not.toHaveBeenCalled();

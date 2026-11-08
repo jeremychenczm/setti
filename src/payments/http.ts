@@ -237,7 +237,8 @@ export async function postPaymentsResponse(req: NextRequest, id: string) {
 export async function paypalRedirectResponse(req: NextRequest, outcome: "return" | "cancel") {
   const operationId = uuid.safeParse(req.nextUrl.searchParams.get("op"));
   const origin = requestOrigin(req) ?? req.nextUrl.origin;
-  const home = new URL("/", origin);
+  // A return Setti cannot place goes to the demo home; "/" is the public landing page.
+  const home = new URL("/try", origin);
   if (!operationId.success) return NextResponse.redirect(home, 303);
   let target: Awaited<ReturnType<typeof operationPage>> = null;
   const page = (state: string) => {
