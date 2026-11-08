@@ -135,7 +135,7 @@ export function CaseChat({ projectKey, quote, account, onSwitchAccount, onOpenQu
   const attachmentFor = (messageId: string) => {
     if (opening && opening.messageId === messageId) return <QuoteCard opening={opening} projectName={currentQuote.projectName} viewerRole={account.role} onOpen={() => onOpenQuote()} replacedBy={versions[0]?.version ?? null} />;
     const index = versions.findIndex((version) => version.messageId === messageId);
-    return index < 0 ? null : <VersionCard version={versions[index]} projectName={currentQuote.projectName} viewerRole={account.role} replacedBy={versions[index + 1]?.version ?? null} />;
+    return index < 0 ? null : <VersionCard version={versions[index]} projectKey={projectKey} projectName={currentQuote.projectName} viewerRole={account.role} replacedBy={versions[index + 1]?.version ?? null} />;
   };
   const lineName = (itemId: string) => (currentQuote.lines.find((line) => line.itemId === itemId) ?? quote.lines.find((line) => line.itemId === itemId))?.name ?? itemId;
   const sentOn = opening?.sentAt ? new Date(opening.sentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;

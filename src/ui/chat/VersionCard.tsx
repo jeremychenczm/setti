@@ -1,7 +1,7 @@
 import { ChevronRight, FileDiff, LockKeyhole } from "lucide-react";
 import Link from "next/link";
 import type { AccountRole } from "@/accounts/demo";
-import type { SentVersion } from "@/chat/types";
+import type { CaseKey, SentVersion } from "@/chat/types";
 import { usd } from "../demo-data";
 import { ChangeSourceNote } from "../pricing/ChangeSource";
 
@@ -10,7 +10,7 @@ function signed(cents: number): string {
 }
 
 /** A later quote version attached to the designer's message that sent it. */
-export function VersionCard({ version, projectName, viewerRole, replacedBy }: { version: SentVersion; projectName: string; viewerRole: AccountRole; replacedBy: number | null }) {
+export function VersionCard({ version, projectKey, projectName, viewerRole, replacedBy }: { version: SentVersion; projectKey: CaseKey; projectName: string; viewerRole: AccountRole; replacedBy: number | null }) {
   const awaiting = version.status === "awaiting_client_confirmation";
   const label = version.status === "approved" ? "Confirmed by the client"
     : version.status === "declined" ? "The client asked for changes"
@@ -31,7 +31,7 @@ export function VersionCard({ version, projectName, viewerRole, replacedBy }: { 
       <Link href={`/change-orders/${version.id}`} className="flex w-full items-center justify-between border-t border-brand-50 bg-brand-50/40 px-3.5 py-2.5 text-[12px] font-medium text-[var(--primary)] hover:bg-brand-50">
         {viewerRole === "client" && awaiting ? "Review and confirm" : `View V${version.version}`}<ChevronRight className="h-3.5 w-3.5" />
       </Link>
-      <div className="flex items-center gap-1 border-t border-brand-50 px-3.5 py-1.5 text-[10px] text-[var(--muted)]"><LockKeyhole className="h-3 w-3" />Locked when sent · {new Date(version.issuedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</div>
+      <div className="flex items-center gap-1 border-t border-brand-50 px-3.5 py-1.5 text-[10px] text-[var(--muted)]"><LockKeyhole className="h-3 w-3" />Locked when sent · {new Date(version.issuedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}{(version.status === "approved" || version.status === "declined") && <Link href={`/receipts/${projectKey}/${version.version}`} className="ml-auto font-medium text-[var(--primary)] hover:underline">Receipt</Link>}</div>
     </div>
   );
 }
