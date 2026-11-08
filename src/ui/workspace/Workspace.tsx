@@ -29,6 +29,9 @@ const StudioProjectsModule = dynamic(() => import("../studio/StudioProjectsModul
 const InboxModule = dynamic(() => import("../inbox/Inbox").then((m) => m.Inbox), {
   loading: () => <div role="status" className="flex flex-1 items-center justify-center rounded-xl bg-white text-[13px] text-[var(--muted)]">Loading inbox…</div>,
 });
+const MoneyModule = dynamic(() => import("../money/MoneyDesk").then((m) => m.MoneyDesk), {
+  loading: () => <div role="status" className="flex flex-1 items-center justify-center rounded-xl bg-white text-[13px] text-[var(--muted)]">Loading the money desk…</div>,
+});
 const StudioProjectChat = dynamic(() => import("../studio/StudioProjectChat").then((m) => m.StudioProjectChat));
 const StudioProjectRecords = dynamic(() => import("../studio/PreparedProject").then((m) => m.StudioProjectRecords));
 
@@ -71,6 +74,7 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
       const url = new URL(window.location.href);
       if (url.pathname === "/studio" && account.role === "designer") { setView("projects"); return; }
       if (url.pathname === "/inbox") { setView("inbox"); return; }
+      if (url.pathname === "/money" && account.role === "designer") { setView("money"); return; }
       const match = /^\/(chats|quotes)\/([^/]+)$/.exec(url.pathname);
       if (!match) return;
       const id = decodeURIComponent(match[2]);
@@ -85,10 +89,10 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
   }, [account]);
 
   function showView(next: View) {
-    if (next === "projects" && account.role !== "designer") return;
+    if ((next === "projects" || next === "money") && account.role !== "designer") return;
     setView(next);
     if (next === "quotes") setRecordsTab("quote");
-    const path = next === "projects" ? "/studio" : next === "inbox" ? "/inbox" : next === "quotes" ? `/quotes/${preparedProject?.id ?? quoteId}` : `/chats/${preparedProject?.id ?? activeId}`;
+    const path = next === "projects" ? "/studio" : next === "money" ? "/money" : next === "inbox" ? "/inbox" : next === "quotes" ? `/quotes/${preparedProject?.id ?? quoteId}` : `/chats/${preparedProject?.id ?? activeId}`;
     window.history.replaceState(window.history.state, "", path);
   }
 
@@ -161,7 +165,7 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
     setAccount(next);
     setActiveId((key) => reachable(next, key));
     setQuoteId((key) => reachable(next, key));
-    if (next.role === "client" && (view === "projects" || preparedCaseId)) {
+    if (next.role === "client" && (view === "projects" || view === "money" || preparedCaseId)) {
       setPreparedCaseId(null);
       setView("chats");
       window.history.replaceState(window.history.state, "", `/chats/${reachable(next, activeId)}`);
@@ -178,10 +182,11 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
         <DemoEndedNotice />
-        {view !== "projects" && !preparedProject && <TrySeedNotice projectKey={view === "chats" ? activeId : quoteId} account={account} onSwitchAccount={switchAccount} onOpenChat={() => { setActiveId(view === "quotes" ? quoteId : activeId); setView("chats"); }} onOpenInbox={() => showView("inbox")} currentView={view} />}
+        {view !== "projects" && view !== "money" && !preparedProject && <TrySeedNotice projectKey={view === "chats" ? activeId : quoteId} account={account} onSwitchAccount={switchAccount} onOpenChat={() => { setActiveId(view === "quotes" ? quoteId : activeId); setView("chats"); }} onOpenInbox={() => showView("inbox")} currentView={view} />}
         <div className="flex min-h-0 min-w-0 flex-1 gap-2">
           {view === "projects" && account.role === "designer" && <StudioProjectsModule onOpenProject={openPreparedProject} />}
           {view === "inbox" && <InboxModule key={account.id} account={account} />}
+          {view === "money" && account.role === "designer" && <MoneyModule onOpenInbox={() => showView("inbox")} />}
           {view === "chats" && (preparedProject
             ? <StudioProjectChat key={preparedProject.id} project={preparedProject} projects={conversations} onSelectProject={open} onOpenRecords={openPreparedRecords} />
             : <CaseChat key={`${account.id}:${activeId}`} projectKey={activeId} quote={quotes[activeId]} account={account} onSwitchAccount={switchAccount} onOpenQuote={openCaseQuote} onSelectCase={open} conversationOptions={conversations} onSelectProject={open} onLatest={(message) => showLatest(activeId, message)} />)}

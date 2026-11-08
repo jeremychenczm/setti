@@ -1,9 +1,9 @@
-import { FileSpreadsheet, FolderOpen, Inbox, MessageCircle } from "lucide-react";
+import { FileSpreadsheet, FolderOpen, Inbox, MessageCircle, Wallet } from "lucide-react";
 import type { ComponentType } from "react";
 import type { AccountId, DemoAccount } from "@/accounts/demo";
 import { AccountMenu } from "./AccountMenu";
 
-export type View = "projects" | "chats" | "quotes" | "inbox";
+export type View = "projects" | "chats" | "quotes" | "inbox" | "money";
 
 interface NavItem {
   view: View;
@@ -11,12 +11,12 @@ interface NavItem {
   icon: ComponentType<{ className?: string }>;
 }
 
-/** The designer sends quotes; a client receives them as proposals. */
+/** The designer sends quotes and keeps the money desk; a client receives quotes as proposals. */
 function itemsFor(account: DemoAccount): NavItem[] {
   return [
     { view: "inbox", label: "Inbox", icon: Inbox },
     { view: "chats", label: "Chats", icon: MessageCircle },
-    ...(account.role === "designer" ? [{ view: "projects" as const, label: "Projects", icon: FolderOpen }] : []),
+    ...(account.role === "designer" ? [{ view: "projects" as const, label: "Projects", icon: FolderOpen }, { view: "money" as const, label: "Money", icon: Wallet }] : []),
     { view: "quotes", label: account.role === "designer" ? "Quotes" : "Proposals", icon: FileSpreadsheet },
   ];
 }
