@@ -13,9 +13,9 @@ export const MAPLE_SAMPLE_MATERIALS = {
     specification: "Light oak writing desk, standard finish · fictional Maple walkthrough product",
     returnPolicy: "Sample supplier terms: an unshipped order can be cancelled before supplier confirmation at no charge. Later returns and any retained cost require a new reviewed agreement and supplier credit.",
   },
-  chair: { oldItemHandling: "not_ordered" as const, oldItemCostCents: 0,
+  chair: { oldItemHandling: "not_ordered" as const, oldItemCostCents: 0, oldItemFees: [],
     note: "Sample cancellation note MAPLE-SAMPLE-Q1: the original lounge chair has not been ordered. No goods are kept and no cancellation cost is retained." },
-  rug: { oldItemHandling: "returned" as const, oldItemCostCents: 6_000,
+  rug: { oldItemHandling: "returned" as const, oldItemCostCents: 6_000, oldItemFees: [{ kind: "restocking_fee" as const, amountCents: 6_000 }],
     note: "Sample return note MAPLE-SAMPLE-Q1: return the wool rug. The supplier retains USD 60 total (20% of USD 300), including all applicable handling, tax and delivery costs; the remaining USD 240 waits for the supplier's credit before refund." },
   terms: "Maple walkthrough terms (fictional): replace the lounge chair with one light oak writing desk at USD 1,100, line tax USD 0 and delivery USD 0. The chair was not ordered and has no retained cost. Return the wool rug with an inclusive USD 60 retained cost; its USD 240 refund waits for supplier credit. Other quote lines stay unchanged. The client confirms this scope, pricing and handling; payment steps are recorded separately after confirmation. Desk capture waits for matching supplier confirmation.",
 } as const;
@@ -51,11 +51,11 @@ export function loadMapleSampleMaterials(quote: Pick<QuoteDocument, "projectId" 
         room: change.after.room || quote.lines.find((line) => line.itemId === "chair")!.room,
         returnable: true, restockingFeeBps: null, customMade: false };
       return { ...change, after, confirmed: false, oldItemHandling: sample.chair.oldItemHandling, oldItemCostCents: sample.chair.oldItemCostCents,
-        oldItemNote: sample.chair.note,
+        oldItemFees: [...sample.chair.oldItemFees], oldItemNote: sample.chair.note,
         priceEvidence: `Fictional sample supplier quote ${sample.reference}: ${sample.supplier}; ${sample.desk.sku}; 1 each at USD 1,100; whole-line tax USD 0 and delivery USD 0; sample lead time 14 days. Loaded from Setti's local walkthrough materials for designer review.` };
     }
     return { ...change, confirmed: false, oldItemHandling: sample.rug.oldItemHandling, oldItemCostCents: sample.rug.oldItemCostCents,
-      oldItemNote: sample.rug.note, priceEvidence: `Fictional sample return note ${sample.reference}: USD 300 original rug, inclusive retained cost USD 60, supplier credit USD 240 before refund.` };
+      oldItemFees: sample.rug.oldItemFees.map((fee) => ({ ...fee })), oldItemNote: sample.rug.note, priceEvidence: `Fictional sample return note ${sample.reference}: USD 300 original rug, inclusive retained cost USD 60, supplier credit USD 240 before refund.` };
   });
   if (!result.terms.trim()) result.terms = sample.terms;
   if (!result.reviewNotes.trim()) result.reviewNotes = `Source: ${sample.reference}, Setti's fictional Maple supplier quote and cancellation / return notes. Designer review remains required.`;

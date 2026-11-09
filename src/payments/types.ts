@@ -1,5 +1,6 @@
 import type { FundingPlan } from "@/approval/funding";
 import type { CaseKey } from "@/chat/types";
+import type { ReviewedChange } from "@/pricing/types";
 import type { SettlementView } from "./fees";
 import type { ItemCancellationReason } from "./cancellation";
 import type { SavedMethodView } from "./saved-methods";
@@ -107,6 +108,8 @@ export interface PaymentLineView {
   supplierEvents: SupplierEventView[];
   /** Frozen return condition, retained even when another item's unresolved operation blocks actions. */
   refundRequiresSupplierCredit?: boolean;
+  /** What the version keeps from the client for this original item and does not refund. */
+  nonRefundable?: Pick<ReviewedChange, "oldItemCostCents" | "oldItemFees"> | null;
   steps: PaymentStep[];
   /** What the version assigned before the studio cancelled the item (`targetCents` is then zero). */
   cancelledTargetCents?: number;

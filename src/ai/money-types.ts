@@ -1,4 +1,5 @@
 import type { CaseKey } from "../chat/types";
+import type { NonRefundableFee } from "../pricing/types";
 
 /** Server-owned evidence, never a model-supplied URL or monetary value. */
 export interface MoneySource {
@@ -53,6 +54,8 @@ export interface MoneyTableRow {
   releasedCents: number;
   /** What the confirmed version keeps from this item's money and does not refund, such as a restocking fee. */
   nonRefundableCents: number;
+  /** What makes up nonRefundableCents, by type; empty or absent when the version states only a total. */
+  nonRefundableFees?: NonRefundableFee[];
   /** Charged less refunded. */
   netCents: number;
   /** The facts about this item; a sentence about it is checked against all of them. */

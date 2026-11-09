@@ -2,6 +2,7 @@
 
 import { Link2, ReceiptText } from "lucide-react";
 import { MONEY_STATUS_LABEL, type MoneyAnswer, type MoneyFact, type MoneyTableRow } from "@/ai/money-types";
+import { notRefundedText } from "@/pricing/fees";
 
 function evidenceHref(value: string): string | null {
   return /^\/quotes\/(?:maple|willow)(?:#[\w.%:~-]+)?$/.test(value)
@@ -17,7 +18,7 @@ function recordedTime(value: string): string {
 
 const usd = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 
-type Money = Pick<MoneyTableRow, "status" | "heldCents" | "chargedCents" | "refundedCents" | "releasedCents" | "nonRefundableCents" | "netCents">;
+type Money = Pick<MoneyTableRow, "status" | "heldCents" | "chargedCents" | "refundedCents" | "releasedCents" | "nonRefundableCents" | "nonRefundableFees" | "netCents">;
 
 /** States the amounts already say; their word is left out when an amount follows. */
 const SHOWN_BY_AMOUNTS = new Set<MoneyTableRow["status"]>(["charged", "on_hold", "refunded", "released"]);
@@ -29,7 +30,9 @@ function detail(row: Money): string[] {
     row.chargedCents > 0 && (row.chargedCents !== row.netCents || row.releasedCents > 0 || row.nonRefundableCents > 0) && `Charged ${usd(row.chargedCents)}`,
     row.refundedCents > 0 && `Refunded ${usd(row.refundedCents)}`,
     row.releasedCents > 0 && `Released ${usd(row.releasedCents)}`,
-    row.nonRefundableCents > 0 && `Non-refundable ${usd(row.nonRefundableCents)}`,
+    row.nonRefundableCents > 0 && (row.nonRefundableFees?.length
+      ? notRefundedText({ oldItemCostCents: row.nonRefundableCents, oldItemFees: row.nonRefundableFees })
+      : `Non-refundable ${usd(row.nonRefundableCents)}`),
   ].filter((part): part is string => !!part);
   const status = SHOWN_BY_AMOUNTS.has(row.status) && parts.length ? null : MONEY_STATUS_LABEL[row.status];
   return [status, ...parts].filter((part): part is string => !!part);
@@ -42,7 +45,7 @@ function Detail({ row }: { row: Money }) {
 
 /** The item table: statuses and amounts as the records stood when the answer was saved, never the model's words. */
 function RecordTable({ rows }: { rows: readonly MoneyTableRow[] }) {
-  const sum = (field: keyof Omit<Money, "status">) => rows.reduce((total, row) => total + row[field], 0);
+  const sum = (field: keyof Omit<Money, "status" | "nonRefundableFees">) => rows.reduce((total, row) => total + row[field], 0);
   const total: Money = { status: "charged", heldCents: sum("heldCents"), chargedCents: sum("chargedCents"), refundedCents: sum("refundedCents"), releasedCents: sum("releasedCents"), nonRefundableCents: sum("nonRefundableCents"), netCents: sum("netCents") };
   return <figure className="mt-2">
     <table className="w-full rounded-lg bg-white/70 text-[12px]">

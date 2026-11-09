@@ -8,7 +8,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "../db/client";
 import type { DemoAccount } from "../accounts/demo";
 import { items, revisions } from "../db/schema";
-import { buildFundingPlan, type FundingLine, type FundingPlan } from "../approval/funding";
+import { buildFundingPlan, REFUND_AFTER_CREDIT, type FundingLine, type FundingPlan } from "../approval/funding";
 import { changeOrderDecisions } from "../approval/schema";
 import { fundingFactsFrom, fundingIdentities, readLedger, type ProjectLedger } from "../approval/store";
 import { chatCases } from "../chat/schema";
@@ -65,6 +65,7 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
     const events: SupplierEventView[] = ledger.supplierEvents.filter((event) => event.changeOrderId === orderId && event.itemId === businessId)
       .map((event) => ({ id: event.id, kind: event.kind, quantity: event.quantity, unitPriceCents: event.unitPriceCents, taxCents: event.taxCents, freightCents: event.freightCents, totalCents: event.totalCents, inStock: event.inStock, leadTimeDays: event.leadTimeDays, reference: event.reference, note: event.note, isDemo: true, createdAt: event.createdAt.toISOString() }));
     const terms = confirmedSupplierTerms(order, line);
+    const kept = line.side === "baseline" ? order.changes.find((change) => change.itemId === line.itemId && change.oldItemHandling !== "not_applicable" && change.oldItemCostCents > 0) : undefined;
     const cancelled = businessId ? ledger.cancellations.find((entry) => entry.itemId === businessId) : undefined;
     // The designer may cancel a furniture item of the current version that nothing was charged for, once its PayPal steps are settled.
     const canCancelItem = owner && current && account?.role === "designer" && !!businessId && !cancelled && line.category === "furniture" && line.targetCents > 0
@@ -73,7 +74,8 @@ export async function paymentsWorkspace(db: Reader, sessionId: string | null, or
     lines.push({
       ...line, businessItemId: businessId ?? null, releasedCents: money.holds.reduce((total, hold) => total + hold.releasedCents, 0), ...money,
       confirmedTerms: terms,
-      refundRequiresSupplierCredit: line.side === "baseline" && order.changes.some((change) => change.itemId === line.itemId && ["returned", "cancelled"].includes(change.oldItemHandling)),
+      refundRequiresSupplierCredit: line.side === "baseline" && order.changes.some((change) => change.itemId === line.itemId && REFUND_AFTER_CREDIT.includes(change.oldItemHandling)),
+      nonRefundable: kept ? { oldItemCostCents: kept.oldItemCostCents, oldItemFees: kept.oldItemFees ?? [] } : null,
       supplierEvents: events, steps: steps(plan, line, owner && current, events, terms?.purpose === "retained_cost", savedMethod).map((step) => ({ ...step, available: step.available && member && step.actor === account?.role })),
       cancellation: cancelled ? cancellationView(cancelled) : null, canCancelItem,
     });

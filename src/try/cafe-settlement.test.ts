@@ -93,6 +93,11 @@ describe.skipIf(!testDatabaseUrl)("café walkthrough after one signature", () =>
     expect(reminders.length).toBeGreaterThan(0);
     expect(new Set(reminders.map((item) => item.projectName))).toEqual(new Set(["Maple Ave Café"]));
     for (const version of [1, 2]) expect((await readVersionReceipt(handle.db, session, "maple", version)).project).toMatchObject({ name: "Maple Ave Café", room: "Front of house" });
+    // The signed V2 states what the old countertop and tile keep from Emma, by type.
+    const signed = (await readVersionReceipt(handle.db, session, "maple", 2)).agreement;
+    const oldItems = signed.kind === "change" ? new Map(signed.changes.map((change) => [change.itemId, change.oldItem])) : new Map();
+    expect(oldItems.get("countertop")).toMatchObject({ handling: "modified", retainedCents: 28_000, fees: [{ kind: "fabrication_fee", amountCents: 28_000 }] });
+    expect(oldItems.get("wall-tile")).toMatchObject({ handling: "returned", retainedCents: 19_600, fees: [{ kind: "restocking_fee", amountCents: 19_600 }] });
 
     // The money answer's item table comes from the records, in fixed words: before any supplier step, what is held and what waits.
     const money = async () => new Map((await createChatStore(handle.db).readMoneyContext!(session, "maple")).items!.map((item) => [item.key, item]));
@@ -126,6 +131,7 @@ describe.skipIf(!testDatabaseUrl)("café walkthrough after one signature", () =>
     for (const [itemId, creditCents] of [["countertop", 44_000], ["wall-tile", 78_400]] as const) {
       const line = find(lines, itemId, "baseline");
       expect(lineProgress(line).label).toBe("Awaiting supplier credit");
+      expect(line.nonRefundable).toEqual({ oldItemCostCents: itemId === "countertop" ? 28_000 : 19_600, oldItemFees: [{ kind: itemId === "countertop" ? "fabrication_fee" : "restocking_fee", amountCents: itemId === "countertop" ? 28_000 : 19_600 }] });
       await recordSupplierCredit(handle.db, session, order.id, { ...ref(line), creditCents, reference: `DEMO-CREDIT-${itemId}`, note: "Demo supplier credit." });
       const refunded = await startRefund(handle.db, paypal, session, order.id, ref(line));
       expect(refunded.map((operation) => [operation.status, operation.amountCents])).toEqual([["succeeded", creditCents]]);
@@ -148,10 +154,10 @@ describe.skipIf(!testDatabaseUrl)("café walkthrough after one signature", () =>
 
     // Settled: each item's status and amounts as the answer's table shows them.
     const settled = await money();
-    expect(settled.get("baseline:countertop")).toMatchObject({ label: "Quartz countertop", status: "refunded", chargedCents: 396_000, refundedCents: 44_000, nonRefundableCents: 28_000, netCents: 352_000 });
+    expect(settled.get("baseline:countertop")).toMatchObject({ label: "Quartz countertop", status: "refunded", chargedCents: 396_000, refundedCents: 44_000, nonRefundableCents: 28_000, nonRefundableFees: [{ kind: "fabrication_fee", amountCents: 28_000 }], netCents: 352_000 });
     expect(settled.get("baseline:wall-tile")).toMatchObject({ label: "Back bar wall tile (original)", status: "refunded", nonRefundableCents: 19_600, netCents: 19_600 });
     expect(settled.get("proposed:wall-tile")).toMatchObject({ label: "Back bar wall tile, sage green (new)", status: "charged", netCents: 152_000 });
-    expect(settled.get("baseline:pendants")).toMatchObject({ status: "charged", releasedCents: 48_000, netCents: 96_000 });
+    expect(settled.get("baseline:pendants")).toMatchObject({ status: "charged", releasedCents: 48_000, nonRefundableFees: [], netCents: 96_000 });
     expect([...settled.values()].reduce((sum, item) => sum + item.netCents, 0)).toBe(1_750_600);
     expect([...settled.values()].every((item) => item.factIds.includes(`item:${item.key}`))).toBe(true);
   });

@@ -5,7 +5,16 @@ import type { ClientDecision } from "@/approval/types";
 import type { ReviewCarryOver } from "./carry-over";
 import type { FieldChange } from "./review-diff";
 
-export type OldItemHandling = "pending" | "not_ordered" | "cancelled" | "returned" | "retained" | "not_applicable";
+/** "modified": the supplier re-makes or re-sizes the item that was already made, instead of cancelling or taking it back. */
+export type OldItemHandling = "pending" | "not_ordered" | "cancelled" | "modified" | "returned" | "retained" | "not_applicable";
+
+/** What a non-refundable cost of the old item is; "other" is explained in the old-item note. */
+export type NonRefundableFeeKind = "restocking_fee" | "fabrication_fee" | "shipping" | "material_cost" | "cancellation_fee" | "other";
+
+export interface NonRefundableFee {
+  kind: NonRefundableFeeKind;
+  amountCents: number;
+}
 
 /** Editable amounts stay nullable until a designer explicitly checks them. */
 export interface PricingItem {
@@ -38,8 +47,10 @@ export interface PricingChangeInput {
   priceEvidence: string;
   confirmed: boolean;
   oldItemHandling: OldItemHandling;
-  /** Total retained old-item cost / handling charge including its applicable fees. */
+  /** Total retained old-item cost / handling charge including its applicable fees: the sum of the fees below. */
   oldItemCostCents: number | null;
+  /** The non-refundable costs that make up that total, by type; an amount stays null until the designer enters it. */
+  oldItemFees: { kind: NonRefundableFeeKind; amountCents: number | null }[];
   oldItemNote: string;
   /** Fixed by the draft: the V1 line this change brings back. */
   fromV1?: FromV1;
@@ -122,6 +133,8 @@ export interface ReviewedChange {
   after: FinalQuoteLine | null;
   oldItemHandling: OldItemHandling;
   oldItemCostCents: number;
+  /** The non-refundable costs that make up oldItemCostCents. Versions frozen before fees had types have none. */
+  oldItemFees?: NonRefundableFee[];
   oldItemNote: string;
   priceEvidence: string;
   /** The V1 line this change brings back, shown to the client with the change. */

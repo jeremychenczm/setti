@@ -62,7 +62,7 @@ export async function runMixedChangeProof(options: ProofOptions): Promise<ProofR
   log("Confirming one change: the chair becomes a writing desk and the rug is returned with a $60 restocking fee.");
   const mixed = await confirmChanges(db, session, PROOF_CASE, [
     { action: "replace", itemId: "chair", after: product("Oak writing desk", "DEMO-DESK-1", 110_000), oldItemHandling: "not_ordered", oldItemCostCents: 0 },
-    { action: "remove", itemId: "rug", oldItemHandling: "returned", oldItemCostCents: 6_000 },
+    { action: "remove", itemId: "rug", oldItemHandling: "returned", oldItemCostCents: 6_000, oldItemFees: [{ kind: "restocking_fee", amountCents: 6_000 }] },
   ]);
   record("Release the lounge chair hold", await startRelease(db, paypal, session, mixed.id, { ...ref("chair"), ...shown(mixed) }));
   await authorizeItem(options, run, mixed, "chair", "Authorize the writing desk ($1,100.00)");

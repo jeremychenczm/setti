@@ -165,7 +165,7 @@ describe.skipIf(!testDatabaseUrl)("read-only case money evidence", () => {
     expect(text(context, "next:proposed:chair")).toContain("short of $1,100.00");
     expect(text(context, "item:proposed:chair")).toContain("This new purchase has its own authorization");
     expect(text(context, "next:proposed:chair")).toContain("another item's released hold does not pay for it");
-    expect(text(context, "terms:baseline:rug")).toContain("retained old-item cost is $60.00");
+    expect(text(context, "terms:baseline:rug")).toContain("the non-refundable cost is $60.00: Restocking fee $60.00");
     expect(text(context, "next:baseline:rug")).toContain("$240.00 remains to be refunded after the supplier credit");
     expect(text(context, "outside-scope")).toContain("$400.00");
     expect(context.mandatoryFactIds).toContain("outside-scope");

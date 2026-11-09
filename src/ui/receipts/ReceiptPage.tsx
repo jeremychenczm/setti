@@ -2,6 +2,7 @@
 
 import { ArrowLeft, Download, LoaderCircle, Printer } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { notRefundedText } from "@/pricing/fees";
 import type { ReceiptItem, VersionReceipt } from "@/receipts/types";
 import {
   ACTION_LABELS, CHANGE_LABELS, DECISION_LABELS, HANDLING_LABELS, PENDING_LABELS, TIMING_LABELS, VIA_LABELS,
@@ -179,7 +180,7 @@ export function ReceiptDocument({ receipt }: { receipt: VersionReceipt }) {
               </td>
               <td className={`${cell} ${amount}`}>{change.before ? usd(before) : "—"}</td>
               <td className={`${cell} ${amount}`}>{change.after || retained ? usd(after) : "—"}</td>
-              <td className={cell}>{CHANGE_LABELS[change.action]}{change.oldItem && <Sub>{HANDLING_LABELS[change.oldItem.handling]}. {retained ? `Supplier keeps ${usd(retained)}.` : "No retained cost."}</Sub>}</td>
+              <td className={cell}>{CHANGE_LABELS[change.action]}{change.oldItem && <Sub>{HANDLING_LABELS[change.oldItem.handling]} · {notRefundedText({ oldItemCostCents: retained, oldItemFees: change.oldItem.fees })}</Sub>}</td>
               <td className={`${cell} ${amount}`}>{signedUsd(after - before)}</td>
             </tr>;
           })}

@@ -7,7 +7,7 @@
 import type { FundingAction } from "../approval/funding";
 import type { CaseKey } from "../chat/types";
 import type { LineState } from "../opening/types";
-import type { ChangeSource, FrozenChangeOrder, OldItemHandling, ReviewedChange } from "../pricing/types";
+import type { ChangeSource, FrozenChangeOrder, NonRefundableFee, OldItemHandling, ReviewedChange } from "../pricing/types";
 import type { LineSnapshot } from "../quotes/hash";
 import type { QuoteDocument } from "../quotes/types";
 
@@ -45,8 +45,8 @@ export interface ChangeReceiptLine {
   action: ReviewedChange["action"];
   before: ReceiptItem | null;
   after: ReceiptItem | null;
-  /** What happens to the item the change replaces or removes. */
-  oldItem: { handling: OldItemHandling; retainedCents: number; note: string } | null;
+  /** What happens to the item the change replaces or removes; fees are empty for versions frozen before fees had types. */
+  oldItem: { handling: OldItemHandling; retainedCents: number; fees: NonRefundableFee[]; note: string } | null;
 }
 
 export type ReceiptAgreement =

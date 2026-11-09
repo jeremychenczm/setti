@@ -19,7 +19,7 @@ export const TIMING_LABELS: Record<ReceiptPending["actions"][number]["timing"], 
 export const VIA_LABELS: Record<NonNullable<ReceiptPayment["confirmed"]>["via"], string> = { webhook: "webhook", readback: "read back", response: "API response" };
 export const DECISION_LABELS: Record<LineState, string> = { approved: "Approved", declined: "Declined", withdrawn: "Dropped", pending: "Undecided" };
 export const HANDLING_LABELS: Record<OldItemHandling, string> = {
-  pending: "Not checked", not_ordered: "Not ordered", cancelled: "Cancelled", returned: "Returned", retained: "Kept by the client", not_applicable: "",
+  pending: "Not checked", not_ordered: "Not ordered", cancelled: "Cancelled", modified: "Modified", returned: "Returned", retained: "Kept by the client", not_applicable: "",
 };
 export const CHANGE_LABELS = { add: "Added", remove: "Removed", replace: "Replaced", quantity: "Quantity changed" } as const;
 

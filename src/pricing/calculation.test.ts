@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { ApprovedQuoteLine, ApprovedQuoteReport } from "@/quotes/types";
 import type { CaseMessage, ChangeDraft, DraftChange, DraftItem } from "@/chat/types";
-import type { PricingInput } from "./types";
+import type { NonRefundableFeeKind, PricingChangeInput, PricingInput } from "./types";
 import { quoteFingerprint } from "../quotes/fingerprint";
 import { createPricingInput, prepareChangeOrder, previewPricing, PricingValidationError, pricingInputSchema, requiresOldItemHandling, validatePricingInput } from "./calculation";
 
@@ -27,13 +27,18 @@ function draft(changes: DraftChange[] = [change()]): ChangeDraft {
 function messages(): CaseMessage[] {
   return ["m1", "m2", "unused"].map((id) => ({ id, actor: "client", text: `Original text ${id}`, createdAt: date, replyToMessageId: null, aiState: "none", error: null, model: null }));
 }
+/** Sets the old-item cost as one fee of that type; 0 means no fee, null not checked. */
+function cost(entry: PricingChangeInput, cents: number | null, kind: NonRefundableFeeKind = "restocking_fee") {
+  entry.oldItemCostCents = cents;
+  entry.oldItemFees = cents ? [{ kind, amountCents: cents }] : [];
+}
 function ready(q: ApprovedQuoteReport, d: ChangeDraft): PricingInput {
   const input = createPricingInput(q, d);
   input.terms = "Prices, tax, delivery and old-item costs were reviewed; nothing has been paid or approved by the client.";
   for (const entry of input.changes) {
     entry.confirmed = true;
     if (entry.after) { entry.after.taxCents = 500; entry.after.freightCents = 100; entry.after.returnPolicy = "Designer checked cancellation terms; delivery timing remains unconfirmed."; }
-    if (requiresOldItemHandling(entry, q.lines.find((old) => old.itemId === entry.itemId))) { entry.oldItemHandling = "returned"; entry.oldItemCostCents = 2_000; entry.oldItemNote = "Confirmed total old-item cost, including any relevant tax and fees."; }
+    if (requiresOldItemHandling(entry, q.lines.find((old) => old.itemId === entry.itemId))) { entry.oldItemHandling = "returned"; cost(entry, 2_000); entry.oldItemNote = "Confirmed total old-item cost, including any relevant tax and fees."; }
   }
   for (const issue of input.issues) { issue.resolved = true; issue.note = "Designer checked this issue against source documents."; }
   return input;
@@ -83,7 +88,9 @@ describe("pricing review calculation", () => {
     const body = prepareChangeOrder(q, d, input, messages());
     expect(body.lines.find((entry) => entry.itemId === "rug")).toMatchObject({ origin: "unchanged", unitPriceCents: 30_000, taxCents: 2_400, freightCents: 600 });
     expect(body.lines.find((entry) => entry.origin === "old_item_cost")).toMatchObject({ itemId: "old-cost-draft-1-change-0", quantity: 1, category: "service", unitPriceCents: 2_000, taxCents: 0, freightCents: 0 });
-    expect(body.lines.find((entry) => entry.origin === "old_item_cost")?.specification).toContain("every verified cost");
+    expect(body.lines.find((entry) => entry.origin === "old_item_cost")).toMatchObject({ name: "Non-refundable cost: Original chair" });
+    expect(body.lines.find((entry) => entry.origin === "old_item_cost")?.specification).toMatch(/^Non-refundable: Restocking fee \$20\.00\. .*every verified cost/);
+    expect(body.changes[0]).toMatchObject({ oldItemCostCents: 2_000, oldItemFees: [{ kind: "restocking_fee", amountCents: 2_000 }] });
     expect(body.changes[0].before?.unitPriceCents).toBe(10_000);
     expect(body.changes[0].before?.quantity).toBe(2);
     expect(body.constraints).toEqual(d.constraints);
@@ -93,16 +100,16 @@ describe("pricing review calculation", () => {
 
   it("old handling uses server-owned quote even if AI before/subtotals are wrong", () => {
     const q = quote(); const d = draft(); d.changes[0].before!.unitPriceCents = 1;
-    const input = ready(q, d); input.changes[0].oldItemHandling = "retained"; input.changes[0].oldItemCostCents = 21_999;
+    const input = ready(q, d); input.changes[0].oldItemHandling = "retained"; cost(input.changes[0], 21_999);
     expect(previewPricing(q, d, input).problems.join()).toContain("full original line total");
-    input.changes[0].oldItemCostCents = 22_000;
+    cost(input.changes[0], 22_000);
     expect(previewPricing(q, d, input).ready).toBe(true);
     expect(prepareChangeOrder(q, d, input, messages()).changes[0].before?.unitPriceCents).toBe(10_000);
   });
 
   it("retains no removed old line and includes only explicitly confirmed removal cost", () => {
     const q = quote(); const d = draft([change("remove")]); const input = ready(q, d);
-    input.changes[0].oldItemHandling = "not_ordered"; input.changes[0].oldItemCostCents = 0;
+    input.changes[0].oldItemHandling = "not_ordered"; cost(input.changes[0], 0);
     const body = prepareChangeOrder(q, d, input, messages());
     expect(body.lines.map((entry) => entry.itemId)).toEqual(["rug"]);
     expect(body.changes[0].after).toBeNull();
@@ -111,7 +118,7 @@ describe("pricing review calculation", () => {
 
   it("handles multiple changes, additions and removals with stable logical IDs", () => {
     const q = quote(); const d = draft([change("quantity"), change("remove", "rug"), change("add")]); const input = ready(q, d);
-    input.changes[1].oldItemCostCents = 0;
+    cost(input.changes[1], 0);
     const first = prepareChangeOrder(q, d, input, messages());
     const second = prepareChangeOrder(q, d, input, messages());
     expect(first.lines.map((entry) => entry.itemId)).toEqual(["chair", "new-draft-1-change-2"]);
@@ -125,9 +132,9 @@ describe("pricing review calculation", () => {
     const input = createPricingInput(q, d);
     expect(input.changes[0]).toMatchObject({ oldItemHandling: "pending", oldItemCostCents: null });
     expect(requiresOldItemHandling(input.changes[0], q.lines[0])).toBe(true);
-    const checked = ready(q, d); checked.changes[0].oldItemHandling = "retained"; checked.changes[0].oldItemCostCents = 9_999;
+    const checked = ready(q, d); checked.changes[0].oldItemHandling = "retained"; cost(checked.changes[0], 9_999);
     expect(previewPricing(q, d, checked).ready).toBe(false);
-    checked.changes[0].oldItemCostCents = 10_000;
+    cost(checked.changes[0], 10_000);
     const body = prepareChangeOrder(q, d, checked, messages());
     expect(body.lines.find((entry) => entry.itemId === "chair")?.quantity).toBe(1);
     expect(body.lines.find((entry) => entry.origin === "old_item_cost")?.unitPriceCents).toBe(10_000);
@@ -138,7 +145,7 @@ describe("pricing review calculation", () => {
     const q = quote(); const d = draft([change("quantity")]); const input = ready(q, d);
     input.changes[0].after!.quantity = 1;
     expect(() => validatePricingInput(q, d, input)).toThrow(PricingValidationError);
-    input.changes[0].oldItemHandling = "pending"; input.changes[0].oldItemCostCents = null;
+    input.changes[0].oldItemHandling = "pending"; cost(input.changes[0], null);
     expect(validatePricingInput(q, d, input).changes[0].oldItemHandling).toBe("pending");
     expect(previewPricing(q, d, input).ready).toBe(false);
   });
@@ -195,7 +202,7 @@ describe("pricing review calculation", () => {
 
   it("does not mistake explicitly reviewed zero tax/delivery/fee for missing values", () => {
     const q = quote(); const d = draft(); const input = ready(q, d);
-    input.changes[0].after!.taxCents = 0; input.changes[0].after!.freightCents = 0; input.changes[0].oldItemCostCents = 0;
+    input.changes[0].after!.taxCents = 0; input.changes[0].after!.freightCents = 0; cost(input.changes[0], 0);
     expect(previewPricing(q, d, input)).toMatchObject({ ready: true, proposedTotals: { totalCents: 83_000 } });
     input.changes[0].after!.taxCents = null;
     expect(previewPricing(q, d, input)).toMatchObject({ ready: false, proposedTotals: null, deltaTotalCents: null });
@@ -222,10 +229,10 @@ describe("pricing review calculation", () => {
 
   it("rejects an empty V2 but permits a real same-price replacement", () => {
     const q = quote(); const removeAll = draft([change("remove"), change("remove", "rug")]); const empty = ready(q, removeAll);
-    empty.changes.forEach((entry) => { entry.oldItemCostCents = 0; });
+    empty.changes.forEach((entry) => { cost(entry, 0); });
     expect(previewPricing(q, removeAll, empty).problems.join()).toContain("must keep at least one line");
     const d = draft(); const input = ready(q, d);
-    input.changes[0].after!.quantity = 2; input.changes[0].after!.unitPriceCents = 10_000; input.changes[0].after!.taxCents = 1_500; input.changes[0].after!.freightCents = 500; input.changes[0].oldItemCostCents = 0;
+    input.changes[0].after!.quantity = 2; input.changes[0].after!.unitPriceCents = 10_000; input.changes[0].after!.taxCents = 1_500; input.changes[0].after!.freightCents = 500; cost(input.changes[0], 0);
     expect(previewPricing(q, d, input)).toMatchObject({ ready: true, deltaTotalCents: 0 });
   });
 
@@ -309,5 +316,48 @@ describe("pricing review calculation", () => {
     const repriced = structuredClone(q);
     repriced.lines[1].unitPriceCents += 1;
     expect(quoteFingerprint(repriced)).not.toBe(quoteFingerprint(q));
+  });
+
+  describe("non-refundable fees", () => {
+    it("freezes several fees by type, and the version's cost is their sum", () => {
+      const q = quote(); const d = draft(); const input = ready(q, d);
+      input.changes[0].oldItemFees = [{ kind: "restocking_fee", amountCents: 1_500 }, { kind: "shipping", amountCents: 500 }];
+      const body = prepareChangeOrder(q, d, input, messages());
+      expect(body.changes[0]).toMatchObject({ oldItemCostCents: 2_000, oldItemFees: [{ kind: "restocking_fee", amountCents: 1_500 }, { kind: "shipping", amountCents: 500 }] });
+      expect(body.lines.find((entry) => entry.origin === "old_item_cost")).toMatchObject({ unitPriceCents: 2_000 });
+      expect(body.lines.find((entry) => entry.origin === "old_item_cost")?.specification).toContain("Non-refundable: Restocking fee $15.00, Shipping $5.00.");
+    });
+
+    it.each([
+      ["a fee without an amount", (entry: PricingChangeInput) => { entry.oldItemFees = [{ kind: "restocking_fee", amountCents: null }]; }, "enter each non-refundable fee's amount"],
+      ["a $0.00 fee", (entry: PricingChangeInput) => { entry.oldItemFees = [{ kind: "restocking_fee", amountCents: 0 }]; }, "enter each non-refundable fee's amount"],
+      ["one type twice", (entry: PricingChangeInput) => { entry.oldItemFees = [{ kind: "shipping", amountCents: 1_000 }, { kind: "shipping", amountCents: 1_000 }]; }, "list each type of non-refundable fee once"],
+      ["a cost with no type", (entry: PricingChangeInput) => { entry.oldItemFees = []; }, "list the non-refundable cost by type"],
+      ["fees that do not add up", (entry: PricingChangeInput) => { entry.oldItemFees = [{ kind: "restocking_fee", amountCents: 1_999 }]; }, "must add up to the old-item cost"],
+      ["an unchecked cost", (entry: PricingChangeInput) => { cost(entry, null); }, "confirm the non-refundable fees, or that there are none"],
+    ])("will not issue %s", (_, corrupt, problem) => {
+      const q = quote(); const d = draft(); const input = ready(q, d);
+      corrupt(input.changes[0]);
+      const preview = previewPricing(q, d, input);
+      expect(preview.ready).toBe(false);
+      expect(preview.problems.join(" ")).toContain(problem);
+    });
+
+    it("issues a modified item with no fee once that is chosen", () => {
+      const q = quote(); const c = change("quantity"); c.after!.quantity = 1; const d = draft([c]); const input = ready(q, d);
+      input.changes[0].oldItemHandling = "modified"; cost(input.changes[0], 0);
+      const body = prepareChangeOrder(q, d, input, messages());
+      expect(body.changes[0]).toMatchObject({ oldItemHandling: "modified", oldItemCostCents: 0, oldItemFees: [] });
+      expect(body.lines.some((entry) => entry.origin === "old_item_cost")).toBe(false);
+    });
+
+    it("keeps fees off a line that has no old item, and reads reviews saved before fees had types", () => {
+      const q = quote(); const d = draft([change("add")]); const input = ready(q, d);
+      input.changes[0].oldItemFees = [{ kind: "other", amountCents: 100 }];
+      expect(() => validatePricingInput(q, d, input)).toThrow("cannot carry old-item handling costs");
+      const saved = ready(q, draft()) as unknown as { changes: Record<string, unknown>[] };
+      delete saved.changes[0].oldItemFees;
+      expect(pricingInputSchema.parse(saved).changes[0].oldItemFees).toEqual([]);
+    });
   });
 });

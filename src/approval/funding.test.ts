@@ -127,6 +127,14 @@ describe("buildFundingPlan", () => {
     expect(plan.actions).toHaveLength(1);
   });
 
+  it("waits for the supplier's credit before refunding a modified item, like a return", () => {
+    const reduced = { ...after, name: before.name, sku: before.sku, specification: before.specification, quantity: 2, unitPriceCents: 8000, taxCents: 1400 };
+    const waiting = buildFundingPlan(order({ action: "quantity", after: reduced, cost: 2000, handling: "modified" }), facts(fact({ capturedCents: 34800 })));
+    expect(waiting.actions).toEqual([expect.objectContaining({ kind: "refund", amountCents: 15400, timing: "after_vendor_credit" })]);
+    const credited = buildFundingPlan(order({ action: "quantity", after: reduced, cost: 2000, handling: "modified" }), facts(fact({ capturedCents: 34800, vendorCreditConfirmed: true })));
+    expect(credited.actions[0].timing).toBe("on_payment_execution");
+  });
+
   it("only releases a partial hold through the later capture-and-close step", () => {
     const reduced = { ...after, quantity: 2, unitPriceCents: 8000, taxCents: 1400 };
     const plan = buildFundingPlan(order({ action: "quantity", after: reduced, cost: 2000 }), facts(fact({ heldCents: 34800 })));

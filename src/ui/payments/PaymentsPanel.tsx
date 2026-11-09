@@ -2,6 +2,7 @@
 
 import { ArrowUpRight, Ban, ChevronRight, CircleDollarSign, LoaderCircle, LockKeyhole, ReceiptText, RefreshCw, ShieldCheck, Truck, X } from "lucide-react";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { nonRefundableText } from "@/pricing/fees";
 import type { FrozenChangeOrder } from "@/pricing/types";
 import type { SavedMethodView } from "@/payments/saved-methods";
 import type { CheckoutView, OperationView, PaymentLineView, PaymentStep, PaymentsWorkspace } from "@/payments/types";
@@ -319,6 +320,7 @@ function LineDetails({ line, operations, version, busy, disabled, canAct, canRec
   const progress = lineProgress(line, operations);
   return <div>
     <div className="grid grid-cols-2 gap-2">{tiles.map((tile) => <div key={tile.label} className="rounded-lg bg-slate-50 p-2.5"><p className="text-[10px] text-slate-500">{tile.label}</p><p className="mt-0.5 text-[15px] font-semibold tabular-nums">{money(tile.amount)}</p></div>)}</div>
+    {line.nonRefundable && <p className="mt-2 text-[12px] text-slate-700"><span className="font-medium">Non-refundable</span> · {nonRefundableText(line.nonRefundable)}</p>}
     <p className="mt-3 flex items-start gap-1.5 text-[12px] leading-relaxed text-slate-700"><ShieldCheck className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${progress.tone === "settled" ? "text-emerald-600" : progress.tone === "waiting" ? "text-amber-600" : "text-brand-600"}`} />{lineState(line, operations)}</p>
     {canReconcile && pending && operations.find((operation) => operation.id === pending)?.canCheck && <button onClick={() => onCheck(pending)} disabled={disabled} className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold text-amber-900 underline disabled:opacity-50"><RefreshCw className="h-3.5 w-3.5" />Check the pending PayPal result</button>}
 

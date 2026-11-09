@@ -55,7 +55,7 @@ function hasSource(sources: ProductPage[]): boolean {
   return sources.some((source) => source.id === HOME_EVIDENCE_ID && source.url === `local:${HOME_EVIDENCE_ID}` && source.error === null);
 }
 
-type Evidence = Pick<PricingChangeInput, "priceEvidence" | "oldItemHandling" | "oldItemCostCents" | "oldItemNote"> & {
+type Evidence = Pick<PricingChangeInput, "priceEvidence" | "oldItemHandling" | "oldItemCostCents" | "oldItemFees" | "oldItemNote"> & {
   after: Partial<PricingItem> | null;
 };
 
@@ -76,7 +76,7 @@ export function homePricingEvidence(quote: ApprovedQuoteReport, change: DraftCha
   if (change.action === "add") {
     const definition = definitions.find((entry) => entry.id === change.productOptionId && entry.itemId === null);
     if (!definition || !chosen(definition, change.after)) return null;
-    return { after: offered(definition), priceEvidence: product(definition).priceEvidence!, oldItemHandling: "not_applicable", oldItemCostCents: 0, oldItemNote: "" };
+    return { after: offered(definition), priceEvidence: product(definition).priceEvidence!, oldItemHandling: "not_applicable", oldItemCostCents: 0, oldItemFees: [], oldItemNote: "" };
   }
   const original = HOME_APPROVED_QUOTE.lines.find((line) => line.itemId === change.itemId);
   const before = quote.lines.find((line) => line.itemId === change.itemId);
@@ -93,7 +93,7 @@ export function homePricingEvidence(quote: ApprovedQuoteReport, change: DraftCha
     const paid = before.quantity * before.unitPriceCents, kept = paid * (before.restockingFeeBps ?? 0) / 10_000;
     return {
       after: offered(definition), priceEvidence: product(definition).priceEvidence!,
-      oldItemHandling: "returned", oldItemCostCents: kept,
+      oldItemHandling: "returned", oldItemCostCents: kept, oldItemFees: [{ kind: "restocking_fee", amountCents: kept }],
       oldItemNote: `MAPLE-CAFE-TILE-01: return the ${before.quantity} unopened white boxes. The supplier keeps 20% (${usd(kept)}) as its restocking fee and credits ${usd(paid - kept)}; the refund waits for that credit. This proposal does not record a return, credit or refund as completed.`,
     };
   }
@@ -103,15 +103,15 @@ export function homePricingEvidence(quote: ApprovedQuoteReport, change: DraftCha
     return {
       after: unchangedTerms(before.leadTimeDays),
       priceEvidence: `Local fictional document MAPLE-CAFE-QUARTZ-01: keep ${after.quantity} linear feet of the same ${before.sku} at USD 180 per foot; whole-line tax USD 0 and delivery USD 0. A cut top is re-cut shorter for a fixed USD 280 fee; the removed length is credited at the per-foot price. ${fromDocuments}`,
-      oldItemHandling: "cancelled", oldItemCostCents: fee,
-      oldItemNote: `MAPLE-CAFE-QUARTZ-01: re-cut the front counter top, removing ${removed} linear feet. The fabricator credits the removed length (${usd(removed * before.unitPriceCents)}) less its USD 280 re-cut fee, so the planned refund of ${usd(removed * before.unitPriceCents - fee)} waits for that credit. This proposal does not record a re-cut, credit or refund as completed.`,
+      oldItemHandling: "modified", oldItemCostCents: fee, oldItemFees: [{ kind: "fabrication_fee", amountCents: fee }],
+      oldItemNote: `MAPLE-CAFE-QUARTZ-01: re-cut the front counter top, removing ${removed} linear feet. The fabricator credits the removed length (${usd(removed * before.unitPriceCents)}) less its USD 280 fee for the re-cut, so the planned refund of ${usd(removed * before.unitPriceCents - fee)} waits for that credit. This proposal does not record a re-cut, credit or refund as completed.`,
     };
   }
   if (change.itemId === "pendants" && after.quantity < before.quantity) {
     return {
       after: unchangedTerms(21),
       priceEvidence: `Local fictional document MAPLE-CAFE-PENDANT-01: keep ${after.quantity} of the same ${before.sku} at USD 240 each; whole-line tax USD 0 and delivery USD 0. Unordered excess lights have no retained cost. ${fromDocuments}`,
-      oldItemHandling: "not_ordered", oldItemCostCents: 0,
+      oldItemHandling: "not_ordered", oldItemCostCents: 0, oldItemFees: [],
       oldItemNote: `MAPLE-CAFE-PENDANT-01: ${before.quantity - after.quantity} excess pendants are not ordered; proposed retained cost USD 0. The reduced scope still needs designer and client confirmation.`,
     };
   }
@@ -119,14 +119,14 @@ export function homePricingEvidence(quote: ApprovedQuoteReport, change: DraftCha
     return {
       after: unchangedTerms(21),
       priceEvidence: `Local fictional document MAPLE-CAFE-STOOL-01: ${after.quantity} of the same ${before.sku} at USD 195 each; whole-line tax USD 0 and delivery USD 0. ${fromDocuments}`,
-      oldItemHandling: "not_applicable", oldItemCostCents: 0, oldItemNote: "",
+      oldItemHandling: "not_applicable", oldItemCostCents: 0, oldItemFees: [], oldItemNote: "",
     };
   }
   if (change.itemId === "site-visits" && after.quantity > before.quantity) {
     return {
       after: unchangedTerms(null),
       priceEvidence: `Local fictional document MAPLE-CAFE-SERVICE-02: ${after.quantity} site visits at USD 180 per visit. ${fromDocuments}`,
-      oldItemHandling: "not_applicable", oldItemCostCents: 0, oldItemNote: "",
+      oldItemHandling: "not_applicable", oldItemCostCents: 0, oldItemFees: [], oldItemNote: "",
     };
   }
   return null;

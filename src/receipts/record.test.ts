@@ -138,8 +138,8 @@ describe.skipIf(!testDatabaseUrl)("signed version receipts", () => {
       expect(receipt.signatures).toEqual([expect.objectContaining({ method: "signed", decision: "approved", name: "Emma Park", contentHash: mixed.contentHash, revisionContentHash: mixed.revisionContentHash, matches: true })]);
       if (receipt.agreement.kind !== "change") throw new Error("expected a change receipt");
       expect(receipt.agreement.changes).toEqual([
-        expect.objectContaining({ itemId: "chair", action: "replace", before: expect.objectContaining({ name: "Confirmed lounge chair", totalCents: 80_000 }), after: expect.objectContaining({ name: "Oak writing desk", totalCents: 110_000 }), oldItem: { handling: "not_ordered", retainedCents: 0, note: expect.any(String) } }),
-        expect.objectContaining({ itemId: "rug", action: "remove", after: null, oldItem: expect.objectContaining({ handling: "returned", retainedCents: 6_000 }) }),
+        expect.objectContaining({ itemId: "chair", action: "replace", before: expect.objectContaining({ name: "Confirmed lounge chair", totalCents: 80_000 }), after: expect.objectContaining({ name: "Oak writing desk", totalCents: 110_000 }), oldItem: { handling: "not_ordered", retainedCents: 0, fees: [], note: expect.any(String) } }),
+        expect.objectContaining({ itemId: "rug", action: "remove", after: null, oldItem: expect.objectContaining({ handling: "returned", retainedCents: 6_000, fees: [{ kind: "restocking_fee", amountCents: 6_000 }] }) }),
       ]);
       expect(receipt.agreement.source.messages).toEqual(mixed.sourceMessages.map(({ id, actor, text, createdAt }) => ({ id, actor, text, createdAt })));
       expect(receipt.agreement.terms).toBe(mixed.terms);

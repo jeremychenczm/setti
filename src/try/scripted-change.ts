@@ -12,7 +12,7 @@ import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
 import { createPricingInput } from "../pricing/calculation";
 import { createPricingStore } from "../pricing/store";
-import type { FrozenChangeOrder, OldItemHandling, PricingItem } from "../pricing/types";
+import type { FrozenChangeOrder, NonRefundableFee, OldItemHandling, PricingItem } from "../pricing/types";
 import { clientSignatureName } from "../opening/types";
 
 export interface ScriptedChange {
@@ -23,6 +23,8 @@ export interface ScriptedChange {
   after?: Partial<PricingItem>;
   oldItemHandling?: OldItemHandling;
   oldItemCostCents?: number;
+  /** The fees that make up the old-item cost; without them, the whole cost is one restocking fee. */
+  oldItemFees?: NonRefundableFee[];
 }
 
 /** The words each person writes along the way. */
@@ -96,6 +98,7 @@ export async function confirmScriptedChanges(
       after: entry.after ? { ...entry.after, taxCents: 0, freightCents: 0, currency: "USD", sku: entry.after.sku || "DEMO", returnable: true, returnPolicy: entry.after.returnPolicy || "Demo test return terms checked.", ...change.after } : null,
       oldItemHandling: reducing ? change.oldItemHandling ?? "not_ordered" : "not_applicable",
       oldItemCostCents: reducing ? change.oldItemCostCents ?? 0 : 0,
+      oldItemFees: !reducing ? [] : change.oldItemFees ?? (change.oldItemCostCents ? [{ kind: "restocking_fee" as const, amountCents: change.oldItemCostCents }] : []),
       oldItemNote: reducing ? words.oldItemNote : "",
     };
   });

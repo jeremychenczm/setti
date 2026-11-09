@@ -65,6 +65,7 @@ describe("one draft for multiple original items", () => {
       entry.confirmed = true;
       entry.oldItemHandling = entry.itemId === "rug" ? "returned" : "not_ordered";
       entry.oldItemCostCents = entry.itemId === "rug" ? 6_000 : 0;
+      entry.oldItemFees = entry.itemId === "rug" ? [{ kind: "restocking_fee", amountCents: 6_000 }] : [];
       entry.oldItemNote = entry.itemId === "rug" ? "Demo rug restocking fee checked: 20% of USD 300, inclusive total USD 60." : "Original chair has not been ordered; no retained cost.";
       entry.priceEvidence ||= "Designer checked the demo rug return terms.";
       if (entry.after) Object.assign(entry.after, { taxCents: 0, freightCents: 0, returnPolicy: "Demo desk terms checked by designer.", returnable: true });

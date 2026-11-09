@@ -204,7 +204,7 @@ async function changeReceipt(db: Reader, key: CaseKey, bridge: Bridge | null, ve
     itemId: change.itemId, action: change.action,
     before: change.before ? receiptItem(change.before) : null,
     after: change.after ? receiptItem(change.after) : null,
-    oldItem: change.oldItemHandling === "not_applicable" ? null : { handling: change.oldItemHandling, retainedCents: change.oldItemCostCents, note: change.oldItemNote },
+    oldItem: change.oldItemHandling === "not_applicable" ? null : { handling: change.oldItemHandling, retainedCents: change.oldItemCostCents, fees: change.oldItemFees ?? [], note: change.oldItemNote },
   }));
 
   let scope = new Map<string, FundingIdentity>();

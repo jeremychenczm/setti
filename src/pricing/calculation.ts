@@ -4,6 +4,7 @@ import { calculateLineTotals, calculateQuoteTotals, type QuoteTotals } from "../
 import { quoteFingerprint } from "../quotes/fingerprint";
 import type { CaseMessage, ChangeDraft, DraftChange, DraftItem, SupplierTerms } from "@/chat/types";
 import { differences } from "./review-diff";
+import { feesText, NON_REFUNDABLE_FEE_KINDS } from "./fees";
 import { HOME_REVIEW_TERMS, homePricingEvidence } from "@/demo/home-evidence";
 import type { ChangeSource, FinalQuoteLine, PricingChangeInput, PricingDocumentBody, PricingInput, PricingItem, PricingPreview, ReviewedChange } from "./types";
 
@@ -34,8 +35,11 @@ export const pricingInputSchema = z.strictObject({
       customMade: z.boolean(), leadTimeDays: z.number().int().min(0).max(36_500).nullable(),
     }).nullable(),
     priceEvidence: text(30_000), confirmed: z.boolean(),
-    oldItemHandling: z.enum(["pending", "not_ordered", "cancelled", "returned", "retained", "not_applicable"]),
-    oldItemCostCents: cents.nullable(), oldItemNote: text(10_000),
+    oldItemHandling: z.enum(["pending", "not_ordered", "cancelled", "modified", "returned", "retained", "not_applicable"]),
+    oldItemCostCents: cents.nullable(),
+    // Reviews saved before fees had types have none.
+    oldItemFees: z.array(z.strictObject({ kind: z.enum(NON_REFUNDABLE_FEE_KINDS), amountCents: cents.nullable() })).max(NON_REFUNDABLE_FEE_KINDS.length).default([]),
+    oldItemNote: text(10_000),
     fromV1: z.strictObject({ itemId: text(300), kind: z.enum(["revised", "carried"]), reason: text(10_000).nullable() }).optional(),
   })).min(1).max(100),
   issues: z.array(z.strictObject({ id: z.string().min(1).max(100), label: text(10_000), resolved: z.boolean(), note: text(10_000) })).max(300),
@@ -134,7 +138,7 @@ function v1PricingChange(key: string, change: DraftChange): PricingChangeInput {
     priceEvidence: fromV1.kind === "carried"
       ? `Carried over unchanged from quote V1 as sent: ${line.source.name} (${line.source.reference}).`
       : `Revised from a quote V1 line the client declined. As sent in V1: ${line.source.name} (${line.source.reference}), ${line.quantity} × ${line.unitPriceCents} cents.`,
-    confirmed: false, oldItemHandling: "not_applicable", oldItemCostCents: 0, oldItemNote: "", fromV1,
+    confirmed: false, oldItemHandling: "not_applicable", oldItemCostCents: 0, oldItemFees: [], oldItemNote: "", fromV1,
   };
 }
 
@@ -178,6 +182,7 @@ export function createPricingInput(quote: ApprovedQuoteReport, draft: ChangeDraf
         confirmed: false,
         oldItemHandling: suggestion?.oldItemHandling ?? (needsOldHandling ? "pending" : "not_applicable"),
         oldItemCostCents: suggestion?.oldItemCostCents ?? (needsOldHandling ? null : 0),
+        oldItemFees: suggestion?.oldItemFees ?? [],
         oldItemNote: suggestion?.oldItemNote ?? "",
       };
     }),
@@ -204,7 +209,7 @@ export function validatePricingInput(quote: ApprovedQuoteReport, draft: ChangeDr
     }
     if (requiresOldItemHandling(actual, actual.itemId ? old.get(actual.itemId) : undefined)) {
       if (actual.oldItemHandling === "not_applicable") throw new PricingValidationError("Replacing, removing or reducing an item requires verified old-item handling.");
-    } else if (actual.oldItemHandling !== "not_applicable" || actual.oldItemCostCents !== 0) throw new PricingValidationError("Added quantities or new items cannot carry old-item handling costs.");
+    } else if (actual.oldItemHandling !== "not_applicable" || actual.oldItemCostCents !== 0 || actual.oldItemFees.length) throw new PricingValidationError("Added quantities or new items cannot carry old-item handling costs.");
     const edited: PricingChangeInput = { ...actual };
     delete edited.fromV1;
     if (expected.fromV1) edited.fromV1 = expected.fromV1;
@@ -242,9 +247,9 @@ function finalAfter(draft: ChangeDraft, change: PricingChangeInput): FinalQuoteL
 
 function feeLine(draft: ChangeDraft, change: PricingChangeInput, before: ApprovedQuoteLine): FinalQuoteLine {
   return {
-    itemId: `old-cost-${draft.id}-${change.key}`, name: `Old item retention and handling cost: ${before.name}`, vendor: before.vendor,
+    itemId: `old-cost-${draft.id}-${change.key}`, name: `Non-refundable cost: ${before.name}`, vendor: before.vendor,
     brand: null, sku: `OLD-COST-${change.key}`,
-    specification: `${change.oldItemNote.trim()}. This line includes every verified cost and applicable tax for keeping, cancelling or returning the old item. It is charged as one amount, with no further tax or delivery.`,
+    specification: `${change.oldItemFees.length ? `Non-refundable: ${feesText(change.oldItemFees.map((fee) => ({ kind: fee.kind, amountCents: fee.amountCents ?? 0 })))}. ` : ""}${change.oldItemNote.trim()}. This line includes every verified cost and applicable tax for keeping, cancelling, modifying or returning the old item. It is charged as one amount, with no further tax or delivery.`,
     category: "service", room: before.room, quantity: 1, unitLabel: "total", currency: "USD",
     unitPriceCents: change.oldItemCostCents!, taxCents: 0, freightCents: 0, sourceUrl: null,
     returnPolicy: "This line is the designer-verified total cost of handling the old item. This change order's terms and old-item notes govern how it is handled or returned.",
@@ -333,7 +338,12 @@ export function previewPricing(quote: ApprovedQuoteReport, draft: ChangeDraft, v
     const before = quote.lines.find((line) => line.itemId === change.itemId);
     if (requiresOldItemHandling(change, before)) {
       if (change.oldItemHandling === "pending" || change.oldItemHandling === "not_applicable") problems.push(`${label}: old-item handling needs confirmation.`);
-      if (change.oldItemCostCents === null) problems.push(`${label}: the full old-item handling cost needs confirmation. Enter 0 if there is no cost.`);
+      if (change.oldItemCostCents === null) problems.push(`${label}: confirm the non-refundable fees, or that there are none.`);
+      const fees = change.oldItemFees;
+      if (fees.some((fee) => fee.amountCents === null || fee.amountCents <= 0)) problems.push(`${label}: enter each non-refundable fee's amount, or remove the fee.`);
+      else if (new Set(fees.map((fee) => fee.kind)).size !== fees.length) problems.push(`${label}: list each type of non-refundable fee once.`);
+      else if (change.oldItemCostCents !== null && change.oldItemCostCents > 0 && !fees.length) problems.push(`${label}: list the non-refundable cost by type.`);
+      else if (change.oldItemCostCents !== null && fees.length && fees.reduce((total, fee) => total + fee.amountCents!, 0) !== change.oldItemCostCents) problems.push(`${label}: the non-refundable fees must add up to the old-item cost.`);
       if (!change.oldItemNote.trim()) problems.push(`${label}: describe the old-item handling and its cost.`);
       const retainedMinimum = change.action === "quantity" ? (before!.quantity - change.after!.quantity) * before!.unitPriceCents : calculateLineTotals(before!).totalCents;
       if (change.oldItemHandling === "retained" && change.oldItemCostCents !== null && change.oldItemCostCents < retainedMinimum) problems.push(change.action === "quantity" ? `${label}: keeping the reduced quantity costs at least its original unit prices in total. Verify the related tax and delivery in the notes.` : `${label}: keeping the old item costs at least its full original line total, including the original tax and delivery.`);
@@ -369,7 +379,8 @@ export function prepareChangeOrder(quote: ApprovedQuoteReport, draft: ChangeDraf
     key: change.key, action: change.action, itemId: change.itemId,
     before: change.itemId ? clone(quote.lines.find((line) => line.itemId === change.itemId)!) : null,
     after: finalAfter(draft, change), oldItemHandling: change.oldItemHandling,
-    oldItemCostCents: change.oldItemCostCents ?? 0, oldItemNote: change.oldItemNote,
+    oldItemCostCents: change.oldItemCostCents ?? 0, oldItemFees: change.oldItemFees.map((fee) => ({ kind: fee.kind, amountCents: fee.amountCents ?? 0 })),
+    oldItemNote: change.oldItemNote,
     priceEvidence: change.priceEvidence,
     ...(change.fromV1 ? { fromV1: change.fromV1, changesFromV1: differences(draft.changes[index].fromV1!.line, change.after!) } : {}),
   }));

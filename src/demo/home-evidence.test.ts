@@ -78,9 +78,9 @@ describe("local supplier evidence for the café proposal", () => {
     expect(input.changes.every((change) => !change.confirmed)).toBe(true);
     expect(input.issues).toEqual([]);
     expect(input.changes.filter((change) => change.after).every((change) => change.after!.taxCents === 0 && change.after!.freightCents === 0 && change.after!.sourceUrl === null)).toBe(true);
-    expect(input.changes.find((change) => change.itemId === "countertop")).toMatchObject({ oldItemHandling: "cancelled", oldItemCostCents: 28_000, oldItemNote: expect.stringContaining("refund of USD 440 waits for that credit") });
-    expect(input.changes.find((change) => change.itemId === "wall-tile")).toMatchObject({ oldItemHandling: "returned", oldItemCostCents: 19_600, oldItemNote: expect.stringContaining("credits USD 784") });
-    expect(input.changes.find((change) => change.itemId === "pendants")).toMatchObject({ oldItemHandling: "not_ordered", oldItemCostCents: 0 });
+    expect(input.changes.find((change) => change.itemId === "countertop")).toMatchObject({ oldItemHandling: "modified", oldItemCostCents: 28_000, oldItemFees: [{ kind: "fabrication_fee", amountCents: 28_000 }], oldItemNote: expect.stringContaining("refund of USD 440 waits for that credit") });
+    expect(input.changes.find((change) => change.itemId === "wall-tile")).toMatchObject({ oldItemHandling: "returned", oldItemCostCents: 19_600, oldItemFees: [{ kind: "restocking_fee", amountCents: 19_600 }], oldItemNote: expect.stringContaining("credits USD 784") });
+    expect(input.changes.find((change) => change.itemId === "pendants")).toMatchObject({ oldItemHandling: "not_ordered", oldItemCostCents: 0, oldItemFees: [] });
     expect(input.changes.filter((change) => change.action === "add").map((change) => change.after)).toEqual([
       expect.objectContaining({ category: "furniture", customMade: true, returnable: false, leadTimeDays: 21 }),
       expect.objectContaining({ category: "furniture", customMade: false, returnable: true, restockingFeeBps: 1_000 }),

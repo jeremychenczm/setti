@@ -119,6 +119,9 @@ interface Groups {
 const PREVIEW_NOTICE = "This is a payment plan preview. No authorization, charge, release or refund has been executed.";
 const VENDOR_NOTICE = "Authorization and capture are separate steps. Product funding remains subject to vendor confirmation.";
 
+/** Old-item handlings whose refund waits until the supplier's credit is recorded. */
+export const REFUND_AFTER_CREDIT: readonly ReviewedChange["oldItemHandling"][] = ["cancelled", "modified", "returned"];
+
 /**
  * Pure, conservative preview. It never calls PayPal or treats approval as payment.
  * The document supplies its frozen baseline; money facts must be mapped to that
@@ -277,7 +280,7 @@ function planFunding(header: PlanHeader, facts: FundingFacts, notices: string[],
       const targetCents = target(group);
       const remaining = Math.max(targetCents - paid, 0);
       if (paid > targetCents) {
-        const conditional = ["returned", "cancelled"].includes(group.handling ?? "") && !fact.vendorCreditConfirmed;
+        const conditional = !!group.handling && REFUND_AFTER_CREDIT.includes(group.handling) && !fact.vendorCreditConfirmed;
         if (group.handling === "pending" || group.handling === "not_applicable" && group.side === "baseline" && changedItems.has(group.itemId)) {
           throw new Error("A captured item reduction needs a confirmed old-item handling decision.");
         }

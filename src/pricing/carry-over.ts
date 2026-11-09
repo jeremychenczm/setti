@@ -7,6 +7,7 @@
  */
 import { canonical } from "@/quotes/fingerprint";
 import type { ApprovedQuoteReport } from "@/quotes/types";
+import { NON_REFUNDABLE_FEE_LABEL } from "./fees";
 import type { FieldChange } from "./review-diff";
 import type { PricingChangeInput, PricingInput, PricingItem } from "./types";
 
@@ -43,7 +44,15 @@ const ITEM_FIELDS: Record<keyof PricingItem, [string, (value: unknown) => string
   restockingFeeBps: ["Restocking fee", (value) => typeof value === "number" ? `${value / 100}%` : "not set"], customMade: ["Custom made", (value) => value ? "yes" : "no"],
   leadTimeDays: ["Lead time", (value) => typeof value === "number" ? `${value} days` : "not set"],
 };
-const LINE_FIELDS = { priceEvidence: ["Price evidence", String], oldItemHandling: ["Old item handling", String], oldItemCostCents: ["Old item cost", money], oldItemNote: ["Old item note", String] } satisfies Partial<Record<keyof PricingChangeInput, [string, (value: unknown) => string]>>;
+const LINE_FIELDS = { priceEvidence: ["Price evidence", String], oldItemHandling: ["Old item handling", String], oldItemNote: ["Old item note", String] } satisfies Partial<Record<keyof PricingChangeInput, [string, (value: unknown) => string]>>;
+/** The old-item cost is the sum of its fees, so the two carry over together. */
+type OldItemCost = { total: PricingChangeInput["oldItemCostCents"]; fees: PricingChangeInput["oldItemFees"] };
+const oldItemCost = (change: PricingChangeInput): OldItemCost => ({ total: change.oldItemCostCents, fees: change.oldItemFees ?? [] });
+const costText = (value: unknown) => {
+  const { total, fees } = value as OldItemCost;
+  if (fees.length) return fees.map((fee) => `${NON_REFUNDABLE_FEE_LABEL[fee.kind]} ${money(fee.amountCents)}`).join(", ");
+  return total === 0 ? "none" : money(total);
+};
 type LineField = keyof typeof LINE_FIELDS;
 
 /** A line is the same line across drafts when it targets the same V1 or quote item the same way. */
@@ -89,6 +98,11 @@ function mergeLine(base: PricingChangeInput, mine: PricingChangeInput, next: Pri
   for (const [field, [label, format]] of Object.entries(LINE_FIELDS) as [LineField, [string, (value: unknown) => string]][]) {
     merge(base[field], mine[field], next[field], label, format, (target, value) => { (target as unknown as Record<string, unknown>)[field] = value; });
   }
+  merge(oldItemCost(base), oldItemCost(mine), oldItemCost(next), "Non-refundable fees", costText, (target, value) => {
+    const { total, fees } = value as OldItemCost;
+    target.oldItemCostCents = total;
+    target.oldItemFees = structuredClone(fees);
+  });
   // The designer's check stands only for a line whose values it covered.
   const confirmed = mine.confirmed && !tookDraft && !contested.length;
   return { line: { ...line, confirmed }, latest: { ...latest, confirmed: false }, contested, tookDraft, keptMine };

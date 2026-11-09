@@ -92,6 +92,17 @@ describe("carrying a saved pricing review onto a newer draft", () => {
     expect(carried.input.changes[1]).toEqual(conflict.mine);
   });
 
+  it("carries the designer's non-refundable fees and their total together", () => {
+    const reduce = (revision: number) => draft(revision, [diningQuantity(dining.quantity - 1)]);
+    const base = createPricingInput(quote, reduce(1));
+    const saved = structuredClone(base);
+    saved.changes[0] = { ...saved.changes[0], oldItemHandling: "returned", oldItemCostCents: 2_500, oldItemFees: [{ kind: "restocking_fee", amountCents: 2_000 }, { kind: "shipping", amountCents: 500 }] };
+    const carried = carryOverReview(quote, base, saved, createPricingInput(quote, reduce(2)));
+    expect(carried.conflicts).toEqual([]);
+    expect(carried.kept).toEqual(["Dining chair"]);
+    expect(carried.input.changes[0]).toMatchObject({ oldItemCostCents: 2_500, oldItemFees: [{ kind: "restocking_fee", amountCents: 2_000 }, { kind: "shipping", amountCents: 500 }] });
+  });
+
   it("drops lines the newer draft no longer has, and takes the draft's title when the designer kept the original", () => {
     const saved = savedReview((input) => { input.title = proposed.title; });
     const second = { ...draft(2, [diningQuantity(6)]), title: "Dining chairs only" };

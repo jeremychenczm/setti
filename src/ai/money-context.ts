@@ -16,7 +16,8 @@ import { trySeeds } from "../try/schema";
 import { HOME_SCENARIO } from "../demo/living-dining";
 import type { PaymentLineView, PaymentsWorkspace } from "../payments/types";
 import { paymentsWorkspace } from "../payments/workspace";
-import type { FrozenChangeOrder } from "../pricing/types";
+import { feesText } from "../pricing/fees";
+import type { FrozenChangeOrder, NonRefundableFee } from "../pricing/types";
 import type { MoneyContext, MoneyFact, MoneyItem, MoneySource, MoneyStatus } from "./money-types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -201,10 +202,10 @@ export function moneyStatus(money: { heldCents: number; capturedCents: number; r
   return "not_charged";
 }
 
-function moneyItem(key: string, label: string, money: { heldCents: number; capturedCents: number; refundedCents: number; releasedCents: number }, nonRefundableCents: number, status: MoneyStatus, factIds: string[]): MoneyItem {
+function moneyItem(key: string, label: string, money: { heldCents: number; capturedCents: number; refundedCents: number; releasedCents: number }, nonRefundableCents: number, status: MoneyStatus, factIds: string[], nonRefundableFees: NonRefundableFee[] = []): MoneyItem {
   return {
     key, label, status, heldCents: money.heldCents, chargedCents: money.capturedCents, refundedCents: money.refundedCents, releasedCents: money.releasedCents,
-    nonRefundableCents, netCents: money.capturedCents - money.refundedCents, factIds: [...new Set(factIds)],
+    nonRefundableCents, nonRefundableFees: structuredClone(nonRefundableFees), netCents: money.capturedCents - money.refundedCents, factIds: [...new Set(factIds)],
   };
 }
 
@@ -260,7 +261,7 @@ function contextFromWorkspace(key: CaseKey, quoteId: string, order: FrozenChange
     const change = line.side === "baseline" ? order.changes.find((entry) => entry.itemId === line.itemId) : undefined;
     const itemFacts = [`item:${line.side}:${line.itemId}`, `next:${line.side}:${line.itemId}`, ...(line.businessItemId ? openFacts.get(line.businessItemId) ?? [] : [])];
     if (change) {
-      facts.push(fact(`terms:${line.side}:${line.itemId}`, `${line.label}: the client-confirmed old-item handling is ${change.oldItemHandling}; the retained old-item cost is ${usd(change.oldItemCostCents)}. This amount is already included in the confirmed target and must not be deducted a second time.`, ["quote", "approval"]));
+      facts.push(fact(`terms:${line.side}:${line.itemId}`, `${line.label}: the client-confirmed old-item handling is ${change.oldItemHandling}; the non-refundable cost is ${usd(change.oldItemCostCents)}${change.oldItemFees?.length ? `: ${feesText(change.oldItemFees)}` : ""}. This amount is already included in the confirmed target and must not be deducted a second time.`, ["quote", "approval"]));
       itemFacts.push(`terms:${line.side}:${line.itemId}`);
     }
     for (const event of line.supplierEvents) {
@@ -275,7 +276,7 @@ function contextFromWorkspace(key: CaseKey, quoteId: string, order: FrozenChange
     const money = { heldCents: line.heldCents, capturedCents: line.capturedCents, refundedCents: line.refundedCents, releasedCents: line.releasedCents };
     const label = line.side === "proposed" ? `${line.label} (new)` : replaced.has(line.itemId) ? `${line.label} (original)` : line.label;
     const kept = change && change.oldItemHandling !== "not_applicable" ? change.oldItemCostCents : 0;
-    items.push(moneyItem(`${line.side}:${line.itemId}`, label, money, kept, moneyStatus(money, { pending, waitingCredit, refundDue: owed && !waitingCredit }), itemFacts));
+    items.push(moneyItem(`${line.side}:${line.itemId}`, label, money, kept, moneyStatus(money, { pending, waitingCredit, refundDue: owed && !waitingCredit }), itemFacts, kept ? change?.oldItemFees : []));
   }
   if (workspace.lines.length) {
     const totals = workspace.lines.reduce((sum, line) => ({ held: sum.held + line.heldCents, captured: sum.captured + line.capturedCents, refunded: sum.refunded + line.refundedCents, released: sum.released + line.releasedCents }), { held: 0, captured: 0, refunded: 0, released: 0 });

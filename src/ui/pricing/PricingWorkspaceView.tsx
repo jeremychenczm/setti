@@ -6,7 +6,9 @@ import { clientOf } from "@/accounts/demo";
 import type { CaseKey } from "@/chat/types";
 import { canLoadMapleSampleMaterials, loadMapleSampleMaterials, MAPLE_SAMPLE_MATERIALS } from "@/demo/maple-materials";
 import { draftSource, previewPricing, requiresOldItemHandling } from "@/pricing/calculation";
-import type { OldItemHandling, PricingChangeInput, PricingItem } from "@/pricing/types";
+import { NON_REFUNDABLE_FEE_KINDS, NON_REFUNDABLE_FEE_LABEL } from "@/pricing/fees";
+import { feeField, OldItemFees } from "./OldItemFees";
+import type { NonRefundableFeeKind, OldItemHandling, PricingChangeInput, PricingItem } from "@/pricing/types";
 import { calculateLineTotals, calculateQuoteTotals } from "@/quotes/totals";
 import { centsText, dateTime, Field, inputClass, LocalShareLink, money, parseDollars, TotalTile, FromV1Note } from "./common";
 import { fieldKey, PricingGrid, type EditableGridField, type RawFields } from "./PricingGrid";
@@ -20,7 +22,8 @@ import { HOME_EVIDENCE_ID, isHomeQuote } from "@/demo/home-evidence";
 import { HomeSupplierDocuments } from "../try/HomeSupplierDocuments";
 import { useTryReadiness } from "../try/useTryReadiness";
 
-const handlingLabels: Record<OldItemHandling, string> = { pending: "Not checked yet", not_ordered: "Not ordered", cancelled: "Order cancelled", returned: "Returned / return arranged", retained: "Retained in the project", not_applicable: "Not applicable" };
+const handlingLabels: Record<OldItemHandling, string> = { pending: "Not checked yet", not_ordered: "Not ordered", cancelled: "Order cancelled", modified: "Modified (re-made or re-sized)", returned: "Returned / return arranged", retained: "Retained in the project", not_applicable: "Not applicable" };
+const oldCostFields = ["oldItemCostCents", ...NON_REFUNDABLE_FEE_KINDS.map(feeField)];
 const quantityIdentityFields = new Set<keyof PricingItem>(["name", "vendor", "sku", "specification", "category", "unitLabel"]);
 const drawerHeading = "text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]";
 
@@ -92,14 +95,7 @@ export function PricingWorkspaceView({ projectKey, guide }: { projectKey: CaseKe
     if (previousChange?.action === "quantity" && quantityIdentityFields.has(field)) return;
     const previousItem = workspace?.quote.lines.find((line) => line.itemId === previousChange?.itemId);
     if (field === "quantity" && previousChange?.after && requiresOldItemHandling(previousChange, previousItem) !== requiresOldItemHandling({ ...previousChange, after: { ...previousChange.after, [field]: value } }, previousItem)) {
-      setRawByEpoch((previous) => {
-        if (previous.epoch !== state.editorEpoch) return previous;
-        const values = { ...previous.values };
-        const errors = { ...previous.errors };
-        delete values[fieldKey(key, "oldItemCostCents")];
-        delete errors[fieldKey(key, "oldItemCostCents")];
-        return { ...previous, values, errors };
-      });
+      dropRaw(key, oldCostFields);
     }
     setInput((previous) => previous ? { ...previous, changes: previous.changes.map((change) => {
       if (change.key !== key || !change.after) return change;
@@ -107,8 +103,8 @@ export function PricingWorkspaceView({ projectKey, guide }: { projectKey: CaseKe
       const updated = { ...change, confirmed: false, after: { ...change.after, [field]: value } };
       const wasRequired = requiresOldItemHandling(change, before);
       const isRequired = requiresOldItemHandling(updated, before);
-      if (isRequired && !wasRequired) return { ...updated, oldItemHandling: "pending" as const, oldItemCostCents: null, oldItemNote: "" };
-      if (!isRequired && wasRequired) return { ...updated, oldItemHandling: "not_applicable" as const, oldItemCostCents: 0, oldItemNote: "" };
+      if (isRequired && !wasRequired) return { ...updated, oldItemHandling: "pending" as const, oldItemCostCents: null, oldItemFees: [], oldItemNote: "" };
+      if (!isRequired && wasRequired) return { ...updated, oldItemHandling: "not_applicable" as const, oldItemCostCents: 0, oldItemFees: [], oldItemNote: "" };
       return updated;
     }) } : previous);
   }
@@ -136,10 +132,48 @@ export function PricingWorkspaceView({ projectKey, guide }: { projectKey: CaseKe
     } else patchAfter(key, field, value);
   }
 
-  function editOldCost(key: string, value: string) {
+  function dropRaw(key: string, fields: string[]) {
+    setRawByEpoch((previous) => {
+      if (previous.epoch !== state.editorEpoch) return previous;
+      const values = { ...previous.values };
+      const errors = { ...previous.errors };
+      for (const field of fields) { delete values[fieldKey(key, field)]; delete errors[fieldKey(key, field)]; }
+      return { ...previous, values, errors };
+    });
+  }
+
+  /** The old-item cost is the sum of its fees; it stays unknown while a fee has no amount, or until there are fees or "no fee" is chosen. */
+  function updateFees(key: string, update: (fees: PricingChangeInput["oldItemFees"]) => PricingChangeInput["oldItemFees"]) {
+    setInput((previous) => previous ? { ...previous, changes: previous.changes.map((change) => {
+      if (change.key !== key) return change;
+      const fees = update(change.oldItemFees);
+      const total = fees.length && fees.every((fee) => fee.amountCents !== null) ? fees.reduce((sum, fee) => sum + fee.amountCents!, 0) : null;
+      return { ...change, oldItemFees: fees, oldItemCostCents: total, confirmed: false };
+    }) } : previous);
+  }
+
+  function editFeeAmount(key: string, kind: NonRefundableFeeKind, value: string) {
     const parsed = parseDollars(value);
-    setRaw(key, "oldItemCostCents", value, parsed.error);
-    patchChange(key, parsed.error ? { confirmed: false } : { oldItemCostCents: parsed.value, confirmed: false });
+    setRaw(key, feeField(kind), value, parsed.error);
+    if (parsed.error) patchChange(key, { confirmed: false });
+    else updateFees(key, (fees) => fees.map((fee) => fee.kind === kind ? { ...fee, amountCents: parsed.value } : fee));
+  }
+
+  function changeFeeKind(key: string, from: NonRefundableFeeKind, to: NonRefundableFeeKind) {
+    dropRaw(key, [feeField(from)]);
+    updateFees(key, (fees) => fees.map((fee) => fee.kind === from ? { ...fee, kind: to } : fee));
+  }
+
+  function removeFee(key: string, kind: NonRefundableFeeKind) {
+    dropRaw(key, [feeField(kind)]);
+    updateFees(key, (fees) => fees.filter((fee) => fee.kind !== kind));
+  }
+
+  function addFee(key: string) {
+    updateFees(key, (fees) => {
+      const kind = NON_REFUNDABLE_FEE_KINDS.find((candidate) => !fees.some((fee) => fee.kind === candidate));
+      return kind ? [...fees, { kind, amountCents: null }] : fees;
+    });
   }
 
   const header = <header className="mb-5 flex flex-wrap items-center gap-3"><a href={`/chats/${projectKey}`} className="flex items-center gap-1.5 text-[12px] text-slate-500 hover:text-slate-900"><ArrowLeft className="h-3.5 w-3.5" />Back to project chat</a><span className="ml-auto rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-800">Demo designer workspace</span></header>;
@@ -177,8 +211,8 @@ export function PricingWorkspaceView({ projectKey, guide }: { projectKey: CaseKe
             <p className="mt-2 text-[12px] leading-relaxed text-slate-600">{MAPLE_SAMPLE_MATERIALS.reference} · {MAPLE_SAMPLE_MATERIALS.supplier}. Prepared for this walkthrough; review these supplied examples before confirming the change.</p>
             <div className="mt-3 grid gap-3 text-[12px] sm:grid-cols-3">
               <div className="rounded-lg bg-white p-3"><h3 className="font-semibold">New writing desk</h3><p className="mt-1">1 each · {money(MAPLE_SAMPLE_MATERIALS.desk.unitPriceCents)}</p><p className="mt-1 text-[11px] text-slate-500">{MAPLE_SAMPLE_MATERIALS.desk.sku}<br />Line tax {money(0)} · delivery {money(0)}<br />Sample lead time: 14 days</p></div>
-              <div className="rounded-lg bg-white p-3"><h3 className="font-semibold">Original lounge chair</h3><p className="mt-1">Not ordered · retained cost {money(0)}</p><p className="mt-1 text-[11px] text-slate-500">The sample cancellation note records no retained goods or cancellation cost.</p></div>
-              <div className="rounded-lg bg-white p-3"><h3 className="font-semibold">Wool rug return</h3><p className="mt-1">Retained cost {money(MAPLE_SAMPLE_MATERIALS.rug.oldItemCostCents)}</p><p className="mt-1 text-[11px] text-slate-500">The sample return note leaves {money(24_000)} to refund after matching supplier credit.</p></div>
+              <div className="rounded-lg bg-white p-3"><h3 className="font-semibold">Original lounge chair</h3><p className="mt-1">Not ordered · no non-refundable fee</p><p className="mt-1 text-[11px] text-slate-500">The sample cancellation note records no retained goods or cancellation cost.</p></div>
+              <div className="rounded-lg bg-white p-3"><h3 className="font-semibold">Wool rug return</h3><p className="mt-1">{NON_REFUNDABLE_FEE_LABEL[MAPLE_SAMPLE_MATERIALS.rug.oldItemFees[0].kind]} {money(MAPLE_SAMPLE_MATERIALS.rug.oldItemFees[0].amountCents)}, not refunded</p><p className="mt-1 text-[11px] text-slate-500">The sample return note leaves {money(24_000)} to refund after matching supplier credit.</p></div>
             </div>
             <details className="mt-3 text-[11px] leading-relaxed text-slate-600"><summary className="cursor-pointer font-medium">Read sample terms and source notes</summary><div className="mt-2 space-y-2"><p>{MAPLE_SAMPLE_MATERIALS.desk.returnPolicy}</p><p>{MAPLE_SAMPLE_MATERIALS.chair.note}</p><p>{MAPLE_SAMPLE_MATERIALS.rug.note}</p><p>{MAPLE_SAMPLE_MATERIALS.terms}</p></div></details>
             <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" disabled={disabled} onClick={loadSampleMaterials} className="rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] disabled:opacity-50">Load sample supplier details</button><p className="flex-1 text-[11px] leading-relaxed text-slate-500">Fills editable prices, references and terms. Check each changed row and resolve the open questions yourself, then save the review.</p></div>
@@ -222,7 +256,7 @@ export function PricingWorkspaceView({ projectKey, guide }: { projectKey: CaseKe
                 </section>
               </>}
 
-              {requiresOldItemHandling(selected, selectedBefore) && <section className="space-y-3 rounded-xl border border-amber-100 bg-amber-50/40 p-4"><h3 className={drawerHeading}>Original item · handling and remaining cost</h3>{selectedBefore && <p className="text-[11px] text-slate-500">V{workspace.quote.version}: {selectedBefore.quantity} × {selectedBefore.name} · original whole-line total {money(calculateLineTotals(selectedBefore).totalCents)} including tax and delivery.</p>}<Field label="Old item handling"><select aria-label="Old item handling" className={inputClass} value={selected.oldItemHandling} onChange={(event) => patchChange(selected.key, { oldItemHandling: event.target.value as OldItemHandling, confirmed: false })}>{(["pending", "not_ordered", "cancelled", "returned", "retained"] as const).map((handling) => <option key={handling} value={handling}>{handlingLabels[handling]}</option>)}</select></Field><Field label="Old-item cost including fees (USD)" hint="Enter the full retained cost or handling charge, including applicable fees. Enter 0 explicitly if verified." error={numericErrors[fieldKey(selected.key, "oldItemCostCents")]}><input aria-label="Old-item cost including fees (USD)" inputMode="decimal" placeholder="Unknown" className={inputClass} value={raw[fieldKey(selected.key, "oldItemCostCents")] ?? centsText(selected.oldItemCostCents)} onChange={(event) => editOldCost(selected.key, event.target.value)} /></Field><Field label="Old-item handling note"><textarea aria-label="Old-item handling note" rows={3} className={inputClass} value={selected.oldItemNote} onChange={(event) => patchChange(selected.key, { oldItemNote: event.target.value, confirmed: false })} /></Field></section>}
+              {requiresOldItemHandling(selected, selectedBefore) && <section className="space-y-3 rounded-xl border border-amber-100 bg-amber-50/40 p-4"><h3 className={drawerHeading}>Original item · handling and remaining cost</h3>{selectedBefore && <p className="text-[11px] text-slate-500">V{workspace.quote.version}: {selectedBefore.quantity} × {selectedBefore.name} · original whole-line total {money(calculateLineTotals(selectedBefore).totalCents)} including tax and delivery.</p>}<Field label="Old item handling"><select aria-label="Old item handling" className={inputClass} value={selected.oldItemHandling} onChange={(event) => patchChange(selected.key, { oldItemHandling: event.target.value as OldItemHandling, confirmed: false })}>{(["pending", "not_ordered", "cancelled", "modified", "returned", "retained"] as const).map((handling) => <option key={handling} value={handling}>{handlingLabels[handling]}</option>)}</select></Field><OldItemFees change={selected} raw={raw} errors={numericErrors} onAmount={(kind, value) => editFeeAmount(selected.key, kind, value)} onKind={(from, to) => changeFeeKind(selected.key, from, to)} onRemove={(kind) => removeFee(selected.key, kind)} onAdd={() => addFee(selected.key)} onNone={() => patchChange(selected.key, { oldItemFees: [], oldItemCostCents: 0, confirmed: false })} /><Field label="Old-item handling note"><textarea aria-label="Old-item handling note" rows={3} className={inputClass} value={selected.oldItemNote} onChange={(event) => patchChange(selected.key, { oldItemNote: event.target.value, confirmed: false })} /></Field></section>}
             </fieldset>
           </ChangeDrawer>}
 
@@ -246,3 +280,4 @@ export function PricingWorkspaceView({ projectKey, guide }: { projectKey: CaseKe
     </div>
   );
 }
+

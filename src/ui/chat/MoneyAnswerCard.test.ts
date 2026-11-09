@@ -54,7 +54,7 @@ describe("recorded money evidence card", () => {
 
   const row = (patch: Partial<MoneyTableRow>): MoneyTableRow => ({ key: "baseline:x", label: "Item", status: "charged", heldCents: 0, chargedCents: 0, refundedCents: 0, releasedCents: 0, nonRefundableCents: 0, netCents: 0, factIds: ["missing"], ...patch });
   const table = [
-    row({ key: "baseline:countertop", label: "Quartz countertop", status: "refunded", chargedCents: 396_000, refundedCents: 44_000, nonRefundableCents: 28_000, netCents: 352_000 }),
+    row({ key: "baseline:countertop", label: "Quartz countertop", status: "refunded", chargedCents: 396_000, refundedCents: 44_000, nonRefundableCents: 28_000, nonRefundableFees: [{ kind: "fabrication_fee", amountCents: 28_000 }], netCents: 352_000 }),
     row({ key: "baseline:pendants", label: "Counter pendant light", status: "charged", chargedCents: 96_000, releasedCents: 48_000, netCents: 96_000 }),
   ];
 
@@ -63,7 +63,7 @@ describe("recorded money evidence card", () => {
       answer: { summary: { text: "Everything is settled.", factIds: ["missing"] }, rows: [], notes: [] } };
     const text = renderToStaticMarkup(createElement(MoneyAnswerCard, { answer, messageId: "reply" })).replace(/<[^>]+>/g, "");
     expect(text).toContain("Everything is settled.");
-    expect(text).toContain("Quartz countertop" + "Charged $3,960.00 · Refunded $440.00 · Non-refundable $280.00" + "$3,520.00");
+    expect(text).toContain("Quartz countertop" + "Charged $3,960.00 · Refunded $440.00 · Fabrication fee $280.00, not refunded" + "$3,520.00");
     expect(text).toContain("Counter pendant light" + "Charged $960.00 · Released $480.00" + "$960.00");
     expect(text).toContain("Counter stool" + "On hold $2,730.00" + "$0.00");
     expect(text).toContain("Floor lamp" + "Waiting for supplier credit" + "$300.00");
