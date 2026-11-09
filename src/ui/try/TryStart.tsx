@@ -177,7 +177,7 @@ export function TryStart() {
     void perform("maple", async (signal) => {
       const initial = !restart && seed?.scenario === HOME_SCENARIO ? snapshot! : await post({ action: "start", scenario: HOME_SCENARIO, ...(restart ? { restart: true } : {}) }, signal);
       if (restart && seed && initial.seed?.runId === seed.runId) throw new Error("This run is still being prepared. Continue its saved preparation before creating a separate run.");
-      if (initial.seed?.scenario !== HOME_SCENARIO) throw new Error("Your earlier project is still being prepared. Continue its saved preparation below before opening the new living and dining example.");
+      if (initial.seed?.scenario !== HOME_SCENARIO) throw new Error("Your earlier project is still being prepared. Continue its saved preparation below before opening the new café example.");
       const ready = initial.seed && canOpenPreparedWorkspace(initial.seed) ? initial : await prepare(initial, signal);
       if (!signal.aborted && mounted.current) open(ready.href, account);
     });
@@ -238,12 +238,12 @@ export function TryStart() {
           </div>
         </div>
         <p className={styles.entryStatus} role="status" aria-live="polite">
-          {checking ? "Finding your saved project…" : error ? <>Your project couldn&rsquo;t open. <a href="#try-problem">See what needs attention.</a></> : opening ? "Opening your project…" : preparing ? seed?.scenario === HOME_SCENARIO ? "Opening your project. Test payments will continue in the background…" : `Preparing your project · ${savedStages} of ${seed?.stages.length ?? 10} steps saved` : seed?.scenario === HOME_SCENARIO && seed.workspaceReady ? "Your living & dining project is ready to read. Choose a role to continue." : "A living & dining project, shared by designer and client. Switch roles anytime."}
+          {checking ? "Finding your saved project…" : error ? <>Your project couldn&rsquo;t open. <a href="#try-problem">See what needs attention.</a></> : opening ? "Opening your project…" : preparing ? seed?.scenario === HOME_SCENARIO ? "Opening your project. Test payments will continue in the background…" : `Preparing your project · ${savedStages} of ${seed?.stages.length ?? 10} steps saved` : seed?.scenario === HOME_SCENARIO && seed.workspaceReady ? "Your café project is ready to read. Choose a role to continue." : "A café counter refit, shared by designer and client. Switch roles anytime."}
         </p>
       </div>
 
       <div className={styles.heroFooter}>
-        <span>Maple Ave<span className={styles.projectCaption}>A sample interior design project</span></span>
+        <span>Maple Ave Café<span className={styles.projectCaption}>A sample interior design project</span></span>
         <span className={styles.sharedProject}>Two roles. The same project.</span>
       </div>
     </section>

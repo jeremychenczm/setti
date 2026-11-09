@@ -111,7 +111,7 @@ export async function startTry(deps: AllocationDeps, current: string | null, { r
   });
   if (result.kind !== "limited" && result.seed.scenario === HOME_SCENARIO && !result.seed.workspaceReady) {
     await ensureHomeWorkspace(deps.db, result.session);
-    const progress = result.seed.stages.map((stage): TryStage => stage.id === "quote" || stage.id === "discussion" ? { ...stage, label: stage.id === "quote" ? "Open the agreed V1 living-and-dining quote" : stage.label, status: "done" } : stage);
+    const progress = result.seed.stages.map((stage): TryStage => stage.id === "quote" || stage.id === "discussion" ? { ...stage, label: stage.id === "quote" ? "Open the agreed V1 café counter and back-bar quote" : stage.label, status: "done" } : stage);
     await deps.db.update(trySeeds).set({ stages: progress, updatedAt: deps.now?.() ?? new Date() }).where(eq(trySeeds.sessionId, result.session));
     return { ...result, seed: (await readTrySeed(deps.db, result.session))! };
   }
