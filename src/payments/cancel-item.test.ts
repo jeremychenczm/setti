@@ -84,7 +84,7 @@ describe.skipIf(!testDatabaseUrl)("the studio cancels an approved item", () => {
     });
     expect(after.toHoldCents).toBe(before.toHoldCents);
     expect(await holdApprovedItems(handle.db, paypal, session, "willow")).toEqual([]);
-    expect((await handle.db.select().from(paymentOperations).where(eq(paymentOperations.itemId, await deskItemId()))).map((operation) => operation.kind)).toEqual(["authorize", "void"]);
+    expect((await handle.db.select().from(paymentOperations).where(eq(paymentOperations.itemId, await deskItemId())).orderBy(paymentOperations.createdAt)).map((operation) => operation.kind)).toEqual(["authorize", "void"]);
 
     const text = await messages();
     // The client hears it from the designer, as a chat message of its own.
@@ -166,7 +166,7 @@ describe.skipIf(!testDatabaseUrl)("the studio cancels an approved item", () => {
     expect(holds.basis).toMatchObject({ version: order.version, orderId: order.id });
     expect(holds.items.find((line) => line.itemId === DESK)).toMatchObject({ state: "cancelled", heldCents: 0, canCancelItem: false, cancellation: { reason: "unavailable" } });
     await holdApprovedItems(handle.db, paypal, session, "willow");
-    expect((await handle.db.select().from(paymentOperations).where(eq(paymentOperations.itemId, itemId))).map((operation) => operation.kind)).toEqual(["authorize", "void"]);
+    expect((await handle.db.select().from(paymentOperations).where(eq(paymentOperations.itemId, itemId)).orderBy(paymentOperations.createdAt)).map((operation) => operation.kind)).toEqual(["authorize", "void"]);
   });
 
   it("cancels an item from a later version's payments page too", async () => {
