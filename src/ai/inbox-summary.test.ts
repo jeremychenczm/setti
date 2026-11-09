@@ -60,6 +60,36 @@ describe("checking what a client summary says is on hold now", () => {
   });
 });
 
+describe("checking how many items a summary names", () => {
+  const cafe = ["Counter pendant light", "Counter stool", "Back bar wall tile, sage green", "Oak window counter", "Acoustic ceiling panel"];
+  const day3 = [
+    { id: "reminders", text: `5 reminders across 1 project(s); 5 to handle today. They are for ${cafe.join("; ")}.`, items: cafe },
+    ...cafe.map((label, index) => ({ id: `r-${index}`, text: `Maple Ave Café · ${label} · not ordered yet. Approved and held for 3 days, but no order is recorded.`, items: [label] })),
+  ];
+
+  it("refuses the day-3 summary that counted five items and named three", () => {
+    const shown = "Five Maple Ave Café items need handling today. Place the orders for the acoustic ceiling panel, back bar wall tile and counter pendant light.";
+    expect(verifySummary(day3, [{ text: shown, factIds: ["reminders"] }])).toEqual([expect.stringMatching(/says Five Maple Ave Café items but names 2 of them \(Counter pendant light; Acoustic ceiling panel\)\. Name each of the 5 as the facts write them: Counter pendant light; Counter stool; Back bar wall tile, sage green; Oak window counter; Acoustic ceiling panel/)]);
+  });
+
+  it("accepts five items named in any order, singular or plural", () => {
+    const text = "Five Maple Ave Café items are not ordered yet: the counter pendant lights, the counter stools, the sage green back bar wall tile, the oak window counter and the acoustic ceiling panels.";
+    expect(verifySummary(day3, [{ text, factIds: ["reminders"] }])).toEqual([]);
+    expect(verifySummary(day3, [{ text: "The counter stools and oak window counter still need orders.", factIds: ["r-1", "r-3"] }])).toEqual([]);
+  });
+
+  const many = Array.from({ length: 19 }, (_, index) => `Item ${String.fromCharCode(65 + index)}`);
+  const nineteen = [{ id: "reminders", text: `19 reminders across 1 project(s); 19 to handle today. They are for Item A; Item B; Item C; and 16 more.`, items: many }];
+
+  it("asks for three names and how many more when more than five share a state, with the count from the facts", () => {
+    expect(verifySummary(nineteen, [{ text: "19 items are not ordered yet, including item A, item B and item C, and 16 more.", factIds: ["reminders"] }])).toEqual([]);
+    expect(verifySummary(nineteen, [{ text: "19 items are not ordered yet, including item A, item B and item C, and 15 more.", factIds: ["reminders"] }])).toEqual([expect.stringMatching(/says "and 15 more", but none of its cited facts states 15/)]);
+    expect(verifySummary(nineteen, [{ text: "19 items are not ordered yet.", factIds: ["reminders"] }])).toEqual([expect.stringMatching(/says 19 items: name three of them and say how many more/)]);
+    expect(verifySummary(nineteen, [{ text: "Item A and item B lead the list, and 16 more wait.", factIds: ["reminders"] }])).toEqual([expect.stringMatching(/names 2 of them; name three/)]);
+    expect(verifySummary(nineteen, [{ text: "Four items need orders today: item A, item B, item C and item D.", factIds: ["reminders"] }])).toEqual([expect.stringMatching(/says Four items, but none of its cited facts states 4/)]);
+  });
+});
+
 describe.skipIf(!testDatabaseUrl)("writing the inbox summary", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
   let session: string;

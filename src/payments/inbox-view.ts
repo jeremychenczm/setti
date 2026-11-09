@@ -125,6 +125,23 @@ export async function inboxBadge(db: Db, sessionId: string | null, account: Demo
 
 const VERB: Record<MoneyEvent["kind"], string> = { charged: "charged", held: "put on hold", released: "hold released", refunded: "refunded" };
 
+/** Up to five names, or three and how many more: the way the summary names a group of items. */
+function listed(labels: readonly string[]): string {
+  return labels.length <= 5 ? labels.join("; ") : `${labels.slice(0, 3).join("; ")}; and ${labels.length - 3} more`;
+}
+
+const REMINDER_STATE: Record<AttentionItem["kind"], string> = {
+  payment_unknown: "with an unknown PayPal result", hold_failed: "whose hold failed", renewal_failed: "whose hold renewal failed",
+  expired: "whose hold expired", capture_ready: "ready to capture", expiring: "whose hold expires soon", not_ordered: "not ordered yet",
+};
+
+/** Facts that count and name the items sharing a state, when there are at least two; none when one group would only repeat the total. */
+function groupFacts(groups: Map<string, { text: (count: number) => string; labels: string[] }>, total: number): SummaryFact[] {
+  const shared = [...groups].filter(([, group]) => group.labels.length > 1);
+  if (shared.length === 1 && shared[0][1].labels.length === total) return [];
+  return shared.map(([id, group]) => ({ id, text: `${group.text(group.labels.length)}: ${listed(group.labels)}.`, items: group.labels }));
+}
+
 /** One item's state today, as the summary's facts state it. */
 function nowText(item: ItemMoney): string {
   const parts = [item.heldCents ? `${usd(item.heldCents)} on hold` : "nothing on hold"];
@@ -144,15 +161,28 @@ export function inboxFacts(view: InboxView): SummaryFact[] {
   if (view.role === "designer") {
     if (!view.reminders.length) return [];
     const today = view.reminders.filter((item) => item.urgency === "now").length;
+    const labels = view.reminders.map((item) => item.itemLabel);
+    const groups = new Map<string, { text: (count: number) => string; labels: string[] }>();
+    for (const item of view.reminders) {
+      const id = `group:${item.projectKey}:${item.kind}`;
+      if (!groups.has(id)) groups.set(id, { text: (count) => `${item.projectName} · ${count} items ${REMINDER_STATE[item.kind]}`, labels: [] });
+      groups.get(id)!.labels.push(item.itemLabel);
+    }
     return [
-      { id: "reminders", text: `${view.reminders.length} reminder${view.reminders.length === 1 ? "" : "s"} across ${new Set(view.reminders.map((item) => item.projectName)).size} project(s); ${today} to handle today.` },
-      ...view.reminders.slice(0, 20).map((item) => ({ id: item.id, text: `${item.projectName} · ${item.title}. ${item.detail}` })),
+      { id: "reminders", text: `${view.reminders.length} reminder${view.reminders.length === 1 ? "" : "s"} across ${new Set(view.reminders.map((item) => item.projectName)).size} project(s); ${today} to handle today. They are for ${listed(labels)}.`, items: labels },
+      ...groupFacts(groups, view.reminders.length),
+      ...view.reminders.slice(0, 20).map((item) => ({ id: item.id, text: `${item.projectName} · ${item.title}. ${item.detail}`, items: [item.itemLabel] })),
     ];
   }
   if (!view.events.length || !view.totals) return [];
+  const groups = new Map<string, { text: (count: number) => string; labels: string[] }>([
+    ["group-on-hold", { text: (count) => `Now · ${count} items on hold`, labels: view.items.filter((item) => item.heldCents > 0).map((item) => item.label) }],
+    ["group-charged", { text: (count) => `Now · ${count} items charged, with nothing on hold`, labels: view.items.filter((item) => item.heldCents === 0 && item.chargedCents > 0).map((item) => item.label) }],
+  ]);
   return [
     { id: "money-now", text: `In ${view.project?.name ?? "this project"}: ${usd(view.totals.chargedCents)} charged in total, ${usd(view.totals.heldCents)} on hold now, ${usd(view.totals.refundedCents)} refunded in total.` },
-    ...view.items.slice(0, 30).map((item, index) => ({ id: `now-${index + 1}`, text: nowText(item) })),
-    ...view.events.slice(0, 20).map((event) => ({ id: event.id, text: `Earlier · ${when(event.at)} · ${event.itemLabel}: ${usd(event.amountCents)} ${VERB[event.kind]}.` })),
+    ...groupFacts(groups, view.items.length),
+    ...view.items.slice(0, 30).map((item, index) => ({ id: `now-${index + 1}`, text: nowText(item), items: [item.label] })),
+    ...view.events.slice(0, 20).map((event) => ({ id: event.id, text: `Earlier · ${when(event.at)} · ${event.itemLabel}: ${usd(event.amountCents)} ${VERB[event.kind]}.`, items: [event.itemLabel] })),
   ];
 }

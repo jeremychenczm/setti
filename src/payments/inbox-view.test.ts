@@ -9,7 +9,8 @@ import { signOpeningForTest } from "../opening/testing";
 import { skipAhead } from "../try/clock";
 import { completeAuthorization } from "./authorize";
 import { cancelApprovedItem } from "./cancel-item";
-import { inboxBadge, inboxFacts, inboxView, markInboxOpened } from "./inbox-view";
+import type { AttentionItem } from "./attention";
+import { inboxBadge, inboxFacts, inboxView, markInboxOpened, type InboxView } from "./inbox-view";
 import { holdApprovedItems } from "./item-holds";
 import { chargeServices, startServicesCheckout } from "./services";
 import { FakePayPal } from "./testing/fake-paypal";
@@ -59,9 +60,12 @@ describe.skipIf(!testDatabaseUrl)("the payment inbox", () => {
 
     const facts = inboxFacts(view);
     expect(facts[0]).toMatchObject({ id: "money-now", text: expect.stringMatching(/^In Willow Residence: \$[\d,.]+ charged in total, \$[\d,.]+ on hold now, \$0\.00 refunded in total\.$/) });
-    // The total, then where each item stands now, then the newest twenty records as history.
-    expect(facts.filter((fact) => fact.text.startsWith("Now · "))).toHaveLength(view.items.length);
-    expect(facts.length).toBe(1 + view.items.length + Math.min(20, view.events.length));
+    // The total, the items that share a state, then where each item stands now, then the newest twenty records as history.
+    const groups = facts.filter((fact) => fact.id.startsWith("group-"));
+    expect(groups.length).toBeGreaterThan(0);
+    for (const group of groups) expect(group.text).toMatch(/^Now · (\d+) items (?:on hold|charged, with nothing on hold): .+; and \d+ more\.$|^Now · [2-5] items (?:on hold|charged, with nothing on hold): [^.]+\.$/);
+    expect(facts.filter((fact) => fact.id.startsWith("now-")).map((fact) => fact.items)).toEqual(view.items.map((item) => [item.label]));
+    expect(facts.length).toBe(1 + groups.length + view.items.length + Math.min(20, view.events.length));
     expect(facts.at(-1)!.text).toMatch(/^Earlier · /);
   });
 
@@ -72,7 +76,10 @@ describe.skipIf(!testDatabaseUrl)("the payment inbox", () => {
     const view = await inboxView(handle.db, null, session, designer);
     expect(view).toMatchObject({ role: "designer", reader: "Jordan", simulatedDays: 3, events: [], project: null });
     expect(view.reminders).toHaveLength(ITEMS);
-    expect(inboxFacts(view)[0]).toEqual({ id: "reminders", text: "19 reminders across 1 project(s); 19 to handle today." });
+    // One kind of reminder in one project: the total names three of them and counts the rest, and no group repeats it.
+    const facts = inboxFacts(view);
+    expect(facts[0]).toEqual({ id: "reminders", text: expect.stringMatching(/^19 reminders across 1 project\(s\); 19 to handle today\. They are for [^;]+; [^;]+; [^;]+; and 16 more\.$/), items: view.reminders.map((item) => item.itemLabel) });
+    expect(facts.some((fact) => fact.id.startsWith("group:"))).toBe(false);
   });
 
   it("counts the client's money records not seen yet, and after a visit only newer ones", async () => {
@@ -107,5 +114,23 @@ describe.skipIf(!testDatabaseUrl)("the payment inbox", () => {
     expect(await inboxBadge(handle.db, session, designer)).toEqual({ role: "designer", count: ITEMS, opened: true });
     // Each account keeps its own read marker.
     expect((await inboxView(handle.db, null, session, client)).unread.length).toBeGreaterThan(0);
+  });
+});
+
+describe("the facts a designer's summary names items from", () => {
+  const reminder = (itemLabel: string, kind: AttentionItem["kind"]): AttentionItem => ({
+    id: `maple:baseline:${itemLabel}:${kind}`, kind, projectKey: "maple", projectName: "Maple Ave Café", itemId: itemLabel, side: "baseline", itemLabel,
+    title: `${itemLabel} · ${kind}`, detail: "Do the next step.", urgency: "now", href: "/quotes/maple",
+  });
+  const view = (reminders: AttentionItem[]) => ({ role: "designer", reminders, events: [], items: [], totals: null, project: null, unread: [] }) as unknown as InboxView;
+
+  it("counts and names each group of reminders that share a state: all of up to five, or three and how many more", () => {
+    const notOrdered = ["Counter stool", "Oak window counter", "Acoustic ceiling panel", "Counter pendant light", "Back bar wall tile", "Bar shelf", "Menu board"];
+    const facts = inboxFacts(view([reminder("Quartz countertop", "capture_ready"), reminder("Floor lamp", "capture_ready"), ...notOrdered.map((label) => reminder(label, "not_ordered")), reminder("Sofa", "expiring")]));
+    expect(facts[0]).toMatchObject({ id: "reminders", text: "10 reminders across 1 project(s); 10 to handle today. They are for Quartz countertop; Floor lamp; Counter stool; and 7 more." });
+    expect(facts.filter((fact) => fact.id.startsWith("group:"))).toEqual([
+      { id: "group:maple:capture_ready", text: "Maple Ave Café · 2 items ready to capture: Quartz countertop; Floor lamp.", items: ["Quartz countertop", "Floor lamp"] },
+      { id: "group:maple:not_ordered", text: "Maple Ave Café · 7 items not ordered yet: Counter stool; Oak window counter; Acoustic ceiling panel; and 4 more.", items: notOrdered },
+    ]);
   });
 });
