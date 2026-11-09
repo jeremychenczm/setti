@@ -32,7 +32,7 @@ function product(definition: Definition): ProductOption {
   return {
     id: definition.id, name: definition.name, sku: definition.sku, brand: null, seller: definition.vendor,
     specification: definition.specification, currency: "USD", unitPriceCents: definition.price, unitLabel: definition.unit,
-    priceEvidence: `Local fictional supplier document ${definition.reference}: ${definition.sku}; ${usd(definition.price)} per ${definition.unit}. Whole-line tax USD 0 and delivery USD 0. Source: HOME_SUPPLIER_NOTES, included in this demo, not an uploaded or verified supplier file.`,
+    priceEvidence: `Local fictional supplier document ${definition.reference}: ${definition.sku}; ${usd(definition.price)} per ${definition.unit}. Whole-line tax USD 0 and delivery USD 0. Source: the local supplier documents included in this demo, not an uploaded or verified supplier file.`,
     availability: "Sample lead time only; actual stock and accepted orders require a separate supplier confirmation.",
   };
 }
@@ -59,7 +59,7 @@ type Evidence = Pick<PricingChangeInput, "priceEvidence" | "oldItemHandling" | "
   after: Partial<PricingItem> | null;
 };
 
-const fromDocuments = "Source: HOME_SUPPLIER_NOTES.";
+const fromDocuments = "Source: the local supplier documents included in this demo.";
 const chosen = (definition: Definition, after: DraftChange["after"]) =>
   !!after && after.sku === definition.sku && after.unitPriceCents === definition.price && after.currency === "USD" && after.unitLabel === definition.unit;
 const offered = (definition: Definition): Partial<PricingItem> => ({

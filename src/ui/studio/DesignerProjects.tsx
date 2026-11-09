@@ -50,7 +50,7 @@ export function DesignerProjects({ onOpenProject }: { onOpenProject: (id: string
           </Link>;
         })}</div>
         {!projects.length && <p role="status" className={styles.empty}>No projects match that search. Try a material, business type or client name.</p>}
-        <p className={styles.disclosure}>Each project opens its own conversation. Continue in-progress projects with real AI; settled projects stay read only. Starting quotes, approvals and payment figures are prepared examples. Maple Ave includes the PayPal Sandbox walkthrough.</p>
+        <p className={styles.disclosure}>Each project opens its own conversation. Continue in-progress projects with real AI; settled projects stay read only. Starting quotes, approvals and payment figures are prepared examples. Maple Ave Café includes the PayPal Sandbox walkthrough.</p>
       </section>
     </div>
   </main>;

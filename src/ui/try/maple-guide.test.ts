@@ -19,6 +19,7 @@ function initial(): MapleGuideData {
 function heldNewItem(days: number): MapleGuideData {
   const data = confirmed();
   const held = line({ side: "proposed", businessItemId: "desk", label: "Desk", targetCents: 110_000, heldCents: 110_000, capturedCents: 0, releasedCents: 0,
+    holds: [{ id: "desk-hold", paypalOrderId: "ORDER", paypalAuthorizationId: "AUTH", amountCents: 110_000, status: "created", capturedCents: 0, heldCents: 110_000, releasedCents: 0, version: 3, createdAt: at, honorExpiresAt: null, expiresAt: null }],
     steps: [{ kind: "supplier_confirmation", actor: "designer", amountCents: 110_000, available: true, note: "Record the supplier's order confirmation." }, { kind: "capture", actor: "designer", amountCents: 110_000, available: false, note: "" }] });
   data.payments = { ...data.payments!, lines: [held] };
   data.simulatedDays = days;
@@ -234,9 +235,29 @@ describe("living-and-dining demo guide", () => {
       secondary: { label: "Record the confirmations now", href: "/change-orders/visitor-v3#payments" },
     });
     const after = mapleGuideStep(heldNewItem(3), "designer");
-    expect(after).toMatchObject({ index: 3, role: "jordan", destination: "order", orderId: "visitor-v3", anchor: "payments", action: "Record the supplier confirmations", title: "Setti caught it: the new item is still not ordered" });
+    expect(after).toMatchObject({ index: 3, role: "jordan", destination: "order", orderId: "visitor-v3", anchor: "payments", action: "Record the supplier confirmations", title: "Setti caught it: the held item is still not ordered" });
     expect(after.detail).toMatch(/^Day 3: PayPal's 3-day honor period for this hold is over/);
     expect(after.skipTo).toBeUndefined();
+  });
+
+  it("counts the holds this version placed apart from the held items still waiting for an order", () => {
+    const data = heldNewItem(0);
+    const [desk] = data.payments!.lines;
+    const hold = desk.holds[0];
+    // Kept from V2 with fewer units, and a line that adds to its V2 hold: three items wait, two holds are new.
+    const lights = { ...desk, itemId: "lights", businessItemId: "lights", label: "Lights", holds: [{ ...hold, id: "lights-hold", version: 2 }] };
+    const stools = { ...desk, itemId: "stools", businessItemId: "stools", label: "Stools", holds: [{ ...hold, id: "stools-v2", version: 2 }, { ...hold, id: "stools-v3", version: 3 }] };
+    data.payments!.lines = [desk, lights, stools];
+    const jordan = mapleGuideStep(data, "designer");
+    expect(jordan.detail).toMatch(/^Setti placed 2 new holds on Emma's saved card, but no supplier order is recorded for the 3 held items\. /);
+    data.clientUnread = 2;
+    expect(mapleGuideStep(data, "client").detail).toMatch(/^Confirming V3 let Setti place 2 new holds on Emma's saved card in the PayPal Sandbox\. /);
+    // A replaced item's hold released on confirming is said too.
+    data.payments!.lines.push(line());
+    expect(mapleGuideStep(data, "client").detail).toMatch(/^Confirming V3 let Setti release the holds it no longer needs and place 2 new holds/);
+    expect(mapleGuideStep(heldNewItem(3), "designer").title).toBe("Setti caught it: the held item is still not ordered");
+    data.simulatedDays = 3;
+    expect(mapleGuideStep(data, "designer").title).toBe("Setti caught it: 3 held items are still not ordered");
   });
 
   it("first shows Emma, right after she confirms, what Setti did with her money", () => {

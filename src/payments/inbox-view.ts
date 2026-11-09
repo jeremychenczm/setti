@@ -10,7 +10,6 @@
 import { canOpenProject, type DemoAccount } from "../accounts/demo";
 import { readLedger, type ProjectLedger } from "../approval/store";
 import { chatCases } from "../chat/schema";
-import { caseDocument } from "../chat/cases";
 import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
 import type { SummaryFact } from "../ai/inbox-summary";
@@ -18,7 +17,7 @@ import { items } from "../db/schema";
 import { pricingCases } from "../pricing/schema";
 import { and, eq } from "drizzle-orm";
 import type { AttentionItem } from "./attention";
-import { attentionView } from "./attention-view";
+import { attentionView, sessionProjectName } from "./attention-view";
 import { lastInboxRead, markInboxSeen, unreadIds } from "./inbox-reads";
 import { checkWithPayPal, moneyEvents, type MoneyEvent } from "./money-events";
 import type { PayPalPayments } from "./paypal";
@@ -102,7 +101,7 @@ export async function inboxView(db: Db, paypal: PayPalPayments | null, sessionId
   // The client sees what PayPal says now: the newest records are read back first.
   if (paypal && events.length) { await checkWithPayPal(db, paypal, events); events = await moneyEvents(db, sessionId, key); }
   const money = await moneyNow(db, sessionId, key);
-  return { ...base, role: "client", reminders: [], project: { key, name: caseDocument(key).projectName }, events, totals: money?.totals ?? null, items: money?.items ?? [], unread: unreadIds(read, { events, reminders: [] }) };
+  return { ...base, role: "client", reminders: [], project: { key, name: await sessionProjectName(db, sessionId, key) }, events, totals: money?.totals ?? null, items: money?.items ?? [], unread: unreadIds(read, { events, reminders: [] }) };
 }
 
 /**

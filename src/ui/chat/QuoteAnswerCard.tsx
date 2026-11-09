@@ -39,6 +39,6 @@ export function QuoteAnswerCard({ answer }: { answer: QuoteAnswer }) {
         <td className="whitespace-nowrap py-1.5 pl-2 text-right font-semibold tabular-nums">{usd(answer.totalCents)}</td>
       </tr></tfoot>
     </table> : <p className="mt-2 text-[12px] leading-relaxed text-slate-600">No line in quote V{answer.version} matches.</p>}
-    <p className="mt-2 text-[10px] leading-relaxed text-slate-500">Calculated by Setti from the approved quote, not by the AI. Line totals include each line&apos;s tax and delivery.</p>
+    <p className="mt-2 text-[10px] leading-relaxed text-slate-500">Calculated in code from the approved quote, not by the AI. Line totals include each line&apos;s tax and delivery.</p>
   </section>;
 }

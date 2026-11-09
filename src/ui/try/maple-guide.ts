@@ -76,27 +76,33 @@ export function mapleGuideStep(data: MapleGuideData, currentRole: "designer" | "
   if (latest?.status === "approved") {
     if (!payments || payments.orderId !== latest.id) return { index: 3, role: currentRole === "client" ? "emma" : "jordan", destination: "order", orderId: latest.id, anchor: "payments", action: `Open V${latest.version} payments`, title: "Read this version's payment records", detail: "Client confirmation is saved. Payment results have not been loaded here yet; approval alone does not establish a charge, release or refund." };
     const changed = mapleChangeLines(payments);
-    // New items held on the saved card, with no supplier order recorded for any of them yet.
+    // Held items, new or kept from an earlier version, with no supplier order recorded for any of them yet.
     const notOrdered = changed.filter((line) => line.category === "furniture" && line.heldCents > 0 && line.steps.some((step) => step.kind === "supplier_confirmation"));
     const ordered = changed.some((line) => line.supplierEvents.some((event) => event.kind === "order_confirmed"));
     const days = data.simulatedDays ?? 0;
-    const newItems = notOrdered.length === 1 ? "the new item" : `the ${notOrdered.length} new items`;
+    // What confirming did, from the records: holds placed for this version, and any hold it released.
+    const newHolds = changed.reduce((count, line) => count + line.holds.filter((hold) => hold.version === latest.version).length, 0);
+    const released = changed.some((line) => line.releasedCents > 0);
+    const holdsText = newHolds === 1 ? "a new hold" : `${newHolds} new holds`;
+    const heldText = notOrdered.length === 1 ? "the held item" : `the ${notOrdered.length} held items`;
+    const didNow = [released && "release the holds it no longer needs", newHolds && `place ${holdsText} on Emma's saved card`].filter(Boolean).join(" and ");
+    const did = [released && `released the holds V${latest.version} no longer needs`, newHolds && `placed ${holdsText} on Emma's saved card`].filter(Boolean).join(" and ");
     // Right after confirming, Emma sees in her own inbox what Setti just did with her money.
     if (payments.current && currentRole === "client" && !ordered && days < NOT_ORDERED_SKIP && (data.clientUnread ?? 0) > 0) return {
       index: 3, role: "emma", destination: "inbox", action: "Open your Inbox",
       title: "Emma checks what Setti did with her money",
-      detail: `Confirming V${latest.version} let Setti release the holds it no longer needs and hold ${newItems} on Emma's saved card in the PayPal Sandbox. The red number on Inbox counts these new records; open it to see each one, when PayPal confirmed it, and Setti's summary.`,
+      detail: `Confirming V${latest.version} let Setti ${didNow || "update Emma's payments"} in the PayPal Sandbox. The red number on Inbox counts these new records; open it to see each one, when PayPal confirmed it, and Setti's summary.`,
     };
     // The skip happens in Jordan's inbox, so the reminder is seen arriving there.
     if (payments.current && notOrdered.length && !ordered && days < NOT_ORDERED_SKIP) return {
       index: 3, role: "jordan", destination: "inbox", action: "Skip ahead 3 days", skipTo: NOT_ORDERED_SKIP,
       secondary: { label: "Record the confirmations now", href: `/change-orders/${encodeURIComponent(latest.id)}#payments` },
       title: "What if Jordan is busy and forgets to order?",
-      detail: `Setti released the holds V${latest.version} no longer needs and held ${newItems} on Emma's saved card, but no supplier order is recorded yet. Skip ahead 3 days here in Jordan's Inbox and watch Setti's reminder arrive, or record the supplier confirmations now. Simulated time moves only the day Setti judges holds by; PayPal calls still happen now, in the Sandbox.`,
+      detail: `${did ? `Setti ${did}, but` : "So far"} no supplier order is recorded for ${heldText}. Skip ahead 3 days here in Jordan's Inbox and watch Setti's reminder arrive, or record the supplier confirmations now. Simulated time moves only the day Setti judges holds by; PayPal calls still happen now, in the Sandbox.`,
     };
     if (payments.current && notOrdered.length && !ordered) return {
       index: 3, role: "jordan", destination: "order", orderId: latest.id, anchor: "payments", action: "Record the supplier confirmations",
-      title: `Setti caught it: ${notOrdered.length === 1 ? "the new item is" : `${notOrdered.length} new items are`} still not ordered`,
+      title: `Setti caught it: ${notOrdered.length === 1 ? "the held item is" : `${notOrdered.length} held items are`} still not ordered`,
       detail: `Day ${days}: PayPal's 3-day honor period for ${notOrdered.length === 1 ? "this hold" : "these holds"} is over and no supplier order is recorded, so Setti's daily check put a reminder in Jordan's Inbox for each. Open a reminder, or go to the payments: save each supplier's confirmation, then capture.`,
     };
     const settled = payments.current && !!payments.plan && payments.plan.status !== "blocked" && changed.length > 0 && changed.every((line) => lineProgress(line, payments.operations).settled)

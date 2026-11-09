@@ -89,9 +89,9 @@ function receiptNo(key: CaseKey, version: number, fingerprint: string | null): s
   return `${key.toUpperCase()}-V${version}-${fingerprint ? fingerprint.slice(0, 8).toUpperCase() : "SAMPLE"}`;
 }
 
-function project(key: CaseKey, document: Pick<QuoteDocument, "projectName" | "clientName" | "designerName">): VersionReceipt["project"] {
-  // Later versions keep the project but not the room line; it is the demo quote's.
-  return { key, name: document.projectName, room: caseDocument(key).room, client: clientSignatureName(document), designer: document.designerName.replace(/\s*\(demo designer\)$/, "") };
+function project(key: CaseKey, document: Pick<QuoteDocument, "projectName" | "clientName" | "designerName">, bridge: Bridge | null): VersionReceipt["project"] {
+  // Later versions keep the project but not the room line; it is the session's V1's, else the demo quote's.
+  return { key, name: document.projectName, room: bridge?.baselineQuote?.room ?? caseDocument(key).room, client: clientSignatureName(document), designer: document.designerName.replace(/\s*\(demo designer\)$/, "") };
 }
 
 async function openingReceipt(db: Reader, caseRow: { id: string; projectKey: CaseKey }, bridge: Bridge | null, versions: Versions, now: Date): Promise<VersionReceipt> {
@@ -164,7 +164,7 @@ async function openingReceipt(db: Reader, caseRow: { id: string; projectKey: Cas
 
   const fingerprint = read.opening.contentHash ?? revision?.contentHash ?? null;
   return {
-    format: RECEIPT_FORMAT, receiptNo: receiptNo(key, 1, fingerprint), issuedAt: now.toISOString(), project: project(key, document),
+    format: RECEIPT_FORMAT, receiptNo: receiptNo(key, 1, fingerprint), issuedAt: now.toISOString(), project: project(key, document, bridge),
     version: {
       number: 1, basedOn: null,
       status: approvedCount === 0 ? "declined" : approvedCount === lines.length ? "approved" : "partly_approved",
@@ -217,7 +217,7 @@ async function changeReceipt(db: Reader, key: CaseKey, bridge: Bridge | null, ve
   }
 
   return {
-    format: RECEIPT_FORMAT, receiptNo: receiptNo(key, version, contentHash), issuedAt: now.toISOString(), project: project(key, order),
+    format: RECEIPT_FORMAT, receiptNo: receiptNo(key, version, contentHash), issuedAt: now.toISOString(), project: project(key, order, bridge),
     version: {
       number: version, basedOn: order.basedOnVersion, status: approved ? "approved" : "changes_requested", replacedBy,
       sentAt: row.issuedAt.toISOString(), sentBy: order.designerName.replace(/\s*\(demo designer\)$/, ""), contentHash, document,

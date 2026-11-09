@@ -14,6 +14,8 @@ import { HOME_PRODUCT_IDS } from "../demo/home-evidence";
 import { HOME_DESIGNER_REQUEST, HOME_SCENARIO } from "../demo/living-dining";
 import { clientSignatureName } from "../opening/types";
 import { startCapture, startRefund } from "../payments/actions";
+import { attentionView } from "../payments/attention-view";
+import { inboxView } from "../payments/inbox-view";
 import { checkServicesCheckout, startServicesCheckout } from "../payments/services";
 import { recordSupplierCredit, recordSupplierOrder } from "../payments/supplier";
 import { FakePayPal } from "../payments/testing/fake-paypal";
@@ -24,7 +26,9 @@ import { paymentsWorkspace } from "../payments/workspace";
 import { createPricingInput } from "../pricing/calculation";
 import { pricingCases } from "../pricing/schema";
 import { createPricingStore } from "../pricing/store";
+import { readVersionReceipt } from "../receipts/record";
 import { lineProgress } from "../ui/payments/progress";
+import { mapleGuideStep } from "../ui/try/maple-guide";
 import { prepareTry, startTry, type TryDeps } from "./service";
 
 describe.skipIf(!testDatabaseUrl)("café walkthrough after one signature", () => {
@@ -77,6 +81,18 @@ describe.skipIf(!testDatabaseUrl)("café walkthrough after one signature", () =>
     const holds = await afterVersionConfirmed(handle.db, paypal, session, "maple", order.id, links);
     expect(holds.map((operation) => [operation.status, operation.amountCents]).sort((a, b) => Number(a[1]) - Number(b[1])))
       .toEqual([["succeeded", 117_000], ["succeeded", 152_000], ["succeeded", 174_000], ["succeeded", 336_000]]);
+
+    // The walkthrough's guide, inbox, reminders and receipts read this session's café V1, not the built-in Maple quote.
+    const snapshot = await createChatStore(handle.db).getCase(session, "maple");
+    const confirmed = await workspace();
+    const guide = (days: number) => mapleGuideStep({ seedOrderId: null, scenario: HOME_SCENARIO, snapshot: { ...snapshot, aiConfigured: true }, pricing: null, payments: confirmed, simulatedDays: days }, "designer");
+    expect(guide(0).detail).toMatch(/^Setti placed 4 new holds on Emma's saved card, but no supplier order is recorded for the 5 held items\. /);
+    expect(guide(3).title).toBe("Setti caught it: 5 held items are still not ordered");
+    expect((await inboxView(handle.db, null, session, accountOrDefault("emma"))).project).toEqual({ key: "maple", name: "Maple Ave Café" });
+    const reminders = (await attentionView(handle.db, session, accountOrDefault("jordan"), new Date(Date.now() + 4 * 86_400_000))).items.filter((item) => item.projectKey === "maple");
+    expect(reminders.length).toBeGreaterThan(0);
+    expect(new Set(reminders.map((item) => item.projectName))).toEqual(new Set(["Maple Ave Café"]));
+    for (const version of [1, 2]) expect((await readVersionReceipt(handle.db, session, "maple", version)).project).toMatchObject({ name: "Maple Ave Café", room: "Front of house" });
 
     // Emma pays for the two extra site visits; the design fee was paid with V1.
     const checkout = await startServicesCheckout(handle.db, paypal, session, "maple", links);
