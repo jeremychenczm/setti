@@ -75,7 +75,7 @@ export async function lockPaymentBasis(tx: Tx, sessionId: string, key: CaseKey):
 }
 
 /** The approved design services the agreement still has to charge, with their business items. */
-async function serviceCharges(tx: Tx, basis: PaymentBasis): Promise<{ itemId: string; amountCents: number }[]> {
+export async function serviceCharges(tx: Tx, basis: PaymentBasis): Promise<{ itemId: string; amountCents: number }[]> {
   const kinds = new Map((await tx.select({ id: items.id, kind: items.kind }).from(items).where(eq(items.projectId, basis.projectId))).map((row) => [row.id, row.kind]));
   return basis.plan.actions.flatMap((action) => {
     const line = basis.plan.lines.find((entry) => entry.itemId === action.itemId && entry.side === action.side);

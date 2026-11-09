@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { CaseMessage, ChangeDraft, SentVersion } from "@/chat/types";
 import type { OperationView, PaymentLineView, PaymentsWorkspace } from "@/payments/types";
-import { HOME_DISCUSSION, HOME_LEGACY_SCENARIO, HOME_SCENARIO } from "@/demo/living-dining";
+import { HOME_DISCUSSION, HOME_SCENARIO } from "@/demo/living-dining";
 import { mapleChangeLines, mapleGuideStep, type MapleGuideData } from "./maple-guide";
 
 const at = "2026-10-24T12:00:00Z";
@@ -171,35 +171,17 @@ describe("living-and-dining demo guide", () => {
     expect(mapleGuideStep(data, "client")).toMatchObject({ index: 1, role: "jordan", destination: "pricing" });
   });
 
-  it("keeps the prepared approved V2 and its scripted draft out of visitor confirmation and payment progress", () => {
+  it("moves a new AI draft, including its client-redacted state, to Jordan's seven-change pricing review", () => {
     const data = homeInitial();
-    data.scenario = HOME_LEGACY_SCENARIO;
-    data.seedOrderId = "seed-v2";
-    data.snapshot.versions = [version({ title: "Prepared living-and-dining baseline", changeCount: 0, totalCents: 773_000 })];
-    data.snapshot.draft = { ...draft(), title: "Prepared living-and-dining baseline" };
-    data.payments = confirmed().payments;
-    data.payments!.orderId = "seed-v2";
-    data.payments!.version = 2;
+    data.snapshot.draft = { ...draft(), origin: "designer", title: "Window bay and back bar revision" };
     const step = mapleGuideStep(data, "designer");
-    expect(step).toMatchObject({ index: 0, role: "jordan", destination: "chat" });
-    expect(step.orderId).toBeUndefined();
-    expect(step.complete).toBeUndefined();
-    // Only a later version issued for the visitor enters Emma's confirmation step.
-    data.snapshot.versions!.push(version({ id: "home-visitor-v3", version: 3, fromCurrentDraft: true, status: "awaiting_client_confirmation" }));
-    expect(mapleGuideStep(data, "designer")).toMatchObject({ index: 2, role: "emma", destination: "order", orderId: "home-visitor-v3" });
-  });
-
-  it("moves a new AI draft, including its client-redacted state, to Jordan's five-change pricing review", () => {
-    const data = homeInitial();
-    data.snapshot.draft = { ...draft(), origin: "designer", title: "Living-and-dining revision" };
-    const step = mapleGuideStep(data, "designer");
-    expect(step).toMatchObject({ index: 1, role: "jordan", destination: "pricing", action: "Review pricing", title: "Jordan reviews the AI's five proposed changes" });
+    expect(step).toMatchObject({ index: 1, role: "jordan", destination: "pricing", action: "Review pricing", title: "Jordan reviews the AI's seven proposed changes" });
     expect(step.detail).toContain("sample supplier documents");
-    expect(step.detail).toContain("all five changes, the sideboard return cost and the unchanged design fee");
+    expect(step.detail).toContain("all seven changes, the countertop re-cut and tile return costs and the unchanged design fee");
     expect(step.complete).toBeUndefined();
     data.snapshot.draft = null;
     data.snapshot.draftPreparing = true;
-    expect(mapleGuideStep(data, "client")).toMatchObject({ index: 1, role: "jordan", destination: "pricing", title: "Jordan reviews the AI's five proposed changes" });
+    expect(mapleGuideStep(data, "client")).toMatchObject({ index: 1, role: "jordan", destination: "pricing", title: "Jordan reviews the AI's seven proposed changes" });
   });
 
   it("preserves the client-led chair-and-rug request and generic pricing review for legacy runs", () => {

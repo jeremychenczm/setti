@@ -216,7 +216,7 @@ export function CaseChat({ projectKey, quote, account, onSwitchAccount, onOpenQu
   return (
     <section className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-white shadow-sm">
       <ChatHeader person={account.role === "designer" ? client : designer} projectId={projectKey} projectName={currentQuote.projectName}
-        projects={account.role === "designer" ? conversationOptions ?? [{ key: "willow", title: "Willow Residence" }, { key: "maple", title: "Maple Ave" }] : undefined}
+        projects={account.role === "designer" ? conversationOptions ?? [{ key: "willow", title: "Willow Residence" }, { key: "maple", title: "Maple Ave Café" }] : undefined}
         onSelectProject={account.role === "designer" ? (id) => onSelectProject ? onSelectProject(id) : onSelectCase(id as CaseKey) : undefined}
         subtitle={`${designer.name} · ${client.name} · Setti`}>
         {opening?.status === "draft" && account.role === "client" ? null : confirmedQuoteHref ? <Link href={confirmedQuoteHref} aria-label={`View client-confirmed quote V${currentQuote.version}`} className="flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--primary-soft)] px-3 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-brand-100"><FileText className="h-3.5 w-3.5" />Quote V{currentQuote.version}</Link> : <button onClick={() => onOpenQuote()} className="flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--primary-soft)] px-3 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-brand-100"><FileText className="h-3.5 w-3.5" />Quote V{currentQuote.version}{opening?.status === "draft" ? " · Draft" : ""}</button>}

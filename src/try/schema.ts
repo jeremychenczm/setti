@@ -4,7 +4,7 @@ import { changeOrders } from "../pricing/schema";
 
 export type TrySeedStatus = "seeding" | "ready" | "failed";
 export type TryStageId = "quote" | "chair_hold" | "rug_hold" | "supplier" | "rug_capture" | "fees"
-  | "starting_payments" | "design_services" | "sofa_hold" | "coffee_table_hold" | "dining_table_hold" | "dining_chairs_hold" | "sideboard_hold" | "sideboard_supplier" | "sideboard_capture" | "discussion";
+  | "starting_payments" | "countertop_supplier" | "countertop_capture" | "wall_tile_supplier" | "wall_tile_capture" | "discussion";
 export interface TryStage {
   id: TryStageId;
   label: string;
@@ -35,7 +35,7 @@ export const trySeeds = pgTable("try_seeds", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   check("try_seeds_status_valid", sql`${t.status} IN ('seeding', 'ready', 'failed')`),
-  check("try_seeds_ready_has_order", sql`${t.status} <> 'ready' OR ${t.changeOrderId} IS NOT NULL OR (${t.scenario} = 'maple-living-dining-v3' AND ${t.scenarioVersion} = 3)`),
+  check("try_seeds_ready_has_order", sql`${t.status} <> 'ready' OR ${t.changeOrderId} IS NOT NULL OR (${t.scenario} = 'maple-living-dining-v3' AND ${t.scenarioVersion} IN (3, 4))`),
   check("try_seeds_scenario_version_positive", sql`${t.scenarioVersion} > 0`),
   check("try_seeds_lease_complete", sql`(${t.leaseId} IS NULL) = (${t.leaseExpiresAt} IS NULL)`),
   index("try_seeds_created_at").on(t.createdAt),

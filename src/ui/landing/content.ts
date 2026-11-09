@@ -11,16 +11,19 @@ export const DEMO_VIDEO_URL: string | null = null;
 
 export interface MapleChange { itemId: string; name: string; change: string; beforeCents: number; afterCents: number }
 
-/** The five furniture changes in Maple's revised quote, V1 price to V2 price. */
+/** The seven changes in Maple Ave Café's revised quote, V1 price to V2 price. A re-cut or a return
+ * counts the fee the supplier keeps; the window counter and the panels are new, so they have no V1 price. */
 export const MAPLE_CHANGES: readonly MapleChange[] = [
-  { itemId: "sofa", name: "Sofa", change: "230 cm → compact 200 cm", beforeCents: 240_000, afterCents: 210_000 },
-  { itemId: "coffee-table", name: "Coffee table", change: "→ two round side tables", beforeCents: 65_000, afterCents: 36_000 },
-  { itemId: "dining-table", name: "Dining table", change: "six seats → round, 110 cm", beforeCents: 140_000, afterCents: 125_000 },
-  { itemId: "dining-chairs", name: "Dining chairs", change: "6 → 4", beforeCents: 108_000, afterCents: 72_000 },
-  { itemId: "sideboard", name: "Sideboard", change: "removed · supplier keeps 20%", beforeCents: 120_000, afterCents: 24_000 },
+  { itemId: "stools", name: "Counter stools", change: "8 → 14", beforeCents: 156_000, afterCents: 273_000 },
+  { itemId: "window-counter", name: "Oak window counter", change: "new · 16 ft", beforeCents: 0, afterCents: 336_000 },
+  { itemId: "panels", name: "Acoustic panels", change: "new · 12", beforeCents: 0, afterCents: 174_000 },
+  { itemId: "countertop", name: "Quartz countertop", change: "22 → 18 ft · re-cut fee kept", beforeCents: 396_000, afterCents: 352_000 },
+  { itemId: "pendants", name: "Pendant lights", change: "6 → 4", beforeCents: 144_000, afterCents: 96_000 },
+  { itemId: "wall-tile", name: "Wall tile", change: "white → sage · 14 → 20 boxes", beforeCents: 98_000, afterCents: 171_600 },
+  { itemId: "site-visits", name: "Site visits", change: "4 → 6", beforeCents: 72_000, afterCents: 108_000 },
 ];
 /** The design fee, unchanged by the revision. */
-export const DESIGN_FEE_CENTS = 100_000;
+export const DESIGN_FEE_CENTS = 240_000;
 export const V1_TOTAL_CENTS = DESIGN_FEE_CENTS + MAPLE_CHANGES.reduce((sum, line) => sum + line.beforeCents, 0);
 export const V2_TOTAL_CENTS = DESIGN_FEE_CENTS + MAPLE_CHANGES.reduce((sum, line) => sum + line.afterCents, 0);
 
@@ -29,19 +32,21 @@ export interface MoneyMove { itemId: string; name: string; moves: readonly { kin
 
 /** What PayPal does for each item once the client signs V2. */
 export const MAPLE_MONEY: readonly MoneyMove[] = [
-  { itemId: "sofa", name: "Sofa", moves: [{ kind: "released", cents: 240_000 }, { kind: "held", cents: 210_000 }] },
-  { itemId: "coffee-table", name: "Coffee table", moves: [{ kind: "released", cents: 65_000 }, { kind: "held", cents: 36_000 }] },
-  { itemId: "dining-table", name: "Dining table", moves: [{ kind: "released", cents: 140_000 }, { kind: "held", cents: 125_000 }] },
-  { itemId: "dining-chairs", name: "Dining chairs", moves: [{ kind: "charged", cents: 72_000 }, { kind: "released", cents: 36_000 }], note: "once the supplier confirms four chairs" },
-  { itemId: "sideboard", name: "Sideboard", moves: [{ kind: "refunded", cents: 96_000 }, { kind: "kept", cents: 24_000 }], note: "once the supplier issues its credit" },
+  { itemId: "stools", name: "Counter stools", moves: [{ kind: "held", cents: 117_000 }], note: "the six extra stools, on top of the eight already held" },
+  { itemId: "window-counter", name: "Oak window counter", moves: [{ kind: "held", cents: 336_000 }] },
+  { itemId: "panels", name: "Acoustic panels", moves: [{ kind: "held", cents: 174_000 }] },
+  { itemId: "countertop", name: "Quartz countertop", moves: [{ kind: "refunded", cents: 44_000 }, { kind: "kept", cents: 352_000 }], note: "once the fabricator credits the 4 ft it cut off" },
+  { itemId: "pendants", name: "Pendant lights", moves: [{ kind: "charged", cents: 96_000 }, { kind: "released", cents: 48_000 }], note: "once the supplier confirms four lights" },
+  { itemId: "wall-tile", name: "Wall tile", moves: [{ kind: "refunded", cents: 78_400 }, { kind: "kept", cents: 19_600 }, { kind: "held", cents: 152_000 }], note: "the white boxes go back; the sage boxes are held" },
+  { itemId: "site-visits", name: "Site visits", moves: [{ kind: "charged", cents: 36_000 }], note: "Emma pays for the two extra visits on PayPal" },
 ];
 
 export const MOVE_LABEL: Record<MoveKind, string> = {
   released: "Hold released", held: "New hold", charged: "Charged", refunded: "Refunded", kept: "Kept",
 };
 
-/** The client's message that settles the chairs and the sideboard, and the designer's request to the agent. */
-export const EMMA_MESSAGE = HOME_DISCUSSION[12].text;
+/** The client's message that starts the change, and the designer's request to the agent. */
+export const EMMA_MESSAGE = HOME_DISCUSSION[0].text;
 export const JORDAN_REQUEST = HOME_DESIGNER_REQUEST;
 export const DISCUSSION_LENGTH = HOME_DISCUSSION.length;
 

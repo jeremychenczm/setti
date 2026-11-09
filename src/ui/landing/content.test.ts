@@ -7,29 +7,36 @@ const moves = (itemId: string) => Object.fromEntries(MAPLE_MONEY.find((entry) =>
 
 describe("landing page facts", () => {
   it("states Maple's V1 prices and total exactly as the demo quote has them", () => {
-    for (const change of MAPLE_CHANGES) expect(change.beforeCents).toBe(line(change.itemId).unitPriceCents * line(change.itemId).quantity);
+    for (const change of MAPLE_CHANGES) {
+      // The window counter and the panels are new in V2, so they have no V1 line and no V1 price.
+      if (change.beforeCents === 0) { expect(HOME_APPROVED_QUOTE.lines.some((entry) => entry.itemId === change.itemId)).toBe(false); continue; }
+      expect(change.beforeCents).toBe(line(change.itemId).unitPriceCents * line(change.itemId).quantity);
+    }
     expect(DESIGN_FEE_CENTS).toBe(line("design").unitPriceCents);
     expect(V1_TOTAL_CENTS).toBe(HOME_APPROVED_QUOTE.lines.reduce((sum, entry) => sum + entry.unitPriceCents * entry.quantity, 0));
   });
 
   it("states the V2 total the app's own walkthrough test reaches", () => {
-    expect(V2_TOTAL_CENTS).toBe(567_000);
-    expect([usd(V1_TOTAL_CENTS), usd(V2_TOTAL_CENTS)]).toEqual(["$7,730", "$5,670"]);
+    expect(V2_TOTAL_CENTS).toBe(1_750_600);
+    expect([usd(V1_TOTAL_CENTS), usd(V2_TOTAL_CENTS)]).toEqual(["$11,060", "$17,506"]);
   });
 
   it("moves each item's money in a way that adds up to its V1 and V2 prices", () => {
-    for (const itemId of ["sofa", "coffee-table", "dining-table"]) {
-      const change = MAPLE_CHANGES.find((entry) => entry.itemId === itemId)!;
-      expect(moves(itemId)).toEqual({ released: change.beforeCents, held: change.afterCents });
-    }
-    const chairs = MAPLE_CHANGES.find((entry) => entry.itemId === "dining-chairs")!;
-    expect(moves("dining-chairs")).toEqual({ charged: chairs.afterCents, released: chairs.beforeCents - chairs.afterCents });
-    const sideboard = MAPLE_CHANGES.find((entry) => entry.itemId === "sideboard")!;
-    const feeBps = line("sideboard").restockingFeeBps ?? 0;
-    expect(feeBps).toBe(2_000);
-    const kept = sideboard.beforeCents * feeBps / 10_000;
-    expect(moves("sideboard")).toEqual({ refunded: sideboard.beforeCents - kept, kept });
-    expect(sideboard.afterCents).toBe(kept);
+    const change = (itemId: string) => MAPLE_CHANGES.find((entry) => entry.itemId === itemId)!;
+    // Added quantity and new pieces are held on top of what V1 already holds.
+    expect(moves("stools")).toEqual({ held: change("stools").afterCents - change("stools").beforeCents });
+    for (const itemId of ["window-counter", "panels"]) expect(moves(itemId)).toEqual({ held: change(itemId).afterCents });
+    // A reduced held line is charged for what stays and releases the rest.
+    expect(moves("pendants")).toEqual({ charged: change("pendants").afterCents, released: change("pendants").beforeCents - change("pendants").afterCents });
+    // A paid line that shrinks or goes back keeps its new price plus the supplier's fee and refunds the rest.
+    const recutFee = 28_000;
+    expect(moves("countertop")).toEqual({ kept: change("countertop").afterCents, refunded: change("countertop").beforeCents - change("countertop").afterCents });
+    expect(change("countertop").afterCents).toBe(18 * line("countertop").unitPriceCents + recutFee);
+    const tile = line("wall-tile"), restocking = tile.quantity * tile.unitPriceCents * (tile.restockingFeeBps ?? 0) / 10_000;
+    expect(moves("wall-tile")).toEqual({ refunded: change("wall-tile").beforeCents - restocking, kept: restocking, held: 20 * 7_600 });
+    expect(change("wall-tile").afterCents).toBe(20 * 7_600 + restocking);
+    // Extra site visits are paid as a services difference.
+    expect(moves("site-visits")).toEqual({ charged: change("site-visits").afterCents - change("site-visits").beforeCents });
   });
 
   it("quotes a message the client really sent in the demo discussion", () => {

@@ -28,14 +28,16 @@ function fixture(actor: "designer" | "client" = "designer", text = HOME_DESIGNER
     readMoneyContext: vi.fn().mockResolvedValue(context),
   } satisfies ChatStore;
   const output: ChangeModelOutput = {
-    intent: "draft", message: "Proposed changes for review.", title: "Living and dining revision", money: null,
+    intent: "draft", message: "Proposed changes for review.", title: "Window bay and back bar revision", money: null,
     changes: [
-      { action: "replace", itemId: "sofa", quantity: 1, productOptionId: HOME_PRODUCT_IDS.sofa, description: "Compact sofa", sourceMessageIds: ["discussion-4"] },
-      { action: "replace", itemId: "coffee-table", quantity: 2, productOptionId: HOME_PRODUCT_IDS["coffee-table"], description: "Two side tables", sourceMessageIds: ["discussion-6"] },
-      { action: "replace", itemId: "dining-table", quantity: 1, productOptionId: HOME_PRODUCT_IDS["dining-table"], description: "Round table", sourceMessageIds: ["discussion-10"] },
-      { action: "quantity", itemId: "dining-chairs", quantity: 4, productOptionId: null, description: "", sourceMessageIds: ["discussion-12"] },
-      { action: "remove", itemId: "sideboard", quantity: null, productOptionId: null, description: "", sourceMessageIds: ["discussion-14"] },
-    ], unresolved: [], constraints: ["Keep design services unchanged."],
+      { action: "add", itemId: null, quantity: 16, productOptionId: HOME_PRODUCT_IDS.windowCounter, description: "Oak window counter", sourceMessageIds: ["discussion-1"] },
+      { action: "quantity", itemId: "stools", quantity: 14, productOptionId: null, description: "", sourceMessageIds: ["discussion-2"] },
+      { action: "add", itemId: null, quantity: 12, productOptionId: HOME_PRODUCT_IDS.panels, description: "Acoustic panels", sourceMessageIds: ["discussion-5"] },
+      { action: "quantity", itemId: "countertop", quantity: 18, productOptionId: null, description: "Front counter re-cut to 10 ft", sourceMessageIds: ["discussion-7"] },
+      { action: "quantity", itemId: "pendants", quantity: 4, productOptionId: null, description: "", sourceMessageIds: ["discussion-9"] },
+      { action: "replace", itemId: "wall-tile", quantity: 20, productOptionId: HOME_PRODUCT_IDS["wall-tile"], description: "Sage green tile", sourceMessageIds: ["discussion-13"] },
+      { action: "quantity", itemId: "site-visits", quantity: 6, productOptionId: null, description: "", sourceMessageIds: ["discussion-16"] },
+    ], unresolved: [], constraints: ["Keep the design fee and the back bar top unchanged."],
   };
   const deps = {
     configured: () => true, readPage: vi.fn<DraftDependencies["readPage"]>(),
@@ -44,8 +46,8 @@ function fixture(actor: "designer" | "client" = "designer", text = HOME_DESIGNER
   return { state, quote, store, context, output, deps };
 }
 
-describe("living-and-dining AI orchestration", () => {
-  it("reads the complete discussion and supplied evidence, then prices all five changes against the approved V1", async () => {
+describe("café AI orchestration", () => {
+  it("reads the complete discussion and supplied evidence, then prices all seven changes against the approved V1", async () => {
     const s = fixture();
     await runCaseAi(s.store, "session", "maple", "request", s.deps);
     const input = s.deps.callModel.mock.calls[0][0];
@@ -57,10 +59,10 @@ describe("living-and-dining AI orchestration", () => {
     expect(s.deps.readPage).not.toHaveBeenCalled();
     const result = s.store.completeAi.mock.calls[0][4];
     expect(result.draft).toMatchObject({ basedOnQuoteId: s.quote.id, basedOnVersion: 1, origin: "designer", model: "configured-model" });
-    expect(result.draft?.changes).toHaveLength(5);
+    expect(result.draft?.changes).toHaveLength(7);
     const pricing = createPricingInput(s.quote, result.draft!);
     expect(pricing.changes.every((change) => !change.confirmed)).toBe(true);
-    expect(previewPricing(s.quote, result.draft!, pricing)).toMatchObject({ ready: false, proposedTotals: { totalCents: 567_000 }, deltaTotalCents: -206_000 });
+    expect(previewPricing(s.quote, result.draft!, pricing)).toMatchObject({ ready: false, proposedTotals: { totalCents: 1_750_600 }, deltaTotalCents: 644_600 });
     expect(s.store.failAi).not.toHaveBeenCalled();
     expect(result).not.toHaveProperty("moneyAnswer");
   });

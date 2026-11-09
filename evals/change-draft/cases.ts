@@ -473,14 +473,18 @@ const HARD_CASES: DraftCase[] = [
     messages: chat(["t", "designer", "@Setti what's the lead time on the custom vanity? Also, please add two more downlights to the quote."]),
     expected: { outcome: "draft", changes: [{ action: "quantity", itemId: "hl-downlights", quantity: 12 }], requiredClaims: [String.raw`\b42\b|six weeks|6 weeks`],
       reference: "The custom vanity has a 42-day lead time once it is ordered. I drafted two more downlights, 12 in total, for your review." } },
-  { id: "hard-maple-walkthrough", tags: ["hard", "demo"], title: "The Maple demo: five changes from a 19-message discussion and supplier documents", quote: maple, stability: true,
+  { id: "hard-maple-walkthrough", tags: ["hard", "demo"], title: "The Maple Ave Café demo: seven changes from a 22-message discussion and supplier documents, with the tile boxes and countertop length worked out", quote: maple, stability: true,
     messages: () => conversation([...HOME_DISCUSSION.map((message, index) => [`discussion-${index + 1}`, message.actor, message.text] as const), ["t", "designer", HOME_DESIGNER_REQUEST] as const]),
     expected: { outcome: "draft", changes: [
-      { action: "replace", itemId: "sofa", quantity: 1, productOptionId: HOME_PRODUCT_IDS.sofa },
-      { action: "replace", itemId: "coffee-table", quantity: 2, productOptionId: HOME_PRODUCT_IDS["coffee-table"] },
-      { action: "replace", itemId: "dining-table", quantity: 1, productOptionId: HOME_PRODUCT_IDS["dining-table"] },
-      { action: "quantity", itemId: "dining-chairs", quantity: 4 },
-      { action: "remove", itemId: "sideboard" },
+      { action: "add", itemId: null, quantity: 16, productOptionId: HOME_PRODUCT_IDS.windowCounter },
+      { action: "quantity", itemId: "stools", quantity: 14 },
+      { action: "add", itemId: null, quantity: 12, productOptionId: HOME_PRODUCT_IDS.panels },
+      // The front counter is re-cut from 14 to 10 ft and the 8 ft back bar stays: 18 ft in all.
+      { action: "quantity", itemId: "countertop", quantity: 18 },
+      { action: "quantity", itemId: "pendants", quantity: 4 },
+      // 120 + 60 sq ft of wall, plus 10% for cuts, at 10 sq ft a box: 20 boxes of the sage tile.
+      { action: "replace", itemId: "wall-tile", quantity: 20, productOptionId: HOME_PRODUCT_IDS["wall-tile"] },
+      { action: "quantity", itemId: "site-visits", quantity: 6 },
     ] } },
 ];
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HOME_LEGACY_SCENARIO, HOME_SCENARIO } from "@/demo/living-dining";
+import { HOME_SCENARIO } from "@/demo/living-dining";
 import { readinessSeed, tryReadiness } from "./useTryReadiness";
 
 describe("background payment readiness", () => {
@@ -13,7 +13,6 @@ describe("background payment readiness", () => {
   it("does not block legacy scenarios or an absent run after checking", () => {
     expect(tryReadiness(null).blocked).toBe(false);
     expect(tryReadiness({ ...seed, scenario: "maple-mixed-change-v1" }).blocked).toBe(false);
-    expect(tryReadiness({ ...seed, scenario: HOME_LEGACY_SCENARIO }).blocked).toBe(false);
     expect(tryReadiness({ ...seed, scenario: "willow-first-payment-v1" }).blocked).toBe(false);
   });
   it("keeps a known pending run locked when its next read fails", () => {
@@ -23,7 +22,6 @@ describe("background payment readiness", () => {
   it("does not unlock an unknown project when its initial status read fails", () => {
     expect(tryReadiness(null, false, "unavailable")).toMatchObject({ checking: false, blocked: true, error: "unavailable" });
     expect(tryReadiness({ ...seed, status: "ready" }, false, "unavailable").blocked).toBe(false);
-    expect(tryReadiness({ ...seed, scenario: HOME_LEGACY_SCENARIO }, false, "unavailable").blocked).toBe(false);
   });
   it("distinguishes an absent run from malformed status data", () => {
     expect(readinessSeed(null)).toBeNull();

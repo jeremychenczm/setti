@@ -7,13 +7,14 @@ import { completeAuthorization, createCheckout } from "../payments/authorize";
 import { executeCapture, refreshCapture } from "../payments/capture";
 import { lockOpeningVersion, openingPlan } from "../payments/opening";
 import { insertOperation } from "../payments/operations";
-import { checkServicesCheckout, lockPaymentBasis } from "../payments/services";
+import { checkServicesCheckout, lockPaymentBasis, serviceCharges } from "../payments/services";
 import { recordOpeningSupplierOrder } from "../payments/supplier";
 import { refreshOpeningRecordedFees } from "../payments/fee-refresh";
+import type { HOME_EARLY_ITEMS } from "../demo/living-dining";
 import { MaplePreparationError } from "./maple";
 import type { TryDeps } from "./service";
 
-/** Historical V1 service payment, using the same service capture path as checkout.
+/** Historical V1 services payment (the design fee and the site visits), using the same service capture path as checkout.
  * The client paid with PayPal's Sandbox test card and agreed to save it for the
  * project, so later item holds need no PayPal window. It is labelled as a card,
  * never as the visitor's PayPal wallet.
@@ -24,11 +25,10 @@ export async function prepareHomeServices(deps: TryDeps, session: string): Promi
     if (basis.version !== 1) throw new MaplePreparationError("The V1 service payment cannot be added to a later agreement.", false);
     const prior = basis.ledger.operations.find((entry) => entry.servicesHold && entry.revisionId === basis.key);
     if (prior) return prior;
-    const action = basis.plan.actions.find((entry) => entry.itemId === "design" && entry.kind === "capture" && entry.timing === "on_payment_execution");
-    const itemId = action && basis.businessItem(action);
-    if (!action || !itemId) throw new MaplePreparationError("The V1 design service has no payment to prepare.", false);
-    const created = await insertOperation(tx, { businessKey: `try-v1-services:${basis.key}`, projectId: basis.projectId, kind: "authorize", amountCents: action.amountCents, binding: basis.bind(null), servicesHold: true, savePaymentMethod: true });
-    await tx.insert(servicesHoldLines).values({ operationId: created.id, itemId, amountCents: action.amountCents });
+    const split = await serviceCharges(tx, basis);
+    if (!split.length) throw new MaplePreparationError("The V1 design services have no payment to prepare.", false);
+    const created = await insertOperation(tx, { businessKey: `try-v1-services:${basis.key}`, projectId: basis.projectId, kind: "authorize", amountCents: split.reduce((sum, line) => sum + line.amountCents, 0), binding: basis.bind(null), servicesHold: true, savePaymentMethod: true });
+    await tx.insert(servicesHoldLines).values(split.map((line) => ({ operationId: created.id, ...line })));
     return created;
   });
   if (operation.status === "failed") throw new MaplePreparationError("The original V1 service checkout was refused and needs review.", false);
@@ -54,7 +54,7 @@ export async function prepareHomeServices(deps: TryDeps, session: string): Promi
 
 /**
  * The V1 starting payments that do not depend on each other run at the same
- * time: the design fee and each furniture hold. Their operations are recorded
+ * time: the services (design fee and site visits) and each product hold. Their operations are recorded
  * together first, from one payment plan, because an operation still open makes
  * the plan wait; each then runs, or resumes, on its own original operation.
  */
@@ -64,15 +64,14 @@ export async function prepareHomeStartingPayments(deps: TryDeps, session: string
     if (basis.version !== 1) throw new MaplePreparationError("The V1 starting payments cannot be added to a later agreement.", false);
     if (basis.ledger.operations.some((entry) => entry.kind === "authorize" && entry.revisionId === basis.key)) return;
     if (basis.plan.status === "blocked") throw new MaplePreparationError("The original V1 payment plan has unresolved operations.");
-    const design = basis.plan.actions.find((entry) => entry.itemId === "design" && entry.kind === "capture" && entry.timing === "on_payment_execution");
-    const designItem = design && basis.businessItem(design);
-    if (!design || !designItem) throw new MaplePreparationError("The V1 design service has no payment to prepare.", false);
-    const services = await insertOperation(tx, { businessKey: `try-v1-services:${basis.key}`, projectId: basis.projectId, kind: "authorize", amountCents: design.amountCents, binding: basis.bind(null), servicesHold: true, savePaymentMethod: true });
-    await tx.insert(servicesHoldLines).values({ operationId: services.id, itemId: designItem, amountCents: design.amountCents });
+    const split = await serviceCharges(tx, basis);
+    if (!split.length) throw new MaplePreparationError("The V1 design services have no payment to prepare.", false);
+    const services = await insertOperation(tx, { businessKey: `try-v1-services:${basis.key}`, projectId: basis.projectId, kind: "authorize", amountCents: split.reduce((sum, line) => sum + line.amountCents, 0), binding: basis.bind(null), servicesHold: true, savePaymentMethod: true });
+    await tx.insert(servicesHoldLines).values(split.map((line) => ({ operationId: services.id, ...line })));
     for (const itemId of itemIds) {
       const action = basis.plan.actions.find((entry) => entry.kind === "new_authorization" && entry.itemId === itemId && entry.side === "baseline");
       const business = action && basis.businessItem(action);
-      if (!action || !business) throw new MaplePreparationError("The V1 furniture line has no authorization to prepare.", false);
+      if (!action || !business) throw new MaplePreparationError("The V1 product line has no authorization to prepare.", false);
       await insertOperation(tx, { businessKey: `try-v1-hold:${basis.key}:${business}`, projectId: basis.projectId, kind: "authorize", amountCents: action.amountCents, binding: basis.bind(business) });
     }
   });
@@ -124,23 +123,26 @@ export async function prepareHomeHold(deps: TryDeps, session: string, itemId: st
   return [checkout.id];
 }
 
-export async function prepareHomeSupplier(db: Db, session: string): Promise<void> {
-  const { version, entry } = await ownedOperation(db, session, "sideboard", "authorize");
+/** A line paid before the design changed (the countertop at templating, the tile on delivery): its supplier step is recorded, then its hold captured. */
+export type HomeEarlyItem = (typeof HOME_EARLY_ITEMS)[number];
+
+export async function prepareHomeSupplier(db: Db, session: string, itemId: HomeEarlyItem): Promise<void> {
+  const { version, entry } = await ownedOperation(db, session, itemId, "authorize");
   const line = entry.line;
-  await recordOpeningSupplierOrder(db, session, "maple", { itemId: "sideboard", contentHash: version.contentHash,
+  await recordOpeningSupplierOrder(db, session, "maple", { itemId, contentHash: version.contentHash,
     quantity: line.quantity, unitPriceCents: line.unitPriceCents, taxCents: line.taxCents, freightCents: line.freightCents,
-    inStock: true, leadTimeDays: line.leadTimeDays, reference: "DEMO-V1-ORDER-sideboard", note: "Prepared fictional sideboard supplier confirmation; payment evidence is recorded separately." });
+    inStock: true, leadTimeDays: line.leadTimeDays, reference: `DEMO-V1-ORDER-${itemId}`, note: `Prepared fictional ${itemId} supplier confirmation; payment evidence is recorded separately.` });
 }
 
-export async function prepareHomeCapture(deps: TryDeps, session: string): Promise<string[]> {
-  const { version, operation: prior } = await ownedOperation(deps.db, session, "sideboard", "capture");
-  if (prior?.status === "failed") throw new MaplePreparationError("The original V1 sideboard capture was refused and needs review.", false);
-  const operations = prior ? [await executeCapture(deps.db, deps.paypal, prior.id)] : await startOpeningCapture(deps.db, deps.paypal, session, "maple", { itemId: "sideboard", contentHash: version.contentHash });
+export async function prepareHomeCapture(deps: TryDeps, session: string, itemId: HomeEarlyItem): Promise<string[]> {
+  const { version, operation: prior } = await ownedOperation(deps.db, session, itemId, "capture");
+  if (prior?.status === "failed") throw new MaplePreparationError(`The original V1 ${itemId} capture was refused and needs review.`, false);
+  const operations = prior ? [await executeCapture(deps.db, deps.paypal, prior.id)] : await startOpeningCapture(deps.db, deps.paypal, session, "maple", { itemId, contentHash: version.contentHash });
   for (const operation of operations) {
-    if (operation.status !== "succeeded") throw new MaplePreparationError("The original V1 sideboard capture is not confirmed.", operation.status !== "failed");
+    if (operation.status !== "succeeded") throw new MaplePreparationError(`The original V1 ${itemId} capture is not confirmed.`, operation.status !== "failed");
     const [capture] = await deps.db.select().from(paypalCaptures).where(eq(paypalCaptures.operationId, operation.id));
     const receipt = capture?.status === "pending" ? await refreshCapture(deps.db, deps.paypal, capture.id) : capture;
-    if (receipt?.status !== "completed") throw new MaplePreparationError("The original V1 sideboard capture is still pending.", receipt?.status !== "declined");
+    if (receipt?.status !== "completed") throw new MaplePreparationError(`The original V1 ${itemId} capture is still pending.`, receipt?.status !== "declined");
   }
   return operations.map((operation) => operation.id);
 }

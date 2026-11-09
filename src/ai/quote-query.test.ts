@@ -9,31 +9,33 @@ const names = (answer: ReturnType<typeof runQuoteQuery>) => answer.rows.map((row
 describe("running a quote query on the approved quote", () => {
   it("lists every line whose total is over an amount, counting quantity", () => {
     const answer = runQuoteQuery(HOME_APPROVED_QUOTE, query([{ field: "lineTotal", op: "gt", value: "1000" }], { field: "lineTotal", direction: "desc" }));
-    // Six dining chairs at $180 each come to $1,080, so they count; design services at exactly $1,000 do not.
-    expect(names(answer)).toEqual(["sofa", "dining-table", "sideboard", "dining-chairs"]);
-    expect(answer).toMatchObject({ quoteId: HOME_APPROVED_QUOTE.id, version: 1, matchedCount: 4, totalCents: 240_000 + 140_000 + 120_000 + 108_000 });
+    // Eight stools at $195 each come to $1,560 and 22 feet of countertop at $180 to $3,960, so both
+    // count; 14 boxes of tile at $70 ($980) and four $180 site visits ($720) do not.
+    expect(names(answer)).toEqual(["countertop", "design", "stools", "pendants"]);
+    expect(answer).toMatchObject({ quoteId: HOME_APPROVED_QUOTE.id, version: 1, matchedCount: 4, totalCents: 396_000 + 240_000 + 156_000 + 144_000 });
   });
 
   it("reads a unit price differently from a line total", () => {
     const answer = runQuoteQuery(HOME_APPROVED_QUOTE, query([{ field: "unitPrice", op: "gte", value: "$1,000" }]));
-    expect(names(answer)).toEqual(["design", "sofa", "dining-table", "sideboard"]);
+    // Only the fixed design fee has a unit price of $1,000 or more; the countertop's line total is high, its per-foot price is not.
+    expect(names(answer)).toEqual(["design"]);
   });
 
   it("includes each line's tax and delivery in its total", () => {
-    const quote: ApprovedQuoteReport = { ...HOME_APPROVED_QUOTE, lines: HOME_APPROVED_QUOTE.lines.map((line) => line.itemId === "coffee-table" ? { ...line, taxCents: 5_000, freightCents: 4_000 } : line) };
-    const [row] = runQuoteQuery(quote, query([{ field: "name", op: "contains", value: "coffee" }])).rows;
-    expect(row).toMatchObject({ unitPriceCents: 65_000, lineTotalCents: 74_000, supplier: "Orbit Workshop" });
+    const quote: ApprovedQuoteReport = { ...HOME_APPROVED_QUOTE, lines: HOME_APPROVED_QUOTE.lines.map((line) => line.itemId === "pendants" ? { ...line, taxCents: 5_000, freightCents: 4_000 } : line) };
+    const [row] = runQuoteQuery(quote, query([{ field: "name", op: "contains", value: "pendant" }])).rows;
+    expect(row).toMatchObject({ unitPriceCents: 24_000, lineTotalCents: 153_000, supplier: "Lumen Row Lighting" });
   });
 
   it("finds the most expensive furniture line with a sort and a limit, and still counts every match", () => {
     const answer = runQuoteQuery(HOME_APPROVED_QUOTE, query([{ field: "category", op: "eq", value: "Furniture" }], { field: "lineTotal", direction: "desc" }, 1));
-    expect(names(answer)).toEqual(["sofa"]);
-    expect(answer).toMatchObject({ matchedCount: 5, totalCents: 240_000 });
+    expect(names(answer)).toEqual(["countertop"]);
+    expect(answer).toMatchObject({ matchedCount: 4, totalCents: 396_000 });
   });
 
   it("matches text without regard to case and keeps the quote's order when unsorted", () => {
-    expect(names(runQuoteQuery(HOME_APPROVED_QUOTE, query([{ field: "name", op: "contains", value: "DINING" }])))).toEqual(["dining-table", "dining-chairs", "sideboard"]);
-    expect(names(runQuoteQuery(HOME_APPROVED_QUOTE, query([{ field: "quantity", op: "gt", value: "1" }])))).toEqual(["dining-chairs"]);
+    expect(names(runQuoteQuery(HOME_APPROVED_QUOTE, query([{ field: "name", op: "contains", value: "COUNTER" }])))).toEqual(["countertop", "pendants", "stools"]);
+    expect(names(runQuoteQuery(HOME_APPROVED_QUOTE, query([{ field: "quantity", op: "gt", value: "1" }])))).toEqual(["site-visits", "countertop", "wall-tile", "pendants", "stools"]);
   });
 
   it("returns no rows rather than guessing when nothing matches", () => {

@@ -84,7 +84,7 @@ function dateLabel(value: string): string {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" }).format(new Date(value));
 }
 
-const QUOTE_LABELS: Record<CaseKey, string> = { willow: "Willow Residence · 28-line test quote", maple: "Maple Ave · 3-line payment example" };
+const QUOTE_LABELS: Record<CaseKey, string> = { willow: "Willow Residence · 28-line test quote", maple: "Maple Ave Café · counter and back bar" };
 
 /**
  * One project's V1 as the signed-in account may see it: a designer's draft, a

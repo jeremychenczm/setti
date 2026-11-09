@@ -40,7 +40,7 @@ const quotes: Record<CaseKey, QuoteDocument> = { willow: willowQuote, maple: map
 
 const projects: Omit<ProjectChat, "counterpart">[] = [
   { key: "willow", title: "Willow Residence", subtitle: "Whole home" },
-  { key: "maple", title: "Maple Ave", subtitle: "Interior design" },
+  { key: "maple", title: "Maple Ave Café", subtitle: "Counter and back bar" },
 ];
 const designer = DEMO_ACCOUNTS.find((person) => person.role === "designer")!;
 

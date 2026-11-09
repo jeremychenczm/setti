@@ -3,20 +3,24 @@ import { randomUUID } from "node:crypto";
 import { and, count, desc, eq, gt, sql } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { createChatStore } from "../chat/store";
-import { HOME_LEGACY_SCENARIO, HOME_SCENARIO, HOME_SCENARIO_VERSION, isHomeScenario } from "../demo/living-dining";
+import { HOME_ITEM_IDS, HOME_SCENARIO, HOME_SCENARIO_VERSION, isHomeScenario } from "../demo/living-dining";
 import type { LinkBuilder } from "../payments/actions";
 import { refreshRecordedFees } from "../payments/fee-refresh";
 import type { PayPalPayments, TestCardApproval } from "../payments/paypal";
-import { authorizeItem, captureMapleRug, capturePreparedItem, confirmSupplierOrder, ensureMapleQuote, MaplePreparationError, mapleRun } from "./maple";
-import { appendHomeDiscussion, ensureHomeQuote, ensureHomeWorkspace } from "./home";
-import { prepareHomeCapture, prepareHomeHold, prepareHomeServices, prepareHomeStartingPayments, prepareHomeSupplier, refreshHomeFees } from "./home-payments";
+import { authorizeItem, captureMapleRug, confirmSupplierOrder, ensureMapleQuote, MaplePreparationError, mapleRun } from "./maple";
+import { ensureHomeWorkspace } from "./home";
+import { prepareHomeCapture, prepareHomeStartingPayments, prepareHomeSupplier, refreshHomeFees, type HomeEarlyItem } from "./home-payments";
 import { trySeeds, type TrySeedStatus, type TryStage } from "./schema";
 
 export const MAPLE_SCENARIO = "maple-mixed-change-v1";
-export type TryScenario = typeof MAPLE_SCENARIO | typeof HOME_SCENARIO | typeof HOME_LEGACY_SCENARIO;
+export type TryScenario = typeof MAPLE_SCENARIO | typeof HOME_SCENARIO;
 export const TRY_PROJECT_HREF = "/chats/maple";
 const LEASE_MS = 5 * 60_000, HOUR_MS = 60 * 60_000;
-const homeHeldItems: Partial<Record<TryStage["id"], string>> = { sofa_hold: "sofa", coffee_table_hold: "coffee-table", dining_table_hold: "dining-table", dining_chairs_hold: "dining-chairs", sideboard_hold: "sideboard" };
+/** The café lines paid before the design changed: each records its supplier step, then is captured. */
+const homeEarlyStages: Partial<Record<TryStage["id"], { item: HomeEarlyItem; capture: boolean }>> = {
+  countertop_supplier: { item: "countertop", capture: false }, countertop_capture: { item: "countertop", capture: true },
+  wall_tile_supplier: { item: "wall-tile", capture: false }, wall_tile_capture: { item: "wall-tile", capture: true },
+};
 export interface TryDeps {
   db: Db; paypal: PayPalPayments; testCard: TestCardApproval; links: LinkBuilder;
   perHour: number; now?: () => Date;
@@ -37,16 +41,16 @@ export type TryPreparation = { kind: "ready" | "progress" | "busy" | "failed"; s
 
 function stages(scenario: string = MAPLE_SCENARIO): TryStage[] {
   const definitions = isHomeScenario(scenario) ? [
-    ["quote", "Import the prepared $7,730 living-and-dining agreement"],
-    // V1 pays the design fee and places all five holds at once; the older V2 story keeps one stage per hold.
-    ...(scenario === HOME_SCENARIO ? [["starting_payments", "Pay the $1,000 design fee and place the five furniture holds ($6,730)"]] : [
-      ["sofa_hold", "Place the $2,400 sofa hold"], ["coffee_table_hold", "Place the $650 coffee table hold"],
-      ["dining_table_hold", "Place the $1,400 dining table hold"], ["dining_chairs_hold", "Place the $1,080 hold for six dining chairs"],
-      ["sideboard_hold", "Place the $1,200 sideboard hold"],
-    ]),
-    ["sideboard_supplier", "Record the sideboard supplier confirmation (demo)"],
-    ["sideboard_capture", "Capture the $1,200 sideboard payment"], ["fees", "Read the PayPal payment evidence"],
-    ["discussion", "Save the living-and-dining discussion and demo supplier notes"],
+    ["quote", "Import the prepared $11,060 café counter and back-bar agreement"],
+    // V1 pays both services and places all four product holds at once.
+    ["starting_payments", "Pay the $2,400 design fee and four site visits ($720), and place the four product holds ($7,940)"],
+    // The fabricator is paid at templating and the tile on delivery, so V1 already captured both.
+    ["countertop_supplier", "Record the countertop fabricator's templating confirmation (demo)"],
+    ["countertop_capture", "Capture the $3,960 countertop payment"],
+    ["wall_tile_supplier", "Record the wall tile delivery confirmation (demo)"],
+    ["wall_tile_capture", "Capture the $980 wall tile payment"],
+    ["fees", "Read the PayPal payment evidence"],
+    ["discussion", "Save the café discussion and demo supplier notes"],
   ] : [
     ["quote", "Confirm the prepared Maple quote"], ["chair_hold", "Place the $800 lounge chair hold"],
     ["rug_hold", "Place the $300 wool rug hold"], ["supplier", "Record the rug supplier confirmation (demo)"],
@@ -102,7 +106,7 @@ export async function startTry(deps: AllocationDeps, current: string | null, { r
     const selected = scenario ?? MAPLE_SCENARIO;
     // A newly selected story cannot adopt an older, unseeded workspace's quote or money.
     const session = current && !existing && !isHomeScenario(selected) ? current : randomUUID();
-    const [created] = await tx.insert(trySeeds).values({ sessionId: session, visitorId: owner, scenario: selected, scenarioVersion: selected === HOME_SCENARIO ? HOME_SCENARIO_VERSION : selected === HOME_LEGACY_SCENARIO ? 2 : 1, stages: stages(selected), createdAt: now, updatedAt: now }).returning();
+    const [created] = await tx.insert(trySeeds).values({ sessionId: session, visitorId: owner, scenario: selected, scenarioVersion: selected === HOME_SCENARIO ? HOME_SCENARIO_VERSION : 1, stages: stages(selected), createdAt: now, updatedAt: now }).returning();
     return { kind: "started", session, visitorId: owner, seed: snapshot(created, now), reused: false };
   });
   if (result.kind !== "limited" && result.seed.scenario === HOME_SCENARIO && !result.seed.workspaceReady) {
@@ -149,22 +153,19 @@ export async function prepareTry(deps: TryDeps, session: string, runId: string):
   const run = mapleRun(session), options = { ...deps, approve: (_url: string, orderId: string, label: string) => approveWithTestCard(deps, orderId, label) };
   let changeOrderId = row.changeOrderId;
   try {
-    const home = isHomeScenario(row.scenario), v1 = row.scenario === HOME_SCENARIO;
-    if ((!home && row.scenario !== MAPLE_SCENARIO) || row.scenarioVersion !== (v1 ? HOME_SCENARIO_VERSION : home ? 2 : 1)) throw new MaplePreparationError("This saved scenario version is not supported by this server. No replacement payments were created.", false);
+    const home = isHomeScenario(row.scenario);
+    if ((!home && row.scenario !== MAPLE_SCENARIO) || row.scenarioVersion !== (home ? HOME_SCENARIO_VERSION : 1)) throw new MaplePreparationError("This saved scenario version is not supported by this server. No replacement payments were created.", false);
     let preparedOperations: string[] = [];
-    if (v1) {
+    if (home) {
       await ensureHomeWorkspace(deps.db, session);
-      const heldItem = homeHeldItems[stage.id];
-      if (stage.id === "starting_payments") preparedOperations = await prepareHomeStartingPayments(deps, session, Object.values(homeHeldItems));
-      // Runs saved before the starting payments ran together keep their one-hold stages.
-      else if (heldItem) preparedOperations = await prepareHomeHold(deps, session, heldItem);
-      else if (stage.id === "design_services") preparedOperations = await prepareHomeServices(deps, session);
-      else if (stage.id === "sideboard_supplier") await prepareHomeSupplier(deps.db, session);
-      else if (stage.id === "sideboard_capture") preparedOperations = await prepareHomeCapture(deps, session);
+      const early = homeEarlyStages[stage.id];
+      if (stage.id === "starting_payments") preparedOperations = await prepareHomeStartingPayments(deps, session, [...HOME_ITEM_IDS]);
+      else if (early?.capture) preparedOperations = await prepareHomeCapture(deps, session, early.item);
+      else if (early) await prepareHomeSupplier(deps.db, session, early.item);
       else if (stage.id === "fees") await refreshHomeFees(deps, session);
       else if (!["quote", "discussion"].includes(stage.id)) throw new MaplePreparationError("The saved V1 stage is not supported.", false);
     } else {
-      const initial = home ? await ensureHomeQuote(deps.db, session) : await ensureMapleQuote(deps.db, session);
+      const initial = await ensureMapleQuote(deps.db, session);
       changeOrderId = initial.id;
       switch (stage.id) {
       case "quote": break;
@@ -172,20 +173,12 @@ export async function prepareTry(deps: TryDeps, session: string, runId: string):
       case "rug_hold": await authorizeItem(options, run, initial, "rug", "Authorize the wool rug ($300.00)"); break;
       case "supplier": await confirmSupplierOrder(deps.db, run, initial, "rug"); break;
       case "rug_capture": await captureMapleRug(options, run, initial); break;
-      case "sofa_hold": await authorizeItem(options, run, initial, "sofa", "Authorize the sofa ($2,400.00)", "baseline"); break;
-      case "coffee_table_hold": await authorizeItem(options, run, initial, "coffee-table", "Authorize the coffee table ($650.00)", "baseline"); break;
-      case "dining_table_hold": await authorizeItem(options, run, initial, "dining-table", "Authorize the dining table ($1,400.00)", "baseline"); break;
-      case "dining_chairs_hold": await authorizeItem(options, run, initial, "dining-chairs", "Authorize six dining chairs ($1,080.00)", "baseline"); break;
-      case "sideboard_hold": await authorizeItem(options, run, initial, "sideboard", "Authorize the sideboard ($1,200.00)", "baseline"); break;
-      case "sideboard_supplier": await confirmSupplierOrder(deps.db, run, initial, "sideboard", "baseline"); break;
-      case "sideboard_capture": await capturePreparedItem(options, run, initial, "sideboard", "sideboard", "baseline"); break;
       case "fees": await refreshRecordedFees(deps.db, deps.paypal, session, initial.id); break;
-      case "discussion": await appendHomeDiscussion(deps.db, session, initial); break;
       default: throw new MaplePreparationError("The saved preparation stage is not supported. No replacement payments were created.", false);
       }
     }
     const progress = row.stages.map((entry): TryStage => entry.id === stage.id
-      ? { ...entry, status: "done", operationIds: v1 ? preparedOperations : run.steps.flatMap((step) => step.operations.map((operation) => operation.id)) } : entry);
+      ? { ...entry, status: "done", operationIds: home ? preparedOperations : run.steps.flatMap((step) => step.operations.map((operation) => operation.id)) } : entry);
     const ready = progress.every((entry) => entry.status === "done");
     await deps.db.update(trySeeds).set({ status: ready ? "ready" : "seeding", changeOrderId, stages: progress, leaseId: null, leaseExpiresAt: null, updatedAt: deps.now?.() ?? new Date() })
       .where(and(eq(trySeeds.sessionId, session), eq(trySeeds.leaseId, leaseId)));

@@ -26,7 +26,7 @@ export const ACCOUNT_COOKIE = "setti-demo-account";
 export const DEMO_ACCOUNTS: readonly DemoAccount[] = [
   { id: "jordan", name: "Jordan Lee", role: "designer", title: "Designer · Lee Studio", projectKey: null, avatar: "/avatars/designer.webp" },
   { id: "sofia", name: "Sofia Martinez", role: "client", title: "Client · Willow Residence", projectKey: "willow", avatar: "/avatars/client.webp" },
-  { id: "emma", name: "Emma Park", role: "client", title: "Client · Maple Ave", projectKey: "maple", avatar: "/avatars/budget-manager.webp" },
+  { id: "emma", name: "Emma Park", role: "client", title: "Client · Maple Ave Café", projectKey: "maple", avatar: "/avatars/budget-manager.webp" },
 ];
 
 const DEFAULT_ACCOUNT = DEMO_ACCOUNTS[0];

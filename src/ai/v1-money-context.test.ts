@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProjectLedger } from "../approval/store";
-import { HOME_APPROVED_QUOTE, HOME_ITEM_IDS } from "../demo/living-dining";
+import { HOME_APPROVED_QUOTE, HOME_EARLY_ITEMS, HOME_ITEM_IDS } from "../demo/living-dining";
 import { itemMappingKey } from "../pricing/document";
 import { buildMoneyAnswer } from "./money-answer";
 import { openingMoneyContext } from "./money-context";
@@ -21,26 +21,31 @@ function fixture() {
   for (const itemId of HOME_ITEM_IDS) {
     const line = quote.lines.find((entry) => entry.itemId === itemId)!;
     const amount = line.quantity * line.unitPriceCents;
-    ledger.authorizations.push(authorization(itemId, businessId(itemId), amount, { status: itemId === "sideboard" ? "captured" : "created" }));
+    const early = (HOME_EARLY_ITEMS as readonly string[]).includes(itemId);
+    ledger.authorizations.push(authorization(itemId, businessId(itemId), amount, { status: early ? "captured" : "created" }));
     ledger.operations.push(operation(`op-${itemId}`, businessId(itemId), amount));
+    if (!early) continue;
+    // The countertop was paid at templating and the tile on delivery, so V1 already captured them in full.
+    const capture = `CAP-${itemId.toUpperCase()}`;
+    ledger.captures.push({ id: `capture-${itemId}`, projectId: "project", authorizationId: itemId, itemId: null, paypalCaptureId: capture, amountCents: amount, currency: "USD", finalCapture: true, status: "completed", operationId: `capture-op-${itemId}`, createdAt: now });
+    ledger.operations.push(operation(`capture-op-${itemId}`, businessId(itemId), amount, { kind: "capture", authorizationId: itemId, finalCapture: true, paypalResourceId: capture }));
   }
-  ledger.captures.push({ id: "capture-sideboard", projectId: "project", authorizationId: "sideboard", itemId: null, paypalCaptureId: "CAP-SIDEBOARD", amountCents: 120_000, currency: "USD", finalCapture: true, status: "completed", operationId: "capture-op", createdAt: now });
-  ledger.operations.push(operation("capture-op", businessId("sideboard"), 120_000, { kind: "capture", authorizationId: "sideboard", finalCapture: true, paypalResourceId: "CAP-SIDEBOARD" }));
   return { key: "maple" as const, quote, itemMapping, ledger, now, providerRecordedAt: now.toISOString(), preparationStatus: "ready" as const };
 }
 const statement = (context: MoneyContext, id: string) => context.facts.find((fact) => fact.id === id)!.text.en;
 
 describe("signed V1 payment evidence", () => {
-  it("reads separate original holds, the completed sideboard capture and unpaid services without a change order", () => {
+  it("reads separate original holds, the completed countertop and tile captures and unpaid services without a change order", () => {
     const input = fixture(), before = structuredClone(input);
     const context = openingMoneyContext(input);
     expect(context).toMatchObject({ quoteId: input.quote.id, version: 1, providerRecordedAt: now.toISOString() });
-    expect(statement(context, "item:baseline:sofa")).toContain("recorded held amount $2,400.00");
-    expect(statement(context, "item:baseline:sideboard")).toContain("completed captures $1,200.00");
-    expect(statement(context, "scope")).toMatch(/held \$5,530\.00, completed captures \$1,200\.00/);
-    expect(statement(context, "next:baseline:design")).toContain("remaining $1,000.00 target");
-    expect(statement(context, "next:baseline:sofa")).toContain("authorized, not charged");
-    expect(context.sources).toContainEqual(expect.objectContaining({ kind: "payment", label: "PayPal V1 capture CAP-SIDEBOARD · completed", href: "/quotes/maple#item-holds" }));
+    expect(statement(context, "item:baseline:stools")).toContain("recorded held amount $1,560.00");
+    expect(statement(context, "item:baseline:countertop")).toContain("completed captures $3,960.00");
+    expect(statement(context, "item:baseline:wall-tile")).toContain("completed captures $980.00");
+    expect(statement(context, "scope")).toMatch(/held \$3,000\.00, completed captures \$4,940\.00/);
+    expect(statement(context, "next:baseline:design")).toContain("remaining $2,400.00 target");
+    expect(statement(context, "next:baseline:stools")).toContain("authorized, not charged");
+    expect(context.sources).toContainEqual(expect.objectContaining({ kind: "payment", label: "PayPal V1 capture CAP-COUNTERTOP · completed", href: "/quotes/maple#item-holds" }));
     expect(context.sources.every((source) => !source.href.startsWith("/change-orders/"))).toBe(true);
     expect(context.facts.every((fact) => fact.sourceIds.every((id) => context.sources.some((source) => source.id === id)))).toBe(true);
     expect(JSON.stringify(context)).not.toMatch(/PRIVATE-REQUEST|private-checkout|signature|approvalUrl/);
@@ -53,7 +58,7 @@ describe("signed V1 payment evidence", () => {
     const context = openingMoneyContext({ ...input, preparationStatus, providerRecordedAt: null });
     expect(context.mandatoryFactIds).toEqual(expect.arrayContaining(["payment-preparation", "no-provider-records"]));
     expect(statement(context, "payment-preparation")).toMatch(/do not treat absent amounts as zero or settled/);
-    expect(statement(context, "next:baseline:sideboard")).toContain("not finished");
+    expect(statement(context, "next:baseline:countertop")).toContain("not finished");
     const answer = buildMoneyAnswer(context, ["quote"]).moneyAnswer;
     expect(answer.facts.map((fact) => fact.id)).toEqual(expect.arrayContaining(["payment-preparation", "no-provider-records"]));
   });
@@ -62,9 +67,9 @@ describe("signed V1 payment evidence", () => {
     const input = fixture();
     input.ledger.captures[0].status = "pending";
     const context = openingMoneyContext(input);
-    expect(statement(context, "item:baseline:sideboard")).toContain("completed captures $0.00");
-    expect(statement(context, "next:baseline:sideboard")).toContain("pending or unknown");
-    expect(context.mandatoryFactIds).toEqual(expect.arrayContaining(["next:baseline:sideboard", "funding-blockers"]));
+    expect(statement(context, "item:baseline:countertop")).toContain("completed captures $0.00");
+    expect(statement(context, "next:baseline:countertop")).toContain("pending or unknown");
+    expect(context.mandatoryFactIds).toEqual(expect.arrayContaining(["next:baseline:countertop", "funding-blockers"]));
   });
 
   it("allocates shared service holds by their recorded splits and keeps one source and warning per operation", () => {

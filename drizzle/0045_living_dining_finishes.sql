@@ -1,0 +1,2 @@
+ALTER TABLE "try_seeds" DROP CONSTRAINT "try_seeds_ready_has_order";--> statement-breakpoint
+ALTER TABLE "try_seeds" ADD CONSTRAINT "try_seeds_ready_has_order" CHECK ("try_seeds"."status" <> 'ready' OR "try_seeds"."change_order_id" IS NOT NULL OR ("try_seeds"."scenario" = 'maple-living-dining-v3' AND "try_seeds"."scenario_version" IN (3, 4)));

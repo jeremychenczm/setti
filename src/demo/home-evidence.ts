@@ -2,31 +2,37 @@
 import type { DraftChange, ProductOption, ProductPage } from "@/chat/types";
 import type { PricingChangeInput, PricingItem } from "@/pricing/types";
 import type { ApprovedQuoteReport, QuoteDocument } from "@/quotes/types";
-import { HOME_APPROVED_QUOTE, HOME_SUPPLIER_NOTES } from "./living-dining";
+import { HOME_APPROVED_QUOTE, HOME_ITEM_IDS, HOME_SUPPLIER_NOTES } from "./living-dining";
 
-export const HOME_EVIDENCE_ID = "maple-living-dining-supplier-notes-v1";
+export const HOME_EVIDENCE_ID = "maple-cafe-supplier-notes-v1";
 export const HOME_PRODUCT_IDS = {
-  sofa: "maple-ld:compact-sofa",
-  "coffee-table": "maple-ld:small-side-table",
-  "dining-table": "maple-ld:round-dining-table",
+  "wall-tile": "maple-cafe:sage-tile",
+  windowCounter: "maple-cafe:oak-window-counter",
+  panels: "maple-cafe:felt-panel",
 } as const;
 
 export function isHomeQuote(quote: Pick<QuoteDocument, "projectId" | "lines">): boolean {
-  return quote.projectId === "maple" && quote.lines.some((line) => ["sofa", "coffee-table", "dining-table", "dining-chairs", "sideboard"].includes(line.itemId));
+  return quote.projectId === "maple" && quote.lines.some((line) => (HOME_ITEM_IDS as readonly string[]).includes(line.itemId));
 }
 
-const cancellation = "Local fictional supplier terms: cancel an unplaced order without a retained cost. No supplier order is placed by this draft.";
+/** Products the documents offer: a replacement for one V1 line (itemId), or a new line (itemId null). */
 const definitions = [
-  { itemId: "sofa", id: HOME_PRODUCT_IDS.sofa, name: "Compact sofa", sku: "DEMO-LD-SOFA-200", specification: "Straight compact sofa, 200 × 90 × 80 cm; warm neutral fabric; no chaise", price: 210_000, lead: 21, reference: "MAPLE-LD-SOFA-01" },
-  { itemId: "coffee-table", id: HOME_PRODUCT_IDS["coffee-table"], name: "Small round side table", sku: "DEMO-LD-SIDE-40", specification: "Movable light oak round side table, 40 cm diameter × 50 cm high; light enough to lift; quoted per individual side table", price: 18_000, lead: 14, reference: "MAPLE-LD-COFFEE-01" },
-  { itemId: "dining-table", id: HOME_PRODUCT_IDS["dining-table"], name: "Round dining table", sku: "DEMO-LD-ROUND-110", specification: "Fixed round light oak dining table, 110 cm diameter × 75 cm high, four seats; no extension", price: 125_000, lead: 21, reference: "MAPLE-LD-DINING-01" },
+  { itemId: "wall-tile", id: HOME_PRODUCT_IDS["wall-tile"], name: "Back bar wall tile, sage green", vendor: "Glaze & Co. Tile (demo)", sku: "DEMO-CAFE-TILE-SGE-4", specification: "4 × 4 in ceramic tile, sage green glaze; one box covers 10 sq ft", price: 7_600, unit: "box", lead: 10, reference: "MAPLE-CAFE-TILE-01",
+    terms: { returnPolicy: "Local fictional supplier terms: unopened boxes can be returned within 30 days of delivery with prior approval, retaining 20% of the returned goods price.", returnable: true, restockingFeeBps: 2_000, customMade: false } },
+  { itemId: null, id: HOME_PRODUCT_IDS.windowCounter, name: "Oak window counter", vendor: "Birch Line Joinery (demo)", sku: "DEMO-CAFE-OAK-WIN-36", specification: "Solid oak window counter, 16 in deep, oiled, on black steel brackets; built for a 36 in counter height; made to measure", price: 21_000, unit: "linear ft", lead: 21, reference: "MAPLE-CAFE-JOINERY-01",
+    terms: { returnPolicy: "Local fictional supplier terms: made to order; once production starts the counter cannot be cancelled or returned.", returnable: false, restockingFeeBps: null, customMade: true } },
+  { itemId: null, id: HOME_PRODUCT_IDS.panels, name: "Acoustic ceiling panel", vendor: "Quiet Panel Co. (demo)", sku: "DEMO-CAFE-FELT-24", specification: "2 × 4 ft ceiling-hung felt acoustic panel, charcoal", price: 14_500, unit: "each", lead: 14, reference: "MAPLE-CAFE-ACOUSTIC-01",
+    terms: { returnPolicy: "Local fictional supplier terms: unused panels can be returned within 14 days of delivery with prior approval, retaining 10% of the goods price.", returnable: true, restockingFeeBps: 1_000, customMade: false } },
 ] as const;
+type Definition = (typeof definitions)[number];
 
-function product(definition: typeof definitions[number]): ProductOption {
+const usd = (cents: number) => `USD ${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
+
+function product(definition: Definition): ProductOption {
   return {
-    id: definition.id, name: definition.name, sku: definition.sku, brand: null, seller: HOME_APPROVED_QUOTE.lines.find((line) => line.itemId === definition.itemId)!.vendor,
-    specification: definition.specification, currency: "USD", unitPriceCents: definition.price, unitLabel: "each",
-    priceEvidence: `Local fictional supplier document ${definition.reference}: ${definition.sku}; USD ${(definition.price / 100).toFixed(2)} per each. Whole-line tax USD 0 and delivery USD 0. Source: HOME_SUPPLIER_NOTES, included in this demo, not an uploaded or verified supplier file.`,
+    id: definition.id, name: definition.name, sku: definition.sku, brand: null, seller: definition.vendor,
+    specification: definition.specification, currency: "USD", unitPriceCents: definition.price, unitLabel: definition.unit,
+    priceEvidence: `Local fictional supplier document ${definition.reference}: ${definition.sku}; ${usd(definition.price)} per ${definition.unit}. Whole-line tax USD 0 and delivery USD 0. Source: HOME_SUPPLIER_NOTES, included in this demo, not an uploaded or verified supplier file.`,
     availability: "Sample lead time only; actual stock and accepted orders require a separate supplier confirmation.",
   };
 }
@@ -34,12 +40,12 @@ function product(definition: typeof definitions[number]): ProductOption {
 export function HOME_EVIDENCE_PAGE(now = new Date().toISOString()): ProductPage {
   return {
     id: HOME_EVIDENCE_ID, url: `local:${HOME_EVIDENCE_ID}`, fetchedAt: now,
-    title: "Local fictional supplier documents · Maple living & dining", text: HOME_SUPPLIER_NOTES,
+    title: "Local fictional supplier documents · Maple Ave Café", text: HOME_SUPPLIER_NOTES,
     products: definitions.map(product), error: null,
   };
 }
 
-/** Product selection must refer to this item's own replacement, not another quoted variant. */
+/** Product selection must refer to this item's own replacement, or to a new line, not another quoted variant. */
 export function homeProductMatches(itemId: string | null, productId: string): boolean {
   const definition = definitions.find((entry) => entry.id === productId);
   return !definition || definition.itemId === itemId;
@@ -53,38 +59,77 @@ type Evidence = Pick<PricingChangeInput, "priceEvidence" | "oldItemHandling" | "
   after: Partial<PricingItem> | null;
 };
 
-/** Populate suggestions only where the exact original SKU/price and chosen product have a source. */
+const fromDocuments = "Source: HOME_SUPPLIER_NOTES.";
+const chosen = (definition: Definition, after: DraftChange["after"]) =>
+  !!after && after.sku === definition.sku && after.unitPriceCents === definition.price && after.currency === "USD" && after.unitLabel === definition.unit;
+const offered = (definition: Definition): Partial<PricingItem> => ({
+  taxCents: 0, freightCents: 0, sourceUrl: null, leadTimeDays: definition.lead, category: "furniture", ...definition.terms,
+});
+
+/**
+ * Populate suggestions only where the documents back them: the exact original SKU and price, a
+ * product the documents offer, and the documents' own terms. Every amount here is a proposal for
+ * the designer to check, not a receipt.
+ */
 export function homePricingEvidence(quote: ApprovedQuoteReport, change: DraftChange, sources: ProductPage[]): Evidence | null {
   if (!isHomeQuote(quote) || !hasSource(sources)) return null;
+  if (change.action === "add") {
+    const definition = definitions.find((entry) => entry.id === change.productOptionId && entry.itemId === null);
+    if (!definition || !chosen(definition, change.after)) return null;
+    return { after: offered(definition), priceEvidence: product(definition).priceEvidence!, oldItemHandling: "not_applicable", oldItemCostCents: 0, oldItemNote: "" };
+  }
   const original = HOME_APPROVED_QUOTE.lines.find((line) => line.itemId === change.itemId);
   const before = quote.lines.find((line) => line.itemId === change.itemId);
   if (!original || !before || before.sku !== original.sku || before.quantity !== original.quantity || before.unitPriceCents !== original.unitPriceCents || before.taxCents !== 0 || before.freightCents !== 0) return null;
-  const definition = definitions.find((entry) => entry.id === change.productOptionId && entry.itemId === change.itemId);
-  if (definition && change.action === "replace" && change.after) {
-    const option = product(definition);
-    if (change.after.sku !== option.sku || change.after.unitPriceCents !== option.unitPriceCents || change.after.currency !== "USD" || change.after.unitLabel !== "each") return null;
+  const unchangedTerms = (lead: number | null): Partial<PricingItem> => ({
+    taxCents: 0, freightCents: 0, sourceUrl: null, leadTimeDays: lead, returnPolicy: before.returnPolicy,
+    returnable: before.nonReturnable === null ? null : !before.nonReturnable, restockingFeeBps: before.restockingFeeBps, customMade: before.customMade,
+  });
+  const after = change.after;
+
+  if (change.itemId === "wall-tile" && change.action === "replace") {
+    const definition = definitions.find((entry) => entry.id === change.productOptionId && entry.itemId === "wall-tile");
+    if (!definition || !chosen(definition, after)) return null;
+    const paid = before.quantity * before.unitPriceCents, kept = paid * (before.restockingFeeBps ?? 0) / 10_000;
     return {
-      after: { taxCents: 0, freightCents: 0, returnPolicy: `${cancellation} Standard unused goods can be returned within 14 days with prior approval, retaining ${definition.itemId === "coffee-table" ? "10%" : "15%"} of the goods price.`, returnable: true, restockingFeeBps: definition.itemId === "coffee-table" ? 1000 : 1500, customMade: false, leadTimeDays: definition.lead, sourceUrl: null },
-      priceEvidence: option.priceEvidence!, oldItemHandling: "not_ordered", oldItemCostCents: 0,
-      oldItemNote: `${definition.reference}: the original ${before.name} has not been ordered in this fictional scenario. Proposed cancellation retains USD 0; this is a pricing assumption for review, not a cancellation or payment receipt.`,
+      after: offered(definition), priceEvidence: product(definition).priceEvidence!,
+      oldItemHandling: "returned", oldItemCostCents: kept,
+      oldItemNote: `MAPLE-CAFE-TILE-01: return the ${before.quantity} unopened white boxes. The supplier keeps 20% (${usd(kept)}) as its restocking fee and credits ${usd(paid - kept)}; the refund waits for that credit. This proposal does not record a return, credit or refund as completed.`,
     };
   }
-  if (change.itemId === "dining-chairs" && change.action === "quantity" && change.after && change.after.quantity < before.quantity) {
+  if (!after || change.action !== "quantity") return null;
+  if (change.itemId === "countertop" && after.quantity < before.quantity) {
+    const removed = before.quantity - after.quantity, fee = 28_000;
     return {
-      after: { taxCents: 0, freightCents: 0, returnPolicy: before.returnPolicy || cancellation, returnable: true, restockingFeeBps: 1000, customMade: false, leadTimeDays: 14, sourceUrl: null },
-      priceEvidence: `Local fictional document MAPLE-LD-CHAIRS-01: retain ${change.after.quantity} of the same ${before.sku}, USD 180 per each; whole-line tax USD 0 and delivery USD 0. Unplaced excess chairs have no retained cost. Source: HOME_SUPPLIER_NOTES.`,
+      after: unchangedTerms(before.leadTimeDays),
+      priceEvidence: `Local fictional document MAPLE-CAFE-QUARTZ-01: keep ${after.quantity} linear feet of the same ${before.sku} at USD 180 per foot; whole-line tax USD 0 and delivery USD 0. A cut top is re-cut shorter for a fixed USD 280 fee; the removed length is credited at the per-foot price. ${fromDocuments}`,
+      oldItemHandling: "cancelled", oldItemCostCents: fee,
+      oldItemNote: `MAPLE-CAFE-QUARTZ-01: re-cut the front counter top, removing ${removed} linear feet. The fabricator keeps its USD 280 re-cut fee and credits ${usd(removed * before.unitPriceCents)} for the removed length, so the planned refund of ${usd(removed * before.unitPriceCents - fee)} waits for that credit. This proposal does not record a re-cut, credit or refund as completed.`,
+    };
+  }
+  if (change.itemId === "pendants" && after.quantity < before.quantity) {
+    return {
+      after: unchangedTerms(21),
+      priceEvidence: `Local fictional document MAPLE-CAFE-PENDANT-01: keep ${after.quantity} of the same ${before.sku} at USD 240 each; whole-line tax USD 0 and delivery USD 0. Unordered excess lights have no retained cost. ${fromDocuments}`,
       oldItemHandling: "not_ordered", oldItemCostCents: 0,
-      oldItemNote: `MAPLE-LD-CHAIRS-01: ${before.quantity - change.after.quantity} excess chairs are not ordered; proposed retained cost USD 0. The reduced scope still needs designer and client confirmation.`,
+      oldItemNote: `MAPLE-CAFE-PENDANT-01: ${before.quantity - after.quantity} excess pendants are not ordered; proposed retained cost USD 0. The reduced scope still needs designer and client confirmation.`,
     };
   }
-  if (change.itemId === "sideboard" && change.action === "remove") {
+  if (change.itemId === "stools" && after.quantity > before.quantity) {
     return {
-      after: null, priceEvidence: "Local fictional return document MAPLE-LD-SIDEBOARD-01: original sideboard USD 1,200; 20% inclusive retained cost USD 240; proposed supplier credit/refund USD 960, conditional on the separate recorded credit and PayPal refund steps.",
-      oldItemHandling: "returned", oldItemCostCents: 24_000,
-      oldItemNote: "MAPLE-LD-SIDEBOARD-01: arrange return of the sideboard; retain USD 240 total (20% of USD 1,200), including all handling, tax and delivery. The planned USD 960 refund waits for supplier credit. This proposal does not record a return, credit or refund as completed.",
+      after: unchangedTerms(21),
+      priceEvidence: `Local fictional document MAPLE-CAFE-STOOL-01: ${after.quantity} of the same ${before.sku} at USD 195 each; whole-line tax USD 0 and delivery USD 0. ${fromDocuments}`,
+      oldItemHandling: "not_applicable", oldItemCostCents: 0, oldItemNote: "",
+    };
+  }
+  if (change.itemId === "site-visits" && after.quantity > before.quantity) {
+    return {
+      after: unchangedTerms(null),
+      priceEvidence: `Local fictional document MAPLE-CAFE-SERVICE-02: ${after.quantity} site visits at USD 180 per visit. ${fromDocuments}`,
+      oldItemHandling: "not_applicable", oldItemCostCents: 0, oldItemNote: "",
     };
   }
   return null;
 }
 
-export const HOME_REVIEW_TERMS = "Local fictional Maple supplier documents: use the selected lines' quantities, per-item USD prices and listed return/cancellation terms. Whole-line tax and delivery are explicitly USD 0 in this demo. Include only the retained old-item costs listed for this proposed scope. Any planned refund requires its separate supplier-credit record and PayPal result. These proposed terms require designer review and client confirmation; they are not stock, order, return or payment receipts. Unchanged lines, including design services, keep their approved scope and price.";
+export const HOME_REVIEW_TERMS = "Local fictional Maple Ave Café supplier documents: use the selected lines' quantities, USD unit prices and listed return, re-cut and cancellation terms. Whole-line tax and delivery are explicitly USD 0 in this demo. Include only the retained costs listed for this proposed scope. Any planned refund requires its separate supplier-credit record and PayPal result. These proposed terms require designer review and client confirmation; they are not stock, order, return or payment receipts. Unchanged lines, including the design fee, keep their approved scope and price.";

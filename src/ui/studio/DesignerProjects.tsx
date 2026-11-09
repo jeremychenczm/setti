@@ -30,7 +30,7 @@ export function DesignerProjects({ onOpenProject }: { onOpenProject: (id: string
       <section className={styles.overview} aria-label="Prepared project overview">{overview.map(({ label, value, icon: StatIcon }) => <div key={label}><span><StatIcon size={16} />{label}</span><strong>{value}</strong></div>)}</section>
 
       <section className={styles.live} aria-labelledby="live-title">
-        <div className={styles.liveIntro}><span className={styles.liveTag}>Interactive project</span><h2 id="live-title">Maple Ave · living &amp; dining</h2><p>Your working project for AI drafts, client approval and PayPal Sandbox payments.</p></div>
+        <div className={styles.liveIntro}><span className={styles.liveTag}>Interactive project</span><h2 id="live-title">Maple Ave Café · counter &amp; back bar</h2><p>Your working project for AI drafts, client approval and PayPal Sandbox payments.</p></div>
         <div className={styles.liveAction}><OpenLiveProject className={styles.primaryButton} /><p>No real money. The original quote opens first; payment preparation continues in the background.</p></div>
       </section>
 

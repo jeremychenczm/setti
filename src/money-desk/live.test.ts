@@ -75,7 +75,7 @@ describe.skipIf(!testDatabaseUrl)("live projects on the money desk", () => {
     expect(chairs.some((item) => item.heldCents > 0 && item.status === "Awaiting supplier confirmation" && item.waitingOn === "designer")).toBe(true);
   });
 
-  it("reads the prepared Maple walkthrough: design fee and sideboard charged, four pieces waiting on their suppliers", async () => {
+  it("reads the prepared Maple walkthrough: services, countertop and tile charged, the pendants and stools waiting on their suppliers", async () => {
     const deps: TryDeps = { db: handle.db, paypal, links, perHour: 30, testCard: (id, options) => paypal.confirmWithTestCard(id, options) };
     const run = await startTry(deps, null, { scenario: HOME_SCENARIO });
     if (run.kind === "limited") throw new Error("Expected a scenario run");
@@ -87,8 +87,8 @@ describe.skipIf(!testDatabaseUrl)("live projects on the money desk", () => {
     }
     expect(ready).toBe(true);
     const project = (await liveProject(handle.db, run.session, "maple", designer))!;
-    expect(project).toMatchObject({ name: "Maple Ave", client: "Emma Park", stage: "V1 approved", agreedCents: 773_000 });
-    expect(deskTotals(project)).toMatchObject({ chargedCents: 220_000, heldCents: 553_000, notFundedCents: 0, needsYou: 4 });
+    expect(project).toMatchObject({ name: "Maple Ave Café", client: "Emma Park", stage: "V1 approved", agreedCents: 1_106_000 });
+    expect(deskTotals(project)).toMatchObject({ chargedCents: 806_000, heldCents: 300_000, notFundedCents: 0, needsYou: 2 });
   });
 
   it("reads a signed V1 that is not paid yet as approved, waiting on the client", async () => {

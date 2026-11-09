@@ -26,7 +26,7 @@ export function ThreadMock() {
 export function DraftMock() {
   return (
     <div className={styles.mockCard}>
-      <div className={styles.mockHead}><span className={styles.spark} aria-hidden="true">✦</span><div><b>Setti · Draft V2</b><small>5 changes from the thread, for Jordan to review</small></div></div>
+      <div className={styles.mockHead}><span className={styles.spark} aria-hidden="true">✦</span><div><b>Setti · Draft V2</b><small>{MAPLE_CHANGES.length} changes from the thread, for Jordan to review</small></div></div>
       <ul className={styles.rows}>
         {MAPLE_CHANGES.map((change) => (
           <li key={change.itemId}>
@@ -60,10 +60,10 @@ export function MoneyMock() {
 export function SignMock() {
   return (
     <div className={`${styles.mockCard} ${styles.sign}`}>
-      <small>Change order V2 · Maple Ave</small>
+      <small>Change order V2 · Maple Ave Café</small>
       <div className={styles.signTotal}><s>{usd(V1_TOTAL_CENTS)}</s>{usd(V2_TOTAL_CENTS)}</div>
       <div className={styles.signature}>Emma Park</div>
-      <small>Approved all five changes in one signature</small>
+      <small>Approved all {MAPLE_CHANGES.length} changes in one signature</small>
     </div>
   );
 }
@@ -71,7 +71,7 @@ export function SignMock() {
 export function WindowMock() {
   return (
     <div className={styles.window}>
-      <div className={styles.windowBar}><span className={styles.dots} aria-hidden="true"><i /><i /><i /></span><b>Maple Ave · Living &amp; dining</b><small>Emma Park, Jordan Lee, Setti</small></div>
+      <div className={styles.windowBar}><span className={styles.dots} aria-hidden="true"><i /><i /><i /></span><b>Maple Ave Café · Counter &amp; back bar</b><small>Emma Park, Jordan Lee, Setti</small></div>
       <div className={styles.windowBody}><ThreadMock /><DraftMock /></div>
     </div>
   );

@@ -123,10 +123,11 @@ describe.skipIf(!testDatabaseUrl)("read-only case money evidence", () => {
     const context = await read();
     expect(context).toMatchObject({ version: 1, quoteId: beforePreparation.quoteId });
     expect(context.mandatoryFactIds).not.toContain("payment-preparation");
-    expect(text(context, "item:baseline:sofa")).toContain("recorded held amount $2,400.00");
-    expect(text(context, "item:baseline:sideboard")).toContain("completed captures $1,200.00");
-    // Preparation also captures the $1,000 V1 design fee alongside the $1,200 sideboard.
-    expect(text(context, "scope")).toMatch(/held \$5,530\.00, completed captures \$2,200\.00/);
+    expect(text(context, "item:baseline:stools")).toContain("recorded held amount $1,560.00");
+    expect(text(context, "item:baseline:countertop")).toContain("completed captures $3,960.00");
+    expect(text(context, "item:baseline:wall-tile")).toContain("completed captures $980.00");
+    // Preparation also captures the $2,400 design fee and $720 of site visits alongside the countertop and tile.
+    expect(text(context, "scope")).toMatch(/held \$3,000\.00, completed captures \$8,060\.00/);
     expect(text(context, "next:baseline:design")).toContain("recorded net captures cover this agreed V1 target");
     expect(context.providerRecordedAt).not.toBeNull();
     expect(context.sources.some((source) => source.kind === "payment" && source.href === "/quotes/maple#item-holds")).toBe(true);

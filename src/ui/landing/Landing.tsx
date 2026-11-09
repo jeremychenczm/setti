@@ -43,26 +43,26 @@ export function Landing() {
 
         <section id="how" className={styles.section}>
           <h2>One change, settled in four steps.</h2>
-          <p className={styles.lede}>Emma wants the room to feel lighter. Here is how that conversation becomes a signed revision and five PayPal moves.</p>
+          <p className={styles.lede}>Emma&apos;s landlord lets her café use the front window. Here is how that conversation becomes a signed revision and five kinds of PayPal move.</p>
           <div className={styles.bento}>
             <div className={styles.tile}>
               <h3><ChatIcon />Emma says it in the chat</h3>
-              <p>A smaller sofa, four chairs instead of six, and no sideboard, so the walkway stays open.</p>
+              <p>A window counter with six more stools, acoustic panels, a shorter front counter, four pendants and sage green tile.</p>
               <div className={styles.tileMock}><ThreadMock /></div>
             </div>
             <div className={styles.tile}>
               <h3><SparkIcon />Setti drafts V2</h3>
-              <p>It reads all {DISCUSSION_LENGTH} messages and the supplier notes, then proposes five changes, each linked to the message it came from.</p>
+              <p>It reads all {DISCUSSION_LENGTH} messages and the supplier notes, then proposes seven changes, each linked to the message it came from.</p>
               <div className={styles.tileMock}><DraftMock /></div>
             </div>
             <div className={styles.tile}>
               <h3><SignIcon />Jordan checks, Emma signs once</h3>
-              <p>Jordan confirms prices and return terms. Emma approves the whole revision with one signature.</p>
+              <p>Jordan confirms prices, re-cut and return terms. Emma approves the whole revision with one signature.</p>
               <div className={styles.tileMock}><SignMock /></div>
             </div>
             <div className={styles.tile}>
               <h3><CardIcon />PayPal settles each item</h3>
-              <p>Holds are released and replaced, the chairs are charged for four, and the early sideboard is refunded minus its restocking fee.</p>
+              <p>New holds for the added pieces, four pendants charged and two released, and refunds for the re-cut top and the returned tile, minus the suppliers&apos; fees.</p>
               <div className={styles.tileMock}><MoneyMock /></div>
             </div>
           </div>
