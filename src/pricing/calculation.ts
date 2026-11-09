@@ -96,7 +96,7 @@ export function requiresOldItemHandling(change: { action: DraftChange["action"];
 
 function baseline(quote: ApprovedQuoteReport, draft: ChangeDraft): Map<string, ApprovedQuoteLine> {
   if (draft.basedOnQuoteId !== quote.id || draft.basedOnVersion !== quote.version || draft.projectKey !== quote.projectId) throw new PricingValidationError("The change draft does not match the current approved quote. Review pricing again.");
-  if (draft.basedOnQuoteFingerprint !== undefined && draft.basedOnQuoteFingerprint !== quoteFingerprint(quote)) throw new PricingValidationError("The approved quote has changed. Ask @Coordinator in the chat for a new draft, then review pricing again.");
+  if (draft.basedOnQuoteFingerprint !== undefined && draft.basedOnQuoteFingerprint !== quoteFingerprint(quote)) throw new PricingValidationError("The approved quote has changed. Ask @Setti in the chat for a new draft, then review pricing again.");
   if (!draft.changes.length || draft.changes.length > 100) throw new PricingValidationError("A change draft must contain 1 to 100 changed lines.");
   const byId = new Map(quote.lines.map((line) => [line.itemId, line]));
   if (byId.size !== quote.lines.length) throw new PricingValidationError("The approved quote contains duplicate item IDs.");
@@ -110,7 +110,7 @@ function baseline(quote: ApprovedQuoteReport, draft: ChangeDraft): Map<string, A
       if (draft.basedOnQuoteFingerprint === undefined) {
         const previous = byId.get(change.itemId)!;
         const before = change.before;
-        if (!before || before.name !== previous.name || before.vendor !== previous.vendor || before.sku !== previous.sku || before.specification !== previous.specification || before.quantity !== previous.quantity || before.unitLabel !== (previous.unitLabel ?? "each") || before.unitPriceCents !== previous.unitPriceCents || before.currency !== "USD") throw new PricingValidationError("The original item in this older draft no longer matches the approved quote. Ask @Coordinator in the chat for a new draft.");
+        if (!before || before.name !== previous.name || before.vendor !== previous.vendor || before.sku !== previous.sku || before.specification !== previous.specification || before.quantity !== previous.quantity || before.unitLabel !== (previous.unitLabel ?? "each") || before.unitPriceCents !== previous.unitPriceCents || before.currency !== "USD") throw new PricingValidationError("The original item in this older draft no longer matches the approved quote. Ask @Setti in the chat for a new draft.");
       }
     }
     if ((change.action === "remove") !== (change.after === null)) throw new PricingValidationError("The change type does not match the draft's new line.");
@@ -200,7 +200,7 @@ export function validatePricingInput(quote: ApprovedQuoteReport, draft: ChangeDr
     if (actual.action === "quantity") {
       const previous = old.get(actual.itemId!)!;
       const after = actual.after!;
-      if (after.name !== previous.name || after.vendor !== previous.vendor || after.sku !== previous.sku || after.specification !== previous.specification || after.category !== previous.category || after.unitLabel !== (previous.unitLabel ?? "each")) throw new PricingValidationError("A quantity change cannot switch to another product or pricing unit. To swap products, ask @Coordinator in the chat for a replacement draft.");
+      if (after.name !== previous.name || after.vendor !== previous.vendor || after.sku !== previous.sku || after.specification !== previous.specification || after.category !== previous.category || after.unitLabel !== (previous.unitLabel ?? "each")) throw new PricingValidationError("A quantity change cannot switch to another product or pricing unit. To swap products, ask @Setti in the chat for a replacement draft.");
     }
     if (requiresOldItemHandling(actual, actual.itemId ? old.get(actual.itemId) : undefined)) {
       if (actual.oldItemHandling === "not_applicable") throw new PricingValidationError("Replacing, removing or reducing an item requires verified old-item handling.");

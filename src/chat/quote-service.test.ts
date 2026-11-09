@@ -16,7 +16,7 @@ function lookup(query: QuoteQuery = overThousand, message = "Here are the lines 
   return { intent: "quote", message, title: "Quote lookup", changes: [], unresolved: [], constraints: [], money: null, quoteQuery: query };
 }
 
-function scenario(text = "@Coordinator Which items are over $1000?", withMoneyRecords = false) {
+function scenario(text = "@Setti Which items are over $1000?", withMoneyRecords = false) {
   const quote = structuredClone(approvedForTest("willow"));
   const state: StoredCase = { id: "owned-case", projectKey: "willow", quote, draft: null, activeMessageId: "request", messages: [human("request", text)] };
   const context: MoneyContext = {
@@ -50,7 +50,7 @@ describe("looking up lines in the approved quote from the chat", () => {
   });
 
   it("answers a cost question as a lookup even when payment records exist", async () => {
-    const s = scenario("@Coordinator What does the most expensive item cost?", true);
+    const s = scenario("@Setti What does the most expensive item cost?", true);
     s.deps.callModel.mockResolvedValue({ output: lookup({ filters: [], sort: { field: "lineTotal", direction: "desc" }, limit: 1 }, "Here is the line with the highest total, including tax and delivery."), model: "test-model" });
     await runCaseAi(s.store, "session", "willow", "request", s.deps);
     expect(saved(s.store).quoteAnswer?.rows).toHaveLength(1);
@@ -77,7 +77,7 @@ describe("looking up lines in the approved quote from the chat", () => {
   });
 
   it("still drafts changes when the model returns an empty quoteQuery, as it always does outside quote mode", async () => {
-    const s = scenario("@Coordinator Change the dining chairs to six.");
+    const s = scenario("@Setti Change the dining chairs to six.");
     const draft: ChangeModelOutput = {
       intent: "draft", message: "Quantity draft for designer review.", title: "Dining chair quantity", unresolved: [], constraints: [], money: null, quoteQuery: null,
       changes: [{ action: "quantity", itemId: "willow-dining-chair", quantity: 6, productOptionId: null, description: "", sourceMessageIds: ["request"] }],
@@ -89,7 +89,7 @@ describe("looking up lines in the approved quote from the chat", () => {
   });
 
   it("refuses a query attached to any other kind of reply", async () => {
-    const s = scenario("@Coordinator What should we confirm next?");
+    const s = scenario("@Setti What should we confirm next?");
     const answer: ChangeModelOutput = { intent: "answer", message: "Confirm the dining chair fabric next.", title: "Next step", changes: [], unresolved: [], constraints: [], money: null, quoteQuery: overThousand };
     s.deps.callModel.mockResolvedValueOnce({ output: answer, model: "test-model" }).mockResolvedValueOnce({ output: { ...answer, quoteQuery: null }, model: "test-model" });
     await runCaseAi(s.store, "session", "willow", "request", s.deps);

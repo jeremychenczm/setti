@@ -5,7 +5,7 @@ import { defaultOpening } from "../opening/document";
 import { approvedForTest } from "../opening/testing";
 import { quoteFingerprint } from "../quotes/fingerprint";
 
-function scenario(text = "@Coordinator Change the dining chairs from four to six.") {
+function scenario(text = "@Setti Change the dining chairs from four to six.") {
   const state: StoredCase = {
     id: "case-test", projectKey: "willow", draft: null, activeMessageId: "request", quote: approvedForTest("willow"),
     messages: [{ id: "request", actor: "client", text, createdAt: "2026-10-18T12:00:00Z", replyToMessageId: null, aiState: "running", error: null, model: null }],
@@ -41,7 +41,7 @@ describe("AI orchestration", () => {
     expect(s.store.completeAi).not.toHaveBeenCalled();
   });
   it("asks the model about a bare mention instead of answering with fixed text", async () => {
-    const s = scenario("@Coordinator");
+    const s = scenario("@Setti");
     const clarify = { ...s.modelOutput, intent: "clarify" as const, message: "Should I explain the quote or draft a change?", title: "", changes: [] };
     s.deps.callModel.mockResolvedValue({ model: "test-model", output: clarify });
     await runCaseAi(s.store, "session", "willow", "request", s.deps);
@@ -62,7 +62,7 @@ describe("AI orchestration", () => {
     expect(s.store.completeAi).toHaveBeenCalledWith("session", "willow", "request", "run", expect.objectContaining({ model: "test-model", draft: expect.objectContaining({ status: "needs_designer_review", deltaSubtotalCents: 16000 }) }));
   });
   it("uses the latest customer-confirmed snapshot for the next round instead of returning to V1", async () => {
-    const s = scenario("@Coordinator Increase the approved six chairs to eight.");
+    const s = scenario("@Setti Increase the approved six chairs to eight.");
     const approved = structuredClone(approvedForTest("willow"));
     approved.id = "confirmed-willow-v3";
     approved.version = 3;
@@ -78,7 +78,7 @@ describe("AI orchestration", () => {
     }));
   });
   it("deduplicates links, preserves failed retrieval and never invents a product", async () => {
-    const s = scenario("@Coordinator Change to this one, 4 chairs https://shop.example/chair. https://shop.example/chair");
+    const s = scenario("@Setti Change to this one, 4 chairs https://shop.example/chair. https://shop.example/chair");
     s.deps.readPage.mockRejectedValue(new Error("The page requires sign-in"));
     Object.assign(s.modelOutput.changes[0], { action: "replace", productOptionId: null, quantity: 4, description: "New dining chair" });
     await runCaseAi(s.store, "session", "willow", "request", s.deps);

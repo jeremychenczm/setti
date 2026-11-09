@@ -63,7 +63,7 @@ export function DraftCard({ draft, messages, onSourceMessage, pricingHref, canPr
 
       {sourceIds.length > 0 && <details className="rounded-xl border border-[var(--line)] p-3"><summary className="cursor-pointer text-[12px] font-medium">Source messages · {sourceIds.length}</summary><div className="mt-3 space-y-2">{sourceIds.map((id) => {
         const source = messages.find((message) => message.id === id);
-        return <button key={id} onClick={() => onSourceMessage(id)} disabled={!source} className="block w-full rounded-lg bg-[var(--canvas)] p-2 text-left text-[11px] leading-relaxed hover:bg-brand-50 disabled:text-[var(--muted)]"><span className="mb-0.5 block font-medium text-[var(--primary)]">{source ? source.actor === "designer" ? "Designer" : source.actor === "client" ? "Client" : "AI" : "Message unavailable"}</span><span className="line-clamp-3 whitespace-pre-wrap">{source?.text ?? id}</span></button>;
+        return <button key={id} onClick={() => onSourceMessage(id)} disabled={!source} className="block w-full rounded-lg bg-[var(--canvas)] p-2 text-left text-[11px] leading-relaxed hover:bg-brand-50 disabled:text-[var(--muted)]"><span className="mb-0.5 block font-medium text-[var(--primary)]">{source ? source.actor === "designer" ? "Designer" : source.actor === "client" ? "Client" : "Setti" : "Message unavailable"}</span><span className="line-clamp-3 whitespace-pre-wrap">{source?.text ?? id}</span></button>;
       })}</div></details>}
 
       {draft.sources.length > 0 && <div><h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold text-slate-600"><Link2 className="h-3.5 w-3.5" />Product sources · {draft.sources.length}</h3><div className="space-y-2">{draft.sources.map((source) => {

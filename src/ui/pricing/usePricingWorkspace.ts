@@ -77,7 +77,7 @@ export function usePricingWorkspace(projectKey: CaseKey) {
     let nextInput = carried ? structuredClone(carried.input) : state.review && state.review.version > 0 ? structuredClone(state.review.input) : null;
     if (!nextInput && state.sourceDraft && (!state.sourceDraft.basedOnQuoteFingerprint || state.sourceDraft.basedOnQuoteFingerprint === quoteFingerprint(state.quote))) {
       try { nextInput = createReviewInput(state.quote, state.sourceDraft); }
-      catch (cause) { setError(`${cause instanceof Error ? cause.message : "The AI draft no longer matches the original quote."} Return to the chat and ask @Coordinator to prepare a new draft.`); }
+      catch (cause) { setError(`${cause instanceof Error ? cause.message : "The AI draft no longer matches the original quote."} Return to the chat and ask @Setti to prepare a new draft.`); }
     }
     setInput(nextInput);
     setEditorSource(carried ? { id: state.sourceDraft!.id, revision: state.sourceDraft!.revision } : state.review ? { id: state.review.sourceDraftId, revision: state.review.sourceDraftRevision } : state.sourceDraft ? { id: state.sourceDraft.id, revision: state.sourceDraft.revision } : null);
@@ -119,12 +119,12 @@ export function usePricingWorkspace(projectKey: CaseKey) {
   const adoptLatest = useCallback(() => {
     if (!workspace?.sourceDraft || mutating.current) return;
     if (workspace.sourceDraft.basedOnQuoteFingerprint && workspace.sourceDraft.basedOnQuoteFingerprint !== quoteFingerprint(workspace.quote)) {
-      setError("The AI draft was prepared against a different original quote. Return to the chat and ask @Coordinator for a new draft before pricing it.");
+      setError("The AI draft was prepared against a different original quote. Return to the chat and ask @Setti for a new draft before pricing it.");
       return;
     }
     try { setInput(createReviewInput(workspace.quote, workspace.sourceDraft)); }
     catch (cause) {
-      setError(`${cause instanceof Error ? cause.message : "This draft cannot be repriced against the current quote."} Return to the chat and ask @Coordinator to prepare a new draft.`);
+      setError(`${cause instanceof Error ? cause.message : "This draft cannot be repriced against the current quote."} Return to the chat and ask @Setti to prepare a new draft.`);
       return;
     }
     setEditorSource({ id: workspace.sourceDraft.id, revision: workspace.sourceDraft.revision });

@@ -76,14 +76,14 @@ describe("case chat HTTP boundary", () => {
   });
   it("accepts natural mention requests and retries without appending another message", async () => {
     const id = randomUUID();
-    await postCaseResponse(post({ id, actor: "designer", text: "@Coordinator, change it to this one, 4 chairs." }), "willow");
+    await postCaseResponse(post({ id, actor: "designer", text: "@Setti, change it to this one, 4 chairs." }), "willow");
     expect(mocks.run).toHaveBeenCalledWith(mocks.store, expect.any(String), "willow", id);
     vi.mocked(mocks.store.appendMessage).mockClear();
     await postCaseResponse(post({ messageId: id }), "willow", true);
     expect(mocks.store.appendMessage).not.toHaveBeenCalled();
   });
   it("rejects other origins, unknown cases and client-supplied approval or prices", async () => {
-    const input = { id: randomUUID(), actor: "client", text: "@Coordinator change" };
+    const input = { id: randomUUID(), actor: "client", text: "@Setti change" };
     expect((await postCaseResponse(post(input, { origin: "https://another.example" }), "willow")).status).toBe(403);
     expect((await postCaseResponse(post(input), "not-a-case")).status).toBe(404);
     expect((await postCaseResponse(post({ ...input, approved: true, quote: { unitPriceCents: 1 } }), "willow")).status).toBe(400);

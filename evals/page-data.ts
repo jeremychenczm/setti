@@ -31,7 +31,7 @@ const usd = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { minim
 const quoted = (text: string) => `“${text}”`;
 const list = (items: string[]) => items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
 const orList = (items: string[]) => items.length <= 1 ? items.join("") : `${items.slice(0, -1).join(", ")} or ${items.at(-1)}`;
-const who = (actor: CaseMessage["actor"]) => actor === "assistant" ? "Coordinator" : actor[0].toUpperCase() + actor.slice(1);
+const who = (actor: CaseMessage["actor"]) => actor === "assistant" ? "Setti" : actor[0].toUpperCase() + actor.slice(1);
 
 function recording(flow: Flow, id: string): Recording {
   const found = loadRecording(flow, id);
@@ -305,7 +305,7 @@ function sources(flow: Flow, ids: string[]): string[] {
 }
 
 const flows: EvalFlow[] = [
-  { id: "change-draft", title: "Change drafts", summary: "A project chat ends with a request to the Coordinator, which drafts a revised quote for the designer to review.", sources: sources("change-draft", DRAFT_CASES.map((entry) => entry.id)), cases: DRAFT_CASES.map(draftCase) },
+  { id: "change-draft", title: "Change drafts", summary: "A project chat ends with a request to Setti, which drafts a revised quote for the designer to review.", sources: sources("change-draft", DRAFT_CASES.map((entry) => entry.id)), cases: DRAFT_CASES.map(draftCase) },
   { id: "money-answer", title: "Money answers", summary: "A client asks about payments in the Maple demo project. The answer must match the recorded PayPal Sandbox payments.", sources: sources("money-answer", MONEY_CASES.map((entry) => entry.id)), cases: MONEY_CASES.map(moneyCase) },
   { id: "inbox-summary", title: "Inbox summaries", summary: "A client's inbox opens with a short summary of what has been charged, what is on hold and what was refunded.", sources: sources("inbox-summary", SCENARIOS.map((entry) => entry.id)), cases: SCENARIOS.map(inboxCase) },
 ];

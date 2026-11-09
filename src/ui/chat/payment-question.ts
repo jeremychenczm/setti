@@ -1,6 +1,6 @@
 import type { CaseKey } from "@/chat/types";
 
-export const PAYMENT_QUESTION = "@Coordinator Explain this project's recorded payments and anything still pending.";
+export const PAYMENT_QUESTION = "@Setti Explain this project's recorded payments and anything still pending.";
 const key = "setti:payment-question";
 type RequestStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 

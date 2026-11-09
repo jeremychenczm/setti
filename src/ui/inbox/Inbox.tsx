@@ -9,6 +9,7 @@ import type { MoneyEvent } from "@/payments/money-events";
 import { dateTime, money } from "../pricing/common";
 import { INBOX_SEEN } from "../workspace/useInboxBadge";
 import { LastCheck } from "./LastCheck";
+import { AiTag } from "../chat/ChatMessageBubble";
 
 const PAYMENT_CHANGED = "setti:payment-changed";
 
@@ -80,14 +81,14 @@ function Summary({ view }: { view: InboxView }) {
     let live = true;
     setState("loading");
     fetch("/api/inbox/summary", { cache: "no-store" })
-      .then((response) => response.ok ? response.json() as Promise<{ summary: InboxSummary | null; reason: string | null }> : { summary: null, reason: "Coordinator's summary is not available right now." })
+      .then((response) => response.ok ? response.json() as Promise<{ summary: InboxSummary | null; reason: string | null }> : { summary: null, reason: "Setti's summary is not available right now." })
       .then((body) => { if (live) setState(body); })
-      .catch(() => { if (live) setState({ summary: null, reason: "Coordinator's summary is not available right now." }); });
+      .catch(() => { if (live) setState({ summary: null, reason: "Setti's summary is not available right now." }); });
     return () => { live = false; };
   }, [shown, empty]);
   if (!state) return null;
   return <div className="mb-4 rounded-xl bg-[var(--agent)] px-4 py-3">
-    <p className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700"><Bot className="h-3.5 w-3.5" />Coordinator</p>
+    <p className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700"><Bot className="h-3.5 w-3.5" />Setti<AiTag /></p>
     {state === "loading" ? <p role="status" className="mt-1.5 flex items-center gap-1.5 text-[12px] text-slate-600"><LoaderCircle className="h-3.5 w-3.5 animate-spin" />Reading {view.role === "designer" ? "your projects" : "your payment records"}…</p>
       : state.summary ? <>
         <p className="mt-1 text-[13px] leading-relaxed text-[var(--ink)]">{state.summary.sentences.map((sentence) => sentence.text).join(" ")}</p>

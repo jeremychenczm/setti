@@ -37,7 +37,7 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
     };
     const chat = createChatStore(handle.db);
     const messageId = randomUUID();
-    await chat.appendMessage(sessionId, key, { id: messageId, actor: "client", text: `@Coordinator ${action === "quantity" ? "Increase the chair quantity." : "Replace the dining chairs with BERGMUND for review."}` });
+    await chat.appendMessage(sessionId, key, { id: messageId, actor: "client", text: `@Setti ${action === "quantity" ? "Increase the chair quantity." : "Replace the dining chairs with BERGMUND for review."}` });
     const now = new Date().toISOString();
     const draft: ChangeDraft = {
       id: randomUUID(), projectKey: key, basedOnQuoteId: quote.id, basedOnVersion: quote.version, basedOnQuoteFingerprint: quoteFingerprint(quote), revision: 1,
@@ -207,7 +207,7 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
     const saved = await saveReady(workspace);
     const chat = createChatStore(handle.db);
     const messageId = randomUUID();
-    await chat.appendMessage(sessionId, "maple", { id: messageId, actor: "client", text: "@Coordinator Please reconsider the chair." });
+    await chat.appendMessage(sessionId, "maple", { id: messageId, actor: "client", text: "@Setti Please reconsider the chair." });
     await chat.beginAi(sessionId, "maple", messageId);
     await expect(issue(saved)).rejects.toMatchObject({ code: "PRICING_BUSY" });
     await expect(store.saveReview(sessionId, "maple", { sourceDraftId: saved.review!.sourceDraftId, sourceDraftRevision: 1, expectedVersion: 1, input: saved.review!.input })).rejects.toMatchObject({ code: "PRICING_BUSY" });

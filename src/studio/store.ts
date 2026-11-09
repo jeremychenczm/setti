@@ -34,7 +34,7 @@ export function studioThreadStore(db: Db) {
         const existing = messages.find((message) => message.id === input.id);
         if (existing && (existing.actor !== "designer" || existing.text !== input.text)) throw new StudioChatError("This message ID has already been used. Refresh the conversation.");
         if (existing && (existing.aiState === "completed" || existing.aiState === "none")) return { messages: [...preparedMessages(project), ...messages], runId: null };
-        if (existing && messages.slice(messages.indexOf(existing) + 1).some((message) => message.actor !== "assistant")) throw new StudioChatError("This project has newer discussion. Send a new @Coordinator message with your current request.");
+        if (existing && messages.slice(messages.indexOf(existing) + 1).some((message) => message.actor !== "assistant")) throw new StudioChatError("This project has newer discussion. Send a new @Setti message with your current request.");
         if (row.activeRunId && row.activeSince && Date.now() - row.activeSince.getTime() < 120_000) throw new StudioChatError("AI is working on this project. Wait a moment, then refresh or retry.");
         for (const message of messages) if (message.aiState === "running") { message.aiState = "failed"; message.error = "The previous AI request timed out. You can retry it."; }
         const ai = isAiInvocation(input.text);

@@ -5,7 +5,7 @@ import { describeQuoteQuery, type QuoteAnswer } from "@/ai/quote-query";
 import { usd } from "../demo-data";
 
 /**
- * A quote lookup's result. The sentence above it is Coordinator's; everything
+ * A quote lookup's result. The sentence above it is Setti's; everything
  * in this card was computed by the server from the approved quote, including
  * the plain-words description of what was looked up.
  */

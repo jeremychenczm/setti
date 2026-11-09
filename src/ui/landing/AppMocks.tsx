@@ -26,7 +26,7 @@ export function ThreadMock() {
 export function DraftMock() {
   return (
     <div className={styles.mockCard}>
-      <div className={styles.mockHead}><span className={styles.spark} aria-hidden="true">✦</span><div><b>Coordinator · Draft V2</b><small>5 changes from the thread, for Jordan to review</small></div></div>
+      <div className={styles.mockHead}><span className={styles.spark} aria-hidden="true">✦</span><div><b>Setti · Draft V2</b><small>5 changes from the thread, for Jordan to review</small></div></div>
       <ul className={styles.rows}>
         {MAPLE_CHANGES.map((change) => (
           <li key={change.itemId}>
@@ -71,7 +71,7 @@ export function SignMock() {
 export function WindowMock() {
   return (
     <div className={styles.window}>
-      <div className={styles.windowBar}><span className={styles.dots} aria-hidden="true"><i /><i /><i /></span><b>Maple Ave · Living &amp; dining</b><small>Emma Park, Jordan Lee, Coordinator</small></div>
+      <div className={styles.windowBar}><span className={styles.dots} aria-hidden="true"><i /><i /><i /></span><b>Maple Ave · Living &amp; dining</b><small>Emma Park, Jordan Lee, Setti</small></div>
       <div className={styles.windowBody}><ThreadMock /><DraftMock /></div>
     </div>
   );

@@ -17,7 +17,7 @@ import { z } from "zod";
 import type { Db } from "../db/client";
 import { inboxSummaries } from "../db/schema";
 import type { SummarySentence } from "../payments/schema";
-import { COORDINATOR_IDENTITY } from "./identity";
+import { SETTI_IDENTITY } from "./identity";
 import { aiConfigured } from "./model";
 import { amountsIn, hasEastAsianScript } from "./money-answer";
 
@@ -40,7 +40,7 @@ export interface InboxSummary { sentences: SummarySentence[]; model: string; at:
 /** A session may have this many summaries written per hour; repeat views of the same facts are free. */
 export const SUMMARIES_PER_HOUR = 30;
 
-export const SUMMARY_SYSTEM_PROMPT = `${COORDINATOR_IDENTITY}
+export const SUMMARY_SYSTEM_PROMPT = `${SETTI_IDENTITY}
 Here you write the summary at the top of a payment inbox, for one reader across their projects. Write one to three short sentences in plain English, under 60 words in all. When several items share a state, name at most three of them and use a fact that states the total for the rest.
 For a designer: lead with what needs doing today and why it matters (the money involved, the deadline), naming the items. For a client: say where their money stands now (what was charged, what is on hold, what was released or refunded), and what happens next only if a fact says so. A client's facts that begin "Now ·" state where each item stands today and those that begin "Earlier ·" are past records: say what is on hold or charged now only from the total and the Now facts, and tell earlier records in the past tense.
 Every sentence lists in factIds the facts it rests on, by id. Every amount you write must appear, exactly as written, in a fact that sentence cites; never add, subtract or total amounts yourself; when you need a total, cite the fact that states it. A sentence that says something was charged, held, released or refunded must cite a fact that records it.
@@ -152,23 +152,23 @@ export async function summarizeInbox(db: Db, sessionId: string, request: Omit<Su
   const [cached] = await db.select().from(inboxSummaries).where(eq(inboxSummaries.key, key));
   if (cached) return cached.sentences && cached.model
     ? { summary: { sentences: cached.sentences, model: cached.model, at: cached.createdAt.toISOString() }, reason: null }
-    : { summary: null, reason: "Coordinator's summary did not pass its check, so only the records are shown." };
+    : { summary: null, reason: "Setti's summary did not pass its check, so only the records are shown." };
   if (!aiConfigured()) return { summary: null, reason: "The AI is not configured on this server, so only the records are shown." };
   const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(inboxSummaries)
     .where(and(eq(inboxSummaries.sessionId, sessionId), gte(inboxSummaries.createdAt, new Date(Date.now() - 60 * 60 * 1000))));
-  if (count >= SUMMARIES_PER_HOUR) return { summary: null, reason: "Coordinator has written many summaries this hour; the records are shown without one." };
+  if (count >= SUMMARIES_PER_HOUR) return { summary: null, reason: "Setti has written many summaries this hour; the records are shown without one." };
 
   let checked: Awaited<ReturnType<typeof writeCheckedSummary>>;
   try { checked = await writeCheckedSummary(request, model); }
   catch (error) {
     // A failed call says nothing about these facts: nothing is cached, and the next view tries again.
     console.warn("Inbox summary model call failed", error instanceof Error ? error.message : error);
-    return { summary: null, reason: "Coordinator's summary is not available right now; the records are shown without one." };
+    return { summary: null, reason: "Setti's summary is not available right now; the records are shown without one." };
   }
   const { written, problems } = checked;
   if (!written) console.warn("Inbox summary failed its check", problems);
   const [row] = await db.insert(inboxSummaries).values({ key, sessionId, sentences: written?.sentences ?? null, model: written?.model ?? null, problems })
     .onConflictDoNothing().returning();
   const at = (row?.createdAt ?? new Date()).toISOString();
-  return written ? { summary: { ...written, at }, reason: null } : { summary: null, reason: "Coordinator's summary did not pass its check, so only the records are shown." };
+  return written ? { summary: { ...written, at }, reason: null } : { summary: null, reason: "Setti's summary did not pass its check, so only the records are shown." };
 }

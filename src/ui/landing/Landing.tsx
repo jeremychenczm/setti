@@ -51,7 +51,7 @@ export function Landing() {
               <div className={styles.tileMock}><ThreadMock /></div>
             </div>
             <div className={styles.tile}>
-              <h3><SparkIcon />Coordinator drafts V2</h3>
+              <h3><SparkIcon />Setti drafts V2</h3>
               <p>It reads all {DISCUSSION_LENGTH} messages and the supplier notes, then proposes five changes, each linked to the message it came from.</p>
               <div className={styles.tileMock}><DraftMock /></div>
             </div>
@@ -82,7 +82,7 @@ export function Landing() {
 
         <section id="ai" className={styles.section}>
           <h2>AI you can check.</h2>
-          <p className={styles.lede}>Coordinator drafts and explains. The money rules and the PayPal calls stay with the server and the people who approve them.</p>
+          <p className={styles.lede}>The AI drafts and explains. The money rules and the PayPal calls stay with the server and the people who approve them.</p>
           <div className={styles.three}>
             <div className={styles.stat}><b>Every amount</b><h3>cites a record</h3><p>The server checks each number against the project&apos;s PayPal records before anyone sees the answer.</p></div>
             <div className={styles.stat}><b>No PayPal access</b><h3>for the model</h3><p>It can draft and explain, but it cannot hold, charge or refund. A test fails if AI code ever reaches the PayPal client.</p><a href={SECURITY_URL}>Read SECURITY.md</a></div>
@@ -108,7 +108,7 @@ export function Landing() {
             <div><b>PayPal</b><p>Holds, captures, voids, refunds, Vault and Pay Later, confirmed by webhooks.</p></div>
             <div><b>AG Grid</b><p>The pricing review and every quote report.</p></div>
             <div><b>Render</b><p>The app, its Postgres database and a daily hold check.</p></div>
-            <div><b>Claude</b><p>Coordinator, the project&apos;s agent, on Claude Sonnet 5.5.</p></div>
+            <div><b>Claude</b><p>Setti&apos;s AI agent, on Claude Sonnet 5.5.</p></div>
           </div>
         </section>
 

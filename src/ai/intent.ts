@@ -1,5 +1,5 @@
-/** A message addressed to the project's agent starts with @Coordinator. */
-const invocation = /^\s*@coordinator(?=$|[\s,:.!?])/iu;
+/** A message addressed to the project's agent starts with @Setti. */
+const invocation = /^\s*@setti(?=$|[\s,:.!?])/iu;
 
 export function isAiInvocation(text: string): boolean {
   return invocation.test(text);

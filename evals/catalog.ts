@@ -42,7 +42,7 @@ const lines: string[] = [
   "",
   `## Change drafts (${DRAFT_CASES.length} cases)`,
   "",
-  "A project chat ends with an @Coordinator request; the key is the change set a designer would agree with, compared by action, quote line, quantity and chosen supplier product. Cases marked ×3 run three times to measure stability.",
+  "A project chat ends with an @Setti request; the key is the change set a designer would agree with, compared by action, quote line, quantity and chosen supplier product. Cases marked ×3 run three times to measure stability.",
   "",
   "| Case | Group | What it tests | Answer key |",
   "| --- | --- | --- | --- |",

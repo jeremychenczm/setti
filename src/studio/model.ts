@@ -2,12 +2,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { aiConfigured, CONTEXT_CHAR_LIMIT } from "@/ai/model";
-import { COORDINATOR_IDENTITY } from "@/ai/identity";
+import { SETTI_IDENTITY } from "@/ai/identity";
 import type { CaseMessage } from "@/chat/types";
 import { studioMoneyTotals, studioQuoteTotal, type StudioCase } from "@/demo/studio-types";
 
 const responseSchema = z.object({ message: z.string().min(1).max(12000) });
-const system = `${COORDINATOR_IDENTITY}
+const system = `${SETTI_IDENTITY}
 In this studio project's conversation you are the designer's design assistant. Reply concisely in plain English. Read this project's complete conversation and supplied quotes before answering. Give useful, specific design advice, explain the current scope, or help the designer outline a change or a client follow-up. Ask only for genuinely missing facts. Never mix projects.
 The server's preparedStartingContext contains FICTIONAL SEEDED history, quotes, client decisions and payment figures. Distinguish an approved quote from a pending/declined proposal and a draft. Monetary values are integer USD cents. Totals in preparedPaymentTotals are illustrative history, NOT verified PayPal transactions. If explaining these amounts, explicitly call them the prepared example's figures. Holds are not charges; a supplier credit still awaited is not a completed refund. Do not infer supplier orders from client payments.
 You have NO tools to issue or edit a quote, obtain client consent, place orders, or execute payments/refunds. Describe suggested changes as proposals for designer review; never claim to have saved a new quote version, sent a quote, approved, charged, refunded, released funds or contacted a supplier. The chat is saved by the application; that does not change quote or payment authority. Existing prices and terms are evidence only for the exact supplied scope; do not invent new supplier prices, measurements or confirmations.

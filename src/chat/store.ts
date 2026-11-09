@@ -180,7 +180,7 @@ export function createChatStore(db: Db): ChatStore {
       return withinCase(sessionId, projectKey, async (tx, row) => {
         const message = await readMessage(tx, row.id, messageId);
         if (!isAiInvocation(message.text)) {
-          throw new ChatStoreError("INVALID_AI_TRIGGER", "Start the message with @Coordinator to request a reply.");
+          throw new ChatStoreError("INVALID_AI_TRIGGER", "Start the message with @Setti to request a reply.");
         }
         if (message.aiState === "completed") return { status: "completed", state: await snapshot(tx, row) };
         if (row.activeRunId) {
@@ -193,7 +193,7 @@ export function createChatStore(db: Db): ChatStore {
         const [newerHuman] = await tx.select({ id: chatMessages.id }).from(chatMessages)
           .where(and(eq(chatMessages.caseId, row.id), gt(chatMessages.sequence, message.sequence), ne(chatMessages.actor, "assistant"))).limit(1);
         if (newerHuman || message.sequence < row.latestCompletedSequence) {
-          throw new ChatStoreError("STALE_MESSAGE", "Newer messages already exist. Start a new @Coordinator message so the latest direction is included.");
+          throw new ChatStoreError("STALE_MESSAGE", "Newer messages already exist. Start a new @Setti message so the latest direction is included.");
         }
         const runId = randomUUID();
         await tx.update(chatMessages).set({ aiState: "running", error: null, model: null, lastRunId: runId })
@@ -218,7 +218,7 @@ export function createChatStore(db: Db): ChatStore {
         if (result.draft) {
           const quote = await currentCaseQuote(tx, row.id, projectKey);
           if (!quote || result.draft.basedOnQuoteId !== quote.id || result.draft.basedOnVersion !== quote.version || result.draft.basedOnQuoteFingerprint !== quoteFingerprint(quote)) {
-            throw new ChatStoreError("STALE_BASELINE", "The approved quote changed. Start a new @Coordinator request against the current approved version.");
+            throw new ChatStoreError("STALE_BASELINE", "The approved quote changed. Start a new @Setti request against the current approved version.");
           }
         }
         if (result.moneyAnswer) {

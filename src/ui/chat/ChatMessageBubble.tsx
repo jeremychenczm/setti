@@ -19,6 +19,11 @@ function linkedText(value: string): ReactNode[] {
     : <span key={index}>{part}</span>);
 }
 
+/** Marks what the model wrote; automatic notices from the platform carry no tag. */
+export function AiTag() {
+  return <span className="ml-1.5 rounded bg-white/80 px-1 py-px align-[1px] text-[9px] font-semibold tracking-wide text-slate-500">AI</span>;
+}
+
 /** `own` marks the signed-in account's messages, shown on the right as in any chat app. */
 export function ChatMessageBubble({ message, person, own, highlighted, unsaved, running, canRetryAi, onRetry, about, attachment }: { message: CaseMessage; person: Person; own: boolean; highlighted: boolean; unsaved: boolean; running: boolean; canRetryAi: boolean; onRetry: () => void; about: { name: string; open: () => void } | null; attachment: ReactNode }) {
   const assistant = message.actor === "assistant";
@@ -31,7 +36,7 @@ export function ChatMessageBubble({ message, person, own, highlighted, unsaved, 
         {!own && (notice ? <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"><Info className="h-5 w-5" /></span> : assistant ? <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-700"><Bot className="h-5 w-5" /></span> : <Avatar person={person} />)}
         {own && <span className="order-last"><Avatar person={person} /></span>}
         <div className={`max-w-[88%] rounded-xl px-3.5 py-2.5 sm:max-w-[82%] ${notice ? "border border-[var(--line)] bg-white" : assistant ? "bg-[var(--agent)]" : own ? "bg-[var(--primary-soft)]" : "bg-[var(--canvas)]"}`}>
-          <div className={`mb-1 text-[11px] font-semibold ${notice ? "text-slate-500" : assistant ? "text-slate-700" : "text-slate-600"}`}>{notice ? "System notice" : assistant ? "Coordinator" : person.name}</div>
+          <div className={`mb-1 text-[11px] font-semibold ${notice ? "text-slate-500" : assistant ? "text-slate-700" : "text-slate-600"}`}>{notice ? "System notice" : assistant ? <>Setti<AiTag /></> : person.name}</div>
           {about && <button onClick={about.open} className="mb-1.5 inline-flex max-w-full items-center gap-1 rounded-full border border-brand-100 bg-white px-2 py-0.5 text-[11px] font-medium text-[var(--primary)] hover:bg-brand-50"><FileText className="h-3 w-3 shrink-0" /><span className="truncate">About · {about.name} (V1)</span></button>}
           {/* A written money answer is rendered by its card, with each sentence's evidence numbers. */}
           {!(assistant && message.moneyAnswer?.answer) &&<p className="whitespace-pre-wrap break-words text-[13px] leading-relaxed">{linkedText(message.text)}</p>}
@@ -39,7 +44,7 @@ export function ChatMessageBubble({ message, person, own, highlighted, unsaved, 
           {assistant && message.moneyAnswer && <MoneyAnswerCard answer={message.moneyAnswer} messageId={message.id} />}
           {assistant && message.quoteAnswer && <QuoteAnswerCard answer={message.quoteAnswer} />}
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[10px] text-[var(--muted)]"><time dateTime={message.createdAt}>{timeLabel(message.createdAt)}</time>{unsaved && <span>{running ? "Sending…" : "Not saved yet"}</span>}{assistant && <span>{notice ? "Automatic notice · not written by AI" : message.model ? `AI · ${message.model}` : "AI response"}</span>}{message.aiState === "failed" && <span className="text-red-600">AI request failed</span>}</div>
-          {message.aiState === "failed" && <div className="mt-2 border-t border-red-100 pt-2 text-[11px] text-red-700"><p>{message.error ?? "The AI did not complete this request."}</p>{canRetryAi ? <button onClick={onRetry} disabled={running} className="mt-1 flex items-center gap-1 font-medium hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Retry AI request</button> : <p className="mt-1">Newer discussion exists. Send a new @Coordinator request.</p>}</div>}
+          {message.aiState === "failed" && <div className="mt-2 border-t border-red-100 pt-2 text-[11px] text-red-700"><p>{message.error ?? "The AI did not complete this request."}</p>{canRetryAi ? <button onClick={onRetry} disabled={running} className="mt-1 flex items-center gap-1 font-medium hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Retry AI request</button> : <p className="mt-1">Newer discussion exists. Send a new @Setti request.</p>}</div>}
         </div>
       </div>
     </div>
