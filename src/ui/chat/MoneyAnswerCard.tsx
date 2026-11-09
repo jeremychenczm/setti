@@ -1,7 +1,7 @@
 "use client";
 
 import { Link2, ReceiptText } from "lucide-react";
-import type { MoneyAnswer, MoneyFact } from "@/ai/money-types";
+import { MONEY_STATUS_LABEL, type MoneyAnswer, type MoneyFact, type MoneyTableRow } from "@/ai/money-types";
 
 function evidenceHref(value: string): string | null {
   return /^\/quotes\/(?:maple|willow)(?:#[\w.%:~-]+)?$/.test(value)
@@ -15,12 +15,69 @@ function recordedTime(value: string): string {
     : `${date.toLocaleString("en-US", { timeZone: "America/Los_Angeles", dateStyle: "medium", timeStyle: "short" })} PT`;
 }
 
+const usd = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+
+type Money = Pick<MoneyTableRow, "status" | "heldCents" | "chargedCents" | "refundedCents" | "releasedCents" | "nonRefundableCents" | "netCents">;
+
+/** States the amounts already say; their word is left out when an amount follows. */
+const SHOWN_BY_AMOUNTS = new Set<MoneyTableRow["status"]>(["charged", "on_hold", "refunded", "released"]);
+
+/** The line under an item's name: its status in fixed words, then the money besides what it paid in the end. */
+function detail(row: Money): string[] {
+  const parts = [
+    row.heldCents > 0 && `On hold ${usd(row.heldCents)}`,
+    row.chargedCents > 0 && (row.chargedCents !== row.netCents || row.releasedCents > 0 || row.nonRefundableCents > 0) && `Charged ${usd(row.chargedCents)}`,
+    row.refundedCents > 0 && `Refunded ${usd(row.refundedCents)}`,
+    row.releasedCents > 0 && `Released ${usd(row.releasedCents)}`,
+    row.nonRefundableCents > 0 && `Non-refundable ${usd(row.nonRefundableCents)}`,
+  ].filter((part): part is string => !!part);
+  const status = SHOWN_BY_AMOUNTS.has(row.status) && parts.length ? null : MONEY_STATUS_LABEL[row.status];
+  return [status, ...parts].filter((part): part is string => !!part);
+}
+
+/** Each part stays on one line; the line wraps only between parts. */
+function Detail({ row }: { row: Money }) {
+  return <span className="block text-[11px] text-slate-500">{detail(row).map((part, index) => <span key={part}>{index > 0 && " · "}<span className="whitespace-nowrap">{part}</span></span>)}</span>;
+}
+
+/** The item table: statuses and amounts as the records stood when the answer was saved, never the model's words. */
+function RecordTable({ rows }: { rows: readonly MoneyTableRow[] }) {
+  const sum = (field: keyof Omit<Money, "status">) => rows.reduce((total, row) => total + row[field], 0);
+  const total: Money = { status: "charged", heldCents: sum("heldCents"), chargedCents: sum("chargedCents"), refundedCents: sum("refundedCents"), releasedCents: sum("releasedCents"), nonRefundableCents: sum("nonRefundableCents"), netCents: sum("netCents") };
+  return <figure className="mt-2">
+    <table className="w-full rounded-lg bg-white/70 text-[12px]">
+      <thead><tr className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
+        <th scope="col" className="py-1.5 pl-3 pr-2 text-left font-medium">Item</th>
+        <th scope="col" className="py-1.5 pl-2 pr-3 text-right font-medium">Net paid</th>
+      </tr></thead>
+      <tbody>
+        {rows.map((row) => <tr key={row.key} className="border-t border-slate-100">
+          <th scope="row" className="py-1.5 pl-3 pr-2 text-left align-baseline font-normal">
+            <span className="block font-medium">{row.label}</span>
+            <Detail row={row} />
+          </th>
+          <td className="whitespace-nowrap py-1.5 pl-2 pr-3 text-right align-baseline font-semibold tabular-nums">{usd(row.netCents)}</td>
+        </tr>)}
+      </tbody>
+      {rows.length > 1 && <tfoot><tr className="border-t border-slate-200">
+        <th scope="row" className="py-1.5 pl-3 pr-2 text-left align-baseline font-normal">
+          <span className="block font-semibold">Total</span>
+          <Detail row={total} />
+        </th>
+        <td className="whitespace-nowrap py-1.5 pl-2 pr-3 text-right align-baseline font-semibold tabular-nums">{usd(total.netCents)}</td>
+      </tr></tfoot>}
+    </table>
+    <figcaption className="mt-1 text-[10px] text-slate-500">From the PayPal Sandbox records</figcaption>
+  </figure>;
+}
+
 /**
- * A money reply. Setti's verified answer reads like a chat message, in the
- * layout it chose (the conclusion, item lines, short notes); every part was
- * checked against the records it cites, but the citations stay out of the
- * chat. The records themselves appear only when Setti shows them because the
- * person asked for the evidence. Without a written answer, the records are the reply.
+ * A money reply. Setti's verified answer reads like a chat message: its
+ * conclusion, the item table built from the records, then short notes; every
+ * sentence was checked against the records of what it is about, but the
+ * citations stay out of the chat. The records themselves appear only when Setti
+ * shows them because the person asked for the evidence. Without a written
+ * answer, the table and the records are the reply.
  */
 export function MoneyAnswerCard({ answer, messageId }: { answer: MoneyAnswer; messageId: string }) {
   const body = answer.answer;
@@ -49,11 +106,13 @@ export function MoneyAnswerCard({ answer, messageId }: { answer: MoneyAnswer; me
     </ol> : <p className="mt-3 text-[12px] leading-relaxed text-slate-600">The available records do not establish an answer to this money question. Check the project records first.</p>}
   </section>;
 
-  if (!body) return records;
+  const table = answer.table?.length ? <RecordTable rows={answer.table} /> : null;
+  if (!body) return table ? <>{table}<details className="mt-2 text-[11px] text-slate-600"><summary className="cursor-pointer">Show the records</summary>{records}</details></> : records;
 
   return <>
     <p className="break-words text-[13px] font-medium leading-relaxed">{body.summary.text}</p>
-    {body.rows.length > 0 && <table className="mt-2 w-full overflow-hidden rounded-lg bg-white/70 text-[12px]">
+    {table}
+    {!table && body.rows.length > 0 && <table className="mt-2 w-full overflow-hidden rounded-lg bg-white/70 text-[12px]">
       <thead><tr className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]"><th scope="col" className="py-1.5 pl-3 pr-2 text-left font-medium">Item</th><th scope="col" className="px-2 py-1.5 text-left font-medium">What happened</th><th scope="col" className="py-1.5 pl-2 pr-3 text-right font-medium">Charged now</th></tr></thead>
       <tbody>
         {body.rows.map((row, index) => <tr key={index} className="border-t border-slate-100">

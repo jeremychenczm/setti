@@ -8,7 +8,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CHANGE_SYSTEM_PROMPT } from "@/ai/model";
-import type { MoneyAnswer } from "@/ai/money-types";
+import { MONEY_STATUS_LABEL, type MoneyAnswer } from "@/ai/money-types";
 import { runCaseAi } from "@/chat/service";
 import type { ChatStore, StoredCase } from "@/chat/types";
 import { backend, type BackendName } from "../change-draft/backends";
@@ -55,10 +55,15 @@ if (unknown.length) throw new Error(`Unknown case ids: ${unknown.join(", ")}`);
 interface Saved { text?: string; moneyAnswer?: MoneyAnswer; model?: string; failed?: string }
 
 
+const usd = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+
 function grade(testCase: MoneyCase, saved: Saved, attempts: Attempt[]) {
   const answer = saved.moneyAnswer?.answer;
   const answered = !!answer && saved.model !== "system";
-  const written = answer ? [answer.summary.text, ...answer.rows.map((row) => `${row.label}: ${row.status}${row.amount ? ` ${row.amount}` : ""}`), ...answer.notes.map((note) => note.text)].join("\n") : "";
+  // The table is the records' own, so a claim it shows counts as stated, in the words the reader sees.
+  const table = saved.moneyAnswer?.table ?? [];
+  const tableLines = table.map((row) => `${row.label}: ${MONEY_STATUS_LABEL[row.status]} ${usd(row.netCents)}${row.refundedCents ? ` refunded ${usd(row.refundedCents)}` : ""}${row.releasedCents ? ` released ${usd(row.releasedCents)}` : ""}${row.heldCents ? ` on hold ${usd(row.heldCents)}` : ""}`);
+  const written = answer ? [answer.summary.text, ...tableLines, ...answer.rows.map((row) => `${row.label}: ${row.status}${row.amount ? ` ${row.amount}` : ""}`), ...answer.notes.map((note) => note.text)].join("\n") : "";
   const cited = new Set(saved.moneyAnswer?.facts.map((fact) => fact.id) ?? []);
   const problems: string[] = [];
   const expected = testCase.expected;
@@ -70,7 +75,8 @@ function grade(testCase: MoneyCase, saved: Saved, attempts: Attempt[]) {
   }
   for (const id of expected.mustCite ?? []) if (!cited.has(id)) problems.push(`did not cite ${id}`);
   if (expected.showEvidence !== undefined && saved.moneyAnswer?.showEvidence !== expected.showEvidence) problems.push(`showEvidence ${saved.moneyAnswer?.showEvidence ?? "unset"}, expected ${expected.showEvidence}`);
-  if (expected.minRows && (answer?.rows.length ?? 0) < expected.minRows) problems.push(`${answer?.rows.length ?? 0} rows, expected at least ${expected.minRows}`);
+  const rowCount = table.length || (answer?.rows.length ?? 0);
+  if (expected.minRows && rowCount < expected.minRows) problems.push(`${rowCount} rows, expected at least ${expected.minRows}`);
   if (!answered) problems.unshift(saved.failed ? `error: ${saved.failed.slice(0, 160)}` : saved.moneyAnswer ? "the written answer failed verification twice; only the records were shown" : `no money answer: ${saved.text?.slice(0, 160)}`);
   const pass = answered && problems.length === 0;
   return { scores: { pass: pass ? 1 : 0, answered: answered ? 1 : 0, first_try: attempts.length === 1 && answered ? 1 : 0 }, explanation: [answered ? `answer: ${written.replace(/\n/gu, " | ")}` : "", ...problems].filter(Boolean).join(" · ") };

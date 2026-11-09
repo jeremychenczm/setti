@@ -29,15 +29,56 @@ export interface MoneyContext {
   sources: MoneySource[];
   /** Uncertainty and missing-record warnings cannot be hidden by model selection. */
   mandatoryFactIds?: string[];
+  /** Each item's recorded money, keyed for the model; the answer's item table is built from these. */
+  items?: MoneyItem[];
 }
+
+/** One item's recorded state, in fixed words: the server derives it from the records, never the model. */
+export type MoneyStatus = "charged" | "on_hold" | "released" | "refunded" | "refund_due" | "waiting_for_supplier_credit" | "waiting_for_result" | "not_charged";
+
+export const MONEY_STATUS_LABEL: Record<MoneyStatus, string> = {
+  charged: "Charged", on_hold: "On hold", released: "Released", refunded: "Refunded", refund_due: "Refund due",
+  waiting_for_supplier_credit: "Waiting for supplier credit", waiting_for_result: "Waiting for result", not_charged: "Not charged",
+};
+
+/** One row of the item table, filled from the records when the answer is saved. */
+export interface MoneyTableRow {
+  /** `side:itemId`, as the model names the item. */
+  key: string;
+  label: string;
+  status: MoneyStatus;
+  heldCents: number;
+  chargedCents: number;
+  refundedCents: number;
+  releasedCents: number;
+  /** What the confirmed version keeps from this item's money and does not refund, such as a restocking fee. */
+  nonRefundableCents: number;
+  /** Charged less refunded. */
+  netCents: number;
+  /** The facts about this item; a sentence about it is checked against all of them. */
+  factIds: string[];
+}
+
+export type MoneyItem = MoneyTableRow;
 
 /** One sentence of Setti's written answer and the recorded facts it rests on. */
 export interface MoneyAnswerSentence {
   text: string;
+  /** Facts it cites by id, including any warning it addresses. */
   factIds: string[];
+  /** The item keys it talks about, or "project"; every record of those is its evidence. Absent in older answers. */
+  about?: string[];
 }
 
-/** One item's line in the answer: what happened to it, and the amount that matters. */
+/** Setti's answer as the model returns it: the items to tabulate and the sentences around them. */
+export interface MoneyAnswerDraft {
+  summary: MoneyAnswerSentence;
+  /** Item keys for the table, in reading order. */
+  items: string[];
+  notes: MoneyAnswerSentence[];
+}
+
+/** One item's line in an older answer, written by the model itself; newer answers keep `rows` empty and use the table. */
 export interface MoneyAnswerRow {
   label: string;
   status: string;
@@ -63,6 +104,8 @@ export interface MoneyAnswer {
   sources: MoneySource[];
   /** Setti's verified answer; absent when the recorded facts are shown on their own. */
   answer?: MoneyAnswerBody;
+  /** The item table, built from the records when the answer was saved; absent in older answers. */
+  table?: MoneyTableRow[];
   /** Setti chose to show the cited records because the person asked for the evidence. */
   showEvidence?: boolean;
 }

@@ -75,11 +75,13 @@ export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKe
         if (output.changes.length || !output.money || output.quoteQuery != null) return failed(["A money answer sets changes=[], quoteQuery=null and gives money.answer."]);
         // The facts the answer cites are the evidence shown under it.
         const known = new Set(moneyContext.facts.map((fact) => fact.id));
-        const cited = answerFactIds(output.money.answer);
+        const cited = answerFactIds(moneyContext, output.money.answer);
         const shown = cited.filter((id) => known.has(id));
         const problems = verifyMoneyAnswer(moneyContext, output.money.answer);
-        if (!cited.length) problems.push("The answer must cite at least one moneyEvidence fact.");
-        if (problems.length) return failed(problems, shown.length ? buildMoneyAnswer(moneyContext, shown) : undefined);
+        if (!cited.length) problems.push("The answer must be about at least one item or the project, or cite a moneyEvidence fact.");
+        // Twice unverified, the table still stands: it comes from the records, not from the model's words.
+        const tabulated = output.money.answer.items.filter((key) => moneyContext.items?.some((item) => item.key === key));
+        if (problems.length) return failed(problems, shown.length ? buildMoneyAnswer(moneyContext, shown, undefined, false, tabulated) : undefined);
         return { ok: true, reply: buildMoneyAnswer(moneyContext, shown, output.money.answer, output.money.showEvidence) };
       }
       if (output.intent === "quote") {

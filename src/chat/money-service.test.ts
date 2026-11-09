@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildDraft } from "../ai/draft";
 import { modelContext, type ChangeModelOutput } from "../ai/model";
-import { UNVERIFIED_MONEY_TEXT } from "../ai/money-answer";
+import { UNVERIFIED_MONEY_TABLE_TEXT, UNVERIFIED_MONEY_TEXT } from "../ai/money-answer";
 import type { MoneyAnswer, MoneyContext } from "../ai/money-types";
 import { approvedForTest } from "../opening/testing";
 import { runCaseAi, type DraftDependencies } from "./service";
@@ -39,7 +39,7 @@ function scenario(text = "@Setti Why are the budget and the payment amount diffe
   } satisfies ChatStore;
   const answer = {
     summary: { text: "The approved budget is not a payment receipt.", factIds: ["budget"] },
-    rows: [],
+    items: [],
     notes: [{ text: "One payment outcome is still unknown, so check it before treating it as complete.", factIds: ["pending"] }],
   };
   const output: ChangeModelOutput = { intent: "money", message: "Untrusted model prose must not become a receipt.", title: "Money", changes: [], unresolved: [], constraints: [], money: { answer, showEvidence: false } };
@@ -67,7 +67,8 @@ describe("grounded money chat orchestration", () => {
     expect(s.deps.callModel).toHaveBeenCalledOnce();
     expect(saved.model).toBe("test-model");
     expect(saved.text).toBe("The approved budget is not a payment receipt." + "\n" + "One payment outcome is still unknown, so check it before treating it as complete.");
-    expect(saved.moneyAnswer?.answer).toEqual(s.output.money!.answer);
+    const { summary, notes } = s.output.money!.answer;
+    expect(saved.moneyAnswer?.answer).toEqual({ summary, rows: [], notes });
     expect(saved.moneyAnswer?.showEvidence).toBe(false);
     expect(saved).not.toHaveProperty("draft");
     expect(s.state.draft).toEqual(previousDraft);
@@ -81,7 +82,7 @@ describe("grounded money chat orchestration", () => {
 
   it.each([{ ids: ["foreign-fact"] }, { ids: [] }])("fails, after one corrected attempt, an answer that cites no fact that exists: $ids", async ({ ids }) => {
     const s = scenario();
-    s.output.money = { answer: { summary: { text: "Here is what the records show.", factIds: ids }, rows: [], notes: [] }, showEvidence: false };
+    s.output.money = { answer: { summary: { text: "Here is what the records show.", factIds: ids }, items: [], notes: [] }, showEvidence: false };
     await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("did not pass verification");
     expect(s.deps.callModel).toHaveBeenCalledTimes(2);
     expect(s.store.completeAi).not.toHaveBeenCalled();
@@ -104,13 +105,25 @@ describe("grounded money chat orchestration", () => {
 
   it("shows only the recorded facts, as a system notice, when the answer fails verification twice", async () => {
     const s = scenario();
-    s.output.money = { answer: { summary: { text: "Everything is paid in full.", factIds: ["budget"] }, rows: [], notes: [] }, showEvidence: false };
+    s.output.money = { answer: { summary: { text: "Everything is paid in full.", factIds: ["budget"] }, items: [], notes: [] }, showEvidence: false };
     await runCaseAi(s.store, "session", "willow", "request", s.deps);
     expect(s.deps.callModel).toHaveBeenCalledTimes(2);
     const saved = s.store.completeAi.mock.calls[0][4];
     expect(saved).toMatchObject({ model: "system", text: UNVERIFIED_MONEY_TEXT });
     expect(saved.moneyAnswer).not.toHaveProperty("answer");
     expect(saved.moneyAnswer?.facts.map((fact) => fact.id)).toEqual(["budget", "pending"]);
+  });
+
+  it("keeps the item table from the records when the written answer fails verification twice", async () => {
+    const s = scenario();
+    s.context.facts.push({ id: "item:baseline:chair", text: { en: "Dining chair (baseline): completed captures $400.00, net captured $400.00." }, sourceIds: ["quote"] });
+    s.context.items = [{ key: "baseline:chair", label: "Dining chair", status: "charged", heldCents: 0, chargedCents: 40_000, refundedCents: 0, releasedCents: 0, nonRefundableCents: 0, netCents: 40_000, factIds: ["item:baseline:chair"] }];
+    s.output.money = { answer: { summary: { text: "Everything is paid in full.", factIds: ["budget"] }, items: ["baseline:chair", "baseline:sofa"], notes: [] }, showEvidence: false };
+    await runCaseAi(s.store, "session", "willow", "request", s.deps);
+    const saved = s.store.completeAi.mock.calls[0][4];
+    expect(saved).toMatchObject({ model: "system", text: UNVERIFIED_MONEY_TABLE_TEXT });
+    expect(saved.moneyAnswer?.table?.map((row) => [row.key, row.netCents])).toEqual([["baseline:chair", 40_000]]);
+    expect(saved.moneyAnswer).not.toHaveProperty("answer");
   });
 
   it("rejects a fact referencing an absent source", async () => {

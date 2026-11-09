@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { MoneyAnswer } from "../../ai/money-types";
+import type { MoneyAnswer, MoneyTableRow } from "../../ai/money-types";
 import { MoneyAnswerCard } from "./MoneyAnswerCard";
 
 function snapshot(): MoneyAnswer {
@@ -50,5 +50,32 @@ describe("recorded money evidence card", () => {
     expect(shown).toContain("Payment status is unknown.");
     expect(shown).toContain('href="/quotes/maple"');
     expect(shown).toContain('id="money-reply-fact-1"');
+  });
+
+  const row = (patch: Partial<MoneyTableRow>): MoneyTableRow => ({ key: "baseline:x", label: "Item", status: "charged", heldCents: 0, chargedCents: 0, refundedCents: 0, releasedCents: 0, nonRefundableCents: 0, netCents: 0, factIds: ["missing"], ...patch });
+  const table = [
+    row({ key: "baseline:countertop", label: "Quartz countertop", status: "refunded", chargedCents: 396_000, refundedCents: 44_000, nonRefundableCents: 28_000, netCents: 352_000 }),
+    row({ key: "baseline:pendants", label: "Counter pendant light", status: "charged", chargedCents: 96_000, releasedCents: 48_000, netCents: 96_000 }),
+  ];
+
+  it("shows the item table from the records: what each item paid in the end, with its status and other money in fixed words, and the total", () => {
+    const answer: MoneyAnswer = { ...snapshot(), table: [...table, row({ key: "baseline:stool", label: "Counter stool", status: "on_hold", heldCents: 273_000 }), row({ key: "baseline:lamp", label: "Floor lamp", status: "waiting_for_supplier_credit", chargedCents: 30_000, netCents: 30_000 })],
+      answer: { summary: { text: "Everything is settled.", factIds: ["missing"] }, rows: [], notes: [] } };
+    const text = renderToStaticMarkup(createElement(MoneyAnswerCard, { answer, messageId: "reply" })).replace(/<[^>]+>/g, "");
+    expect(text).toContain("Everything is settled.");
+    expect(text).toContain("Quartz countertop" + "Charged $3,960.00 · Refunded $440.00 · Non-refundable $280.00" + "$3,520.00");
+    expect(text).toContain("Counter pendant light" + "Charged $960.00 · Released $480.00" + "$960.00");
+    expect(text).toContain("Counter stool" + "On hold $2,730.00" + "$0.00");
+    expect(text).toContain("Floor lamp" + "Waiting for supplier credit" + "$300.00");
+    expect(text).toContain("Total" + "On hold $2,730.00 · Charged $5,220.00 · Refunded $440.00 · Released $480.00 · Non-refundable $280.00" + "$4,780.00");
+    expect(text).toContain("From the PayPal Sandbox records");
+    expect(text).not.toContain("Payment status is unknown.");
+  });
+
+  it("keeps the table, with the records behind it, when there is no written answer", () => {
+    const html = renderToStaticMarkup(createElement(MoneyAnswerCard, { answer: { ...snapshot(), table }, messageId: "reply" }));
+    expect(html).toContain("Quartz countertop");
+    expect(html).toContain("<summary");
+    expect(html).toContain("Payment status is unknown.");
   });
 });

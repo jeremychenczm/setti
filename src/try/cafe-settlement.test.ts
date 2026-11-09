@@ -94,6 +94,12 @@ describe.skipIf(!testDatabaseUrl)("café walkthrough after one signature", () =>
     expect(new Set(reminders.map((item) => item.projectName))).toEqual(new Set(["Maple Ave Café"]));
     for (const version of [1, 2]) expect((await readVersionReceipt(handle.db, session, "maple", version)).project).toMatchObject({ name: "Maple Ave Café", room: "Front of house" });
 
+    // The money answer's item table comes from the records, in fixed words: before any supplier step, what is held and what waits.
+    const money = async () => new Map((await createChatStore(handle.db).readMoneyContext!(session, "maple")).items!.map((item) => [item.key, item]));
+    const early = await money();
+    expect(early.get("baseline:countertop")).toMatchObject({ status: "waiting_for_supplier_credit", chargedCents: 396_000, nonRefundableCents: 28_000 });
+    expect([...early.values()].filter((item) => item.status === "on_hold").map((item) => item.label).sort()).toEqual(["Acoustic ceiling panel (new)", "Back bar wall tile, sage green (new)", "Counter pendant light", "Counter stool", "Oak window counter (new)"]);
+
     // Emma pays for the two extra site visits; the design fee was paid with V1.
     const checkout = await startServicesCheckout(handle.db, paypal, session, "maple", links);
     expect(checkout.amountCents).toBe(36_000);
@@ -139,5 +145,14 @@ describe.skipIf(!testDatabaseUrl)("café walkthrough after one signature", () =>
     const refunded = ledger.refunds.filter((refund) => refund.status === "completed").reduce((sum, refund) => sum + refund.amountCents, 0);
     expect([captured, refunded, captured - refunded]).toEqual([1_873_000, 122_400, 1_750_600]);
     expect(order.totals.totalCents).toBe(1_750_600);
+
+    // Settled: each item's status and amounts as the answer's table shows them.
+    const settled = await money();
+    expect(settled.get("baseline:countertop")).toMatchObject({ label: "Quartz countertop", status: "refunded", chargedCents: 396_000, refundedCents: 44_000, nonRefundableCents: 28_000, netCents: 352_000 });
+    expect(settled.get("baseline:wall-tile")).toMatchObject({ label: "Back bar wall tile (original)", status: "refunded", nonRefundableCents: 19_600, netCents: 19_600 });
+    expect(settled.get("proposed:wall-tile")).toMatchObject({ label: "Back bar wall tile, sage green (new)", status: "charged", netCents: 152_000 });
+    expect(settled.get("baseline:pendants")).toMatchObject({ status: "charged", releasedCents: 48_000, netCents: 96_000 });
+    expect([...settled.values()].reduce((sum, item) => sum + item.netCents, 0)).toBe(1_750_600);
+    expect([...settled.values()].every((item) => item.factIds.includes(`item:${item.key}`))).toBe(true);
   });
 });

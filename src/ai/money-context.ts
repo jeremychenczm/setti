@@ -17,7 +17,7 @@ import { HOME_SCENARIO } from "../demo/living-dining";
 import type { PaymentLineView, PaymentsWorkspace } from "../payments/types";
 import { paymentsWorkspace } from "../payments/workspace";
 import type { FrozenChangeOrder } from "../pricing/types";
-import type { MoneyContext, MoneyFact, MoneySource } from "./money-types";
+import type { MoneyContext, MoneyFact, MoneyItem, MoneySource, MoneyStatus } from "./money-types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const usd = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -121,6 +121,7 @@ export function openingMoneyContext({ key, quote, ledger, itemMapping, now, prov
   }
   const recorded = ledgerFacts(identities, mappingBlockers, ledger, null, now);
   const totals = { held: 0, captured: 0, refunded: 0 };
+  const items: MoneyItem[] = [];
   for (const line of quote.lines) {
     const businessId = itemMapping[itemMappingKey({ ...line, sourceUrl: line.source.url ?? null })];
     const held = recorded.lines.find((entry) => entry.itemId === line.itemId && entry.side === "baseline");
@@ -137,10 +138,12 @@ export function openingMoneyContext({ key, quote, ledger, itemMapping, now, prov
     for (const hold of holds) addSource(`hold:${hold.id}`, `PayPal V1 authorization ${hold.paypalAuthorizationId} · ${hold.status}`, hold.createdAt);
     for (const capture of captures) addSource(`capture:${capture.id}`, `PayPal V1 capture ${capture.paypalCaptureId} · ${capture.status}`, capture.createdAt);
     for (const refund of refunds) addSource(`refund:${refund.id}`, `PayPal V1 refund ${refund.paypalRefundId} · ${refund.status}`, refund.createdAt);
+    const itemFacts = [`item:baseline:${line.itemId}`, `next:baseline:${line.itemId}`];
     for (const event of ledger.supplierEvents.filter((entry) => entry.itemId === businessId)) {
       const id = `supplier:${event.id}`;
       sources.push({ id, kind: "supplier", label: `Demo V1 supplier ${event.kind} · ${event.reference}`, href: paymentHref, recordedAt: event.createdAt.toISOString() });
       refs.push(id);
+      itemFacts.push(id);
       facts.push(fact(id, `${line.name}: a demo supplier ${event.kind === "credit_confirmed" ? "credit" : "confirmation"} for ${usd(event.totalCents)} was recorded by the designer. This is not a supplier integration or a PayPal receipt.`, [id, "quote"]));
     }
     const operations = ledger.operations.filter((entry) => entry.itemId === businessId || holds.some((hold) => hold.operationId === entry.id));
@@ -150,6 +153,7 @@ export function openingMoneyContext({ key, quote, ledger, itemMapping, now, prov
       addSource(id, `${operation.kind} · ${operation.status} · ${operation.paypalResourceId ?? operation.paypalOrderId ?? operation.id}`, operation.updatedAt);
       if (!facts.some((entry) => entry.id === id)) facts.push(fact(id, `${operation.servicesHold ? "The design-services checkout" : line.name} has a V1 ${operation.kind} operation for ${usd(operation.amountCents)} whose outcome is ${operation.status}. Check the original operation; it is not proof that money completed or that a replacement is safe.`, [id]));
       mandatoryFactIds.push(id);
+      itemFacts.push(id);
     }
     const heldCents = held?.heldCents ?? 0, capturedCents = held?.capturedCents ?? 0, refundedCents = held?.refundedCents ?? 0;
     totals.held += heldCents; totals.captured += capturedCents; totals.refunded += refundedCents;
@@ -165,6 +169,12 @@ export function openingMoneyContext({ key, quote, ledger, itemMapping, now, prov
       : `there is no completed recorded payment covering the remaining ${usd(Math.max(0, target - capturedCents + refundedCents))} target. Approval alone does not prove it was paid.`;
     facts.push(fact(nextId, `${line.name}: ${next}`, refs));
     if (uncertain) mandatoryFactIds.push(nextId);
+    // A hold that is no longer open gave back whatever it did not capture.
+    const capturedFrom = (holdId: string) => captures.filter((entry) => entry.authorizationId === holdId && entry.status === "completed").reduce((sum, entry) => sum + entry.amountCents, 0);
+    const releasedCents = holds.filter((hold) => hold.itemId === businessId && hold.status !== "created" && hold.status !== "partially_captured")
+      .reduce((sum, hold) => sum + Math.max(0, hold.amountCents - capturedFrom(hold.id)), 0);
+    const money = { heldCents, capturedCents, refundedCents, releasedCents };
+    items.push(moneyItem(`baseline:${line.itemId}`, line.name, money, 0, moneyStatus(money, { pending: uncertain, waitingCredit: false, refundDue: false }), itemFacts));
   }
   if (recorded.blockers?.length) {
     facts.push(fact("funding-blockers", `Recorded V1 payment evidence has unresolved conditions: ${recorded.blockers.join(" ")} No new executable payment conclusion follows from incomplete results.`, ["quote"]));
@@ -176,7 +186,26 @@ export function openingMoneyContext({ key, quote, ledger, itemMapping, now, prov
     facts.push(fact("no-provider-records", "No stored PayPal response has yet been found for this V1. Quote and local preparation records do not establish actual completed payment or a PayPal balance.", ["quote"]));
     mandatoryFactIds.push("no-provider-records");
   }
-  return { projectKey: key, quoteId: quote.id, version: 1, checkedAt: now.toISOString(), providerRecordedAt, mode: "recorded_sandbox", facts, sources, mandatoryFactIds: [...new Set(mandatoryFactIds)] };
+  return { projectKey: key, quoteId: quote.id, version: 1, checkedAt: now.toISOString(), providerRecordedAt, mode: "recorded_sandbox", facts, sources, mandatoryFactIds: [...new Set(mandatoryFactIds)], items };
+}
+
+/** The item's state in fixed words, worked out from its records: anything still uncertain comes first. */
+export function moneyStatus(money: { heldCents: number; capturedCents: number; refundedCents: number; releasedCents: number }, flags: { pending: boolean; waitingCredit: boolean; refundDue: boolean }): MoneyStatus {
+  if (flags.pending) return "waiting_for_result";
+  if (flags.waitingCredit) return "waiting_for_supplier_credit";
+  if (flags.refundDue) return "refund_due";
+  if (money.heldCents > 0) return "on_hold";
+  if (money.refundedCents > 0) return "refunded";
+  if (money.capturedCents > 0) return "charged";
+  if (money.releasedCents > 0) return "released";
+  return "not_charged";
+}
+
+function moneyItem(key: string, label: string, money: { heldCents: number; capturedCents: number; refundedCents: number; releasedCents: number }, nonRefundableCents: number, status: MoneyStatus, factIds: string[]): MoneyItem {
+  return {
+    key, label, status, heldCents: money.heldCents, chargedCents: money.capturedCents, refundedCents: money.refundedCents, releasedCents: money.releasedCents,
+    nonRefundableCents, netCents: money.capturedCents - money.refundedCents, factIds: [...new Set(factIds)],
+  };
 }
 
 function fact(id: string, en: string, sourceIds: string[]): MoneyFact {
@@ -203,6 +232,8 @@ function contextFromWorkspace(key: CaseKey, quoteId: string, order: FrozenChange
   ];
   const lineSources = new Map<string, string[]>();
   const providerTimes: string[] = [];
+  const items: MoneyItem[] = [];
+  const openFacts = new Map<string, string[]>();
   const relevant = new Map(workspace.lines.filter((line) => line.businessItemId).map((line) => [line.businessItemId!, line]));
   for (const operation of workspace.operations) {
     for (const call of operation.calls) if (call.httpStatus !== null) providerTimes.push(call.createdAt);
@@ -212,7 +243,10 @@ function contextFromWorkspace(key: CaseKey, quoteId: string, order: FrozenChange
     sources.push({ id, kind: "payment", label: `${operation.kind} · ${operation.status} · ${operation.paypalResourceId ?? operation.paypalOrderId ?? operation.id}`, href: `${href}${line ? lineAnchor(line) : "#payments"}`, recordedAt: operation.updatedAt });
     facts.push(fact(id, `${operation.itemLabel ?? "An item"} has a ${operation.kind} operation for ${usd(operation.amountCents)} whose outcome is ${operation.status}. Check the existing operation; do not assume completion or start a replacement payment.`, [id]));
     mandatoryFactIds.push(id);
+    if (operation.businessItemId) openFacts.set(operation.businessItemId, [...(openFacts.get(operation.businessItemId) ?? []), id]);
   }
+  // A replaced item appears twice; the reader tells the two apart as the original and the new one.
+  const replaced = new Set(workspace.lines.filter((line) => line.side === "proposed").map((line) => line.itemId));
   for (const line of workspace.lines) {
     const refs = addLineSources(line, href, sources);
     lineSources.set(`${line.side}:${line.itemId}`, refs);
@@ -224,14 +258,24 @@ function contextFromWorkspace(key: CaseKey, quoteId: string, order: FrozenChange
       mandatoryFactIds.push(`next:${line.side}:${line.itemId}`);
     }
     const change = line.side === "baseline" ? order.changes.find((entry) => entry.itemId === line.itemId) : undefined;
+    const itemFacts = [`item:${line.side}:${line.itemId}`, `next:${line.side}:${line.itemId}`, ...(line.businessItemId ? openFacts.get(line.businessItemId) ?? [] : [])];
     if (change) {
       facts.push(fact(`terms:${line.side}:${line.itemId}`, `${line.label}: the client-confirmed old-item handling is ${change.oldItemHandling}; the retained old-item cost is ${usd(change.oldItemCostCents)}. This amount is already included in the confirmed target and must not be deducted a second time.`, ["quote", "approval"]));
+      itemFacts.push(`terms:${line.side}:${line.itemId}`);
     }
     for (const event of line.supplierEvents) {
       const sourceId = `supplier:${event.id}`;
       sources.push({ id: sourceId, kind: "supplier", label: `Demo supplier ${event.kind} · ${event.reference}`, href: `${href}${lineAnchor(line)}`, recordedAt: event.createdAt });
       facts.push(fact(sourceId, `${line.label}: a demo ${event.kind === "credit_confirmed" ? "supplier credit" : "supplier confirmation"} for ${usd(event.totalCents)} was recorded by the designer at ${event.createdAt}. This is not a live supplier integration or a PayPal receipt.`, [sourceId, "quote"]));
+      itemFacts.push(sourceId);
     }
+    const pending = (line.businessItemId ? openFacts.has(line.businessItemId) : false) || line.captures.some((capture) => capture.status === "pending") || line.refunds.some((refund) => refund.status === "pending");
+    const owed = net > line.targetCents;
+    const waitingCredit = owed && !!line.refundRequiresSupplierCredit && !line.supplierEvents.some((event) => event.kind === "credit_confirmed");
+    const money = { heldCents: line.heldCents, capturedCents: line.capturedCents, refundedCents: line.refundedCents, releasedCents: line.releasedCents };
+    const label = line.side === "proposed" ? `${line.label} (new)` : replaced.has(line.itemId) ? `${line.label} (original)` : line.label;
+    const kept = change && change.oldItemHandling !== "not_applicable" ? change.oldItemCostCents : 0;
+    items.push(moneyItem(`${line.side}:${line.itemId}`, label, money, kept, moneyStatus(money, { pending, waitingCredit, refundDue: owed && !waitingCredit }), itemFacts));
   }
   if (workspace.lines.length) {
     const totals = workspace.lines.reduce((sum, line) => ({ held: sum.held + line.heldCents, captured: sum.captured + line.capturedCents, refunded: sum.refunded + line.refundedCents, released: sum.released + line.releasedCents }), { held: 0, captured: 0, refunded: 0, released: 0 });
@@ -257,7 +301,7 @@ function contextFromWorkspace(key: CaseKey, quoteId: string, order: FrozenChange
     facts.push(fact("no-provider-records", "No stored PayPal response was found for this case. The displayed coverage is based on local records only and does not establish an actual PayPal balance or a completed payment.", ["quote"]));
     mandatoryFactIds.push("no-provider-records");
   }
-  return { projectKey: key, quoteId, version: order.version, checkedAt: now.toISOString(), providerRecordedAt, mode: "recorded_sandbox", facts, sources, mandatoryFactIds };
+  return { projectKey: key, quoteId, version: order.version, checkedAt: now.toISOString(), providerRecordedAt, mode: "recorded_sandbox", facts, sources, mandatoryFactIds, items };
 }
 
 function lineAnchor(line: PaymentLineView): string {

@@ -1,4 +1,4 @@
-import type { MoneyAnswer, MoneyAnswerBody, MoneyAnswerSentence, MoneyContext } from "./money-types";
+import { MONEY_STATUS_LABEL, type MoneyAnswer, type MoneyAnswerDraft, type MoneyAnswerSentence, type MoneyContext, type MoneyItem, type MoneyTableRow } from "./money-types";
 import { aiTask, isExplicitDraftRequest } from "./intent";
 
 /** A hint for deferring irrelevant product reads and protecting clearly read-only questions. */
@@ -66,82 +66,114 @@ const STATUS_TERMS = [
 const ACTION_CLAIM = /\bI\s+(?:have\s+|just\s+)?(?:refunded|charged|captured|released|paid|approved|moved|sent|authori[sz]ed|voided)\b/iu;
 /** Warnings the evidence panel always shows; the written answer need not repeat them. */
 const SHOWN_ANYWAY = new Set(["record-freshness", "outside-scope"]);
+/** What a sentence is about when it speaks of the project as a whole rather than one item. */
+export const PROJECT = "project";
 
-/** Each part of an answer as one checkable statement, named as the model will read it back. */
-function answerParts(body: MoneyAnswerBody): { name: string; text: string; factIds: string[] }[] {
-  return [
-    { name: "The summary", ...body.summary },
-    ...body.rows.map((row, index) => ({ name: `Row ${index + 1}`, text: `${row.label}: ${row.status}${row.amount ? ` ${row.amount}` : ""}`, factIds: row.factIds })),
-    ...body.notes.map((note, index) => ({ name: `Note ${index + 1}`, ...note })),
-  ];
+/** The facts no item owns: totals, the budget, the approval and warnings about the whole project. */
+function projectFactIds(context: MoneyContext): string[] {
+  const owned = new Set((context.items ?? []).flatMap((item) => item.factIds));
+  return context.facts.map((fact) => fact.id).filter((id) => !owned.has(id));
 }
 
-/** Every fact the answer cites, each once, in the order it first cites them. */
-export function answerFactIds(body: MoneyAnswerBody): string[] {
-  return [...new Set(answerParts(body).flatMap((part) => part.factIds))];
+/** Everything a sentence may rest on: the facts it cites, and every record of the items (or the project) it is about. */
+export function sentenceEvidence(context: MoneyContext, sentence: MoneyAnswerSentence): string[] {
+  const items = new Map((context.items ?? []).map((item) => [item.key, item]));
+  const ids = [...sentence.factIds];
+  for (const key of sentence.about ?? []) ids.push(...(key === PROJECT ? projectFactIds(context) : items.get(key)?.factIds ?? []));
+  return [...new Set(ids)];
+}
+
+/** The written parts of an answer, named as the model will read them back. */
+function draftParts(draft: MoneyAnswerDraft): { name: string; sentence: MoneyAnswerSentence }[] {
+  return [{ name: "The summary", sentence: draft.summary }, ...draft.notes.map((note, index) => ({ name: `Note ${index + 1}`, sentence: note }))];
+}
+
+/** Every fact the answer rests on, each once: its sentences' evidence, then its table items' records. */
+export function answerFactIds(context: MoneyContext, draft: MoneyAnswerDraft): string[] {
+  const items = new Map((context.items ?? []).map((item) => [item.key, item]));
+  return [...new Set([...draftParts(draft).flatMap((part) => sentenceEvidence(context, part.sentence)), ...draft.items.flatMap((key) => items.get(key)?.factIds ?? [])])];
 }
 
 /** The answer as plain text, for chat previews and anywhere the layout cannot be shown. */
-export function answerText(body: MoneyAnswerBody): string {
-  return [body.summary.text, ...body.rows.map((row) => `${row.label}: ${row.status}${row.amount ? ` · ${row.amount}` : ""}`), ...body.notes.map((note) => note.text)].map((line) => line.trim()).join("\n");
+export function answerText(draft: MoneyAnswerDraft, table: readonly MoneyTableRow[]): string {
+  return [draft.summary.text, ...table.map((row) => `${row.label}: ${MONEY_STATUS_LABEL[row.status]} · net ${usd(row.netCents)}`), ...draft.notes.map((note) => note.text)].map((line) => line.trim()).join("\n");
 }
 
 /**
- * Checks Setti's written money answer against the recorded facts before it is
- * saved: each amount and payment status must come from the facts its part
- * cites, and recorded warnings must be addressed. Returns what to fix.
+ * Checks Setti's written money answer against the records before it is saved.
+ * The item table is built from the records, so only the items it lists are
+ * checked there. Each sentence is checked against the facts it cites and every
+ * record of what it is about: each amount must be written in those records, and
+ * each charge, refund, hold, release, credit or pending result must be recorded
+ * there. Recorded warnings must be addressed. Returns what to fix.
  */
-export function verifyMoneyAnswer(context: MoneyContext, body: MoneyAnswerBody): string[] {
+export function verifyMoneyAnswer(context: MoneyContext, draft: MoneyAnswerDraft): string[] {
   const facts = new Map(context.facts.map((fact) => [fact.id, fact.text.en]));
+  const items = new Map((context.items ?? []).map((item) => [item.key, item]));
   const problems: string[] = [];
-  body.rows.forEach((row, index) => {
-    if (!row.factIds.length) problems.push(`Row ${index + 1} (${row.label}) must cite the facts it rests on.`);
-    if (row.amount !== null && amountsIn(row.amount).length !== 1) problems.push(`Row ${index + 1} (${row.label}) amount must be one amount written like $1,200.00, or null.`);
-  });
+  const listed = new Set<string>();
+  for (const key of draft.items) {
+    if (!items.has(key)) problems.push(`items lists "${key}", which is not a key in moneyEvidence.items.`);
+    else if (listed.has(key)) problems.push(`items lists "${key}" twice.`);
+    listed.add(key);
+  }
   const cited = new Set<string>();
-  answerParts(body).forEach((sentence) => {
-    const label = `${sentence.name} ("${sentence.text.slice(0, 80)}")`;
+  for (const { name, sentence } of draftParts(draft)) {
+    const label = `${name} ("${sentence.text.slice(0, 80)}")`;
     const unknown = sentence.factIds.filter((id) => !facts.has(id));
     if (unknown.length) problems.push(`${label} cites facts that are not in moneyEvidence: ${unknown.join(", ")}.`);
-    const texts = sentence.factIds.flatMap((id) => facts.get(id) ?? []);
+    const strange = (sentence.about ?? []).filter((key) => key !== PROJECT && !items.has(key));
+    if (strange.length) problems.push(`${label} is about ${strange.map((key) => `"${key}"`).join(", ")}, not in moneyEvidence.items; use item keys or "${PROJECT}".`);
     for (const id of sentence.factIds) cited.add(id);
     if (EAST_ASIAN_SCRIPT.test(sentence.text)) problems.push(`${label} is not in English.`);
     if (/https?:\/\//iu.test(sentence.text)) problems.push(`${label} contains a link; the server adds the evidence links.`);
     if (ACTION_CLAIM.test(sentence.text)) problems.push(`${label} says the AI performed a payment action; the AI cannot move money or approve anything.`);
+    const texts = sentenceEvidence(context, sentence).flatMap((id) => facts.get(id) ?? []);
     const amounts = amountsIn(sentence.text);
     const terms = STATUS_TERMS.filter((term) => term.said.test(sentence.text));
-    if ((amounts.length || terms.length) && !texts.length) problems.push(`${label} states an amount or payment status without citing the facts it rests on.`);
-    if (!texts.length) return;
-    const recorded = new Set(texts.flatMap(amountsIn));
-    const missing = amounts.filter((amount) => !recorded.has(amount));
-    if (missing.length) problems.push(`${label} uses ${missing.map(usd).join(", ")}, which is not written in the facts it cites. Use only amounts written in those facts; do not add or subtract them.`);
-    for (const term of terms) if (!texts.some((text) => term.recorded.test(text))) problems.push(`${label} mentions ${term.name}, but none of the facts it cites records one.`);
-  });
+    if (!texts.length) {
+      if (amounts.length || terms.length) problems.push(`${label} states an amount or payment status, but names nothing in about and cites no fact.`);
+      continue;
+    }
+    const scope = scopeOf(sentence, items);
+    const recorded = [...new Set(texts.flatMap(amountsIn))];
+    const missing = amounts.filter((amount) => !recorded.includes(amount));
+    if (missing.length) problems.push(`${label} uses ${missing.map(usd).join(", ")}, which is not written in the records of ${scope}; those records contain ${recorded.slice(0, 20).map(usd).join(", ") || "no amounts"}. Use only those amounts, never a sum or difference of them; if the amount belongs to another item, add that item to about.`);
+    for (const term of terms) if (!texts.some((text) => term.recorded.test(text))) problems.push(`${label} mentions ${term.name}, but the records of ${scope} do not record one. If it belongs to another item, add that item to about; otherwise do not say it.`);
+  }
   const unaddressed = (context.mandatoryFactIds ?? []).filter((id) => !SHOWN_ANYWAY.has(id) && facts.has(id) && !cited.has(id));
-  if (unaddressed.length) problems.push(`The answer must address these recorded warnings and cite them: ${unaddressed.join(", ")}.`);
+  if (unaddressed.length) problems.push(`The answer must address these recorded warnings and list them in the factIds of the sentence that does: ${unaddressed.join(", ")}.`);
   return problems;
+}
+
+/** How a problem names what a sentence is about, in the item names the model was given. */
+function scopeOf(sentence: MoneyAnswerSentence, items: ReadonlyMap<string, MoneyItem>): string {
+  const names = (sentence.about ?? []).map((key) => key === PROJECT ? "the project" : items.get(key)?.label).filter(Boolean);
+  return names.length ? `${names.join(", ")}${sentence.factIds.length ? " and the facts it cites" : ""}` : "the facts it cites";
 }
 
 /** Shown, as a system notice, when Setti's written answer did not pass verification twice. */
 export const UNVERIFIED_MONEY_TEXT = "Setti's written answer did not pass verification against the saved records, so it was not shown. These are the recorded facts it selected.";
+/** The same notice when the item table, which comes from the records, is still shown. */
+export const UNVERIFIED_MONEY_TABLE_TEXT = "Setti's written explanation did not pass verification against the saved records, so it was not shown. The table comes straight from the records.";
 
-const sentenceOf = (sentence: MoneyAnswerSentence): MoneyAnswerSentence => ({ text: sentence.text.trim(), factIds: [...new Set(sentence.factIds)] });
-/** A stored copy with trimmed text and each citation once. */
-function cleanAnswer(body: MoneyAnswerBody): MoneyAnswerBody {
-  return {
-    summary: sentenceOf(body.summary),
-    rows: body.rows.map((row) => ({ label: row.label.trim(), status: row.status.trim(), amount: row.amount?.trim() || null, factIds: [...new Set(row.factIds)] })),
-    notes: body.notes.map(sentenceOf),
-  };
-}
+const sentenceOf = (sentence: MoneyAnswerSentence): MoneyAnswerSentence => ({
+  text: sentence.text.trim(), factIds: [...new Set(sentence.factIds)], ...(sentence.about?.length ? { about: [...new Set(sentence.about)] } : {}),
+});
 
-/** The facts and evidence behind an answer; amounts, statuses, sources and URLs all come from the records. */
-export function buildMoneyAnswer(context: MoneyContext, selected: readonly string[], answer?: MoneyAnswerBody, showEvidence = false): { text: string; moneyAnswer: MoneyAnswer } {
+/**
+ * The facts and evidence behind an answer; amounts, statuses, sources and URLs
+ * all come from the records. `tableKeys` are the items to tabulate, from the
+ * records as they are now, so the saved table never changes afterwards.
+ */
+export function buildMoneyAnswer(context: MoneyContext, selected: readonly string[], draft?: MoneyAnswerDraft, showEvidence = false, tableKeys: readonly string[] = draft?.items ?? []): { text: string; moneyAnswer: MoneyAnswer } {
   // Every selected fact comes from the bounded money context, so an answer may cite as many of them as it needs.
   if (!selected.length || new Set(selected).size !== selected.length) throw new Error("Invalid money fact selection");
+  const items = new Map((context.items ?? []).map((item) => [item.key, item]));
+  const table = [...new Set(tableKeys)].flatMap((key) => { const item = items.get(key); return item ? [structuredClone(item)] : []; });
   const byId = new Map(context.facts.map((fact) => [fact.id, fact]));
   const bySource = new Map(context.sources.map((source) => [source.id, source]));
-  const ids = [...new Set([...(answer ? answerParts(answer) : []).flatMap((part) => part.factIds), ...selected, ...(context.mandatoryFactIds ?? [])])];
+  const ids = [...new Set([...(draft ? answerFactIds(context, draft) : []), ...selected, ...table.flatMap((row) => row.factIds), ...(context.mandatoryFactIds ?? [])])].filter((id) => byId.has(id) || selected.includes(id));
   const facts = ids.map((id) => {
     const fact = byId.get(id);
     if (!fact || !fact.sourceIds.length || fact.sourceIds.some((source) => !bySource.has(source))) throw new Error("Unknown money evidence");
@@ -150,11 +182,12 @@ export function buildMoneyAnswer(context: MoneyContext, selected: readonly strin
   const sources = context.sources.filter((source) => facts.some((fact) => fact.sourceIds.includes(source.id)));
   if (sources.some((source) => !/^\/(?:quotes\/(?:maple|willow)|change-orders\/[0-9a-f-]{36})(?:#[a-zA-Z0-9_%.-]+)?$/.test(source.href))) throw new Error("Invalid money source");
   return {
-    text: answer ? answerText(answer) : UNVERIFIED_MONEY_TEXT,
+    text: draft ? answerText(draft, table) : table.length ? UNVERIFIED_MONEY_TABLE_TEXT : UNVERIFIED_MONEY_TEXT,
     moneyAnswer: {
       quoteId: context.quoteId, version: context.version, checkedAt: context.checkedAt,
       providerRecordedAt: context.providerRecordedAt, mode: context.mode, facts, sources: structuredClone(sources),
-      ...(answer ? { answer: cleanAnswer(answer), showEvidence } : {}),
+      ...(table.length ? { table } : {}),
+      ...(draft ? { answer: { summary: sentenceOf(draft.summary), rows: [], notes: draft.notes.map(sentenceOf) }, showEvidence } : {}),
     },
   };
 }

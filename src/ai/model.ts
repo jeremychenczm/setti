@@ -4,7 +4,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import type { ApprovedQuoteReport } from "@/quotes/types";
 import type { CaseMessage, ChangeDraft, ProductPage } from "@/chat/types";
 import { aiOutputSchema, type AiOutput } from "./output";
-import type { MoneyAnswerBody, MoneyContext } from "./money-types";
+import { MONEY_STATUS_LABEL, type MoneyAnswerDraft, type MoneyContext } from "./money-types";
 import { SETTI_IDENTITY } from "./identity";
 import { quoteQuerySchema, type QuoteQuery } from "./quote-query";
 
@@ -15,8 +15,8 @@ export const CHANGE_SYSTEM_PROMPT = `${SETTI_IDENTITY}
 In this project's chat your only capabilities are answering, asking a clarification, looking up lines in the approved quote, and drafting changes for designer review.
 Write every message, title and answer in plain English for the person who asked.
 For questions whose task is only to explain this project's budget, authorization, capture, release, refund, retained costs, payment progress or why money differs from the quote, use intent=money. An explicit request to prepare a revised proposal stays intent=draft even if it also asks to calculate costs or explain the resulting payment steps. In money mode set changes=[] and money={answer, showEvidence}. Never invent facts or IDs.
-money.answer is your written answer, laid out so the reader understands it at a glance: summary is one sentence that answers the question directly, leading with the conclusion. rows are item lines, used when the question covers two or more items or the whole project: one row per item, label = the item's name (add "(new)" or "(original)" when both versions appear), status = 2-5 everyday words for what happened (for example "Charged", "On hold", "Hold released", "$960.00 refunded", "Waiting for supplier credit"), amount = what is charged for that item now (its net captured amount), exactly as written in its facts: for example $240.00 for a returned item that keeps a retained cost, $0.00 for an item whose hold was released; null only if no such amount is recorded. Put other amounts, such as a refund or a released hold, in status. For a single item or a simple question leave rows empty; otherwise list only the items the question concerns. notes are 0-3 short sentences for warnings or explanations a reader could misread, such as a released hold not being a refund. Every summary, row and note has factIds listing the moneyEvidence facts it rests on. Every amount you write must appear, exactly, in the facts that part cites; never add, subtract or total amounts yourself, because the server verifies each part against the cited facts before anyone sees it. Any part about a charge, refund, hold, release, supplier credit or pending result must cite a fact that records it: charges, refunds, holds and releases are recorded in each item's own fact (item:...), so cite that fact; terms, supplier and next facts explain why or what is still waiting, so cite them in addition, never instead. Address every warning in moneyEvidence.mandatoryFactIds (pending or unknown results, missing records, blockers) in the summary or a note and cite it; outside-scope is shown with the evidence anyway. Use everyday words: "charged" for captures, "on hold" for authorizations, "released" for voided holds, "original" and "new" item rather than "baseline" and "proposed"; avoid terms such as "net captured". Do not restate that these are Sandbox or stored records, or when they were read; the evidence panel shows that. Never write fact IDs, PayPal IDs or links. Set message to the summary sentence.
-This is a chat, so your citations stay hidden by default; the server uses them to verify each part. Set showEvidence=true only when the user asks where the information comes from or asks for proof, records, receipts or sources; the server then lists the facts you cite, with their PayPal record links, under your answer. Otherwise set showEvidence=false. Answer the final triggering question only, not earlier questions. For one item's status cite that item's facts; do not bring in unrelated items, supplier events, approval details or scope totals. When the question asks how much has been charged, held or refunded overall, even alongside a question about one item, the summary states those totals from the scope fact. A budget-versus-checkout question needs the budget fact and the relevant item facts.
+money.answer is your written answer, laid out so the reader understands it at a glance. summary is one sentence that answers the question directly, leading with the conclusion. items lists, in reading order, the keys of the moneyEvidence.items the question concerns: use it when the question covers two or more items or the whole project, leave it empty for a single item or a simple question, and otherwise list only the items the question concerns. The server builds the item table from the records (each item's status and its charged, refunded, released, on-hold, non-refundable and net amounts), so you never write those figures for the table. notes are 0-3 short sentences for what the table cannot show or a reader could misread, such as a released hold not being a refund, or why a returned or changed item keeps a non-refundable cost; do not repeat the table. The summary and each note set about to the keys of the items they talk about, or ["project"] when they speak of the project as a whole, and factIds to any further facts they rest on. The server checks each of them against every record of what it is about and the facts it lists: every amount you write must appear exactly in those records, never as a sum or difference you worked out, and anything you say was charged, refunded, held, released, credited or pending must be recorded there. Address every warning in moneyEvidence.mandatoryFactIds (pending or unknown results, missing records, blockers) in the summary or a note and list its id in that sentence's factIds; outside-scope is shown with the evidence anyway. Use everyday words: "charged" for captures, "on hold" for authorizations, "released" for voided holds, "original" and "new" item rather than "baseline" and "proposed"; avoid terms such as "net captured" and "target". Do not restate that these are Sandbox or stored records, or when they were read; the evidence panel shows that. Never write fact IDs, item keys, PayPal IDs or links. Set message to the summary sentence.
+This is a chat, so your citations stay hidden by default; the server uses them to verify each part. Set showEvidence=true only when the user asks where the information comes from or asks for proof, records, receipts or sources; the server then lists the facts you cite, with their PayPal record links, under your answer. Otherwise set showEvidence=false. Answer the final triggering question only, not earlier questions. For one item's status write about that item; do not bring in unrelated items, supplier events, approval details or scope totals. When the question asks how much has been charged, held or refunded overall, even alongside a question about one item, the summary is about the project and states those totals from the scope fact. A budget-versus-checkout question needs the budget fact and the relevant item facts.
 Do not use intent=answer or clarify to state project amounts or payment statuses: payment questions use money mode and quote look-ups use quote mode. Use money=null for every other intent, and quoteQuery=null unless intent is quote.
 For questions that look up lines of the approved quote (which items, how many, what a line costs, the most or least expensive, items above or below an amount, items in a room or category or from a supplier), use intent=quote with quoteQuery, changes=[] and money=null. The server runs quoteQuery on approvedQuote and shows every matching line with its unit price, quantity and line total, so you never list lines or amounts yourself. Every filter in quoteQuery.filters must hold: name, room, category (furniture or service) and supplier take eq or contains with text; unitPrice, quantity and lineTotal take gt, gte, lt, lte or eq with a dollar amount such as 1000 (for quantity, a whole number). lineTotal is quantity times unit price plus the line's tax and delivery: use it for what an item costs in the quote, and unitPrice only when the question asks about the price of one unit. Use the quote's own room and supplier names. sort orders the rows by name, unitPrice, quantity or lineTotal; limit keeps the first rows, for example 1 for the single most expensive line. message is one plain sentence saying what you looked up and which measure you used, for example "Here are the V1 lines whose total, including tax and delivery, is over $1,000."; it may repeat only the amounts in your filters and never states a result, a count or a payment status. Questions about what was paid, held, charged or refunded use intent=money, not quote.
 For intent=draft, message is your reply to the designer: one to three plain sentences saying what the draft changes and what still needs their check. Keep each change description, unresolved question and constraint to one short sentence. You may quote prices that appear in the approved quote or product pages, but never say that anything was paid, charged, captured, refunded, held, authorized or released, and do not describe payment steps; the client version shows them.
@@ -70,13 +70,13 @@ export interface ChangeModelInput {
   previousAttemptProblems?: string[];
 }
 
-const answerSentence = z.strictObject({ text: z.string().min(1).max(500), factIds: z.array(z.string().min(1).max(500)).max(12) });
+const answerSentence = z.strictObject({ text: z.string().min(1).max(500), about: z.array(z.string().min(1).max(300)).max(12), factIds: z.array(z.string().min(1).max(500)).max(12) });
 export const changeModelOutputSchema = aiOutputSchema.extend({
   intent: z.enum(["draft", "clarify", "answer", "cancel", "money", "quote"]),
   money: z.strictObject({
     answer: z.strictObject({
       summary: answerSentence,
-      rows: z.array(z.strictObject({ label: z.string().min(1).max(80), status: z.string().min(1).max(80), amount: z.string().max(40).nullable(), factIds: z.array(z.string().min(1).max(500)).min(1).max(8) })).max(12),
+      items: z.array(z.string().min(1).max(300)).max(40),
       notes: z.array(answerSentence).max(3),
     }),
     showEvidence: z.boolean(),
@@ -85,7 +85,7 @@ export const changeModelOutputSchema = aiOutputSchema.extend({
 });
 export type ChangeModelOutput = Omit<AiOutput, "intent"> & {
   intent: AiOutput["intent"] | "money" | "quote";
-  money?: { answer: MoneyAnswerBody; showEvidence: boolean } | null;
+  money?: { answer: MoneyAnswerDraft; showEvidence: boolean } | null;
   quoteQuery?: QuoteQuery | null;
 };
 
@@ -94,8 +94,12 @@ export function aiConfigured(): boolean {
 }
 
 /** The evidence panel always shows when records were read; the written answer need not, so the model does not see that fact. */
-function withoutFreshness(context: MoneyContext): MoneyContext {
-  return { ...context, facts: context.facts.filter((fact) => fact.id !== "record-freshness"), mandatoryFactIds: context.mandatoryFactIds?.filter((id) => id !== "record-freshness") };
+/** The money context as the model reads it: no read timestamp, and each item by key, name and status only; its amounts are in the facts. */
+function withoutFreshness(context: MoneyContext) {
+  return {
+    ...context, facts: context.facts.filter((fact) => fact.id !== "record-freshness"), mandatoryFactIds: context.mandatoryFactIds?.filter((id) => id !== "record-freshness"),
+    items: context.items?.map((item) => ({ key: item.key, label: item.label, status: MONEY_STATUS_LABEL[item.status] })),
+  };
 }
 
 /**
