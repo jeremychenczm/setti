@@ -45,6 +45,9 @@ export interface MapleGuideStep {
   secondary?: { label: string; href: string };
 }
 
+/** Line progress that only the client can move on: a hold to approve, or a service to pay. */
+const CLIENT_PROGRESS = new Set(["Authorization needed", "Additional authorization needed", "Awaiting client approval", "Payment required"]);
+
 /** Progress is derived from saved records, never from which tour buttons were clicked. */
 export function mapleGuideStep(data: MapleGuideData, currentRole: "designer" | "client"): MapleGuideStep {
   const { snapshot, seedOrderId, pricing, payments } = data;
@@ -109,9 +112,12 @@ export function mapleGuideStep(data: MapleGuideData, currentRole: "designer" | "
       };
     }
     const available = changed.flatMap((line) => line.steps.filter((step) => step.available).map((step) => ({ line, step })))[0];
-    const waiting = changed.find((line) => !lineProgress(line, payments.operations).settled);
+    const unsettled = changed.filter((line) => !lineProgress(line, payments.operations).settled);
+    const needsClient = (line: PaymentLineView) => CLIENT_PROGRESS.has(lineProgress(line, payments.operations).label);
+    // Emma is pointed at her own payment first; otherwise the first line still waiting leads.
+    const waiting = (currentRole === "client" ? unsettled.find(needsClient) : undefined) ?? unsettled[0];
     const progress = waiting ? lineProgress(waiting, payments.operations) : null;
-    const clientNeeded = progress?.label === "Authorization needed" || progress?.label === "Additional authorization needed" || progress?.label === "Awaiting client approval";
+    const clientNeeded = !!waiting && needsClient(waiting);
     return { index: 3, role: available ? available.step.actor === "client" ? "emma" : "jordan" : clientNeeded ? "emma" : "jordan", destination: "order", orderId: latest.id, anchor: "payments", action: `Continue V${latest.version} payments`,
       title: "Each item keeps its own payment progress", detail: (payments.plan?.status === "blocked" ? "Check unresolved existing operations before starting another payment. Pending and unknown results are not counted as completed." : available ? `${available.line.label}: ${available.step.note}` : progress?.next ?? payments.reason ?? "Open the recorded payment steps to see what is still needed."),
     };

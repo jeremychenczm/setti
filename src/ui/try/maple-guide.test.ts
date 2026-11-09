@@ -171,6 +171,21 @@ describe("living-and-dining demo guide", () => {
     expect(mapleGuideStep(data, "client")).toMatchObject({ index: 1, role: "jordan", destination: "pricing" });
   });
 
+  it("sends the client to pay a service's remaining amount, ahead of supplier steps that are Jordan's", () => {
+    const data = confirmed();
+    data.scenario = HOME_SCENARIO;
+    data.payments!.operations = [];
+    data.payments!.lines = [
+      line({ itemId: "pendants", businessItemId: "pendants", label: "Counter pendant light", change: "quantity", targetCents: 96_000, heldCents: 144_000, capturedCents: 0, steps: [] }),
+      line({ itemId: "site-visits", businessItemId: "site-visits", label: "Site visits during installation", category: "service", change: "quantity", targetCents: 108_000, heldCents: 0, capturedCents: 72_000, steps: [] }),
+    ];
+    const client = mapleGuideStep(data, "client");
+    expect(client).toMatchObject({ index: 3, role: "emma", destination: "order", orderId: "visitor-v3", anchor: "payments" });
+    expect(client.detail).toContain("under Design services");
+    // Jordan, looking at the same records, is shown the pendants waiting on his supplier step first.
+    expect(mapleGuideStep(data, "designer")).toMatchObject({ role: "jordan", detail: expect.stringContaining("confirms this item's supplier terms") });
+  });
+
   it("moves a new AI draft, including its client-redacted state, to Jordan's seven-change pricing review", () => {
     const data = homeInitial();
     data.snapshot.draft = { ...draft(), origin: "designer", title: "Window bay and back bar revision" };

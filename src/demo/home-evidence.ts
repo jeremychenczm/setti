@@ -104,7 +104,7 @@ export function homePricingEvidence(quote: ApprovedQuoteReport, change: DraftCha
       after: unchangedTerms(before.leadTimeDays),
       priceEvidence: `Local fictional document MAPLE-CAFE-QUARTZ-01: keep ${after.quantity} linear feet of the same ${before.sku} at USD 180 per foot; whole-line tax USD 0 and delivery USD 0. A cut top is re-cut shorter for a fixed USD 280 fee; the removed length is credited at the per-foot price. ${fromDocuments}`,
       oldItemHandling: "cancelled", oldItemCostCents: fee,
-      oldItemNote: `MAPLE-CAFE-QUARTZ-01: re-cut the front counter top, removing ${removed} linear feet. The fabricator keeps its USD 280 re-cut fee and credits ${usd(removed * before.unitPriceCents)} for the removed length, so the planned refund of ${usd(removed * before.unitPriceCents - fee)} waits for that credit. This proposal does not record a re-cut, credit or refund as completed.`,
+      oldItemNote: `MAPLE-CAFE-QUARTZ-01: re-cut the front counter top, removing ${removed} linear feet. The fabricator credits the removed length (${usd(removed * before.unitPriceCents)}) less its USD 280 re-cut fee, so the planned refund of ${usd(removed * before.unitPriceCents - fee)} waits for that credit. This proposal does not record a re-cut, credit or refund as completed.`,
     };
   }
   if (change.itemId === "pendants" && after.quantity < before.quantity) {
