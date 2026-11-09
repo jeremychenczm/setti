@@ -1,0 +1,59 @@
+{
+  "checkedAt": "2026-11-09T08:37:03.241Z",
+  "scenario": "maple-living-dining-v3",
+  "discussionMessages": 22,
+  "model": "claude-sonnet-5-5",
+  "origin": "designer",
+  "quoteVersion": 1,
+  "workspaceOpenMs": 1438,
+  "changes": [
+    {
+      "action": "add",
+      "itemId": null,
+      "quantity": 16,
+      "productOptionId": "maple-cafe:oak-window-counter"
+    },
+    {
+      "action": "quantity",
+      "itemId": "stools",
+      "quantity": 14,
+      "productOptionId": null
+    },
+    {
+      "action": "add",
+      "itemId": null,
+      "quantity": 12,
+      "productOptionId": "maple-cafe:felt-panel"
+    },
+    {
+      "action": "quantity",
+      "itemId": "countertop",
+      "quantity": 18,
+      "productOptionId": null
+    },
+    {
+      "action": "quantity",
+      "itemId": "pendants",
+      "quantity": 4,
+      "productOptionId": null
+    },
+    {
+      "action": "replace",
+      "itemId": "wall-tile",
+      "quantity": 20,
+      "productOptionId": "maple-cafe:sage-tile"
+    },
+    {
+      "action": "quantity",
+      "itemId": "site-visits",
+      "quantity": 6,
+      "productOptionId": null
+    }
+  ],
+  "baselineCents": 1106000,
+  "proposedCents": 1750600,
+  "differenceCents": 644600,
+  "reviewRequired": true,
+  "formalNewVersionIssued": false,
+  "resetVerified": true
+}
