@@ -81,7 +81,7 @@ export function MoneyDesk({ onOpenInbox }: { onOpenInbox: () => void }) {
       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-50 text-brand-700"><Wallet className="h-4 w-4" /></span>
       <div className="mr-auto min-w-0">
         <h1 id="money-title" className="text-[15px] font-semibold">Money</h1>
-        <p className="text-[11px] text-[var(--muted)]">Where client money stands in every project. Calculated by Setti from the quotes and PayPal Sandbox records.</p>
+        <p className="text-[11px] text-[var(--muted)]">Where client money stands in every project, from the quotes and PayPal Sandbox records.</p>
       </div>
       <div role="group" aria-label="Show projects" className="flex gap-0.5 rounded-[10px] border border-[var(--line)] bg-[var(--canvas)] p-[3px]">
         {(["all", "live", "example"] as const).map((id) => <button key={id} type="button" aria-pressed={filter === id} onClick={() => setFilter(id)}
