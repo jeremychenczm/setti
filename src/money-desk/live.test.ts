@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { DEMO_ACCOUNTS } from "@/accounts/demo";
 import { caseDocument } from "@/chat/cases";
+import { createChatStore } from "@/chat/store";
 import { openTestDb, testDatabaseUrl, truncate } from "@/db/testing";
 import { signOpeningForTest } from "@/opening/testing";
 import { completeAuthorization } from "@/payments/authorize";
@@ -88,6 +89,25 @@ describe.skipIf(!testDatabaseUrl)("live projects on the money desk", () => {
     const project = (await liveProject(handle.db, run.session, "maple", designer))!;
     expect(project).toMatchObject({ name: "Maple Ave", client: "Emma Park", stage: "V1 approved", agreedCents: 773_000 });
     expect(deskTotals(project)).toMatchObject({ chargedCents: 220_000, heldCents: 553_000, notFundedCents: 0, needsYou: 4 });
+  });
+
+  it("reads a signed V1 that is not paid yet as approved, waiting on the client", async () => {
+    await signOpeningForTest(handle.db, session, "willow");
+    const project = (await willow())!;
+    expect(project).toMatchObject({ stage: "V1 approved", version: 1 });
+    expect(project.items.length).toBe(WILLOW.lines.length);
+    expect(project.items.every((item) => item.waitingOn === "client" && item.chargedCents === 0 && item.heldCents === 0)).toBe(true);
+  });
+
+  it("starting the Maple walkthrough opens a new session, so Willow's money stays with the old one", async () => {
+    await v1ServicesPaidAndItemsHeld();
+    const deps: TryDeps = { db: handle.db, paypal, links, perHour: 30, testCard: (id, options) => paypal.confirmWithTestCard(id, options) };
+    const run = await startTry(deps, session, { scenario: HOME_SCENARIO });
+    if (run.kind === "limited") throw new Error("Expected a scenario run");
+    expect(run.session).not.toBe(session);
+    await createChatStore(handle.db).getCase(run.session, "willow");
+    expect(await liveProject(handle.db, run.session, "willow", designer)).toMatchObject({ stage: "V1 not sent yet", items: [] });
+    expect(await willow()).toMatchObject({ stage: "V1 approved" });
   });
 
   it("is the designer's view only", async () => {

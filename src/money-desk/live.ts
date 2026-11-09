@@ -10,6 +10,7 @@ import type { CaseKey } from "@/chat/types";
 import type { Db } from "@/db/client";
 import { changeOrderDecisions, changeOrders, chatCases, revisions } from "@/db/schema";
 import { readOpening } from "@/opening/read";
+import type { OpeningStatus } from "@/opening/types";
 import { itemHoldsView, type ItemHoldView } from "@/payments/item-holds-view";
 import { servicesPaymentView, type ServiceChargeView } from "@/payments/services-view";
 import type { PaymentLineView } from "@/payments/types";
@@ -76,6 +77,9 @@ export function serviceItem(service: ServiceChargeView, heldForServices: boolean
 
 const clientName = (value: string) => value.replace(/\s*\(demo client\)$/u, "");
 
+/** Where V1 stands when it has no payment basis yet: a signed V1 is never "not sent". */
+export const OPENING_STAGE: Record<OpeningStatus, string> = { draft: "V1 not sent yet", sent: "V1 with the client", approved: "V1 approved" };
+
 export async function liveProject(db: Db, sessionId: string, key: CaseKey, account: DemoAccount, now = new Date()): Promise<DeskProject | null> {
   const reader: Reader = db;
   const [row] = await reader.select({ id: chatCases.id }).from(chatCases).where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, key)));
@@ -105,8 +109,7 @@ export async function liveProject(db: Db, sessionId: string, key: CaseKey, accou
 
   const holds = await itemHoldsView(db, sessionId, key, account);
   if (!holds.basis) {
-    const sent = opening.opening.status === "sent";
-    return { ...project, stage: sent ? "V1 with the client" : "V1 not sent yet", version: null, agreedCents: null, proposedCents: opening.opening.totalCents, items: [], href: `/quotes/${key}` };
+    return { ...project, stage: OPENING_STAGE[opening.opening.status], version: null, agreedCents: null, proposedCents: opening.opening.totalCents, items: [], href: `/quotes/${key}` };
   }
   const services = await servicesPaymentView(db, sessionId, key, account, null);
   const items = [...services.services.map((service) => serviceItem(service, services.canFinish)), ...holds.items.map(heldItem)];
