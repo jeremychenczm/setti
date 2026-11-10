@@ -70,7 +70,7 @@ export function mapleGuideStep(data: MapleGuideData, currentRole: "designer" | "
   };
   if (latest?.status === "awaiting_client_confirmation") return {
     index: 2, role: "emma", destination: "order", orderId: latest.id, anchor: "client-decision-title", action: `Review and confirm V${latest.version}`,
-    title: `Emma reviews the exact V${latest.version} agreement`, detail: "Read the scope, prices, retained costs and planned payment steps. Type the signature and confirm only when ready. Switching accounts does not sign anything.",
+    title: `Emma reviews the exact V${latest.version} agreement`, detail: "Read the scope, prices, non-refundable fees and planned payment steps. Type the signature and confirm only when ready. Switching accounts does not sign anything.",
   };
   if (latest?.status === "declined") return { ...chat, index: 1, role: "jordan", title: "Emma asked for changes", detail: "Discuss the client's feedback in the chat and prepare a revised draft before requesting confirmation again." };
   if (latest?.status === "approved") {

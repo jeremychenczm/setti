@@ -18,11 +18,11 @@ export function isHomeQuote(quote: Pick<QuoteDocument, "projectId" | "lines">): 
 /** Products the documents offer: a replacement for one V1 line (itemId), or a new line (itemId null). */
 const definitions = [
   { itemId: "wall-tile", id: HOME_PRODUCT_IDS["wall-tile"], name: "Back bar wall tile, sage green", vendor: "Glaze & Co. Tile (demo)", sku: "DEMO-CAFE-TILE-SGE-4", specification: "4 × 4 in ceramic tile, sage green glaze; one box covers 10 sq ft", price: 7_600, unit: "box", lead: 10, reference: "MAPLE-CAFE-TILE-01",
-    terms: { returnPolicy: "Local fictional supplier terms: unopened boxes can be returned within 30 days of delivery with prior approval, retaining 20% of the returned goods price.", returnable: true, restockingFeeBps: 2_000, customMade: false } },
+    terms: { returnPolicy: "Local fictional supplier terms: unopened boxes can be returned within 30 days of delivery with prior approval, with a 20% restocking fee on the returned goods price.", returnable: true, restockingFeeBps: 2_000, customMade: false } },
   { itemId: null, id: HOME_PRODUCT_IDS.windowCounter, name: "Oak window counter", vendor: "Birch Line Joinery (demo)", sku: "DEMO-CAFE-OAK-WIN-36", specification: "Solid oak window counter, 16 in deep, oiled, on black steel brackets; built for a 36 in counter height; made to measure", price: 21_000, unit: "linear ft", lead: 21, reference: "MAPLE-CAFE-JOINERY-01",
     terms: { returnPolicy: "Local fictional supplier terms: made to order; once production starts the counter cannot be cancelled or returned.", returnable: false, restockingFeeBps: null, customMade: true } },
   { itemId: null, id: HOME_PRODUCT_IDS.panels, name: "Acoustic ceiling panel", vendor: "Quiet Panel Co. (demo)", sku: "DEMO-CAFE-FELT-24", specification: "2 × 4 ft ceiling-hung felt acoustic panel, charcoal", price: 14_500, unit: "each", lead: 14, reference: "MAPLE-CAFE-ACOUSTIC-01",
-    terms: { returnPolicy: "Local fictional supplier terms: unused panels can be returned within 14 days of delivery with prior approval, retaining 10% of the goods price.", returnable: true, restockingFeeBps: 1_000, customMade: false } },
+    terms: { returnPolicy: "Local fictional supplier terms: unused panels can be returned within 14 days of delivery with prior approval, with a 10% restocking fee on the goods price.", returnable: true, restockingFeeBps: 1_000, customMade: false } },
 ] as const;
 type Definition = (typeof definitions)[number];
 
@@ -110,9 +110,9 @@ export function homePricingEvidence(quote: ApprovedQuoteReport, change: DraftCha
   if (change.itemId === "pendants" && after.quantity < before.quantity) {
     return {
       after: unchangedTerms(21),
-      priceEvidence: `Local fictional document MAPLE-CAFE-PENDANT-01: keep ${after.quantity} of the same ${before.sku} at USD 240 each; whole-line tax USD 0 and delivery USD 0. Unordered excess lights have no retained cost. ${fromDocuments}`,
+      priceEvidence: `Local fictional document MAPLE-CAFE-PENDANT-01: keep ${after.quantity} of the same ${before.sku} at USD 240 each; whole-line tax USD 0 and delivery USD 0. Unordered excess lights have no non-refundable fee. ${fromDocuments}`,
       oldItemHandling: "not_ordered", oldItemCostCents: 0, oldItemFees: [],
-      oldItemNote: `MAPLE-CAFE-PENDANT-01: ${before.quantity - after.quantity} excess pendants are not ordered; proposed retained cost USD 0. The reduced scope still needs designer and client confirmation.`,
+      oldItemNote: `MAPLE-CAFE-PENDANT-01: ${before.quantity - after.quantity} excess pendants are not ordered; proposed non-refundable fee USD 0. The reduced scope still needs designer and client confirmation.`,
     };
   }
   if (change.itemId === "stools" && after.quantity > before.quantity) {
@@ -132,4 +132,4 @@ export function homePricingEvidence(quote: ApprovedQuoteReport, change: DraftCha
   return null;
 }
 
-export const HOME_REVIEW_TERMS = "Local fictional Maple Ave Café supplier documents: use the selected lines' quantities, USD unit prices and listed return, re-cut and cancellation terms. Whole-line tax and delivery are explicitly USD 0 in this demo. Include only the retained costs listed for this proposed scope. Any planned refund requires its separate supplier-credit record and PayPal result. These proposed terms require designer review and client confirmation; they are not stock, order, return or payment receipts. Unchanged lines, including the design fee, keep their approved scope and price.";
+export const HOME_REVIEW_TERMS = "Local fictional Maple Ave Café supplier documents: use the selected lines' quantities, USD unit prices and listed return, re-cut and cancellation terms. Whole-line tax and delivery are explicitly USD 0 in this demo. Include only the non-refundable fees listed for this proposed scope. Any planned refund requires its separate supplier-credit record and PayPal result. These proposed terms require designer review and client confirmation; they are not stock, order, return or payment receipts. Unchanged lines, including the design fee, keep their approved scope and price.";

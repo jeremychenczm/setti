@@ -285,7 +285,7 @@ function planFunding(header: PlanHeader, facts: FundingFacts, notices: string[],
           throw new Error("A captured item reduction needs a confirmed old-item handling decision.");
         }
         push(group, "refund", paid - targetCents, conditional ? "after_vendor_credit" : "on_payment_execution",
-          conditional ? "Refund only after the vendor credit is verified; the reviewed retained cost is deducted once." : "Refund completed captures above the reviewed target after subtracting prior refunds and retained costs.");
+          conditional ? "Refund only after the vendor credit is verified; the reviewed non-refundable fees are deducted once." : "Refund completed captures above the reviewed target after subtracting prior refunds and non-refundable fees.");
       }
       if (fact.heldCents > remaining) {
         const release = fact.heldCents - remaining;

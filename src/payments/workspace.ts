@@ -158,7 +158,7 @@ function steps(plan: FundingPlan, line: FundingLine, canAct: boolean, events: Su
             step("supplier_credit", action.amountCents, ready, "Record the supplier's credit for the return (demo, entered by the designer). The refund becomes available only if the credit equals the confirmed refund."),
             step("refund", action.amountCents, false, "The refund waits for the supplier's credit."),
           ]
-          : [step("refund", action.amountCents, ready, "Refund completed captures above the confirmed amount, newest capture first. Retained costs stay with the studio.")];
+          : [step("refund", action.amountCents, ready, "Refund completed captures above the confirmed amount, newest capture first. Non-refundable fees stay charged.")];
     }
   });
 }

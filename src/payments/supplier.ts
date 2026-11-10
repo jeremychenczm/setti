@@ -157,7 +157,7 @@ export async function recordSupplierCredit(db: Db, sessionId: string, orderId: s
     const refund = plan.actions.find((action) => action.kind === "refund" && action.timing === "after_vendor_credit" && action.itemId === input.itemId && action.side === input.side);
     if (!refund) throw new PaymentActionError("NOT_AVAILABLE", "No refund on this line is waiting for a supplier credit.");
     if (credit !== refund.amountCents) {
-      throw new PaymentActionError("SUPPLIER_TERMS_CHANGED", `The supplier credited ${money(credit)}, but V${version.order.version} confirms a refund of ${money(refund.amountCents)} after the retained cost. Nothing will be refunded on other terms: re-price the return and send the client a new version.`);
+      throw new PaymentActionError("SUPPLIER_TERMS_CHANGED", `The supplier credited ${money(credit)}, but V${version.order.version} confirms a refund of ${money(refund.amountCents)} after the non-refundable fees. Nothing will be refunded on other terms: re-price the return and send the client a new version.`);
     }
     const [event] = await tx.insert(supplierEvents).values({ projectId: version.projectId, changeOrderId: version.order.id, itemId, kind: "credit_confirmed", totalCents: credit, reference, note, sessionId }).returning();
     await noteInCase(tx, { changeOrderId: version.order.id, itemId }, ({ version: number, itemName }) => `Demo supplier credit recorded by the designer for V${number} · ${itemName}: ${money(credit)} (reference ${reference}). The confirmed refund can now be sent through PayPal.`);

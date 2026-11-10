@@ -79,7 +79,7 @@ export const HOME_APPROVED_QUOTE: ApprovedQuoteReport = {
       source: { kind: "demo", reference: "MAPLE-CAFE-TILE-01", name: "Fictional Glaze & Co. tile quote",
         note: "Local fictional per-box price, coverage and return terms; the quantity is a count of boxes.", priceNote: "14 boxes at USD 70 per box, USD 980 total; tax USD 0 and delivery USD 0 (demo assumptions)." },
       leadTimeDays: 10, restockingFeeBps: 2_000,
-      returnPolicy: "Fictional terms: delivered to site and paid on delivery. Unopened boxes may be returned within 30 days of delivery with prior approval, retaining 20% of the returned goods price.",
+      returnPolicy: "Fictional terms: delivered to site and paid on delivery. Unopened boxes may be returned within 30 days of delivery with prior approval, with a 20% restocking fee on the returned goods price.",
     }),
     product({
       itemId: "pendants", name: "Counter pendant light", vendor: "Lumen Row Lighting (demo)", sku: "DEMO-CAFE-PENDANT-9",
@@ -88,7 +88,7 @@ export const HOME_APPROVED_QUOTE: ApprovedQuoteReport = {
       source: { kind: "demo", reference: "MAPLE-CAFE-PENDANT-01", name: "Fictional Lumen Row pendant quote",
         note: "Local fictional per-light price and order terms; the quantity is a count of lights.", priceNote: "Six pendants at USD 240 each, USD 1,440 total; tax USD 0 and delivery USD 0 (demo assumptions)." },
       leadTimeDays: 21, restockingFeeBps: 1_500,
-      returnPolicy: "Fictional terms: an order not yet confirmed can be changed, including its quantity, or cancelled at no retained cost. Unused lights may be returned within 14 days of delivery with prior approval, retaining 15% of the goods price. These pendants have not been ordered.",
+      returnPolicy: "Fictional terms: an order not yet confirmed can be changed, including its quantity, or cancelled free of charge. Unused lights may be returned within 14 days of delivery with prior approval, with a 15% restocking fee on the goods price. These pendants have not been ordered.",
     }),
     product({
       itemId: "stools", name: "Counter stool", vendor: "Ridge Seating (demo)", sku: "DEMO-CAFE-STOOL-26",
@@ -97,7 +97,7 @@ export const HOME_APPROVED_QUOTE: ApprovedQuoteReport = {
       source: { kind: "demo", reference: "MAPLE-CAFE-STOOL-01", name: "Fictional Ridge Seating stool quote",
         note: "Local fictional per-stool price and order terms; the quantity is a count of stools.", priceNote: "Eight stools at USD 195 each, USD 1,560 total; tax USD 0 and delivery USD 0 (demo assumptions)." },
       leadTimeDays: 21, restockingFeeBps: 1_500,
-      returnPolicy: "Fictional terms: an order not yet confirmed can be changed, including its quantity, or cancelled at no retained cost. Unused stools may be returned within 14 days of delivery with prior approval, retaining 15% of the goods price. These stools have not been ordered.",
+      returnPolicy: "Fictional terms: an order not yet confirmed can be changed, including its quantity, or cancelled free of charge. Unused stools may be returned within 14 days of delivery with prior approval, with a 15% restocking fee on the goods price. These stools have not been ordered.",
     }),
   ],
 };
