@@ -68,7 +68,7 @@ class Builder {
   }
 }
 
-export function truthOf(timeline: Timeline): { items: ItemTruth[]; heldCents: number; chargedCents: number; refundedCents: number } {
+export function truthOf(timeline: Timeline): { items: ItemTruth[]; heldCents: number; chargedCents: number; refundedCents: number; recordedCents: Set<number> } {
   const ids = [...new Set([...timeline.holds.map((hold) => hold.itemId), ...timeline.captures.map((capture) => capture.itemId)])];
   const items = ids.map((itemId) => {
     const holds = timeline.holds.filter((hold) => hold.itemId === itemId && !hold.services);
@@ -83,7 +83,13 @@ export function truthOf(timeline: Timeline): { items: ItemTruth[]; heldCents: nu
   });
   const sum = (key: "heldCents" | "chargedCents" | "refundedCents") => items.reduce((total, item) => total + item[key], 0);
   // The services hold is charged at once and never shown as a hold; an entry with no money is not an item.
-  return { items: items.filter((item) => item.heldCents || item.chargedCents || item.refundedCents || item.releasedCents), heldCents: sum("heldCents"), chargedCents: sum("chargedCents"), refundedCents: sum("refundedCents") };
+  const shown = items.filter((item) => item.heldCents || item.chargedCents || item.refundedCents || item.releasedCents);
+  const [held, charged, refunded] = [sum("heldCents"), sum("chargedCents"), sum("refundedCents")];
+  // Every figure a summary could truly write: each record's amount, each item's and the project's totals, and what a refund left charged.
+  const recordedCents = new Set([0, held, charged, refunded, charged - refunded,
+    ...timeline.holds.map((hold) => hold.amountCents), ...timeline.captures.map((capture) => capture.amountCents), ...timeline.refunds.map((refund) => refund.amountCents),
+    ...shown.flatMap((item) => [item.heldCents, item.chargedCents, item.refundedCents, item.releasedCents, item.chargedCents - item.refundedCents])]);
+  return { items: shown, heldCents: held, chargedCents: charged, refundedCents: refunded, recordedCents };
 }
 
 const MAPLE = {

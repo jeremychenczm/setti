@@ -15,7 +15,7 @@ import { inboxFacts, itemsNow, type InboxView } from "@/payments/inbox-view";
 import type { SummarySentence } from "@/payments/schema";
 import { runHeadless } from "../lib/claude-code";
 import { answersFromTrace, fingerprint, loadRecording, recordedAttempts, replayer, saveRun, type Replayer } from "../lib/replay";
-import { stateErrors } from "./grade";
+import { amountErrors } from "./grade";
 import { SCENARIOS, truthOf, type Scenario } from "./scenarios";
 
 const args = new Map<string, string>();
@@ -47,7 +47,7 @@ mkdirSync(join(out, "traces"), { recursive: true });
 writeFileSync(join(flow, "_state.json"), JSON.stringify({
   metrics: [
     { id: "pass", label: "Pass", kind: "binary" },
-    { id: "raw_state_error", label: "Raw state err", kind: "binary", better: "lower" },
+    { id: "raw_amount_error", label: "Raw amount err", kind: "binary", better: "lower" },
     { id: "first_try", label: "First try", kind: "binary" },
     { id: "shown", label: "Shown", kind: "binary" },
   ],
@@ -150,12 +150,12 @@ async function runJob(scenario: Scenario, rep: number) {
     return;
   }
   const shown = written!.written?.sentences ?? null;
-  const firstErrors = attempts[0]?.sentences ? stateErrors(attempts[0].sentences, truth) : [];
-  const shownErrors = shown ? stateErrors(shown, truth) : [];
+  const firstErrors = attempts[0]?.sentences ? amountErrors(attempts[0].sentences, truth) : [];
+  const shownErrors = shown ? amountErrors(shown, truth) : [];
   const pass = !!shown && shownErrors.length === 0;
   const row = {
     prompt_id: scenario.id, rep, prompt: scenario.title, tags: scenario.tags, status: "ok", stop_reason: shown ? "shown" : "withheld",
-    grade: { pass: pass ? 1 : 0, raw_state_error: firstErrors.length ? 1 : 0, first_try: attempts.length === 1 && !!shown ? 1 : 0, shown: shown ? 1 : 0 },
+    grade: { pass: pass ? 1 : 0, raw_amount_error: firstErrors.length ? 1 : 0, first_try: attempts.length === 1 && !!shown ? 1 : 0, shown: shown ? 1 : 0 },
     explanation: { pass: [shown ? `shown: ${shown.map((sentence) => sentence.text).join(" ")}` : `withheld: ${written!.problems.join(" | ")}`, ...shownErrors, ...(firstErrors.length ? [`first attempt: ${firstErrors.join(" ")}`] : [])].join(" · ") },
     model: DEFAULT_MODEL, cost_usd: Number(attempts.reduce((sum, attempt) => sum + attempt.costUsd, 0).toFixed(4)),
     in_tokens: attempts.reduce((sum, attempt) => sum + attempt.inTokens, 0), out_tokens: attempts.reduce((sum, attempt) => sum + attempt.outTokens, 0),
@@ -181,8 +181,8 @@ async function main() {
   const jobs = SCENARIOS.filter((scenario) => !only || only.includes(scenario.id)).flatMap((scenario) => repsOf(scenario).map((rep) => ({ scenario, rep }))).filter((job) => !done.has(`${job.scenario.id}#${job.rep}`));
   console.log(`inbox-summary eval · backend ${backendName}${label ? ` · ${label}` : ""} · ${jobs.length} runs`);
   await Promise.all(Array.from({ length: Math.min(concurrency, jobs.length) }, async () => { for (let job = jobs.shift(); job; job = jobs.shift()) await runJob(job.scenario, job.rep); }));
-  const rows = readFileSync(resultsPath, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { grade: { pass: number; raw_state_error: number }; cost_usd: number });
-  console.log(`\n${rows.filter((row) => row.grade.pass).length}/${rows.length} passed · first attempts with a state error: ${rows.filter((row) => row.grade.raw_state_error).length} · API-equivalent ${rows.reduce((sum, row) => sum + row.cost_usd, 0).toFixed(2)}`);
+  const rows = readFileSync(resultsPath, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { grade: { pass: number; raw_amount_error: number }; cost_usd: number });
+  console.log(`\n${rows.filter((row) => row.grade.pass).length}/${rows.length} passed · first attempts with a wrong amount: ${rows.filter((row) => row.grade.raw_amount_error).length} · API-equivalent ${rows.reduce((sum, row) => sum + row.cost_usd, 0).toFixed(2)}`);
   if (backendName === "replay" && !fromTraces) {
     if (replayProblems.length) { console.log(`\nReplay does not match the recording:\n${replayProblems.map((problem) => `  ${problem}`).join("\n")}`); process.exitCode = 1; }
     else console.log("Replay matches the recording: every run graded as recorded, with no model call.");
