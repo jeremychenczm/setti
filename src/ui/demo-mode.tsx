@@ -4,11 +4,14 @@
  * values the demo fills in (a fictional supplier's order number, for example)
  * show only then; a real studio's pages never call anything a demo.
  */
-import { createContext, useContext } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 
 const DemoMode = createContext(false);
 
-export const DemoModeProvider = DemoMode.Provider;
+/** A component, not the context object itself, so server pages can render it too. */
+export function DemoModeProvider({ value, children }: { value: boolean; children: ReactNode }) {
+  return <DemoMode.Provider value={value}>{children}</DemoMode.Provider>;
+}
 
 export function useDemoMode(): boolean {
   return useContext(DemoMode);
