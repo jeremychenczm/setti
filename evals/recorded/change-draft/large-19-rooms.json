@@ -1,25 +1,25 @@
 {
   "flow": "change-draft",
   "case": "large-19-rooms",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "6a905d6faa1cdc894740",
+          "fingerprint": "21d9d9e271be721f7a61",
           "output": {
             "intent": "draft",
-            "message": "I drafted three changes for your review: one nightstand in guest bedroom 2, the chalk white Terrace hex at 6 boxes for the primary bath floor, and removal of the office built-in shelving. This is a draft only, not an order or payment, and it needs your review before it goes to the client.",
-            "title": "Guest bedroom 2 nightstand, primary bath floor tile swap, office shelving removal",
+            "message": "I drafted three changes for your review: one nightstand in guest bedroom 2, the chalk white Terrace hex (6 boxes) replacing the gray hex floor tile in the primary bath, and removal of the office built-in shelving. This is a draft only, not an order or payment, and the checks below still need your review.",
+            "title": "Guest bedroom 2 nightstand, primary bath tile swap and office shelving removal",
             "changes": [
               {
                 "action": "quantity",
                 "itemId": "cr-guest-bedroom-2-nightstand",
                 "quantity": 1,
                 "productOptionId": null,
-                "description": "Reduce the guest bedroom 2 nightstands from two to one.",
+                "description": "Reduce the guest bedroom 2 nightstands from 2 to 1.",
                 "sourceMessageIds": [
                   "m1",
                   "t"
@@ -30,9 +30,10 @@
                 "itemId": "cr-primary-bath-floor-tile",
                 "quantity": 6,
                 "productOptionId": "terrace-hex-white",
-                "description": "Replace the gray hex floor tile with Terrace hex in chalk white, 6 boxes.",
+                "description": "Replace the gray hex floor tile with Terrace hex, chalk white, 6 boxes.",
                 "sourceMessageIds": [
                   "m2",
+                  "m3",
                   "t"
                 ]
               },
@@ -49,16 +50,19 @@
               }
             ],
             "unresolved": [
-              "Does 6 boxes of the 10.8 sq ft Terrace hex cover the primary bath floor, given the original tile came in 10.0 sq ft boxes?"
+              "Does 6 boxes of 10.8 sq ft cover the primary bath floor, given the original 5 boxes were 10.0 sq ft each?"
             ],
             "constraints": [
-              "The built-in shelving was custom made to site measurements and is non-returnable once fabrication starts, so its removal depends on supplier approval.",
-              "The client must confirm the revised quote before any change takes effect."
+              "The client must confirm the revised quote before anything changes.",
+              "The office built-in shelving is made to order and may not be returnable if fabrication has started.",
+              "Any payment steps follow only after the client confirms."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 3/3 expected matched, 3 drafted"
     }
   ]
 }

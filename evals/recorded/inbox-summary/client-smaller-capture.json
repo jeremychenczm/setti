@@ -1,14 +1,15 @@
 {
   "flow": "inbox-summary",
   "case": "client-smaller-capture",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 1; its prompt and checks did not change in round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
+      "explanation": "shown: In Maple Ave, $5,020.00 has been charged in total, $1,610.00 is on hold now, and $0.00 has been refunded. The 2 items on hold are the round dining table ($1,250.00) and the small round side table ($360.00). The 4 items charged are the compact sofa, design services, dining sideboard and upholstered dining chairs, with nothing on hold for them.",
       "attempts": [
         {
-          "fingerprint": "0d0308ab0d9509f8ce1e",
+          "fingerprint": "8f0dee94e5d1eb348045",
           "output": [
             {
               "text": "In Maple Ave, $5,020.00 has been charged in total, $1,610.00 is on hold now, and $0.00 has been refunded.",
@@ -17,18 +18,17 @@
               ]
             },
             {
-              "text": "The hold is on the Round dining table ($1,250.00) and the Small round side table ($360.00).",
+              "text": "The 2 items on hold are the round dining table ($1,250.00) and the small round side table ($360.00).",
               "factIds": [
+                "group-on-hold",
                 "now-6",
                 "now-7"
               ]
             },
             {
-              "text": "Earlier holds on the Three-seat sofa ($2,400.00), Fixed six-person dining table ($1,400.00) and Large rectangular coffee table ($650.00) were released.",
+              "text": "The 4 items charged are the compact sofa, design services, dining sideboard and upholstered dining chairs, with nothing on hold for them.",
               "factIds": [
-                "now-8",
-                "now-4",
-                "now-5"
+                "group-charged"
               ]
             }
           ]
@@ -38,9 +38,10 @@
     {
       "rep": 1,
       "pass": 1,
+      "explanation": "shown: In Maple Ave, $5,020.00 has been charged in total, $1,610.00 is on hold now, and $0.00 has been refunded. The 2 items on hold are the round dining table ($1,250.00) and the small round side table ($360.00). The 4 items charged are the compact sofa, design services, dining sideboard and upholstered dining chairs, with nothing on hold for them.",
       "attempts": [
         {
-          "fingerprint": "0d0308ab0d9509f8ce1e",
+          "fingerprint": "8f0dee94e5d1eb348045",
           "output": [
             {
               "text": "In Maple Ave, $5,020.00 has been charged in total, $1,610.00 is on hold now, and $0.00 has been refunded.",
@@ -49,18 +50,17 @@
               ]
             },
             {
-              "text": "The round dining table has $1,250.00 on hold and the small round side table has $360.00 on hold.",
+              "text": "The 2 items on hold are the round dining table ($1,250.00) and the small round side table ($360.00).",
               "factIds": [
+                "group-on-hold",
                 "now-6",
                 "now-7"
               ]
             },
             {
-              "text": "Earlier holds were released on the three-seat sofa ($2,400.00), the fixed six-person dining table ($1,400.00) and the large rectangular coffee table ($650.00).",
+              "text": "The 4 items charged are the compact sofa, design services, dining sideboard and upholstered dining chairs, with nothing on hold for them.",
               "factIds": [
-                "now-8",
-                "now-4",
-                "now-5"
+                "group-charged"
               ]
             }
           ]
@@ -70,9 +70,10 @@
     {
       "rep": 2,
       "pass": 1,
+      "explanation": "shown: In Maple Ave, $5,020.00 has been charged in total, $1,610.00 is on hold now, and $0.00 has been refunded. The 2 items on hold are the round dining table ($1,250.00) and the small round side table ($360.00). The 4 charged items are the compact sofa, design services, dining sideboard and upholstered dining chairs.",
       "attempts": [
         {
-          "fingerprint": "0d0308ab0d9509f8ce1e",
+          "fingerprint": "8f0dee94e5d1eb348045",
           "output": [
             {
               "text": "In Maple Ave, $5,020.00 has been charged in total, $1,610.00 is on hold now, and $0.00 has been refunded.",
@@ -81,18 +82,17 @@
               ]
             },
             {
-              "text": "The round dining table has $1,250.00 on hold and the small round side table has $360.00 on hold.",
+              "text": "The 2 items on hold are the round dining table ($1,250.00) and the small round side table ($360.00).",
               "factIds": [
+                "group-on-hold",
                 "now-6",
                 "now-7"
               ]
             },
             {
-              "text": "Earlier holds were released on the three-seat sofa ($2,400.00), the fixed six-person dining table ($1,400.00) and the large rectangular coffee table ($650.00).",
+              "text": "The 4 charged items are the compact sofa, design services, dining sideboard and upholstered dining chairs.",
               "factIds": [
-                "op-008",
-                "op-010",
-                "op-009"
+                "group-charged"
               ]
             }
           ]

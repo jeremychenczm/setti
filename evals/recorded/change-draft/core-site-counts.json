@@ -1,28 +1,29 @@
 {
   "flow": "change-draft",
   "case": "core-site-counts",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "f6b258670847cdd7152d",
+          "fingerprint": "7bc296df103585cfead2",
           "output": {
             "intent": "draft",
-            "message": "I drafted four quantity changes for your review: downlights to 12 (using your correction), shower wall tile to 11 boxes, brass cabinet pulls to 36 (including the client's request for the island drawers), and trim paint to 5 gallons. Please confirm the pulls change, since it came from the client's message rather than your notes. This draft is not an order or a payment.",
-            "title": "Quantity changes from today's site notes",
+            "message": "I drafted four quantity changes from today's site notes for your review: downlights to 12, shower wall tile to 11 boxes, cabinet pulls to 36, and trim paint to 5 gallons. This is a draft only, not an order or payment, and it still needs your review.",
+            "title": "Site-note quantity changes: downlights, shower tile, cabinet pulls, trim paint",
             "changes": [
               {
                 "action": "quantity",
                 "itemId": "hl-downlights",
                 "quantity": 12,
                 "productOptionId": null,
-                "description": "Downlights go from 10 to 12, per the corrected count.",
+                "description": "Raise recessed downlights from 10 to 12, using the corrected count.",
                 "sourceMessageIds": [
                   "m2",
-                  "m4"
+                  "m4",
+                  "t"
                 ]
               },
               {
@@ -30,9 +31,10 @@
                 "itemId": "hl-shower-tile",
                 "quantity": 11,
                 "productOptionId": null,
-                "description": "Shower wall tile goes from 9 to 11 boxes.",
+                "description": "Raise shower wall tile from 9 to 11 boxes (two more boxes).",
                 "sourceMessageIds": [
-                  "m5"
+                  "m5",
+                  "t"
                 ]
               },
               {
@@ -40,9 +42,10 @@
                 "itemId": "hl-cabinet-pulls",
                 "quantity": 36,
                 "productOptionId": null,
-                "description": "Cabinet pulls go from 28 to 36 for four new island drawers with two pulls each.",
+                "description": "Raise brass cabinet pulls from 28 to 36 for four new island drawers with two pulls each.",
                 "sourceMessageIds": [
-                  "m6"
+                  "m6",
+                  "t"
                 ]
               },
               {
@@ -50,41 +53,44 @@
                 "itemId": "hl-trim-paint",
                 "quantity": 5,
                 "productOptionId": null,
-                "description": "Trim paint goes from 4 to 5 gallons for the new doorway casing.",
+                "description": "Raise trim paint from 4 to 5 gallons for the new doorway casing.",
                 "sourceMessageIds": [
-                  "m7"
+                  "m7",
+                  "t"
                 ]
               }
             ],
             "unresolved": [],
             "constraints": [
               "The downlight count uses the corrected 12, not the earlier 14.",
+              "The pull request came from the client, so the designer should confirm it.",
               "Trim paint is tinted to order and cannot be returned once mixed.",
-              "The pulls change comes from the client's message, so please confirm it before sending.",
-              "The client must confirm the revised quote before any change takes effect."
+              "The client must confirm the revised quote before anything proceeds."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 4/4 expected matched, 4 drafted"
     },
     {
       "rep": 1,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "f6b258670847cdd7152d",
+          "fingerprint": "7bc296df103585cfead2",
           "output": {
             "intent": "draft",
-            "message": "I drafted four quantity changes for your review: downlights to 12 (using your correction, not 14), shower wall tile to 11 boxes, brass pulls to 36, and trim paint to 5 gallons. The pull increase comes from the client's message about the island drawers, so please check it. This draft is not an order or a payment.",
-            "title": "Quantity changes from today's site notes",
+            "message": "Drafted four quantity changes from today's site notes for your review: downlights to 12, shower wall tile to 11 boxes, cabinet pulls to 36, and trim paint to 5 gallons. This is a draft only, not an order or payment, so please check the final downlight count and the pull total.",
+            "title": "Quantity changes from site notes, Oct 21",
             "changes": [
               {
                 "action": "quantity",
                 "itemId": "hl-downlights",
                 "quantity": 12,
                 "productOptionId": null,
-                "description": "Raise recessed downlights from 10 to 12, per the corrected count.",
+                "description": "Raise recessed downlights from 10 to 12, the corrected final count.",
                 "sourceMessageIds": [
                   "m2",
                   "m4"
@@ -105,7 +111,7 @@
                 "itemId": "hl-cabinet-pulls",
                 "quantity": 36,
                 "productOptionId": null,
-                "description": "Add 8 pulls for four new island drawers, from 28 to 36.",
+                "description": "Add 8 pulls for the four new island drawers, from 28 to 36.",
                 "sourceMessageIds": [
                   "m6"
                 ]
@@ -115,43 +121,42 @@
                 "itemId": "hl-trim-paint",
                 "quantity": 5,
                 "productOptionId": null,
-                "description": "Add one gallon of trim paint, from 4 to 5 gallons.",
+                "description": "Add one gallon of trim paint for the new doorway casing, from 4 to 5.",
                 "sourceMessageIds": [
                   "m7"
                 ]
               }
             ],
-            "unresolved": [
-              "Should the new island drawers use the same 6 in unlacquered brass pull already quoted?"
-            ],
+            "unresolved": [],
             "constraints": [
-              "Downlights use the corrected total of 12; the earlier figure of 14 was superseded.",
-              "The pull increase was requested by the client, not in the designer's site notes.",
-              "Tinted trim paint cannot be returned once mixed.",
-              "The client must confirm the revised quote before any change takes effect."
+              "The downlight count uses the designer's correction to 12; the earlier figure of 14 is superseded.",
+              "The pull request came from the client in chat and needs designer confirmation.",
+              "Client confirmation is needed before any change takes effect."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 4/4 expected matched, 4 drafted"
     },
     {
       "rep": 2,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "f6b258670847cdd7152d",
+          "fingerprint": "7bc296df103585cfead2",
           "output": {
             "intent": "draft",
-            "message": "I drafted four quantity changes from today's site notes: downlights to 12 (using the correction, not the earlier 14), shower wall tile to 11 boxes, cabinet pulls to 36, and trim paint to 5 gallons. The pull change comes from the client's message, so please check it. This draft needs your review and is not an order.",
-            "title": "Quantity changes from today's site notes",
+            "message": "This draft updates four quantities from today's site notes: downlights to 12, shower wall tile to 11 boxes, cabinet pulls to 36, and trim paint to 5 gallons. It needs your review, and it is not an order or a payment.",
+            "title": "Site-note quantity changes: downlights, shower tile, cabinet pulls, trim paint",
             "changes": [
               {
                 "action": "quantity",
                 "itemId": "hl-downlights",
                 "quantity": 12,
                 "productOptionId": null,
-                "description": "Downlights go from 10 to 12 in total, per your correction.",
+                "description": "Set recessed downlights to the corrected total of 12.",
                 "sourceMessageIds": [
                   "m2",
                   "m4"
@@ -162,7 +167,7 @@
                 "itemId": "hl-shower-tile",
                 "quantity": 11,
                 "productOptionId": null,
-                "description": "Shower wall tile goes from 9 to 11 boxes, two more.",
+                "description": "Add two boxes to the 9 quoted, for 11 boxes of shower wall tile.",
                 "sourceMessageIds": [
                   "m5"
                 ]
@@ -172,7 +177,7 @@
                 "itemId": "hl-cabinet-pulls",
                 "quantity": 36,
                 "productOptionId": null,
-                "description": "Cabinet pulls go from 28 to 36 for four new drawers with two pulls each.",
+                "description": "Add 8 pulls (4 drawers × 2) to the 28 quoted, for 36 pulls.",
                 "sourceMessageIds": [
                   "m6"
                 ]
@@ -182,22 +187,26 @@
                 "itemId": "hl-trim-paint",
                 "quantity": 5,
                 "productOptionId": null,
-                "description": "Trim paint goes from 4 to 5 gallons, one more for the new casing.",
+                "description": "Add one gallon to the 4 quoted, for 5 gallons of trim paint.",
                 "sourceMessageIds": [
                   "m7"
                 ]
               }
             ],
-            "unresolved": [],
-            "constraints": [
-              "The pull increase comes from the client's message, so confirm it matches your site notes.",
-              "The client must confirm the revised quote before anything proceeds.",
-              "Mixed trim paint cannot be returned, and opened tile boxes cannot be returned."
+            "unresolved": [
+              "The island drawer pulls came from the client's message; please confirm the four new drawers with the designer's plan."
             ],
-            "money": null
+            "constraints": [
+              "Downlight count uses the corrected 12, not the earlier 14.",
+              "Trim paint is tinted to order and cannot be returned once mixed.",
+              "The client must confirm the revised quote before anything proceeds."
+            ],
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 4/4 expected matched, 4 drafted"
     }
   ]
 }

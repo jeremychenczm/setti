@@ -1,25 +1,25 @@
 {
   "flow": "change-draft",
   "case": "large-31-rooms",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "38a822828a315fdb5ab7",
+          "fingerprint": "fa1c31b31cc5b62a7f4b",
           "output": {
             "intent": "draft",
-            "message": "I drafted all four changes for your review: one cottage bedroom nightstand, the Haven four-seat in oatmeal replacing the media room sofa, the guest bath 1 towel bar removed, and six sunroom drapery panels. This is a draft for designer review, not an order or payment; please check the media room clearance for the wider sofa and the sunroom window measurements.",
-            "title": "Revised quote: nightstand, Haven sofa, towel bar removal, sunroom drapery",
+            "message": "I drafted all four changes for your review: one cottage bedroom nightstand, the Haven four-seat oatmeal sofa in the media room, no guest bath 1 towel bar, and six sunroom drapery panels. This is a draft for designer review, not an order or a payment. Please check the media room fit of the wider sofa.",
+            "title": "Cedar Ridge House: nightstand, media room sofa, towel bar and sunroom drapery changes",
             "changes": [
               {
                 "action": "quantity",
                 "itemId": "cr-cottage-bedroom-nightstand",
                 "quantity": 1,
                 "productOptionId": null,
-                "description": "Reduce cottage bedroom nightstands from two to one.",
+                "description": "Reduce the cottage bedroom nightstands from two to one.",
                 "sourceMessageIds": [
                   "m1",
                   "t"
@@ -30,7 +30,7 @@
                 "itemId": "cr-media-room-sofa",
                 "quantity": 1,
                 "productOptionId": "haven-4s-oat",
-                "description": "Replace the media room sofa with the Haven four-seat sofa in oatmeal (104 in wide).",
+                "description": "Replace the quoted media room sofa with one Haven four-seat sofa in oatmeal (NWS-HVN-4S-OAT).",
                 "sourceMessageIds": [
                   "m2",
                   "m3",
@@ -42,7 +42,7 @@
                 "itemId": "cr-guest-bath-1-towel-bar",
                 "quantity": null,
                 "productOptionId": null,
-                "description": "Remove the guest bath 1 towel bar because hooks will be used.",
+                "description": "Remove the guest bath 1 towel bar because the client will use hooks.",
                 "sourceMessageIds": [
                   "m3",
                   "t"
@@ -53,7 +53,7 @@
                 "itemId": "cr-sunroom-curtains",
                 "quantity": 6,
                 "productOptionId": null,
-                "description": "Increase sunroom linen drapery panels from four to six.",
+                "description": "Increase the sunroom linen drapery panels from four to six for the wider windows.",
                 "sourceMessageIds": [
                   "m4",
                   "t"
@@ -61,17 +61,18 @@
               }
             ],
             "unresolved": [
-              "Is there enough clearance for the 104 in wide Haven sofa in the media room?",
-              "Do the measured sunroom window widths confirm six panels?"
+              "Does the 104 in wide Haven four-seat fit the media room, given the quoted sofa is 96 in wide?"
             ],
             "constraints": [
-              "The client must confirm the revised quote before anything proceeds.",
-              "Haven sofa is made to order in 4-6 weeks, so lead time and return eligibility need designer review."
+              "The client must confirm the revised quote before any change takes effect.",
+              "The Haven sofa is made to order in 4–6 weeks per the supplier page."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 4/4 expected matched, 4 drafted"
     }
   ]
 }

@@ -1,28 +1,32 @@
 {
   "flow": "change-draft",
   "case": "lang-ambiguous-rug",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "96389cfa6622d98e4e33",
+          "fingerprint": "65436488de077d573fae",
           "output": {
             "intent": "clarify",
-            "message": "Which rug do you want to swap: the 9 × 12 ft living room rug or the 8 × 10 ft bedroom rug, and what smaller size or product should replace it? Once I know, I can prepare a draft for designer review; it is not an order or a payment.",
-            "title": "Clarify which rug to replace with a smaller one",
+            "message": "There are two rugs in the approved quote, the 9 × 12 ft living room rug and the 8 × 10 ft bedroom rug, so which one should be swapped for a smaller one? Please also tell me the size or send a link for the replacement rug; I haven't drafted anything yet, and any draft will need designer review and is not an order or payment.",
+            "title": "Clarify which rug to swap for a smaller one",
             "changes": [],
             "unresolved": [
-              "Is the rug to replace the living room rug (9 × 12 ft) or the bedroom rug (8 × 10 ft)?",
-              "What smaller size or product link should the replacement rug be?"
+              "Which rug should be replaced: the living room rug (9 × 12 ft) or the bedroom rug (8 × 10 ft)?",
+              "What size, product or link should the smaller replacement rug be?"
             ],
-            "constraints": [],
-            "money": null
+            "constraints": [
+              "A draft is only a proposal for designer review and is not an order or payment."
+            ],
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome no_draft (intent clarify) · 1 model call"
     }
   ]
 }

@@ -85,5 +85,5 @@ export const CASES: MoneyCase[] = [
     expected: { showEvidence: true, mustCite: ["item:baseline:sideboard"] } },
   { id: "settled-total-and-retained", tags: ["settled", "retained"], title: "Total paid after the refund, and why a returned item still costs $240", fixture: SETTLED, stability: true,
     messages: ask(["t", "client", "@Setti how much have I paid in total after refunds, and why is the sideboard still costing me $240 if it was returned?"]),
-    expected: { requiredClaims: [String.raw`\$5,670\.00`, String.raw`\$240\.00`, String.raw`retain|restock|kept|keeps|supplier`] } },
+    expected: { requiredClaims: [String.raw`\$5,670\.00`, String.raw`\$240\.00`, String.raw`non-refundable|retain|restock|kept|keeps|supplier`] } },
 ];

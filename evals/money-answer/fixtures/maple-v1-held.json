@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-11-05T08:24:00.688Z",
+  "capturedAt": "2026-11-11T03:27:46.771Z",
   "quote": {
     "id": "demo-maple-living-dining-v1",
     "room": "Living & dining room",
@@ -227,7 +227,7 @@
     "projectKey": "maple",
     "quoteId": "demo-maple-living-dining-v1",
     "version": 1,
-    "checkedAt": "2026-11-05T08:24:00.611Z",
+    "checkedAt": "2026-11-11T03:27:46.696Z",
     "providerRecordedAt": "2026-11-02T05:48:32.164Z",
     "mode": "recorded_sandbox",
     "facts": [
@@ -421,7 +421,7 @@
       {
         "id": "record-freshness",
         "text": {
-          "en": "This answer reads stored V1 Sandbox evidence at 2026-11-05T08:24:00.611Z; the most recent recorded provider response is 2026-11-02T05:48:32.164Z. No live PayPal query was made for this answer."
+          "en": "This answer reads stored V1 Sandbox evidence at 2026-11-11T03:27:46.696Z; the most recent recorded provider response is 2026-11-02T05:48:32.164Z. No live PayPal query was made for this answer."
         },
         "sourceIds": [
           "quote"
@@ -507,6 +507,105 @@
         "recordedAt": "2026-11-02T05:48:29.718Z"
       }
     ],
-    "mandatoryFactIds": []
+    "mandatoryFactIds": [],
+    "items": [
+      {
+        "key": "baseline:design",
+        "label": "Design services",
+        "status": "charged",
+        "heldCents": 0,
+        "chargedCents": 100000,
+        "refundedCents": 0,
+        "releasedCents": 0,
+        "nonRefundableCents": 0,
+        "nonRefundableFees": [],
+        "netCents": 100000,
+        "factIds": [
+          "item:baseline:design",
+          "next:baseline:design"
+        ]
+      },
+      {
+        "key": "baseline:sofa",
+        "label": "Three-seat sofa",
+        "status": "on_hold",
+        "heldCents": 240000,
+        "chargedCents": 0,
+        "refundedCents": 0,
+        "releasedCents": 0,
+        "nonRefundableCents": 0,
+        "nonRefundableFees": [],
+        "netCents": 0,
+        "factIds": [
+          "item:baseline:sofa",
+          "next:baseline:sofa"
+        ]
+      },
+      {
+        "key": "baseline:coffee-table",
+        "label": "Large rectangular coffee table",
+        "status": "on_hold",
+        "heldCents": 65000,
+        "chargedCents": 0,
+        "refundedCents": 0,
+        "releasedCents": 0,
+        "nonRefundableCents": 0,
+        "nonRefundableFees": [],
+        "netCents": 0,
+        "factIds": [
+          "item:baseline:coffee-table",
+          "next:baseline:coffee-table"
+        ]
+      },
+      {
+        "key": "baseline:dining-table",
+        "label": "Fixed six-person dining table",
+        "status": "on_hold",
+        "heldCents": 140000,
+        "chargedCents": 0,
+        "refundedCents": 0,
+        "releasedCents": 0,
+        "nonRefundableCents": 0,
+        "nonRefundableFees": [],
+        "netCents": 0,
+        "factIds": [
+          "item:baseline:dining-table",
+          "next:baseline:dining-table"
+        ]
+      },
+      {
+        "key": "baseline:dining-chairs",
+        "label": "Upholstered dining chairs",
+        "status": "on_hold",
+        "heldCents": 108000,
+        "chargedCents": 0,
+        "refundedCents": 0,
+        "releasedCents": 0,
+        "nonRefundableCents": 0,
+        "nonRefundableFees": [],
+        "netCents": 0,
+        "factIds": [
+          "item:baseline:dining-chairs",
+          "next:baseline:dining-chairs"
+        ]
+      },
+      {
+        "key": "baseline:sideboard",
+        "label": "Dining sideboard",
+        "status": "charged",
+        "heldCents": 0,
+        "chargedCents": 120000,
+        "refundedCents": 0,
+        "releasedCents": 0,
+        "nonRefundableCents": 0,
+        "nonRefundableFees": [],
+        "netCents": 120000,
+        "factIds": [
+          "item:baseline:sideboard",
+          "next:baseline:sideboard",
+          "supplier:c4980362-a35e-4b41-8cd1-5d303f9d30bd"
+        ]
+      }
+    ]
   }
 }

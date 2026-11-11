@@ -1,58 +1,49 @@
 {
   "flow": "money-answer",
   "case": "v2-release-not-refund",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "306bfd2e18df3cfafe3f",
+          "fingerprint": "91fe034e1f13da3215d4",
           "output": {
             "intent": "money",
-            "message": "Your original sofa's $2,400.00 hold was released, not refunded, because it was never charged; the revised quote replaced it with the compact sofa.",
-            "title": "Original sofa hold released, no refund",
+            "message": "Your original three-seat sofa hold of $2,400.00 was released because the confirmed V2 quote replaces it with the compact sofa, and it was not a refund because nothing had been charged for it.",
+            "title": "Sofa hold released, no refund",
             "changes": [],
             "unresolved": [],
             "constraints": [],
             "money": {
               "answer": {
                 "summary": {
-                  "text": "Your original sofa's $2,400.00 hold was released, not refunded, because it was never charged; the revised quote replaced it with the compact sofa.",
+                  "text": "Your original three-seat sofa hold of $2,400.00 was released because the confirmed V2 quote replaces it with the compact sofa, and it was not a refund because nothing had been charged for it.",
+                  "about": [
+                    "baseline:sofa"
+                  ],
                   "factIds": [
                     "item:baseline:sofa",
-                    "terms:baseline:sofa"
+                    "approval"
                   ]
                 },
-                "rows": [
-                  {
-                    "label": "Three-seat sofa (original)",
-                    "status": "$2,400.00 hold released",
-                    "amount": "$0.00",
-                    "factIds": [
-                      "item:baseline:sofa"
-                    ]
-                  },
-                  {
-                    "label": "Compact sofa (new)",
-                    "status": "$2,100.00 on hold",
-                    "amount": "$0.00",
-                    "factIds": [
-                      "item:proposed:sofa",
-                      "next:proposed:sofa"
-                    ]
-                  }
-                ],
+                "items": [],
                 "notes": [
                   {
-                    "text": "A released hold is not a refund: no money was charged for the original sofa, so there was nothing to refund.",
+                    "text": "A released hold is not a refund: the original sofa shows $0.00 charged and $0.00 refunded, so no money was returned to you.",
+                    "about": [
+                      "baseline:sofa"
+                    ],
                     "factIds": [
                       "item:baseline:sofa"
                     ]
                   },
                   {
-                    "text": "The compact sofa has its own separate hold and is not yet charged; that waits for the supplier's confirmation.",
+                    "text": "The new compact sofa has its own hold of $2,100.00, which is on hold and not charged yet.",
+                    "about": [
+                      "proposed:sofa"
+                    ],
                     "factIds": [
                       "item:proposed:sofa",
                       "next:proposed:sofa"
@@ -61,10 +52,12 @@
                 ]
               },
               "showEvidence": false
-            }
+            },
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "answer: Your original three-seat sofa hold of $2,400.00 was released because the confirmed V2 quote replaces it with the compact sofa, and it was not a refund because nothing had been charged for it. | A released hold is not a refund: the original sofa shows $0.00 charged and $0.00 refunded, so no money was returned to you. | The new compact sofa has its own hold of $2,100.00, which is on hold and not charged yet."
     }
   ]
 }

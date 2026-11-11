@@ -1,18 +1,18 @@
 {
   "flow": "money-answer",
   "case": "v1-charged-and-held",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "3ad45d6f549219e70a5a",
+          "fingerprint": "f39bbad0f6ba426ab6f1",
           "output": {
             "intent": "money",
             "message": "So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is not paid for yet: its $2,400.00 is on hold, not charged.",
-            "title": "Charged, on hold and sofa payment status",
+            "title": "",
             "changes": [],
             "unresolved": [],
             "constraints": [],
@@ -20,70 +20,40 @@
               "answer": {
                 "summary": {
                   "text": "So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is not paid for yet: its $2,400.00 is on hold, not charged.",
+                  "about": [
+                    "project",
+                    "sofa"
+                  ],
                   "factIds": [
                     "scope",
                     "item:baseline:sofa"
                   ]
                 },
-                "rows": [
+                "items": [
+                  "baseline:design",
+                  "baseline:sideboard",
+                  "baseline:sofa",
+                  "baseline:coffee-table",
+                  "baseline:dining-table",
+                  "baseline:dining-chairs"
+                ],
+                "notes": [
                   {
-                    "label": "Design services",
-                    "status": "Charged",
-                    "amount": "$1,000.00",
+                    "text": "The charged amount is the design services and the dining sideboard; nothing has been refunded.",
+                    "about": [
+                      "baseline:design",
+                      "baseline:sideboard"
+                    ],
                     "factIds": [
-                      "item:baseline:design"
-                    ]
-                  },
-                  {
-                    "label": "Dining sideboard",
-                    "status": "Charged",
-                    "amount": "$1,200.00",
-                    "factIds": [
+                      "item:baseline:design",
                       "item:baseline:sideboard"
                     ]
                   },
                   {
-                    "label": "Three-seat sofa",
-                    "status": "On hold, not charged",
-                    "amount": "$0.00",
-                    "factIds": [
-                      "item:baseline:sofa"
-                    ]
-                  },
-                  {
-                    "label": "Large rectangular coffee table",
-                    "status": "On hold, not charged",
-                    "amount": "$0.00",
-                    "factIds": [
-                      "item:baseline:coffee-table"
-                    ]
-                  },
-                  {
-                    "label": "Fixed six-person dining table",
-                    "status": "On hold, not charged",
-                    "amount": "$0.00",
-                    "factIds": [
-                      "item:baseline:dining-table"
-                    ]
-                  },
-                  {
-                    "label": "Upholstered dining chairs",
-                    "status": "On hold, not charged",
-                    "amount": "$0.00",
-                    "factIds": [
-                      "item:baseline:dining-chairs"
-                    ]
-                  }
-                ],
-                "notes": [
-                  {
-                    "text": "A hold reserves the amount but is not a charge.",
-                    "factIds": [
-                      "item:baseline:sofa"
-                    ]
-                  },
-                  {
-                    "text": "The sofa will only be charged after its supplier confirms the order.",
+                    "text": "The sofa amount is on hold, not charged, and it will only be charged after the supplier confirms that item.",
+                    "about": [
+                      "baseline:sofa"
+                    ],
                     "factIds": [
                       "next:baseline:sofa"
                     ]
@@ -91,121 +61,66 @@
                 ]
               },
               "showEvidence": false
-            }
+            },
+            "quoteQuery": null
+          },
+          "feedback": [
+            "The summary (\"So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is\") is about \"sofa\", not in moneyEvidence.items; use item keys or \"project\"."
+          ]
+        },
+        {
+          "fingerprint": "42cc4847f77118e09a50",
+          "output": {
+            "intent": "money",
+            "message": "So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is not paid for yet because its $2,400.00 is on hold, not charged.",
+            "title": "Charged and on-hold amounts",
+            "changes": [],
+            "unresolved": [],
+            "constraints": [],
+            "money": {
+              "answer": {
+                "summary": {
+                  "text": "So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is not paid for yet because its $2,400.00 is on hold, not charged.",
+                  "about": [
+                    "project",
+                    "baseline:sofa"
+                  ],
+                  "factIds": [
+                    "scope",
+                    "item:baseline:sofa"
+                  ]
+                },
+                "items": [],
+                "notes": [
+                  {
+                    "text": "The sofa's hold becomes a charge only after its supplier confirms the order.",
+                    "about": [
+                      "baseline:sofa"
+                    ],
+                    "factIds": [
+                      "next:baseline:sofa"
+                    ]
+                  }
+                ]
+              },
+              "showEvidence": false
+            },
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "answer: So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is not paid for yet because its $2,400.00 is on hold, not charged. | The sofa's hold becomes a charge only after its supplier confirms the order."
     },
     {
       "rep": 1,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "3ad45d6f549219e70a5a",
-          "output": {
-            "intent": "money",
-            "message": "So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is not paid yet because its $2,400.00 is on hold, not charged.",
-            "title": "Charged, on hold and sofa payment status",
-            "changes": [],
-            "unresolved": [],
-            "constraints": [],
-            "money": {
-              "answer": {
-                "summary": {
-                  "text": "So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is not paid yet because its $2,400.00 is on hold, not charged.",
-                  "factIds": [
-                    "scope",
-                    "item:baseline:sofa",
-                    "next:baseline:sofa"
-                  ]
-                },
-                "rows": [
-                  {
-                    "label": "Design services",
-                    "status": "Charged",
-                    "amount": "$1,000.00",
-                    "factIds": [
-                      "item:baseline:design",
-                      "next:baseline:design"
-                    ]
-                  },
-                  {
-                    "label": "Dining sideboard",
-                    "status": "Charged",
-                    "amount": "$1,200.00",
-                    "factIds": [
-                      "item:baseline:sideboard",
-                      "next:baseline:sideboard"
-                    ]
-                  },
-                  {
-                    "label": "Three-seat sofa",
-                    "status": "On hold, not charged",
-                    "amount": "$0.00",
-                    "factIds": [
-                      "item:baseline:sofa",
-                      "next:baseline:sofa"
-                    ]
-                  },
-                  {
-                    "label": "Large rectangular coffee table",
-                    "status": "On hold, not charged",
-                    "amount": "$0.00",
-                    "factIds": [
-                      "item:baseline:coffee-table",
-                      "next:baseline:coffee-table"
-                    ]
-                  },
-                  {
-                    "label": "Fixed six-person dining table",
-                    "status": "On hold, not charged",
-                    "amount": "$0.00",
-                    "factIds": [
-                      "item:baseline:dining-table",
-                      "next:baseline:dining-table"
-                    ]
-                  },
-                  {
-                    "label": "Upholstered dining chairs",
-                    "status": "On hold, not charged",
-                    "amount": "$0.00",
-                    "factIds": [
-                      "item:baseline:dining-chairs",
-                      "next:baseline:dining-chairs"
-                    ]
-                  }
-                ],
-                "notes": [
-                  {
-                    "text": "A hold reserves the money but is not a charge, and another item's payment does not cover the sofa.",
-                    "factIds": [
-                      "item:baseline:sofa"
-                    ]
-                  },
-                  {
-                    "text": "The sofa will only be charged once its supplier confirms the order.",
-                    "factIds": [
-                      "next:baseline:sofa"
-                    ]
-                  }
-                ]
-              },
-              "showEvidence": false
-            }
-          }
-        }
-      ]
-    },
-    {
-      "rep": 2,
-      "pass": 1,
-      "attempts": [
-        {
-          "fingerprint": "3ad45d6f549219e70a5a",
+          "fingerprint": "f39bbad0f6ba426ab6f1",
           "output": {
             "intent": "money",
             "message": "So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is not paid for yet: its $2,400.00 is on hold, not charged.",
-            "title": "What is charged, what is on hold, and sofa status",
+            "title": "",
             "changes": [],
             "unresolved": [],
             "constraints": [],
@@ -213,89 +128,219 @@
               "answer": {
                 "summary": {
                   "text": "So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is not paid for yet: its $2,400.00 is on hold, not charged.",
+                  "about": [
+                    "project",
+                    "sofa"
+                  ],
                   "factIds": [
                     "scope",
-                    "item:baseline:sofa",
-                    "next:baseline:sofa"
+                    "item:baseline:sofa"
                   ]
                 },
-                "rows": [
-                  {
-                    "label": "Design services",
-                    "status": "Charged",
-                    "amount": "$1,000.00",
-                    "factIds": [
-                      "item:baseline:design",
-                      "next:baseline:design"
-                    ]
-                  },
-                  {
-                    "label": "Dining sideboard",
-                    "status": "Charged",
-                    "amount": "$1,200.00",
-                    "factIds": [
-                      "item:baseline:sideboard",
-                      "next:baseline:sideboard"
-                    ]
-                  },
-                  {
-                    "label": "Three-seat sofa",
-                    "status": "On hold",
-                    "amount": "$0.00",
-                    "factIds": [
-                      "item:baseline:sofa",
-                      "next:baseline:sofa"
-                    ]
-                  },
-                  {
-                    "label": "Large rectangular coffee table",
-                    "status": "On hold",
-                    "amount": "$0.00",
-                    "factIds": [
-                      "item:baseline:coffee-table",
-                      "next:baseline:coffee-table"
-                    ]
-                  },
-                  {
-                    "label": "Fixed six-person dining table",
-                    "status": "On hold",
-                    "amount": "$0.00",
-                    "factIds": [
-                      "item:baseline:dining-table",
-                      "next:baseline:dining-table"
-                    ]
-                  },
-                  {
-                    "label": "Upholstered dining chairs",
-                    "status": "On hold",
-                    "amount": "$0.00",
-                    "factIds": [
-                      "item:baseline:dining-chairs",
-                      "next:baseline:dining-chairs"
-                    ]
-                  }
+                "items": [
+                  "baseline:design",
+                  "baseline:sideboard",
+                  "baseline:sofa",
+                  "baseline:coffee-table",
+                  "baseline:dining-table",
+                  "baseline:dining-chairs"
                 ],
                 "notes": [
                   {
-                    "text": "A hold is not a charge; the sofa's charge waits for its supplier confirmation.",
+                    "text": "The charged amount covers the design services and the dining sideboard; nothing has been refunded.",
+                    "about": [
+                      "baseline:design",
+                      "baseline:sideboard"
+                    ],
                     "factIds": [
-                      "item:baseline:sofa",
-                      "next:baseline:sofa"
+                      "item:baseline:design",
+                      "item:baseline:sideboard",
+                      "scope"
                     ]
                   },
                   {
-                    "text": "These totals cover the approved V1 items only, not a full settlement.",
+                    "text": "The sofa's hold is not a charge; it will only be charged once the sofa's supplier confirms the order.",
+                    "about": [
+                      "baseline:sofa"
+                    ],
                     "factIds": [
-                      "scope"
+                      "next:baseline:sofa"
                     ]
                   }
                 ]
               },
               "showEvidence": false
-            }
+            },
+            "quoteQuery": null
+          },
+          "feedback": [
+            "The summary (\"So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is\") is about \"sofa\", not in moneyEvidence.items; use item keys or \"project\"."
+          ]
+        },
+        {
+          "fingerprint": "42cc4847f77118e09a50",
+          "output": {
+            "intent": "money",
+            "message": "So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is not paid for yet because its $2,400.00 is on hold and not charged.",
+            "title": "Charged and on-hold amounts, and sofa status",
+            "changes": [],
+            "unresolved": [],
+            "constraints": [],
+            "money": {
+              "answer": {
+                "summary": {
+                  "text": "So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is not paid for yet because its $2,400.00 is on hold and not charged.",
+                  "about": [
+                    "project",
+                    "baseline:sofa"
+                  ],
+                  "factIds": [
+                    "scope",
+                    "item:baseline:sofa"
+                  ]
+                },
+                "items": [
+                  "baseline:design",
+                  "baseline:sideboard",
+                  "baseline:sofa",
+                  "baseline:coffee-table",
+                  "baseline:dining-table",
+                  "baseline:dining-chairs"
+                ],
+                "notes": [
+                  {
+                    "text": "The sofa's hold is not a charge; the charge waits for the sofa supplier's confirmation.",
+                    "about": [
+                      "baseline:sofa"
+                    ],
+                    "factIds": [
+                      "next:baseline:sofa"
+                    ]
+                  }
+                ]
+              },
+              "showEvidence": false
+            },
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "answer: So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is not paid for yet because its $2,400.00 is on hold and not charged. | Design services: Charged $1,000.00 | Dining sideboard: Charged $1,200.00 | Three-seat sofa: On hold $0.00 on hold $2,400.00 | Large rectangular coffee table: On hold $0.00 on hold $650.00 | Fixed six-person dining table: On hold $0.00 on hold $1,400.00 | Upholstered dining chairs: On hold $0.00 on hold $1,080.00 | The sofa's hold is not a charge; the charge waits for the sofa supplier's confirmation."
+    },
+    {
+      "rep": 2,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "f39bbad0f6ba426ab6f1",
+          "output": {
+            "intent": "money",
+            "message": "So far $2,200.00 has been charged, $5,530.00 is only on hold, and the sofa is not paid for yet because its $2,400.00 is on hold, not charged.",
+            "title": "",
+            "changes": [],
+            "unresolved": [],
+            "constraints": [],
+            "money": {
+              "answer": {
+                "summary": {
+                  "text": "So far $2,200.00 has been charged, $5,530.00 is only on hold, and the sofa is not paid for yet because its $2,400.00 is on hold, not charged.",
+                  "about": [
+                    "project",
+                    "sofa"
+                  ],
+                  "factIds": [
+                    "scope",
+                    "item:baseline:sofa"
+                  ]
+                },
+                "items": [
+                  "baseline:design",
+                  "baseline:sideboard",
+                  "baseline:sofa",
+                  "baseline:coffee-table",
+                  "baseline:dining-table",
+                  "baseline:dining-chairs"
+                ],
+                "notes": [
+                  {
+                    "text": "The charged amount covers the design services ($1,000.00) and the dining sideboard ($1,200.00).",
+                    "about": [
+                      "baseline:design",
+                      "baseline:sideboard"
+                    ],
+                    "factIds": [
+                      "item:baseline:design",
+                      "item:baseline:sideboard"
+                    ]
+                  },
+                  {
+                    "text": "The sofa amount is on hold, not charged, and the charge waits for the supplier to confirm the sofa order.",
+                    "about": [
+                      "baseline:sofa"
+                    ],
+                    "factIds": [
+                      "next:baseline:sofa"
+                    ]
+                  }
+                ]
+              },
+              "showEvidence": false
+            },
+            "quoteQuery": null
+          },
+          "feedback": [
+            "The summary (\"So far $2,200.00 has been charged, $5,530.00 is only on hold, and the sofa is no\") is about \"sofa\", not in moneyEvidence.items; use item keys or \"project\"."
+          ]
+        },
+        {
+          "fingerprint": "b924623d8caedb8feb44",
+          "output": {
+            "intent": "money",
+            "message": "So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is not paid for yet because its $2,400.00 is on hold, not charged.",
+            "title": "Charged and on-hold amounts",
+            "changes": [],
+            "unresolved": [],
+            "constraints": [],
+            "money": {
+              "answer": {
+                "summary": {
+                  "text": "So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is not paid for yet because its $2,400.00 is on hold, not charged.",
+                  "about": [
+                    "project",
+                    "baseline:sofa"
+                  ],
+                  "factIds": [
+                    "scope",
+                    "item:baseline:sofa"
+                  ]
+                },
+                "items": [
+                  "baseline:design",
+                  "baseline:sofa",
+                  "baseline:coffee-table",
+                  "baseline:dining-table",
+                  "baseline:dining-chairs",
+                  "baseline:sideboard"
+                ],
+                "notes": [
+                  {
+                    "text": "The sofa's $2,400.00 is only authorized, and it will be charged after the supplier confirms that item.",
+                    "about": [
+                      "baseline:sofa"
+                    ],
+                    "factIds": [
+                      "next:baseline:sofa"
+                    ]
+                  }
+                ]
+              },
+              "showEvidence": false
+            },
+            "quoteQuery": null
+          }
+        }
+      ],
+      "explanation": "answer: So far $2,200.00 has been charged and $5,530.00 is only on hold, and the sofa is not paid for yet because its $2,400.00 is on hold, not charged. | Design services: Charged $1,000.00 | Three-seat sofa: On hold $0.00 on hold $2,400.00 | Large rectangular coffee table: On hold $0.00 on hold $650.00 | Fixed six-person dining table: On hold $0.00 on hold $1,400.00 | Upholstered dining chairs: On hold $0.00 on hold $1,080.00 | Dining sideboard: Charged $1,200.00 | The sofa's $2,400.00 is only authorized, and it will be charged after the supplier confirms that item."
     }
   ]
 }

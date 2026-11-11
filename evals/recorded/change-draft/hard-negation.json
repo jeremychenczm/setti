@@ -1,17 +1,17 @@
 {
   "flow": "change-draft",
   "case": "hard-negation",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "8635c1c045b74745506a",
+          "fingerprint": "6165db064cd6af5828a0",
           "output": {
             "intent": "draft",
-            "message": "I've drafted removal of the arc floor lamp and the round entry mirror, and left both rugs unchanged as you asked. This draft needs your review and is not an order.",
+            "message": "Draft removes the arc floor lamp and the round entry mirror and leaves both rugs unchanged. It is for designer review only and is not an order or payment.",
             "title": "Remove arc floor lamp and round entry mirror",
             "changes": [
               {
@@ -37,13 +37,15 @@
             ],
             "unresolved": [],
             "constraints": [
-              "Both the living room rug and the bedroom rug stay unchanged.",
+              "Both rugs stay unchanged as instructed.",
               "The client must confirm the revised quote before it takes effect."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 2/2 expected matched, 2 drafted"
     }
   ]
 }

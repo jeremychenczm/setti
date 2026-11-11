@@ -1,25 +1,25 @@
 {
   "flow": "change-draft",
   "case": "hard-half-sourced",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "32649f79ab9c4ef6addc",
+          "fingerprint": "9063243a93de8584198e",
           "output": {
             "intent": "draft",
-            "message": "I drafted adding one 48 in Ridge bench and a placeholder line for the matching coat rack for your review. The coat rack has no link or price yet, so it needs the client's link; this is not an order or payment.",
-            "title": "Add Ridge bench (48 in) and matching coat rack",
+            "message": "I drafted adding one 48 in Ridge bench from the supplied product page. The coat rack is added as a placeholder with no product, because the client hasn't sent its link yet. This draft needs designer review and is not an order or a payment.",
+            "title": "Add Ridge 48 in bench and matching coat rack",
             "changes": [
               {
                 "action": "add",
                 "itemId": null,
                 "quantity": 1,
                 "productOptionId": "ridge-bench-48",
-                "description": "Add one Ridge bench, 48 in, white oak with seagrass seat (NWS-RDG-48).",
+                "description": "Add one Ridge bench, 48 in (NWS-RDG-48), white oak with seagrass seat.",
                 "sourceMessageIds": [
                   "m1",
                   "t"
@@ -30,7 +30,7 @@
                 "itemId": null,
                 "quantity": 1,
                 "productOptionId": null,
-                "description": "Add one matching coat rack, product and price to be set by the designer once the client sends the link.",
+                "description": "Add one matching coat rack; product, price and supplier are still to be confirmed.",
                 "sourceMessageIds": [
                   "m1",
                   "t"
@@ -38,35 +38,37 @@
               }
             ],
             "unresolved": [
-              "Which coat rack product should be used, since the client has not yet sent the link?",
-              "What are the coat rack's price, size and quantity?"
+              "Which coat rack product, price and supplier? The client will send the link.",
+              "Is one bench the intended quantity and the right room for placement?"
             ],
             "constraints": [
-              "The client still needs to confirm the revised quote before it takes effect.",
-              "The coat rack is a placeholder with no product source until the link arrives."
+              "The client must confirm the revised quote before anything proceeds.",
+              "The coat rack has no price until its product link is supplied."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 2/2 expected matched, 2 drafted"
     },
     {
       "rep": 1,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "32649f79ab9c4ef6addc",
+          "fingerprint": "9063243a93de8584198e",
           "output": {
             "intent": "draft",
-            "message": "I drafted adding one 48 in Ridge bench to the quote and a placeholder line for the matching coat rack. The coat rack still needs its product link, so please check it before the draft goes to the client; this is a draft for review, not an order.",
-            "title": "Add Ridge bench (48 in) and matching coat rack",
+            "message": "I drafted adding one 48 in Ridge bench from the supplied page, plus a placeholder for the coat rack. The coat rack has no link yet, so the designer needs to check it once the client sends it. This is a draft for designer review, not an order or payment.",
+            "title": "Add Ridge bench 48 in and coat rack",
             "changes": [
               {
                 "action": "add",
                 "itemId": null,
                 "quantity": 1,
                 "productOptionId": "ridge-bench-48",
-                "description": "Add one Ridge bench, 48 in, from Northwood Seating.",
+                "description": "Add one Ridge bench, 48 in (NWS-RDG-48), white oak with seagrass seat.",
                 "sourceMessageIds": [
                   "m1",
                   "t"
@@ -77,7 +79,7 @@
                 "itemId": null,
                 "quantity": 1,
                 "productOptionId": null,
-                "description": "Add one matching coat rack, product and price to be set once the client sends the link.",
+                "description": "Add a matching coat rack; product, price and quantity to be set by the designer once the link arrives.",
                 "sourceMessageIds": [
                   "m1",
                   "t"
@@ -85,35 +87,38 @@
               }
             ],
             "unresolved": [
-              "Which coat rack product should be added, since the client has not sent the link yet?",
-              "Should the coat rack quantity be one?"
+              "Which coat rack should be added? The client has not yet sent the link.",
+              "How many Ridge benches are wanted? One is assumed.",
+              "Which room will the bench and coat rack go in?"
             ],
             "constraints": [
-              "The client still needs to confirm the revised quote before anything is final.",
-              "The coat rack price is not known until its product source is supplied."
+              "Client confirmation of the revised quote is still needed.",
+              "The coat rack has no product source, so its price is not yet known."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 2/2 expected matched, 2 drafted"
     },
     {
       "rep": 2,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "32649f79ab9c4ef6addc",
+          "fingerprint": "9063243a93de8584198e",
           "output": {
             "intent": "draft",
-            "message": "I drafted adding one 48 in Ridge bench; the coat rack is included as a placeholder with no product, since the client's link hasn't arrived. This draft is for designer review and is not an order or payment.",
-            "title": "Add Ridge bench (48 in) and coat rack",
+            "message": "I drafted adding one 48 in Ridge bench from the supplied product page, plus a placeholder line for the coat rack. The coat rack link has not been sent yet, so the designer needs to check that line. This draft is for designer review and is not an order or a payment.",
+            "title": "Add Ridge 48 in bench and coat rack",
             "changes": [
               {
                 "action": "add",
                 "itemId": null,
                 "quantity": 1,
                 "productOptionId": "ridge-bench-48",
-                "description": "Add one Ridge bench, 48 in (NWS-RDG-48), from Northwood Seating.",
+                "description": "Add one Ridge bench, 48 in (NWS-RDG-48), as requested.",
                 "sourceMessageIds": [
                   "m1",
                   "t"
@@ -124,7 +129,7 @@
                 "itemId": null,
                 "quantity": 1,
                 "productOptionId": null,
-                "description": "Add one matching coat rack; product, price and supplier still to be chosen.",
+                "description": "Add a matching coat rack; product, price and quantity are to be confirmed once the link arrives.",
                 "sourceMessageIds": [
                   "m1",
                   "t"
@@ -132,17 +137,19 @@
               }
             ],
             "unresolved": [
-              "Which coat rack should be quoted? The client said they would send the link tomorrow.",
-              "How many coat racks are wanted, and in what finish to match the bench?"
+              "Which coat rack should be added? The client will send the link tomorrow.",
+              "How many coat racks are wanted, and which room are the bench and coat rack for?"
             ],
             "constraints": [
-              "The coat rack has no product source yet, so its price needs designer review.",
-              "The client must confirm the revised quote before anything proceeds."
+              "The client still needs to confirm the revised quote before anything changes.",
+              "The coat rack has no price until its product link is supplied."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 2/2 expected matched, 2 drafted"
     }
   ]
 }

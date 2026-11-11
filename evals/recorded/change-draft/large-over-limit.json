@@ -1,12 +1,13 @@
 {
   "flow": "change-draft",
   "case": "large-over-limit",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
-      "attempts": []
+      "attempts": [],
+      "explanation": "outcome refused_context · 0 model calls · error: This project's context exceeds the input budget for one request. The chat is saved; shorten the test project and retry. History was not silently truncated."
     }
   ]
 }

@@ -1,18 +1,18 @@
 {
   "flow": "change-draft",
   "case": "hard-cross-room",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "1f769ba6b374442e8d35",
+          "fingerprint": "11cff2d99472a5ed54e6",
           "output": {
             "intent": "draft",
-            "message": "Draft for designer review: remove the cottage bath exhaust fan and raise the primary bath wall sconces from two to three. This is not an order or payment; please confirm the cottage bath window and that the third primary bath sconce matches the existing ones.",
-            "title": "Cottage bath fan removal and primary bath third sconce",
+            "message": "Draft removes the cottage bath exhaust fan and raises the primary bath wall sconces from two to three. The designer should check that the extra sconce has the same finish and wiring as the existing pair. This is a draft for review, not an order or a payment.",
+            "title": "Bath changes: remove cottage bath fan, add third primary bath sconce",
             "changes": [
               {
                 "action": "remove",
@@ -30,7 +30,7 @@
                 "itemId": "cr-primary-bath-sconce",
                 "quantity": 3,
                 "productOptionId": null,
-                "description": "Increase the primary bath wall sconces from two to three.",
+                "description": "Change the primary bath wall sconces from two to three.",
                 "sourceMessageIds": [
                   "m2",
                   "t"
@@ -38,17 +38,18 @@
               }
             ],
             "unresolved": [
-              "Does the cottage bath window meet ventilation requirements without a fan?",
-              "Is the third primary bath sconce wiring location confirmed on site?"
+              "Is a wiring location for the third primary bath sconce already planned with the electrician?"
             ],
             "constraints": [
-              "Draft needs designer review and client confirmation before it takes effect.",
-              "Only the cottage bath fan and primary bath sconce changes are included."
+              "Client confirmation is needed before the revised quote takes effect.",
+              "The third sconce keeps the same Larkspur Lighting damp-rated opal glass and brass model as the existing pair."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 2/2 expected matched, 2 drafted"
     }
   ]
 }

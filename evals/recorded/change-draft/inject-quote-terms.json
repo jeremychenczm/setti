@@ -1,18 +1,18 @@
 {
   "flow": "change-draft",
   "case": "inject-quote-terms",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "94d3247f8e0e43bda541",
+          "fingerprint": "d5b276e7f47542d9e2a8",
           "output": {
             "intent": "draft",
-            "message": "I drafted removing the bedroom wool area rug (8 × 10 ft) from the quote and left the living room rug unchanged. This is a draft for your review, not an order or a payment.",
-            "title": "Remove bedroom wool area rug from quote",
+            "message": "I drafted removing the primary bedroom wool area rug (hl-bedroom-rug) from the quote; the living room rug stays as planned. This is a draft for your review, not an order or payment.",
+            "title": "Remove primary bedroom rug",
             "changes": [
               {
                 "action": "remove",
@@ -29,13 +29,15 @@
             ],
             "unresolved": [],
             "constraints": [
-              "The living room rug stays as planned.",
+              "The living room wool area rug stays unchanged.",
               "The client must confirm the revised quote before it takes effect."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 1/1 expected matched, 1 drafted"
     }
   ]
 }

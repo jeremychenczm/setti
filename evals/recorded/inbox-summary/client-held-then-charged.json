@@ -1,35 +1,32 @@
 {
   "flow": "inbox-summary",
   "case": "client-held-then-charged",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 1; its prompt and checks did not change in round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
+      "explanation": "shown: In Maple Ave, $2,200.00 is charged in total, $5,530.00 is on hold now, and $0.00 has been refunded. On hold: the fixed six-person dining table, large rectangular coffee table, three-seat sofa and upholstered dining chairs. The design services and dining sideboard are charged, with nothing on hold.",
       "attempts": [
         {
-          "fingerprint": "23f24bc907f19393458f",
+          "fingerprint": "1ce3b12c572522bbe047",
           "output": [
             {
-              "text": "In Maple Ave, $2,200.00 has been charged in total and $5,530.00 is on hold now, with $0.00 refunded.",
+              "text": "In Maple Ave, $2,200.00 is charged in total, $5,530.00 is on hold now, and $0.00 has been refunded.",
               "factIds": [
                 "money-now"
               ]
             },
             {
-              "text": "Design services ($1,000.00) and the dining sideboard ($1,200.00) are charged.",
+              "text": "On hold: the fixed six-person dining table, large rectangular coffee table, three-seat sofa and upholstered dining chairs.",
               "factIds": [
-                "now-1",
-                "now-2"
+                "group-on-hold"
               ]
             },
             {
-              "text": "The sofa ($2,400.00), dining table ($1,400.00) and dining chairs ($1,080.00) are on hold, along with the coffee table.",
+              "text": "The design services and dining sideboard are charged, with nothing on hold.",
               "factIds": [
-                "now-3",
-                "now-5",
-                "now-6",
-                "now-4"
+                "group-charged"
               ]
             }
           ]
@@ -39,29 +36,27 @@
     {
       "rep": 1,
       "pass": 1,
+      "explanation": "shown: In Maple Ave, $2,200.00 has been charged in total, $5,530.00 is on hold now, and $0.00 has been refunded. The charged items are Design services and the dining sideboard. On hold are the fixed six-person dining table, large rectangular coffee table, three-seat sofa and upholstered dining chairs.",
       "attempts": [
         {
-          "fingerprint": "23f24bc907f19393458f",
+          "fingerprint": "1ce3b12c572522bbe047",
           "output": [
             {
-              "text": "In Maple Ave, $2,200.00 has been charged in total and $5,530.00 is on hold now, with $0.00 refunded.",
+              "text": "In Maple Ave, $2,200.00 has been charged in total, $5,530.00 is on hold now, and $0.00 has been refunded.",
               "factIds": [
                 "money-now"
               ]
             },
             {
-              "text": "The charges are $1,000.00 for Design services and $1,200.00 for the Dining sideboard.",
+              "text": "The charged items are Design services and the dining sideboard.",
               "factIds": [
-                "now-1",
-                "now-2"
+                "group-charged"
               ]
             },
             {
-              "text": "The held amounts include $2,400.00 for the Three-seat sofa, $1,400.00 for the Fixed six-person dining table and $1,080.00 for the Upholstered dining chairs.",
+              "text": "On hold are the fixed six-person dining table, large rectangular coffee table, three-seat sofa and upholstered dining chairs.",
               "factIds": [
-                "now-5",
-                "now-3",
-                "now-6"
+                "group-on-hold"
               ]
             }
           ]
@@ -71,9 +66,10 @@
     {
       "rep": 2,
       "pass": 1,
+      "explanation": "shown: In Maple Ave, $2,200.00 has been charged in total and $5,530.00 is on hold now, with $0.00 refunded. 4 items are on hold: the fixed six-person dining table, large rectangular coffee table, three-seat sofa and upholstered dining chairs. 2 items are charged, with nothing on hold: design services and the dining sideboard.",
       "attempts": [
         {
-          "fingerprint": "23f24bc907f19393458f",
+          "fingerprint": "1ce3b12c572522bbe047",
           "output": [
             {
               "text": "In Maple Ave, $2,200.00 has been charged in total and $5,530.00 is on hold now, with $0.00 refunded.",
@@ -82,18 +78,15 @@
               ]
             },
             {
-              "text": "The charges are $1,000.00 for Design services and $1,200.00 for the Dining sideboard.",
+              "text": "4 items are on hold: the fixed six-person dining table, large rectangular coffee table, three-seat sofa and upholstered dining chairs.",
               "factIds": [
-                "now-1",
-                "now-2"
+                "group-on-hold"
               ]
             },
             {
-              "text": "On hold now are the Three-seat sofa at $2,400.00, the Fixed six-person dining table at $1,400.00, and the Upholstered dining chairs at $1,080.00.",
+              "text": "2 items are charged, with nothing on hold: design services and the dining sideboard.",
               "factIds": [
-                "now-5",
-                "now-3",
-                "now-6"
+                "group-charged"
               ]
             }
           ]

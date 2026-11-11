@@ -1,87 +1,108 @@
 {
   "flow": "money-answer",
   "case": "settled-total-and-retained",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "63a2c392a044b941fa1e",
+          "fingerprint": "0d0620fd83b5ba74116f",
           "output": {
             "intent": "money",
-            "message": "After the $960.00 refund, you have been charged $5,670.00 in total across the payment items shown.",
-            "title": "Total paid after refunds and sideboard cost",
+            "message": "After refunds you have paid $5,670.00 in total, and the sideboard still costs $240.00 because that amount is the non-refundable cost of returning it.",
+            "title": "",
             "changes": [],
             "unresolved": [],
             "constraints": [],
             "money": {
               "answer": {
                 "summary": {
-                  "text": "After the $960.00 refund, you have been charged $5,670.00 in total across the payment items shown.",
+                  "text": "After refunds you have paid $5,670.00 in total: $6,630.00 was charged and $960.00 was refunded.",
+                  "about": [
+                    "project"
+                  ],
                   "factIds": [
                     "scope"
                   ]
                 },
-                "rows": [],
+                "items": [
+                  "baseline:sideboard"
+                ],
                 "notes": [
                   {
-                    "text": "The sideboard was returned, but $240.00 of the $1,200.00 charged is a retained cost under the return terms you confirmed, so only $960.00 was refunded.",
+                    "text": "The sideboard was charged $1,200.00 and $960.00 was refunded, which leaves $240.00 as the non-refundable cost of the return.",
+                    "about": [
+                      "baseline:sideboard"
+                    ],
                     "factIds": [
                       "item:baseline:sideboard",
                       "terms:baseline:sideboard"
                     ]
                   },
                   {
-                    "text": "The $960.00 refund has been completed after the supplier credit was recorded; the $240.00 is already in your confirmed quote and is not deducted again.",
+                    "text": "That $240.00 was already part of the confirmed sideboard amount, so it is not taken off a second time.",
+                    "about": [
+                      "baseline:sideboard"
+                    ],
                     "factIds": [
-                      "item:baseline:sideboard",
-                      "supplier:396aabd8-0f33-401d-b8e9-bf79362f41f5",
                       "terms:baseline:sideboard"
                     ]
                   }
                 ]
               },
               "showEvidence": false
-            }
+            },
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "answer: After refunds you have paid $5,670.00 in total: $6,630.00 was charged and $960.00 was refunded. | Dining sideboard: Refunded $240.00 refunded $960.00 | The sideboard was charged $1,200.00 and $960.00 was refunded, which leaves $240.00 as the non-refundable cost of the return. | That $240.00 was already part of the confirmed sideboard amount, so it is not taken off a second time."
     },
     {
       "rep": 1,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "63a2c392a044b941fa1e",
+          "fingerprint": "0d0620fd83b5ba74116f",
           "output": {
             "intent": "money",
-            "message": "For the payment items shown, $6,630.00 has been charged and $960.00 refunded, leaving $5,670.00 paid.",
-            "title": "Total paid after refunds and sideboard retained cost",
+            "message": "After refunds you have paid $5,670.00 in total, and the sideboard still costs $240.00 because that amount is the non-refundable cost of returning it.",
+            "title": "",
             "changes": [],
             "unresolved": [],
             "constraints": [],
             "money": {
               "answer": {
                 "summary": {
-                  "text": "For the payment items shown, $6,630.00 has been charged and $960.00 refunded, leaving $5,670.00 paid.",
+                  "text": "After refunds you have paid $5,670.00 in total: $6,630.00 was charged and $960.00 was refunded.",
+                  "about": [
+                    "project"
+                  ],
                   "factIds": [
                     "scope"
                   ]
                 },
-                "rows": [],
+                "items": [
+                  "baseline:sideboard"
+                ],
                 "notes": [
                   {
-                    "text": "The sideboard still costs $240.00 because it was returned under terms that keep $240.00 as a retained cost; the $960.00 refund has been paid after the supplier credit was recorded.",
+                    "text": "The sideboard was charged $1,200.00 and $960.00 was refunded, which leaves $240.00. That $240.00 is the non-refundable cost of returning it, and it is already part of the confirmed quote, so it is not deducted a second time.",
+                    "about": [
+                      "baseline:sideboard"
+                    ],
                     "factIds": [
                       "item:baseline:sideboard",
-                      "terms:baseline:sideboard",
-                      "supplier:396aabd8-0f33-401d-b8e9-bf79362f41f5"
+                      "terms:baseline:sideboard"
                     ]
                   },
                   {
-                    "text": "Holds that were released on the replaced items were never charged, so they are not refunds and are not part of the refunded amount.",
+                    "text": "Released holds on the original items are not refunds, because that money was never charged.",
+                    "about": [
+                      "project"
+                    ],
                     "factIds": [
                       "scope"
                     ]
@@ -89,65 +110,69 @@
                 ]
               },
               "showEvidence": false
-            }
+            },
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "answer: After refunds you have paid $5,670.00 in total: $6,630.00 was charged and $960.00 was refunded. | Dining sideboard: Refunded $240.00 refunded $960.00 | The sideboard was charged $1,200.00 and $960.00 was refunded, which leaves $240.00. That $240.00 is the non-refundable cost of returning it, and it is already part of the confirmed quote, so it is not deducted a second time. | Released holds on the original items are not refunds, because that money was never charged."
     },
     {
       "rep": 2,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "63a2c392a044b941fa1e",
+          "fingerprint": "0d0620fd83b5ba74116f",
           "output": {
             "intent": "money",
-            "message": "You have paid $5,670.00 in total after the $960.00 refund, and the sideboard still costs $240.00 because that is the retained cost kept when it was returned.",
-            "title": "Total paid after refunds and sideboard cost",
+            "message": "After refunds you have paid $5,670.00 in total, and the sideboard still shows $240.00 because that is the non-refundable cost of returning it.",
+            "title": "",
             "changes": [],
             "unresolved": [],
             "constraints": [],
             "money": {
               "answer": {
                 "summary": {
-                  "text": "You have paid $5,670.00 in total after the $960.00 refund, and the sideboard still costs $240.00 because that is the retained cost kept when it was returned.",
+                  "text": "After refunds you have paid $5,670.00 in total: $6,630.00 was charged and $960.00 was refunded.",
+                  "about": [
+                    "project"
+                  ],
                   "factIds": [
-                    "scope",
-                    "item:baseline:sideboard",
-                    "terms:baseline:sideboard"
+                    "scope"
                   ]
                 },
-                "rows": [
+                "items": [
+                  "baseline:sideboard"
+                ],
+                "notes": [
                   {
-                    "label": "Dining sideboard",
-                    "status": "$960.00 refunded",
-                    "amount": "$240.00",
+                    "text": "The sideboard was charged $1,200.00 and $960.00 was refunded, leaving $240.00 that is non-refundable under its return terms.",
+                    "about": [
+                      "baseline:sideboard"
+                    ],
                     "factIds": [
                       "item:baseline:sideboard",
                       "terms:baseline:sideboard"
                     ]
-                  }
-                ],
-                "notes": [
-                  {
-                    "text": "The $240.00 was already included in the confirmed price, so it is not taken off a second time.",
-                    "factIds": [
-                      "terms:baseline:sideboard"
-                    ]
                   },
                   {
-                    "text": "The $5,670.00 covers the payment items shown, not a complete project settlement.",
+                    "text": "That $240.00 is already counted in the confirmed amount for the sideboard, so it is not taken off a second time.",
+                    "about": [
+                      "baseline:sideboard"
+                    ],
                     "factIds": [
-                      "scope"
+                      "terms:baseline:sideboard"
                     ]
                   }
                 ]
               },
               "showEvidence": false
-            }
+            },
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "answer: After refunds you have paid $5,670.00 in total: $6,630.00 was charged and $960.00 was refunded. | Dining sideboard: Refunded $240.00 refunded $960.00 | The sideboard was charged $1,200.00 and $960.00 was refunded, leaving $240.00 that is non-refundable under its return terms. | That $240.00 is already counted in the confirmed amount for the sideboard, so it is not taken off a second time."
     }
   ]
 }

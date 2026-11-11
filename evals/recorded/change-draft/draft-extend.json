@@ -1,17 +1,17 @@
 {
   "flow": "change-draft",
   "case": "draft-extend",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "760ebb4e956da2c95847",
+          "fingerprint": "dda8d228d8daecd5fc2d",
           "output": {
             "intent": "draft",
-            "message": "I updated the draft to keep the dining chairs at eight and the oak sideboard removed, and added removal of the round entry mirror, which the client asked for in their message. The draft needs your review and is not an order or a payment.",
+            "message": "I updated the draft to keep eight dining chairs instead of six and the oak sideboard removed, and added removal of the round entry mirror. This is a draft for your review, not an order or a payment.",
             "title": "Dining chairs, sideboard and entry mirror",
             "changes": [
               {
@@ -48,12 +48,15 @@
             ],
             "unresolved": [],
             "constraints": [
-              "The client must confirm the revised quote before it takes effect."
+              "The client asked for the mirror removal in chat, and the designer has now requested it for the draft.",
+              "Client confirmation of the revised quote is still needed."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 3/3 expected matched, 3 drafted"
     }
   ]
 }

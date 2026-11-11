@@ -1,54 +1,55 @@
 {
   "flow": "change-draft",
   "case": "hard-changed-twice",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "922792947c05c0a4b849",
+          "fingerprint": "c474d6d33f1e16c478e4",
           "output": {
             "intent": "draft",
-            "message": "I drafted the dining chairs at eight (up from six) and kept the drapery panels at the approved four, so no drapery change is needed. This draft needs your review and is not an order or payment; Sam's earlier request for ten chairs was superseded by the client's later \"eight is final\".",
-            "title": "Dining chairs to eight; drapery panels stay at four",
+            "message": "Drafted the dining chairs going from six to eight, and the bedroom drapery panels staying at four as in the approved quote. This is a draft for your review, not an order or payment.",
+            "title": "Dining chairs to eight, drapery panels unchanged at four",
             "changes": [
               {
                 "action": "quantity",
                 "itemId": "hl-dining-chair",
                 "quantity": 8,
                 "productOptionId": null,
-                "description": "Increase the upholstered dining chairs from six to eight, as the client confirmed as final.",
+                "description": "Increase upholstered dining chairs from six to eight, the client's final number.",
                 "sourceMessageIds": [
                   "m1",
                   "m2",
-                  "m5",
-                  "m6",
                   "m8"
                 ]
               }
             ],
             "unresolved": [],
             "constraints": [
-              "Drapery stays at the approved four panels because the client dropped the six-panel request for a blind on the bay.",
-              "The client must confirm the revised quote before it takes effect."
+              "Drapery panels stay at four as in the approved quote, so no drapery change is drafted.",
+              "The ten-chair idea was replaced by the client's final choice of eight.",
+              "Client confirmation is needed on the revised quote before anything proceeds."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 1/1 expected matched, 1 drafted"
     },
     {
       "rep": 1,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "922792947c05c0a4b849",
+          "fingerprint": "c474d6d33f1e16c478e4",
           "output": {
             "intent": "draft",
-            "message": "I drafted the dining chairs going from six to eight, and the drapery panels staying at four, which is unchanged from the approved quote. This draft needs your review; it is not an order or a payment.",
-            "title": "Dining chairs to eight, drapery panels stay at four",
+            "message": "Draft sets the dining chairs to eight (final per the client's last word) and leaves the drapery panels at the four already in the quote, so only the chair quantity changes. This is a draft for designer review, not an order or payment.",
+            "title": "Dining chairs to eight, drapery panels unchanged",
             "changes": [
               {
                 "action": "quantity",
@@ -65,23 +66,25 @@
             ],
             "unresolved": [],
             "constraints": [
-              "Drapery panels stay at four after the client chose a blind for the bay, so no drapery change is drafted.",
-              "The ten-chair idea was superseded by the client's final eight."
+              "Drapery panels stay at four because the client chose a blind for the bay instead of six panels.",
+              "Client must confirm the revised quote before anything proceeds."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 1/1 expected matched, 1 drafted"
     },
     {
       "rep": 2,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "922792947c05c0a4b849",
+          "fingerprint": "c474d6d33f1e16c478e4",
           "output": {
             "intent": "draft",
-            "message": "I drafted the dining chairs going from six to eight, and left the drapery panels at four as in the approved quote, which is no change. This draft needs your review and is not an order or a payment.",
+            "message": "Drafted the dining chairs going from six to eight, as the client's final word in the chat, and the drapery panels staying at four, so there is no change to the drapery. This draft needs your review and is not an order or a payment.",
             "title": "Dining chairs to eight; drapery panels stay at four",
             "changes": [
               {
@@ -89,24 +92,27 @@
                 "itemId": "hl-dining-chair",
                 "quantity": 8,
                 "productOptionId": null,
-                "description": "Increase upholstered dining chairs from six to eight, the client's final number.",
+                "description": "Increase upholstered dining chairs from 6 to 8, the client's final choice.",
                 "sourceMessageIds": [
                   "m1",
+                  "m2",
                   "m5",
+                  "m6",
                   "m8"
                 ]
               }
             ],
             "unresolved": [],
             "constraints": [
-              "Drapery panels stay at four after the client chose a blind for the bay, so no drapery change is drafted.",
-              "The client confirmed eight chairs as final, overriding the earlier ten-chair idea.",
-              "The client must confirm the revised quote before anything proceeds."
+              "Drapery panels stay at four because the client chose a blind for the bay, so no drapery change is drafted.",
+              "Client confirmation of the revised quote is still needed before anything proceeds."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 1/1 expected matched, 1 drafted"
     }
   ]
 }

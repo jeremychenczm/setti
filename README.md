@@ -139,15 +139,15 @@ Setti keeps watching the holds after everyone has signed.
 
 ## AI quality
 
-[`evals/`](evals/README.md) runs Setti's three AI features through the same code the app uses, on 50 fictional cases graded in code against answer keys written before any model answered. The cases lean hard: several changes in one thread, corrections and withdrawn decisions, quotes up to 295 lines (315,000 characters), and 11 cases with instructions injected into supplier pages, quote fields or the chat. With Claude Sonnet 5.5 at high effort on the Claude API, 5 November 2026:
+[`evals/`](evals/README.md) runs Setti's three AI features through the same code the app uses, on 50 fictional cases graded in code against answer keys written before any model answered. The cases lean hard: several changes in one thread, corrections and withdrawn decisions, quotes up to 295 lines (315,000 characters), and 11 cases with instructions injected into supplier pages, quote fields or the chat. With Claude Sonnet 5.5 at high effort on the Claude API, 10 November 2026:
 
 | Feature | Runs | Passed | Passed on the first try |
 |---|---|---|---|
 | Change drafts | 65 | 65 | 62 of 64 model runs |
-| Money answers | 14 | 14 | 14 |
+| Money answers | 14 | 14 | 11 |
 | Client inbox summaries | 21 | 21 | 21 |
 
-The first round found two prompt problems (a change a client said the designer had approved by phone was drafted, and totals were left out beside a one-item question), and the second found a server check that read "settled" as a payment word. All three were fixed and measured again; [evals/README.md](evals/README.md#results) has both rounds, what changed and the limits of a set this size. The model answers behind these numbers are committed in [`evals/recorded/`](evals/recorded), and CI replays them through the same checks on every push without calling the model (`npm run eval:replay`).
+Earlier rounds found two prompt problems and a server check that read "settled" as a payment word; all were fixed. Where the server sent a first reply back, the rewrite passed; [evals/README.md](evals/README.md#results) lists why, with the limits of a set this size. The model answers behind these numbers are committed in [`evals/recorded/`](evals/recorded), and CI replays them through the same checks on every push without calling the model (`npm run eval:replay`).
 
 ## Security
 

@@ -1,27 +1,26 @@
 {
   "flow": "change-draft",
   "case": "hard-knock-on",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "778961a7e7ebc82e4d63",
+          "fingerprint": "76b523b5f6fdfbdf6029",
           "output": {
             "intent": "draft",
-            "message": "I drafted a swap of the four-seat sofa for the Haven three-seat in oatmeal for designer review; this is a draft, not an order or payment. The 9 × 12 living room rug was discussed but not requested, so it is left unchanged until you check the layout.",
-            "title": "Swap four-seat sofa for Haven three-seat sofa in oatmeal",
+            "message": "Draft swaps the four-seat sofa for the Haven three-seat in oatmeal, for designer review; this is not an order or payment. The 9 × 12 living room rug is not part of this draft, since you said you would check the layout first.",
+            "title": "Swap sofa to Haven three-seat in oatmeal",
             "changes": [
               {
                 "action": "replace",
                 "itemId": "hl-sofa",
                 "quantity": 1,
                 "productOptionId": "haven-3s-oat",
-                "description": "Replace the four-seat linen sofa with the Haven three-seat sofa in oatmeal (NWS-HVN-3S-OAT).",
+                "description": "Replace the four-seat sofa with the Haven three-seat sofa in oatmeal (86 in wide).",
                 "sourceMessageIds": [
-                  "m1",
                   "m2",
                   "m3",
                   "t"
@@ -29,18 +28,20 @@
               }
             ],
             "unresolved": [
-              "Does the Haven sofa listing include freight, and what is the tax and delivery cost for it?",
-              "Does the 86 in sofa leave the clear path to the patio door once both lounge chairs are placed?"
+              "The Haven page lists no tax or delivery charge, so confirm them for this sofa."
             ],
             "constraints": [
-              "The Haven page says the sofa is made to order in 4–6 weeks while also showing it as in stock, so confirm lead time and return terms with the supplier.",
-              "The 9 × 12 living room rug is not changed in this draft pending the designer's layout check.",
-              "The client must confirm the revised quote before it takes effect."
+              "The client chose oatmeal, not slate.",
+              "Haven sofas are made to order in 4–6 weeks, so check the timing with the client.",
+              "The living room rug is unchanged until the designer checks the layout.",
+              "The client must confirm the revised quote before any change takes effect."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 1/1 expected matched, 1 drafted"
     }
   ]
 }

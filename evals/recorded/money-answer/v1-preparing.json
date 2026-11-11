@@ -1,52 +1,54 @@
 {
   "flow": "money-answer",
   "case": "v1-preparing",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "25db4e7ac47c709fb9ea",
+          "fingerprint": "1e968662c068c7db42a7",
           "output": {
             "intent": "money",
-            "message": "No charge is recorded for your design fee so far: the agreed fee is $1,000.00, but the recorded charged amount is $0.00 and payment setup is not finished.",
-            "title": "Design fee payment status",
+            "message": "No charge to your design fee is recorded so far: the $1,000.00 fee shows $0.00 charged, and the project's payment setup is still in progress.",
+            "title": "",
             "changes": [],
             "unresolved": [],
             "constraints": [],
             "money": {
               "answer": {
                 "summary": {
-                  "text": "No charge is recorded for your design fee so far: the agreed fee is $1,000.00, but the recorded charged amount is $0.00 and payment setup is not finished.",
+                  "text": "No charge to your design fee is recorded so far: the $1,000.00 fee shows $0.00 charged, and the project's payment setup is still in progress.",
+                  "about": [
+                    "baseline:design"
+                  ],
                   "factIds": [
                     "item:baseline:design",
-                    "next:baseline:design"
+                    "payment-preparation"
                   ]
                 },
-                "rows": [],
+                "items": [],
                 "notes": [
                   {
-                    "text": "The starting payment setup is still in progress, so a missing record does not mean the fee is unpaid or settled.",
+                    "text": "No PayPal response has been found yet for this project, so the missing records do not confirm the fee is unpaid or settled.",
+                    "about": [
+                      "project"
+                    ],
                     "factIds": [
-                      "payment-preparation",
+                      "no-provider-records",
                       "next:baseline:design"
-                    ]
-                  },
-                  {
-                    "text": "No payment response from PayPal has been found for this quote yet, and approving the quote is not a payment.",
-                    "factIds": [
-                      "no-provider-records"
                     ]
                   }
                 ]
               },
               "showEvidence": false
-            }
+            },
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "answer: No charge to your design fee is recorded so far: the $1,000.00 fee shows $0.00 charged, and the project's payment setup is still in progress. | No PayPal response has been found yet for this project, so the missing records do not confirm the fee is unpaid or settled."
     }
   ]
 }

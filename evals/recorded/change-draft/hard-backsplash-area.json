@@ -1,25 +1,25 @@
 {
   "flow": "change-draft",
   "case": "hard-backsplash-area",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "213c4a428d0a4481a24b",
+          "fingerprint": "82571bad25a75bcf23a8",
           "output": {
             "intent": "draft",
-            "message": "I drafted a replacement of the zellige backsplash tile with Terrace hex in sage, 8 boxes: 72 sq ft plus 10% for cuts is about 79.2 sq ft, and the tile is sold in full 10.8 sq ft boxes. This draft needs your review and is not an order or a payment.",
-            "title": "Backsplash: switch to sage Terrace hex tile, 8 boxes",
+            "message": "I drafted replacing the zellige backsplash tile with Terrace hex in sage, 8 boxes: 72 sq ft plus 10% for cuts is about 79.2 sq ft, and the tile is sold in full 10.8 sq ft boxes. This is a draft for your review, not an order or a payment, so please check the area and the return terms for the original tile.",
+            "title": "Backsplash: switch to sage Terrace hex for 72 sq ft",
             "changes": [
               {
                 "action": "replace",
                 "itemId": "hl-backsplash-tile",
                 "quantity": 8,
                 "productOptionId": "terrace-hex-sage",
-                "description": "Replace the 6 boxes of white zellige with 8 boxes of sage Terrace hex for about 72 sq ft plus 10% for cuts.",
+                "description": "Replace 6 boxes of white zellige with 8 boxes of sage Terrace hex (72 sq ft plus 10% for cuts, 10.8 sq ft per box).",
                 "sourceMessageIds": [
                   "m1",
                   "m2",
@@ -28,16 +28,21 @@
                 ]
               }
             ],
-            "unresolved": [],
-            "constraints": [
-              "Quantity is rounded up to full boxes because the tile is sold by the 10.8 sq ft box only.",
-              "The original zellige terms allow return of full, unopened boxes within 30 days with no restocking fee confirmed, so return eligibility needs checking.",
-              "The client still needs to confirm the revised quote before anything proceeds."
+            "unresolved": [
+              "Is 72 sq ft the final measured backsplash area, since it was given as about 72?",
+              "Can the original zellige boxes be returned, i.e. are they unopened and uncut under the supplier's terms?"
             ],
-            "money": null
+            "constraints": [
+              "The client must confirm the revised quote before anything proceeds.",
+              "Any supplier credit or refund for the original tile depends on the supplier's return terms, and opened or cut boxes cannot be returned.",
+              "The tile is sold in full boxes only, so the quantity is rounded up to 8 boxes."
+            ],
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 1/1 expected matched, 1 drafted"
     }
   ]
 }

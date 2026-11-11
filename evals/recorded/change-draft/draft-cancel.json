@@ -1,25 +1,29 @@
 {
   "flow": "change-draft",
   "case": "draft-cancel",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "b55747df5644e9340e53",
+          "fingerprint": "deeed6b3e4c96e078451",
           "output": {
             "intent": "cancel",
-            "message": "I've withdrawn the current draft, so the dining chair and oak sideboard changes are dropped and V1 stays as signed. This only cancels the unapproved draft; it is not an order, payment or refund.",
+            "message": "I've withdrawn the current draft, so the quote stays at V1 exactly as signed. This only cancels the unapproved draft; it is not an order, refund or payment.",
             "title": "Keep V1 as signed",
             "changes": [],
             "unresolved": [],
-            "constraints": [],
-            "money": null
+            "constraints": [
+              "Quote V1 stays as approved by Nora Patel, with no changes."
+            ],
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome cancel (intent cancel) · 1 model call"
     }
   ]
 }

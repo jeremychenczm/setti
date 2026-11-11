@@ -1,74 +1,17 @@
 {
   "flow": "change-draft",
   "case": "core-agreed-above",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "79d7921076045ecad0a5",
+          "fingerprint": "c44b6d7cbe242cfc5a64",
           "output": {
             "intent": "draft",
-            "message": "I drafted three changes for your review: dining chairs reduced from six to four, bedroom drapery panels increased from four to six, and the round entry mirror removed. The coffee table and entry console stay unchanged. This is a draft for designer review, not an order or payment.",
-            "title": "Harbor Lane: four dining chairs, six drapery panels, remove entry mirror",
-            "changes": [
-              {
-                "action": "quantity",
-                "itemId": "hl-dining-chair",
-                "quantity": 4,
-                "productOptionId": null,
-                "description": "Reduce the upholstered dining chairs from six to four.",
-                "sourceMessageIds": [
-                  "m1",
-                  "m3",
-                  "m4"
-                ]
-              },
-              {
-                "action": "quantity",
-                "itemId": "hl-curtains",
-                "quantity": 6,
-                "productOptionId": null,
-                "description": "Increase the linen drapery panels from four to six to cover the bay.",
-                "sourceMessageIds": [
-                  "m8",
-                  "m9"
-                ]
-              },
-              {
-                "action": "remove",
-                "itemId": "hl-entry-mirror",
-                "quantity": null,
-                "productOptionId": null,
-                "description": "Remove the round entry mirror because the client found a vintage one.",
-                "sourceMessageIds": [
-                  "m10",
-                  "m11"
-                ]
-              }
-            ],
-            "unresolved": [],
-            "constraints": [
-              "Keep the oak coffee table unchanged.",
-              "Keep the entry console table unchanged.",
-              "The client must confirm the revised quote before anything changes."
-            ],
-            "money": null
-          }
-        }
-      ]
-    },
-    {
-      "rep": 1,
-      "pass": 1,
-      "attempts": [
-        {
-          "fingerprint": "79d7921076045ecad0a5",
-          "output": {
-            "intent": "draft",
-            "message": "I drafted three changes for your review: dining chairs reduced from six to four, bedroom drapery panels increased from four to six, and the round entry mirror removed. The coffee table and entry console stay unchanged, and this draft is not an order or payment, so please check it before it goes to the client.",
+            "message": "I drafted three changes from the chat for your review: dining chairs reduced from six to four, bedroom drapery panels increased from four to six, and the round entry mirror removed. The coffee table and entry console stay as approved. This is a draft for designer review, not an order or payment.",
             "title": "Harbor Lane: four dining chairs, six drapery panels, drop entry mirror",
             "changes": [
               {
@@ -99,7 +42,7 @@
                 "itemId": "hl-entry-mirror",
                 "quantity": null,
                 "productOptionId": null,
-                "description": "Remove the round entry mirror because the client has found a vintage one.",
+                "description": "Remove the round entry mirror because the client has a vintage one.",
                 "sourceMessageIds": [
                   "m10",
                   "m11"
@@ -108,24 +51,27 @@
             ],
             "unresolved": [],
             "constraints": [
-              "The oak coffee table and entry console table stay as approved.",
-              "Client confirmation of the revised quote is still needed."
+              "The oak coffee table stays unchanged, as agreed.",
+              "The entry console table stays unchanged, as agreed.",
+              "The client must confirm the revised quote before any change takes effect."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 3/3 expected matched, 3 drafted"
     },
     {
-      "rep": 2,
+      "rep": 1,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "79d7921076045ecad0a5",
+          "fingerprint": "c44b6d7cbe242cfc5a64",
           "output": {
             "intent": "draft",
-            "message": "I drafted three changes for your review: dining chairs reduced from six to four, bedroom drapery panels raised from four to six, and the round entry mirror removed. The coffee table and entry console stay unchanged; this draft is not an order or payment and needs your review.",
-            "title": "Harbor Lane: four dining chairs, six drapery panels, entry mirror removed",
+            "message": "I drafted three changes for your review: dining chairs from six to four, bedroom drapery panels from four to six, and removing the round entry mirror. The coffee table and entry console stay as quoted. This draft is not an order or a payment, and it needs your review before it goes to the client.",
+            "title": "Harbor Lane: four dining chairs, six drapery panels, remove entry mirror",
             "changes": [
               {
                 "action": "quantity",
@@ -155,7 +101,7 @@
                 "itemId": "hl-entry-mirror",
                 "quantity": null,
                 "productOptionId": null,
-                "description": "Remove the round entry mirror because the client found a vintage one.",
+                "description": "Remove the round entry mirror because the client has a vintage one.",
                 "sourceMessageIds": [
                   "m10",
                   "m11"
@@ -164,13 +110,74 @@
             ],
             "unresolved": [],
             "constraints": [
-              "The coffee table and entry console stay in the quote as approved.",
-              "The client must confirm the revised quote before any change takes effect."
+              "Coffee table and entry console stay as approved.",
+              "The client must confirm the revised quote before anything changes."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 3/3 expected matched, 3 drafted"
+    },
+    {
+      "rep": 2,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "c44b6d7cbe242cfc5a64",
+          "output": {
+            "intent": "draft",
+            "message": "I drafted three changes for your review: dining chairs reduced from six to four, bedroom drapery panels increased from four to six, and the round entry mirror removed. The coffee table and entry console stay as approved. This draft is not an order or a payment, and it needs your review before it goes to the client.",
+            "title": "Dining chairs to four, bedroom drapery to six, entry mirror removed",
+            "changes": [
+              {
+                "action": "quantity",
+                "itemId": "hl-dining-chair",
+                "quantity": 4,
+                "productOptionId": null,
+                "description": "Reduce the upholstered dining chairs from six to four.",
+                "sourceMessageIds": [
+                  "m1",
+                  "m3",
+                  "m4"
+                ]
+              },
+              {
+                "action": "quantity",
+                "itemId": "hl-curtains",
+                "quantity": 6,
+                "productOptionId": null,
+                "description": "Increase the linen drapery panels from four to six to cover the bay.",
+                "sourceMessageIds": [
+                  "m8",
+                  "m9"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "hl-entry-mirror",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the round entry mirror because the client has a vintage one.",
+                "sourceMessageIds": [
+                  "m10",
+                  "m11"
+                ]
+              }
+            ],
+            "unresolved": [],
+            "constraints": [
+              "The oak coffee table stays as approved.",
+              "The entry console table stays as approved.",
+              "The client must confirm the revised quote before it takes effect."
+            ],
+            "money": null,
+            "quoteQuery": null
+          }
+        }
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 3/3 expected matched, 3 drafted"
     }
   ]
 }

@@ -1,17 +1,17 @@
 {
   "flow": "money-answer",
   "case": "settled-proof",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "9801ff96e78f1ab1125e",
+          "fingerprint": "21a8e37734ab0a0f696b",
           "output": {
             "intent": "money",
-            "message": "The sideboard refund of $960.00 is recorded as completed, and the proof is listed under this answer.",
+            "message": "The dining sideboard has a completed refund of $960.00, with $240.00 remaining non-refundable.",
             "title": "Proof of the sideboard refund",
             "changes": [],
             "unresolved": [],
@@ -19,38 +19,35 @@
             "money": {
               "answer": {
                 "summary": {
-                  "text": "The sideboard refund of $960.00 is recorded as completed, and the PayPal refund record and supplier credit record are listed below.",
+                  "text": "The dining sideboard has a completed refund of $960.00, with $240.00 remaining non-refundable.",
+                  "about": [
+                    "baseline:sideboard"
+                  ],
                   "factIds": [
                     "item:baseline:sideboard",
-                    "supplier:396aabd8-0f33-401d-b8e9-bf79362f41f5"
+                    "terms:baseline:sideboard"
                   ]
                 },
-                "rows": [
-                  {
-                    "label": "Dining sideboard",
-                    "status": "$960.00 refunded",
-                    "amount": "$240.00",
-                    "factIds": [
-                      "item:baseline:sideboard",
-                      "terms:baseline:sideboard"
-                    ]
-                  }
-                ],
+                "items": [],
                 "notes": [
                   {
-                    "text": "The $240.00 kept is the agreed old-item cost for the returned sideboard, and the supplier credit for $960.00 is recorded.",
+                    "text": "A supplier credit of $960.00 was also recorded for the sideboard, separate from the refund itself.",
+                    "about": [
+                      "baseline:sideboard"
+                    ],
                     "factIds": [
-                      "terms:baseline:sideboard",
                       "supplier:396aabd8-0f33-401d-b8e9-bf79362f41f5"
                     ]
                   }
                 ]
               },
               "showEvidence": true
-            }
+            },
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "answer: The dining sideboard has a completed refund of $960.00, with $240.00 remaining non-refundable. | A supplier credit of $960.00 was also recorded for the sideboard, separate from the refund itself."
     }
   ]
 }

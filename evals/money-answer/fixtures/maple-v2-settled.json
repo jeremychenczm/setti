@@ -1,5 +1,5 @@
 {
-  "capturedAt": "2026-11-05T08:24:00.803Z",
+  "capturedAt": "2026-11-11T03:27:46.872Z",
   "quote": {
     "id": "5b04fe1b-b349-4a40-a858-7d7ad1381a43",
     "room": "Living & dining room",
@@ -229,7 +229,7 @@
     "projectKey": "maple",
     "quoteId": "5b04fe1b-b349-4a40-a858-7d7ad1381a43",
     "version": 2,
-    "checkedAt": "2026-11-05T08:24:00.754Z",
+    "checkedAt": "2026-11-11T03:27:46.831Z",
     "providerRecordedAt": "2026-11-02T05:58:41.767Z",
     "mode": "recorded_sandbox",
     "facts": [
@@ -299,7 +299,7 @@
       {
         "id": "terms:baseline:sofa",
         "text": {
-          "en": "Three-seat sofa: the client-confirmed old-item handling is not_ordered; the retained old-item cost is $0.00. This amount is already included in the confirmed target and must not be deducted a second time."
+          "en": "Three-seat sofa: the client-confirmed old-item handling is not_ordered; the non-refundable cost is $0.00. This amount is already included in the confirmed target and must not be deducted a second time."
         },
         "sourceIds": [
           "quote",
@@ -365,7 +365,7 @@
       {
         "id": "terms:baseline:coffee-table",
         "text": {
-          "en": "Large rectangular coffee table: the client-confirmed old-item handling is not_ordered; the retained old-item cost is $0.00. This amount is already included in the confirmed target and must not be deducted a second time."
+          "en": "Large rectangular coffee table: the client-confirmed old-item handling is not_ordered; the non-refundable cost is $0.00. This amount is already included in the confirmed target and must not be deducted a second time."
         },
         "sourceIds": [
           "quote",
@@ -431,7 +431,7 @@
       {
         "id": "terms:baseline:dining-table",
         "text": {
-          "en": "Fixed six-person dining table: the client-confirmed old-item handling is not_ordered; the retained old-item cost is $0.00. This amount is already included in the confirmed target and must not be deducted a second time."
+          "en": "Fixed six-person dining table: the client-confirmed old-item handling is not_ordered; the non-refundable cost is $0.00. This amount is already included in the confirmed target and must not be deducted a second time."
         },
         "sourceIds": [
           "quote",
@@ -499,7 +499,7 @@
       {
         "id": "terms:baseline:dining-chairs",
         "text": {
-          "en": "Upholstered dining chairs: the client-confirmed old-item handling is not_ordered; the retained old-item cost is $0.00. This amount is already included in the confirmed target and must not be deducted a second time."
+          "en": "Upholstered dining chairs: the client-confirmed old-item handling is not_ordered; the non-refundable cost is $0.00. This amount is already included in the confirmed target and must not be deducted a second time."
         },
         "sourceIds": [
           "quote",
@@ -545,7 +545,7 @@
       {
         "id": "terms:baseline:sideboard",
         "text": {
-          "en": "Dining sideboard: the client-confirmed old-item handling is returned; the retained old-item cost is $240.00. This amount is already included in the confirmed target and must not be deducted a second time."
+          "en": "Dining sideboard: the client-confirmed old-item handling is returned; the non-refundable cost is $240.00. This amount is already included in the confirmed target and must not be deducted a second time."
         },
         "sourceIds": [
           "quote",
@@ -590,7 +590,7 @@
       {
         "id": "record-freshness",
         "text": {
-          "en": "This answer reads stored Sandbox evidence at 2026-11-05T08:24:00.754Z; the most recent recorded provider response is 2026-11-02T05:58:41.767Z. No live PayPal query was made for this answer. Supplier confirmations are designer-entered demo records."
+          "en": "This answer reads stored Sandbox evidence at 2026-11-11T03:27:46.831Z; the most recent recorded provider response is 2026-11-02T05:58:41.767Z. No live PayPal query was made for this answer. Supplier confirmations are designer-entered demo records."
         },
         "sourceIds": [
           "quote"
@@ -755,6 +755,162 @@
     ],
     "mandatoryFactIds": [
       "record-freshness"
+    ],
+    "items": [
+      {
+        "key": "baseline:design",
+        "label": "Design services",
+        "status": "charged",
+        "heldCents": 0,
+        "chargedCents": 100000,
+        "refundedCents": 0,
+        "releasedCents": 0,
+        "nonRefundableCents": 0,
+        "nonRefundableFees": [],
+        "netCents": 100000,
+        "factIds": [
+          "item:baseline:design",
+          "next:baseline:design"
+        ]
+      },
+      {
+        "key": "baseline:sofa",
+        "label": "Three-seat sofa (original)",
+        "status": "released",
+        "heldCents": 0,
+        "chargedCents": 0,
+        "refundedCents": 0,
+        "releasedCents": 240000,
+        "nonRefundableCents": 0,
+        "nonRefundableFees": [],
+        "netCents": 0,
+        "factIds": [
+          "item:baseline:sofa",
+          "next:baseline:sofa",
+          "terms:baseline:sofa"
+        ]
+      },
+      {
+        "key": "proposed:sofa",
+        "label": "Compact sofa (new)",
+        "status": "charged",
+        "heldCents": 0,
+        "chargedCents": 210000,
+        "refundedCents": 0,
+        "releasedCents": 0,
+        "nonRefundableCents": 0,
+        "nonRefundableFees": [],
+        "netCents": 210000,
+        "factIds": [
+          "item:proposed:sofa",
+          "next:proposed:sofa",
+          "supplier:a6f08721-9e4f-4400-9be9-7abe4b4513f8"
+        ]
+      },
+      {
+        "key": "baseline:coffee-table",
+        "label": "Large rectangular coffee table (original)",
+        "status": "released",
+        "heldCents": 0,
+        "chargedCents": 0,
+        "refundedCents": 0,
+        "releasedCents": 65000,
+        "nonRefundableCents": 0,
+        "nonRefundableFees": [],
+        "netCents": 0,
+        "factIds": [
+          "item:baseline:coffee-table",
+          "next:baseline:coffee-table",
+          "terms:baseline:coffee-table"
+        ]
+      },
+      {
+        "key": "proposed:coffee-table",
+        "label": "Small round side table (new)",
+        "status": "charged",
+        "heldCents": 0,
+        "chargedCents": 36000,
+        "refundedCents": 0,
+        "releasedCents": 0,
+        "nonRefundableCents": 0,
+        "nonRefundableFees": [],
+        "netCents": 36000,
+        "factIds": [
+          "item:proposed:coffee-table",
+          "next:proposed:coffee-table",
+          "supplier:794754fc-1a70-450d-ac9f-15d6a09398cd"
+        ]
+      },
+      {
+        "key": "baseline:dining-table",
+        "label": "Fixed six-person dining table (original)",
+        "status": "released",
+        "heldCents": 0,
+        "chargedCents": 0,
+        "refundedCents": 0,
+        "releasedCents": 140000,
+        "nonRefundableCents": 0,
+        "nonRefundableFees": [],
+        "netCents": 0,
+        "factIds": [
+          "item:baseline:dining-table",
+          "next:baseline:dining-table",
+          "terms:baseline:dining-table"
+        ]
+      },
+      {
+        "key": "proposed:dining-table",
+        "label": "Round dining table (new)",
+        "status": "charged",
+        "heldCents": 0,
+        "chargedCents": 125000,
+        "refundedCents": 0,
+        "releasedCents": 0,
+        "nonRefundableCents": 0,
+        "nonRefundableFees": [],
+        "netCents": 125000,
+        "factIds": [
+          "item:proposed:dining-table",
+          "next:proposed:dining-table",
+          "supplier:4c95c9a2-5621-4b68-8405-5b355ba20c71"
+        ]
+      },
+      {
+        "key": "baseline:dining-chairs",
+        "label": "Upholstered dining chairs",
+        "status": "charged",
+        "heldCents": 0,
+        "chargedCents": 72000,
+        "refundedCents": 0,
+        "releasedCents": 36000,
+        "nonRefundableCents": 0,
+        "nonRefundableFees": [],
+        "netCents": 72000,
+        "factIds": [
+          "item:baseline:dining-chairs",
+          "next:baseline:dining-chairs",
+          "terms:baseline:dining-chairs",
+          "supplier:3954685c-2c2f-4e0a-84d6-5c9182e1b515"
+        ]
+      },
+      {
+        "key": "baseline:sideboard",
+        "label": "Dining sideboard",
+        "status": "refunded",
+        "heldCents": 0,
+        "chargedCents": 120000,
+        "refundedCents": 96000,
+        "releasedCents": 0,
+        "nonRefundableCents": 24000,
+        "nonRefundableFees": [],
+        "netCents": 24000,
+        "factIds": [
+          "item:baseline:sideboard",
+          "next:baseline:sideboard",
+          "terms:baseline:sideboard",
+          "supplier:396aabd8-0f33-401d-b8e9-bf79362f41f5"
+        ]
+      }
     ]
   }
 }

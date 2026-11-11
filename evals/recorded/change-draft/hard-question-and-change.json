@@ -1,17 +1,17 @@
 {
   "flow": "change-draft",
   "case": "hard-question-and-change",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "4357a83df6c7f4efb2e6",
+          "fingerprint": "f68e51153e165797d315",
           "output": {
             "intent": "draft",
-            "message": "I drafted a quantity change for the recessed LED downlights, from 10 to 12, for your review; this is not an order or a payment. The custom oak vanity has a 42-day lead time in the approved quote, which is a quote detail rather than part of the draft.",
+            "message": "I drafted raising the recessed LED downlights from 10 to 12 for your review. The approved quote lists the custom oak vanity at a 42-day lead time. This draft is not an order or a payment, and it needs your review before it goes to the client.",
             "title": "Add two recessed LED downlights (10 to 12)",
             "changes": [
               {
@@ -19,7 +19,7 @@
                 "itemId": "hl-downlights",
                 "quantity": 12,
                 "productOptionId": null,
-                "description": "Increase recessed LED downlights from 10 to 12.",
+                "description": "Raise the recessed LED downlights from 10 to 12 (two more).",
                 "sourceMessageIds": [
                   "t"
                 ]
@@ -27,13 +27,15 @@
             ],
             "unresolved": [],
             "constraints": [
-              "The client must confirm the revised quote before any change takes effect.",
-              "This draft is not an order or a payment."
+              "The client must confirm the revised quote before anything changes.",
+              "Draft only: not an order or a payment."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 1/1 expected matched, 1 drafted"
     }
   ]
 }

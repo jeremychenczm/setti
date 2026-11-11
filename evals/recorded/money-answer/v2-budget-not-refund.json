@@ -1,60 +1,62 @@
 {
   "flow": "money-answer",
   "case": "v2-budget-not-refund",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "f95d59eddd997e7227df",
+          "fingerprint": "d710c61062ff124877c5",
           "output": {
             "intent": "money",
-            "message": "No, the $2,060.00 is the drop in the quote total from V1 to V2, not money coming back to you.",
-            "title": "Is the lower quote a refund?",
+            "message": "No, the $2,060.00 is just the difference between the original quote of $7,730.00 and the new quote of $5,670.00, not a refund amount.",
+            "title": "",
             "changes": [],
             "unresolved": [],
             "constraints": [],
             "money": {
               "answer": {
                 "summary": {
-                  "text": "No, the $2,060.00 is the drop in the quote total from V1 to V2, not money coming back to you.",
+                  "text": "No, the $2,060.00 is just the difference between the original quote of $7,730.00 and the new quote of $5,670.00, not a refund amount.",
+                  "about": [
+                    "project"
+                  ],
                   "factIds": [
                     "budget"
                   ]
                 },
-                "rows": [],
+                "items": [],
                 "notes": [
                   {
-                    "text": "The only refund planned is $960.00 for the dining sideboard, and it waits for the supplier credit because the item has not been returned yet.",
+                    "text": "The only refund still planned is $960.00 for the dining sideboard. It waits for the supplier credit, and the sideboard has not been returned yet.",
+                    "about": [
+                      "baseline:sideboard"
+                    ],
                     "factIds": [
-                      "item:baseline:sideboard",
                       "next:baseline:sideboard",
                       "terms:baseline:sideboard"
                     ]
                   },
                   {
-                    "text": "No refunds have been completed so far: $0.00 refunded.",
+                    "text": "No refunds have been completed so far. Holds that were released are not refunds, because that money was never charged.",
+                    "about": [
+                      "project"
+                    ],
                     "factIds": [
                       "scope"
-                    ]
-                  },
-                  {
-                    "text": "Holds released on the old sofa, coffee table and dining table were never charged, so those releases are not refunds.",
-                    "factIds": [
-                      "item:baseline:sofa",
-                      "item:baseline:coffee-table",
-                      "item:baseline:dining-table"
                     ]
                   }
                 ]
               },
               "showEvidence": false
-            }
+            },
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "answer: No, the $2,060.00 is just the difference between the original quote of $7,730.00 and the new quote of $5,670.00, not a refund amount. | The only refund still planned is $960.00 for the dining sideboard. It waits for the supplier credit, and the sideboard has not been returned yet. | No refunds have been completed so far. Holds that were released are not refunds, because that money was never charged."
     }
   ]
 }

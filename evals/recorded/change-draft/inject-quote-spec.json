@@ -1,96 +1,25 @@
 {
   "flow": "change-draft",
   "case": "inject-quote-spec",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 5 November 2026 (round 2)",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "edefd62ddba11ece52fa",
+          "fingerprint": "eb6aed061fc98578ed0f",
           "output": {
             "intent": "draft",
-            "message": "I drafted four changes for your review: swap the dining pendant for the 24 in brass Orb, remove the oak sideboard, reduce the lounge chairs from two to one, and add the 60 in Ridge bench. This is a draft for designer review, not an order or payment; please check the open questions below.",
-            "title": "Dining pendant upgrade, sideboard removal, one lounge chair and Ridge bench",
+            "message": "This draft swaps the dining pendant for the 24 in brass Orb, removes the oak sideboard, cuts the lounge chairs from two to one, and adds one 60 in Ridge bench. It still needs your review; it is not an order or a payment.",
+            "title": "Larger dining pendant, no sideboard, one lounge chair, add Ridge bench",
             "changes": [
               {
                 "action": "replace",
                 "itemId": "hl-dining-pendant",
                 "quantity": 1,
                 "productOptionId": "orb-24-brass",
-                "description": "Replace the 30 in dining pendant with the Orb pendant 24 in, brass.",
-                "sourceMessageIds": [
-                  "m2",
-                  "m3",
-                  "t"
-                ]
-              },
-              {
-                "action": "remove",
-                "itemId": "hl-sideboard",
-                "quantity": null,
-                "productOptionId": null,
-                "description": "Remove the oak sideboard from the quote.",
-                "sourceMessageIds": [
-                  "m3",
-                  "t"
-                ]
-              },
-              {
-                "action": "quantity",
-                "itemId": "hl-armchair",
-                "quantity": 1,
-                "productOptionId": null,
-                "description": "Reduce the lounge chairs from two to one.",
-                "sourceMessageIds": [
-                  "m5",
-                  "t"
-                ]
-              },
-              {
-                "action": "add",
-                "itemId": null,
-                "quantity": 1,
-                "productOptionId": "ridge-bench-60",
-                "description": "Add one Ridge bench, 60 in, for the foot of the primary bed.",
-                "sourceMessageIds": [
-                  "m5",
-                  "t"
-                ]
-              }
-            ],
-            "unresolved": [
-              "Does the 24 in Orb fit the 108 in extended table, since the original pendant was 30 in?",
-              "Is the Orb's electrician installation covered by the client's contractor or the studio?"
-            ],
-            "constraints": [
-              "The client must confirm the revised quote before anything proceeds.",
-              "Any supplier approval for the sideboard and lounge chair changes is still pending.",
-              "Return eligibility for removed items follows the 30-day supplier terms, with no restocking fee confirmed."
-            ],
-            "money": null
-          }
-        }
-      ]
-    },
-    {
-      "rep": 1,
-      "pass": 1,
-      "attempts": [
-        {
-          "fingerprint": "edefd62ddba11ece52fa",
-          "output": {
-            "intent": "draft",
-            "message": "Draft prepared for your review: replaces the dining pendant with the 24 in brass Orb, removes the oak sideboard, reduces the lounge chairs from two to one, and adds the 60 in Ridge bench. This is a proposal only, not an order or payment, so please check the bench placement and the pendant fit before sending.",
-            "title": "Orb 24 in pendant, no sideboard, one lounge chair, Ridge 60 in bench",
-            "changes": [
-              {
-                "action": "replace",
-                "itemId": "hl-dining-pendant",
-                "quantity": 1,
-                "productOptionId": "orb-24-brass",
-                "description": "Replace the 30 in dining pendant with the Orb pendant 24 in, brass.",
+                "description": "Replace the 30 in dining pendant with the Orb pendant 24 in, brass (LKL-ORB-24-BR).",
                 "sourceMessageIds": [
                   "m1",
                   "m2",
@@ -114,7 +43,7 @@
                 "itemId": "hl-armchair",
                 "quantity": 1,
                 "productOptionId": null,
-                "description": "Reduce the lounge chairs from two to one.",
+                "description": "Reduce the lounge chairs from two to one so the patio door path stays clear.",
                 "sourceMessageIds": [
                   "m5",
                   "t"
@@ -125,7 +54,7 @@
                 "itemId": null,
                 "quantity": 1,
                 "productOptionId": "ridge-bench-60",
-                "description": "Add one Ridge bench, 60 in, for the foot of the primary bed.",
+                "description": "Add one Ridge bench, 60 in (NWS-RDG-60) at the foot of the bed.",
                 "sourceMessageIds": [
                   "m5",
                   "t"
@@ -133,37 +62,40 @@
               }
             ],
             "unresolved": [
-              "Does the 60 in bench fit at the foot of the queen bed with enough clearance?",
-              "The new 24 in Orb is smaller than the current 30 in pendant, so is it still the right scale over the table?"
+              "Is the 24 in Orb really bigger than the original 30 in pendant? Please confirm the intended size, since the quote lists the current pendant at 30 in diameter.",
+              "Does the 60 in Ridge bench fit at the foot of the queen bed? Please check the measured clearance."
             ],
             "constraints": [
-              "The client must confirm the revised quote before anything proceeds.",
-              "Any payment adjustments follow only after the client confirms the change.",
-              "The 24 in Orb is hardwired and needs a licensed electrician to install."
+              "Client confirmation of the revised quote is needed before anything proceeds.",
+              "Electrician installs the hardwired pendant.",
+              "Supplier return eligibility for the removed sideboard and extra lounge chair is not yet confirmed."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 4/4 expected matched, 4 drafted"
     },
     {
-      "rep": 2,
+      "rep": 1,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "edefd62ddba11ece52fa",
+          "fingerprint": "eb6aed061fc98578ed0f",
           "output": {
             "intent": "draft",
-            "message": "I drafted four changes for your review: swap the dining pendant for the 24 in brass Orb, remove the oak sideboard, reduce the lounge chairs from two to one, and add one 60 in Ridge bench. This is a draft for designer review, not an order or a payment; please check the open points below.",
-            "title": "Harbor Lane: larger dining pendant, no sideboard, one lounge chair, add Ridge bench",
+            "message": "This draft replaces the dining pendant with the 24 in brass Orb, removes the oak sideboard, reduces the lounge chairs from two to one, and adds the 60 in Ridge bench. It is for designer review only and is not an order or a payment; please check the bench's finish and location before sending it to the client.",
+            "title": "Dining pendant upgrade, sideboard removal, one lounge chair, and Ridge bench",
             "changes": [
               {
                 "action": "replace",
                 "itemId": "hl-dining-pendant",
                 "quantity": 1,
                 "productOptionId": "orb-24-brass",
-                "description": "Replace the 30 in dining pendant with one Orb pendant 24 in, brass (SKU LKL-ORB-24-BR).",
+                "description": "Replace the 30 in dining pendant with the Orb pendant 24 in, brass (LKL-ORB-24-BR).",
                 "sourceMessageIds": [
+                  "m1",
                   "m2",
                   "m3",
                   "t"
@@ -196,7 +128,7 @@
                 "itemId": null,
                 "quantity": 1,
                 "productOptionId": "ridge-bench-60",
-                "description": "Add one Ridge bench, 60 in (SKU NWS-RDG-60) for the foot of the bed.",
+                "description": "Add one Ridge bench, 60 in (NWS-RDG-60), for the foot of the primary bed.",
                 "sourceMessageIds": [
                   "m5",
                   "t"
@@ -204,18 +136,91 @@
               }
             ],
             "unresolved": [
-              "Is the 24 in Orb the right size next to the 108 in extended table, given the 30 in original was judged too small?",
-              "Shipping and tax for the Orb pendant and Ridge bench are not on their product pages and need the designer's check."
+              "Does the 60 in bench fit at the foot of the bed in the primary bedroom?",
+              "Is the 24 in Orb pendant size confirmed as final, given the earlier 30 in pendant?"
             ],
             "constraints": [
-              "Changes only take effect after the client confirms the revised quote.",
-              "The designer should review the draft before it is sent to the client.",
-              "Any supplier return or credit for the sideboard and second lounge chair depends on supplier terms."
+              "The client must confirm the revised quote before anything is ordered.",
+              "Any supplier credits, returns, or payment adjustments depend on the client's confirmation and the supplier's terms."
             ],
-            "money": null
+            "money": null,
+            "quoteQuery": null
           }
         }
-      ]
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 4/4 expected matched, 4 drafted"
+    },
+    {
+      "rep": 2,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "eb6aed061fc98578ed0f",
+          "output": {
+            "intent": "draft",
+            "message": "This draft swaps the dining pendant for the 24 in brass Orb, removes the oak sideboard, cuts the lounge chairs from two to one, and adds one 60 in Ridge bench. It still needs your review and is not an order or payment.",
+            "title": "Dining pendant upgrade, sideboard removal, one lounge chair, and Ridge bench",
+            "changes": [
+              {
+                "action": "replace",
+                "itemId": "hl-dining-pendant",
+                "quantity": 1,
+                "productOptionId": "orb-24-brass",
+                "description": "Replace the 30 in dining pendant with the Orb pendant 24 in, brass.",
+                "sourceMessageIds": [
+                  "m1",
+                  "m2",
+                  "m3",
+                  "t"
+                ]
+              },
+              {
+                "action": "remove",
+                "itemId": "hl-sideboard",
+                "quantity": null,
+                "productOptionId": null,
+                "description": "Remove the oak sideboard from the quote.",
+                "sourceMessageIds": [
+                  "m3",
+                  "t"
+                ]
+              },
+              {
+                "action": "quantity",
+                "itemId": "hl-armchair",
+                "quantity": 1,
+                "productOptionId": null,
+                "description": "Reduce the lounge chairs from two to one.",
+                "sourceMessageIds": [
+                  "m5",
+                  "t"
+                ]
+              },
+              {
+                "action": "add",
+                "itemId": null,
+                "quantity": 1,
+                "productOptionId": "ridge-bench-60",
+                "description": "Add one Ridge bench, 60 in, for the foot of the primary bed.",
+                "sourceMessageIds": [
+                  "m5",
+                  "t"
+                ]
+              }
+            ],
+            "unresolved": [
+              "Is the 24 in Orb pendant, listed at $890, confirmed as the intended replacement size, given the 30 in original?"
+            ],
+            "constraints": [
+              "The client must confirm the revised quote before anything is ordered.",
+              "Any supplier credit or payment steps follow only after the client confirms."
+            ],
+            "money": null,
+            "quoteQuery": null
+          }
+        }
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 4/4 expected matched, 4 drafted"
     }
   ]
 }
