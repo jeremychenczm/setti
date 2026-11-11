@@ -26,6 +26,11 @@ export function approvedStart(project: ProjectSettings): ApprovedQuoteReport | n
   return project.startsFrom === "approved_quote" && "status" in project.quote && project.quote.status === "approved" ? project.quote : null;
 }
 
+/** The designer the project's quote names, without the demo's "(demo designer)" note. */
+export function quoteDesignerName(quote: Pick<ProjectQuote, "designerName">): string {
+  return quote.designerName.replace(/\s*\(demo designer\)$/, "");
+}
+
 /** The project's V1 lines as prepared, without an approval. */
 export function preparedQuote(project: ProjectSettings): ProjectQuote {
   return project.quote;

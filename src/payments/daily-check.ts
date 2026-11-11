@@ -22,6 +22,7 @@ import { randomUUID } from "node:crypto";
 import { and, desc, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { DEMO_ACCOUNTS } from "../accounts/demo";
 import { chatCases, chatMessages } from "../chat/schema";
+import { quoteDesignerName } from "../projects/settings";
 import type { Db } from "../db/client";
 import { demoActivity, holdChecks, paymentOperations, paypalAuthorizations, projects, renewalNotices, savedPaymentMethods } from "../db/schema";
 import { pricingCases } from "../pricing/schema";
@@ -87,7 +88,7 @@ export async function runDailyCheck(db: Db, paypal: PayPalPayments, options: { n
   }
   const ended = new Set((await db.select({ sessionId: demoActivity.sessionId }).from(demoActivity).where(isNotNull(demoActivity.endedAt))).map((row) => row.sessionId));
 
-  const allScopes = await db.select({ caseId: chatCases.id, sessionId: chatCases.sessionId, projectKey: chatCases.projectKey, projectId: pricingCases.projectId, clientName: projects.clientName })
+  const allScopes = await db.select({ caseId: chatCases.id, sessionId: chatCases.sessionId, projectKey: chatCases.projectKey, projectId: pricingCases.projectId, clientName: projects.clientName, quote: chatCases.quote })
     .from(chatCases).innerJoin(pricingCases, eq(pricingCases.caseId, chatCases.id)).innerJoin(projects, eq(projects.id, pricingCases.projectId))
     .where(options.sessionId ? eq(chatCases.sessionId, options.sessionId) : undefined);
   const scopes = allScopes.filter((scope) => !ended.has(scope.sessionId));
@@ -120,7 +121,7 @@ export async function runDailyCheck(db: Db, paypal: PayPalPayments, options: { n
           .onConflictDoNothing().returning({ authorizationId: renewalNotices.authorizationId });
         const fresh = due.filter((line) => recorded.some((entry) => entry.authorizationId === line.timing!.holdId));
         if (!fresh.length) return 0;
-        const text = renewalNotice({ lines: fresh, client: scope.clientName, designer: designer.name, method: { kind: method.kind, label: method.label }, now });
+        const text = renewalNotice({ lines: fresh, client: scope.clientName, designer: quoteDesignerName(scope.quote), method: { kind: method.kind, label: method.label }, now });
         await tx.insert(chatMessages).values({ caseId: scope.caseId, id: messageId, actor: "assistant", model: "notice", aiState: "completed", text });
         await tx.update(chatCases).set({ updatedAt: new Date() }).where(eq(chatCases.id, scope.caseId));
         return fresh.length;
@@ -143,7 +144,7 @@ export async function runDailyCheck(db: Db, paypal: PayPalPayments, options: { n
       }
       const [method] = await db.select({ kind: savedPaymentMethods.kind, label: savedPaymentMethods.label }).from(savedPaymentMethods)
         .where(eq(savedPaymentMethods.projectId, scope.projectId)).orderBy(desc(savedPaymentMethods.createdAt)).limit(1);
-      const text = renewalReport(outcomes, { client: scope.clientName, designer: designer.name, method: { kind: method?.kind === "card" ? "card" : "paypal", label: method?.label ?? null } });
+      const text = renewalReport(outcomes, { client: scope.clientName, designer: quoteDesignerName(scope.quote), method: { kind: method?.kind === "card" ? "card" : "paypal", label: method?.label ?? null } });
       if (text) {
         await db.insert(chatMessages).values({ caseId: scope.caseId, id: randomUUID(), actor: "assistant", model: "notice", aiState: "completed", text });
         await db.update(chatCases).set({ updatedAt: new Date() }).where(eq(chatCases.id, scope.caseId));

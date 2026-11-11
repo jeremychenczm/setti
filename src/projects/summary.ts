@@ -7,6 +7,7 @@ import type { Db } from "@/db/client";
 import type { Actor } from "@/http/identity";
 import { withoutApproval } from "@/opening/document";
 import { clientSignatureName } from "@/opening/types";
+import { quoteDesignerName } from "./settings";
 import type { ProjectPerson, ProjectSummary } from "./types";
 
 type Account = { id: string; name: string; demoPersona: string | null };
@@ -40,7 +41,7 @@ export async function projectsFor(db: Pick<Db, "select">, actor: Actor): Promise
     const named = clientSignatureName(quote);
     return {
       key: row.projectKey, name: row.name, subtitle: row.subtitle, studio: studioNames.get(row.sessionId) ?? "", quote,
-      designer: designer ? person(designer, "designer") : { id: `${row.sessionId}:designer`, name: quote.designerName.replace(/\s*\(demo designer\)$/, "") || "Your designer", role: "designer" },
+      designer: designer ? person(designer, "designer") : { id: `${row.sessionId}:designer`, name: quoteDesignerName(quote) || "Your designer", role: "designer" },
       client: client ? person(client, "client") : named ? { id: `${row.id}:client`, name: named, role: "client" } : null,
       clientJoined: Boolean(client),
     };

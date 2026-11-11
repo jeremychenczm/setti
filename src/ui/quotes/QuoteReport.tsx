@@ -394,7 +394,14 @@ function Amount({ label, value, strong }: { label: string; value: number; strong
 }
 
 /** One quote line's card in a drawer beside the table: what it is, its terms and source, and its decision. */
+/** A lead time as a person would write it: whole weeks when it is some, else days. */
+function leadTime(days: number): string {
+  if (days > 0 && days % 7 === 0) return days === 7 ? "1 week" : `${days / 7} weeks`;
+  return days === 1 ? "1 day" : `${days} days`;
+}
+
 function LineDetails({ line, onClose, children }: { line: QuoteRow; onClose: () => void; children?: ReactNode }) {
+  const demo = useDemoMode();
   useEffect(() => {
     const close = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
     document.addEventListener("keydown", close);
@@ -414,9 +421,9 @@ function LineDetails({ line, onClose, children }: { line: QuoteRow; onClose: () 
       </header>
       <div className="flex-1 overflow-y-auto px-5 py-4 text-[12px]">
       <div className="space-y-5">
-        <div><div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Specification</div><p className="leading-relaxed">{line.specification}</p><p className="mt-2 text-[11px] text-[var(--muted)]">{line.sku} · {line.room} · Priced per {line.unitLabel ?? "each"}</p><p className="mt-1 text-[11px] text-[var(--muted)]">{line.leadTimeDays === null ? line.category === "service" ? "Service · no product delivery" : "Stock and lead time to be confirmed" : `Estimated lead time: ${line.leadTimeDays / 7} weeks (sample)`}</p></div>
+        <div><div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Specification</div><p className="leading-relaxed">{line.specification}</p><p className="mt-2 text-[11px] text-[var(--muted)]">{line.sku} · {line.room} · Priced per {line.unitLabel ?? "each"}</p><p className="mt-1 text-[11px] text-[var(--muted)]">{line.leadTimeDays === null ? line.category === "service" ? "Service · no product delivery" : "Stock and lead time to be confirmed" : `Estimated lead time: ${leadTime(line.leadTimeDays)}${demo ? " (sample)" : ""}`}</p></div>
         <div><div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Return & cancellation terms</div><p className="leading-relaxed">{line.returnPolicy}</p><p className="mt-2 text-[11px] text-[var(--muted)]">{line.customMade ? "Custom-made" : "Not custom-made"} · {line.nonReturnable === null ? "Return eligibility to be confirmed" : line.nonReturnable ? "Non-returnable" : "See the agreed terms"}</p>{line.source.returnPolicyUrl && <a href={line.source.returnPolicyUrl} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[11px] text-[var(--primary)] hover:underline">Supplier return policy<ArrowUpRight className="h-3 w-3" /></a>}</div>
-        <div><div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Source · {line.source.kind === "public_reference" ? "public retail price" : line.source.kind === "estimate" ? "test estimate" : line.category === "furniture" ? "supplier quote" : "example"}</div><div className="flex items-start gap-1.5"><FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--primary)]" /><span>{line.source.name}</span></div><p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">{line.source.note}</p>{line.source.priceNote && <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">{line.source.priceNote}</p>}{line.source.checkedAt && <p className="mt-1 text-[10px] text-[var(--muted)]">Price checked: {line.source.checkedAt}</p>}<p className="mt-1 break-all font-mono text-[10px] text-[var(--muted)]">{line.source.reference}</p>{line.source.url && <a href={line.source.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[11px] text-[var(--primary)] hover:underline">View product & price<ArrowUpRight className="h-3 w-3" /></a>}</div>
+        <div><div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Source · {line.source.kind === "public_reference" ? "public retail price" : line.source.kind === "estimate" ? demo ? "test estimate" : "designer estimate" : line.category === "furniture" ? "supplier quote" : "example"}</div><div className="flex items-start gap-1.5"><FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--primary)]" /><span>{line.source.name}</span></div><p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">{line.source.note}</p>{line.source.priceNote && <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">{line.source.priceNote}</p>}{line.source.checkedAt && <p className="mt-1 text-[10px] text-[var(--muted)]">Price checked: {line.source.checkedAt}</p>}<p className="mt-1 break-all font-mono text-[10px] text-[var(--muted)]">{line.source.reference}</p>{line.source.url && <a href={line.source.url} target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-[11px] text-[var(--primary)] hover:underline">View product & price<ArrowUpRight className="h-3 w-3" /></a>}</div>
       </div>
       {children}
       </div>

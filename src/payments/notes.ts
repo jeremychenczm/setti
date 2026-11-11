@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { DEMO_ACCOUNTS } from "../accounts/demo";
 import { changeOrderDecisions } from "../approval/schema";
 import type { Db } from "../db/client";
 import { items, revisions } from "../db/schema";
 import { chatCases, chatMessages } from "../chat/schema";
+import { quoteDesignerName } from "../projects/settings";
 import { changeOrders, pricingCases } from "../pricing/schema";
 import type { PaymentOperation } from "./operations";
 import { activeSavedMethod } from "./saved-methods";
@@ -74,7 +74,8 @@ async function heldFurniture(tx: Tx, projectId: string, holds: Hold[]): Promise<
  * wrote themselves, sent as they wrote it.
  */
 async function handOff(tx: Tx, caseId: string, id: string, said: string, own = false): Promise<void> {
-  const designer = DEMO_ACCOUNTS.find((account) => account.role === "designer")!.name.split(" ")[0];
+  const [project] = await tx.select({ quote: chatCases.quote }).from(chatCases).where(eq(chatCases.id, caseId));
+  const designer = (project ? quoteDesignerName(project.quote) : "").split(" ")[0] || "the studio";
   const inserted = await tx.insert(chatMessages).values({ caseId, id, actor: "client", text: own ? said : `${said} Over to you, ${designer}.` })
     .onConflictDoNothing().returning({ id: chatMessages.id });
   if (inserted.length) await tx.update(chatCases).set({ updatedAt: new Date() }).where(eq(chatCases.id, caseId));
