@@ -8,6 +8,7 @@ import {
   ACTION_LABELS, CHANGE_LABELS, DECISION_LABELS, HANDLING_LABELS, PENDING_LABELS, TIMING_LABELS, VIA_LABELS,
   certificateRows, paymentGroups, paypalReference, pendingRows, ptDateTime, ptDay, sealOf, shortHash, signedUsd, usd, utcTime, verifyCommand, type Seal,
 } from "./receipt-view";
+import { useDemoMode } from "../demo-mode";
 
 type Loaded = { receipt: VersionReceipt } | { error: string };
 
@@ -116,6 +117,7 @@ function Fact({ label, value, strong }: { label: string; value: ReactNode; stron
 }
 
 export function ReceiptDocument({ receipt, studioName = "" }: { receipt: VersionReceipt; studioName?: string }) {
+  const demo = useDemoMode();
   const { project, version, agreement, totals, pending } = receipt;
   const seal = sealOf(receipt);
   const groups = paymentGroups(receipt);
@@ -312,12 +314,12 @@ export function ReceiptDocument({ receipt, studioName = "" }: { receipt: Version
 
     <div className="grid gap-1 text-[10.5px] leading-relaxed text-[var(--muted)]">
       <p>This receipt records the agreement as signed and the PayPal activity reported when it was issued. Money that moves later appears on a newer receipt. It is not a tax invoice.</p>
-      <p>Not included: {receipt.notIncluded.join(", ")}. Demo project on PayPal Sandbox; no real money moved.</p>
+      <p>Not included: {receipt.notIncluded.join(", ")}. {demo ? "Demo project on PayPal Sandbox" : "PayPal Sandbox"}; no real money moved.</p>
     </div>
 
     <footer className="flex flex-wrap justify-between gap-x-4 gap-y-1 border-t border-[var(--line)] pt-2.5 text-[10px] text-[var(--muted)] print:hidden">
       <span>Setti · Signed version receipt · No. {receipt.receiptNo}</span>
-      <span>Demo project · PayPal Sandbox</span>
+      <span>{demo ? "Demo project · PayPal Sandbox" : "PayPal Sandbox"}</span>
     </footer>
   </article>;
 }

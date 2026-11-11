@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ApprovalWorkspace, DecideChangeOrderInput } from "@/approval/types";
 import { dateTime, Field, inputClass } from "./common";
 import { FundingImpactPreview } from "./FundingImpactPreview";
+import { useDemoMode } from "../demo-mode";
 
 export function isApprovalWorkspace(value: unknown, orderId: string): value is ApprovalWorkspace {
   if (!value || typeof value !== "object") return false;
@@ -41,10 +42,12 @@ interface ApprovalPanelProps {
 export function ApprovalPanel({ workspace, loading, onChange, onBusyChange }: ApprovalPanelProps) {
   const { view, canDecide, clientName } = workspace;
   const { order, decision } = view;
+  const demo = useDemoMode();
   // The demo fills in the client's review, signature and message so a test confirmation is one click; each stays editable.
-  const [signature, setSignature] = useState(clientName ?? "");
-  const [note, setNote] = useState(() => confirmationNote(order.version, order.designerName));
-  const [acknowledged, setAcknowledged] = useState(true);
+  // A real client types their own name, writes their own message and ticks the acknowledgement themselves.
+  const [signature, setSignature] = useState(demo ? clientName ?? "" : "");
+  const [note, setNote] = useState(() => demo ? confirmationNote(order.version, order.designerName) : "");
+  const [acknowledged, setAcknowledged] = useState(demo);
   const [busy, setBusy] = useState<"approved" | "changes_requested" | "check" | null>(null);
   const [pending, setPending] = useState<DecideChangeOrderInput | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -142,19 +145,19 @@ export function ApprovalPanel({ workspace, loading, onChange, onBusyChange }: Ap
       {decision && <div role="status" className={`mt-4 rounded-xl border p-4 text-[12px] leading-relaxed ${decision.decision === "approved" ? "border-emerald-100 bg-emerald-50 text-emerald-900" : "border-amber-100 bg-amber-50 text-amber-900"}`}>
         <p className="flex items-center gap-1.5 font-semibold">{decision.decision === "approved" && <Check className="h-4 w-4" />}{decision.decision === "approved" ? `V${order.version} confirmed` : `Changes requested for V${order.version}`}</p>
         <p className="mt-2">{decision.clientName} · {dateTime(decision.decidedAt)} PT</p>
-        <p className="mt-1 text-[11px]">Recorded with the exact frozen content and quote revision. Demo client decision.</p>
+        <p className="mt-1 text-[11px]">Recorded with the exact frozen content and quote revision.{demo ? " Demo client decision." : ""}</p>
         {decision.note && <p className="mt-3 whitespace-pre-wrap border-t border-current/10 pt-3">{decision.note}</p>}
         {decision.decision === "approved" && view.status !== "superseded" && <p className="mt-3 text-[11px]">This confirmed version is the baseline for the next change. With a saved payment method, its new items are held right away; releases, captures and refunds are separate steps.</p>}
       </div>}
       {notice && <p role="status" className="mt-4 rounded-lg bg-brand-50 p-3 text-[12px] leading-relaxed text-brand-900">{notice}</p>}
       {error && <div role="alert" className="mt-4 rounded-lg border border-red-100 bg-red-50 p-3 text-[12px] leading-relaxed text-red-900"><p>{error}</p>{pending && <div className="mt-3 flex flex-wrap gap-3"><button onClick={() => void checkSavedStatus()} disabled={Boolean(busy) || loading} className="inline-flex items-center gap-1.5 font-semibold underline disabled:opacity-50">{busy === "check" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Check saved status</button><button onClick={() => void submit(pending)} disabled={Boolean(busy) || loading} className="font-semibold underline disabled:opacity-50">Retry the same {pending.decision === "approved" ? "confirmation" : "request"}</button></div>}</div>}
       {canDecide && !decision && <div className="mt-4">
-        <p className="rounded-lg bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600">Reviewing as <strong className="font-semibold text-slate-800">{clientName}</strong> in this demo session. The shared link alone does not grant confirmation permission.</p>
+        <p className="rounded-lg bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600">Reviewing as <strong className="font-semibold text-slate-800">{clientName}</strong>{demo ? " in this demo session" : ""}. The shared link alone does not grant confirmation permission.</p>
         <fieldset disabled={disabled} className="mt-4 space-y-4">
           <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-brand-100 bg-brand-50/50 p-3 text-[12px] leading-relaxed"><input type="checkbox" aria-label="Reviewed this exact change-order version" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} className="mt-0.5" /><span>I have reviewed the complete V{order.version} quote, changes, prices and client terms. My decision applies to this exact version.</span></label>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <Field label="Your signature" hint={signature.trim() === clientName ? "Prefilled for the demo. Edit it if you like; it must read your full name." : `Type your full name exactly: ${clientName ?? ""}`}><input aria-label="Demo client confirmation name" autoComplete="off" value={signature} onChange={(event) => setSignature(event.target.value)} maxLength={160} className={inputClass} /></Field>
+              <Field label="Your signature" hint={demo && signature.trim() === clientName ? "Prefilled for the demo. Edit it if you like; it must read your full name." : `Type your full name exactly: ${clientName ?? ""}`}><input aria-label="Demo client confirmation name" autoComplete="off" value={signature} onChange={(event) => setSignature(event.target.value)} maxLength={160} className={inputClass} /></Field>
               <div className="mt-2 rounded-xl border border-[var(--line)] bg-[var(--canvas)] px-4 pb-3 pt-5">
                 <div aria-hidden className="min-h-[46px] truncate border-b border-slate-300 pb-1 font-signature text-[34px] leading-none text-[var(--ink)]">{signature.trim()}</div>
                 <div className="mt-1.5 flex justify-between gap-3 text-[10px] text-[var(--muted)]"><span>{clientName} · Client</span><span>{today()} · V{order.version}</span></div>
@@ -166,7 +169,7 @@ export function ApprovalPanel({ workspace, loading, onChange, onBusyChange }: Ap
         </fieldset>
         <p className="mt-3 text-[11px] leading-relaxed text-slate-500">Confirming records agreement to this version. Neither button places a supplier order, authorizes funds, charges or refunds money.</p>
       </div>}
-      {!canDecide && !decision && <p className="mt-4 flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />{workspace.reason ?? "This is a read-only shared review. Return to the owning demo project session to make a client decision."}</p>}
+      {!canDecide && !decision && <p className="mt-4 flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />{workspace.reason ?? (demo ? "This is a read-only shared review. Return to the owning demo project session to make a client decision." : "This is a read-only shared review. Sign in as the project's client to make a decision.")}</p>}
       {clientName && decision && <a href={`/chats/${order.projectKey}`} className="mt-4 inline-block text-[12px] font-medium text-[var(--primary)] underline">Return to the project conversation</a>}
     </section>
   </>;

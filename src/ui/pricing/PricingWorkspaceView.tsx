@@ -20,6 +20,7 @@ import { ChangeSourceFields } from "./ChangeSource";
 import { HOME_EVIDENCE_ID, isHomeQuote } from "@/demo/home-evidence";
 import { HomeSupplierDocuments } from "../try/HomeSupplierDocuments";
 import { useTryReadiness } from "../try/useTryReadiness";
+import { useDemoMode } from "../demo-mode";
 
 const handlingLabels: Record<OldItemHandling, string> = { pending: "Not checked yet", not_ordered: "Not ordered", cancelled: "Order cancelled", modified: "Modified (re-made or re-sized)", returned: "Returned / return arranged", retained: "Retained in the project", not_applicable: "Not applicable" };
 const oldCostFields = ["oldItemCostCents", ...NON_REFUNDABLE_FEE_KINDS.map(feeField)];
@@ -27,6 +28,7 @@ const quantityIdentityFields = new Set<keyof PricingItem>(["name", "vendor", "sk
 const drawerHeading = "text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]";
 
 export function PricingWorkspaceView({ projectKey, clientName, guide }: { projectKey: CaseKey; clientName: string; guide?: ReactNode }) {
+  const demo = useDemoMode();
   const readiness = useTryReadiness(projectKey);
   const state = usePricingWorkspace(projectKey);
   const { workspace, input, setInput } = state;
@@ -174,7 +176,7 @@ export function PricingWorkspaceView({ projectKey, clientName, guide }: { projec
     });
   }
 
-  const header = <header className="mb-5 flex flex-wrap items-center gap-3"><a href={`/chats/${projectKey}`} className="flex items-center gap-1.5 text-[12px] text-slate-500 hover:text-slate-900"><ArrowLeft className="h-3.5 w-3.5" />Back to project chat</a><span className="ml-auto rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-800">Demo designer workspace</span></header>;
+  const header = <header className="mb-5 flex flex-wrap items-center gap-3"><a href={`/chats/${projectKey}`} className="flex items-center gap-1.5 text-[12px] text-slate-500 hover:text-slate-900"><ArrowLeft className="h-3.5 w-3.5" />Back to project chat</a>{demo && <span className="ml-auto rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-800">Demo designer workspace</span>}</header>;
 
   return (
     <div id="pricing-workspace" data-pricing-source-stale={stale ? "true" : "false"} className={`min-h-dvh bg-[var(--canvas)] px-3 py-5 text-[var(--ink)] transition-[padding] duration-200 sm:px-6 ${selected ? "lg:pr-[504px]" : ""}`}>
@@ -182,7 +184,7 @@ export function PricingWorkspaceView({ projectKey, clientName, guide }: { projec
         {/* The walkthrough guide stays in view while the page scrolls, and moves aside with the content when the drawer opens. */}
         {guide && <div className="sticky top-0 z-30 -mx-3 -mt-5 mb-4 bg-[var(--canvas)] px-3 pb-3 pt-3 sm:-mx-6 sm:px-6">{guide}</div>}
         {header}
-        <div className="mb-6"><div className="mb-2 flex items-center gap-2 text-[11px] uppercase tracking-wider text-slate-500"><ClipboardCheck className="h-4 w-4" />{workspace?.quote.projectName ?? projectKey} · Designer pricing</div><h1 className="text-[26px] font-semibold tracking-tight">Review the change before issuing it</h1><p className="mt-2 max-w-3xl text-[12px] leading-relaxed text-slate-500">Check prices, old-item handling and unresolved details. Save your review, then send it to the client as a new version in the project chat. V1 remains unchanged.</p><p className="mt-2 text-[10px] text-slate-400">Demo designer · pricing edits are saved for this demo project and browser.</p></div>
+        <div className="mb-6"><div className="mb-2 flex items-center gap-2 text-[11px] uppercase tracking-wider text-slate-500"><ClipboardCheck className="h-4 w-4" />{workspace?.quote.projectName ?? projectKey} · Designer pricing</div><h1 className="text-[26px] font-semibold tracking-tight">Review the change before issuing it</h1><p className="mt-2 max-w-3xl text-[12px] leading-relaxed text-slate-500">Check prices, old-item handling and unresolved details. Save your review, then send it to the client as a new version in the project chat. V1 remains unchanged.</p>{demo && <p className="mt-2 text-[10px] text-slate-400">Demo designer · pricing edits are saved for this demo project and browser.</p>}</div>
 
         {state.loading && <div role="status" className="flex items-center gap-2 rounded-xl bg-white p-8 text-[13px] text-slate-500"><LoaderCircle className="h-4 w-4 animate-spin" />Loading pricing workspace…</div>}
         {state.error && <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-[12px] leading-relaxed text-red-800"><p className="whitespace-pre-wrap">{state.error}</p>{state.pendingCheck && <button onClick={() => void state.checkSavedStatus()} disabled={Boolean(state.busy)} className="mt-2 font-semibold underline disabled:opacity-50">Check saved status</button>}{state.conflict && <button onClick={() => void state.reload()} disabled={Boolean(state.busy)} className="mt-2 font-semibold underline disabled:opacity-50">Load saved review · discard local edits</button>}{!workspace && !state.loading && <button onClick={() => void state.reload()} className="mt-2 font-semibold underline">Try loading again</button>}</div>}

@@ -5,6 +5,7 @@ import { useId, useState } from "react";
 import type { SavedMethodView } from "@/payments/saved-methods";
 import type { CheckoutView } from "@/payments/types";
 import { PayPalButton, type PayPalHandlers } from "./PayPalButtons";
+import { useDemoMode } from "../demo-mode";
 
 const shortDate = (value: string) => new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
 
@@ -49,6 +50,7 @@ export function PayMethodChooser({ options, paypal, testCardBusy, disabled, save
   options: CheckoutView; paypal: PayPalHandlers; testCardBusy: boolean; disabled: boolean;
   save: boolean; onSaveChange: (save: boolean) => void; onTestCard: () => void;
 }) {
+  const demoMode = useDemoMode();
   const group = useId();
   const methods: { id: Method; title: string; detail: string; icon: typeof Wallet; demo?: boolean }[] = [
     ...(options.paypalClientId ? [
@@ -73,7 +75,7 @@ export function PayMethodChooser({ options, paypal, testCardBusy, disabled, save
               <span className="block text-[13px] font-semibold text-[var(--ink)]">{entry.title}</span>
               <span className="block truncate text-[11px] text-[var(--muted)]">{entry.detail}</span>
             </span>
-            {entry.demo && <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">Demo</span>}
+            {entry.demo && <span className="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">{demoMode ? "Demo" : "Sandbox"}</span>}
           </label>
           {selected && <div className="px-3.5 pb-3.5">
             {entry.id === "card"

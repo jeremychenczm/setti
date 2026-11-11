@@ -4,6 +4,7 @@ import { requireWorkspace } from "@/auth/viewer";
 import { isCaseKey } from "@/chat/cases";
 import { PricingWorkspaceView } from "@/ui/pricing/PricingWorkspaceView";
 import { TryPageGuide } from "@/ui/try/TryPageGuide";
+import { DemoModeProvider } from "@/ui/demo-mode";
 
 export const metadata: Metadata = { title: "Designer pricing review | Setti" };
 
@@ -15,5 +16,5 @@ export default async function PricingPage({ params }: { params: Promise<{ caseKe
   if (account.role !== "designer") redirect(`/chats/${caseKey}`);
   const project = projects.find((entry) => entry.key === caseKey);
   if (!project) notFound();
-  return <PricingWorkspaceView projectKey={caseKey} clientName={project.client?.name ?? "the client"} guide={demo ? <TryPageGuide projectKey={caseKey} account={account} currentView="pricing" /> : null} />;
+  return <DemoModeProvider value={demo}><PricingWorkspaceView projectKey={caseKey} clientName={project.client?.name ?? "the client"} guide={demo ? <TryPageGuide projectKey={caseKey} account={account} currentView="pricing" /> : null} /></DemoModeProvider>;
 }
