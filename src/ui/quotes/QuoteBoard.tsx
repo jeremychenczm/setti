@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { DemoAccount } from "@/accounts/demo";
 import type { CaseKey } from "@/chat/types";
 import type { QuoteView, SignOpeningInput } from "@/opening/types";
+import { QuoteDraftEditor } from "./QuoteDraftEditor";
 import { QuoteReport, type QuoteActions } from "./QuoteReport";
 import type { QuoteOption } from "./QuoteReport";
 
@@ -32,18 +33,24 @@ export function QuoteBoard({ projectKey, studioName, viewer, options, focusItemI
   onBack: () => void; onSelectQuote: (id: CaseKey) => void; onOpenChat: () => void;
 }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
+  /** The designer edits an unsent V1; an empty one opens for editing at once. */
+  const [editing, setEditing] = useState<boolean | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
       const response = await fetch(`/api/quotes/${projectKey}`, { cache: "no-store", signal });
       const body = await response.json().catch(() => null);
-      if (response.ok) setLoaded({ view: body as QuoteView });
+      if (response.ok) {
+        const view = body as QuoteView;
+        setLoaded({ view });
+        setEditing((current) => current ?? (viewer.role === "designer" && !!view.draftHash && view.document.lines.length === 0));
+      }
       else if (body?.code === "NOT_SHARED") setLoaded({ notShared: true });
       else setLoaded({ error: body?.error ?? "The quote could not be loaded." });
     } catch {
       if (!signal?.aborted) setLoaded({ error: "Connection interrupted. Reload to try again." });
     }
-  }, [projectKey]);
+  }, [projectKey, viewer.role]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -52,6 +59,7 @@ export function QuoteBoard({ projectKey, studioName, viewer, options, focusItemI
   }, [load]);
 
   const actions: QuoteActions = {
+    edit: () => setEditing(true),
     async sign(input: SignOpeningInput) {
       const result = await post(`/api/quotes/${projectKey}/sign`, input);
       if (!result.ok) return failure(result.body, "The decisions could not be signed. Please retry.");
@@ -85,6 +93,7 @@ export function QuoteBoard({ projectKey, studioName, viewer, options, focusItemI
     },
   };
 
+  if (loaded && "view" in loaded && editing && loaded.view.draftHash) return <QuoteDraftEditor projectKey={projectKey} view={loaded.view} onSaved={() => load()} onClose={() => setEditing(false)} />;
   if (loaded && "view" in loaded) return <QuoteReport view={loaded.view} studioName={studioName} viewer={viewer} options={options} focusItemId={focusItemId} actions={actions} onBack={onBack} onSelectQuote={onSelectQuote} onOpenChat={onOpenChat} />;
   return (
     <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-white shadow-sm">

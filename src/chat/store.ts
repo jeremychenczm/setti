@@ -165,6 +165,8 @@ export function createChatStore(db: Db): ChatStore {
         if (row.activeRunId) throw new ChatStoreError("CASE_BUSY", "Wait for the current AI reply before sending the quote.");
         const document = openingDocument(row);
         if (!document.lines.length) throw new ChatStoreError("NOT_AVAILABLE", "Quote V1 has no lines yet. Add its items before sending it.");
+        // The client signs with the name the quote is prepared for, so it must be there.
+        if (!document.clientName.trim()) throw new ChatStoreError("NOT_AVAILABLE", "Add who quote V1 is prepared for before sending it: the client signs with that name.");
         await tx.insert(chatMessages).values({ caseId: row.id, id: input.id, actor: "designer", text });
         await tx.insert(openingQuotes).values({ caseId: row.id, messageId: input.id, document, contentHash: documentHash(document), sentBy: input.sentBy.trim() });
         await insertBaseline(tx, row.id, document);

@@ -71,6 +71,8 @@ function StatusBadge({ status, label }: { status: OpeningStatus; label?: string 
 
 /** What the page can ask the server to do; each returns an error to show, or null. */
 export interface QuoteActions {
+  /** Opens the editor of an unsent V1, for the designer. */
+  edit?: () => void;
   sign: (input: SignOpeningInput) => Promise<string | null>;
   drop: (itemId: string) => Promise<string | null>;
   /** Puts a declined line in a designer draft and opens the pricing page. */
@@ -261,7 +263,8 @@ export function QuoteReport({ view, studioName, viewer, options, focusItemId, ac
             <div>
               <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--muted)]"><FileText className="h-3.5 w-3.5" />{quote.projectName} / Quote 001</div>
               <div className="flex items-center gap-3"><h1 className="text-[28px] font-semibold tracking-tight">{approval ? "Approved quote" : "Quote"}</h1><span className="rounded-md bg-[var(--canvas)] px-2 py-1 text-[12px] font-medium">V{quote.version}</span>{!approval && <StatusBadge status={status} label={progressLabel(opening)} />}</div>
-              <p className="mt-1.5 text-[13px] text-[var(--muted)]">{quote.room} · {approval ? "Agreed scope and itemized prices." : "Proposed scope and itemized prices."}</p>
+              <p className="mt-1.5 text-[13px] text-[var(--muted)]">{quote.room ? `${quote.room} · ` : ""}{approval ? "Agreed scope and itemized prices." : "Proposed scope and itemized prices."}</p>
+              {actions.edit && view.draftHash && viewer.role === "designer" && <button onClick={actions.edit} className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-3 py-1.5 text-[12px] font-medium text-[var(--primary)] hover:bg-[var(--primary-soft)]"><PencilLine className="h-3.5 w-3.5" />Edit V1</button>}
             </div>
             <div className="text-right"><div className="text-[11px] text-[var(--muted)]">{totalLabel} · USD</div><div className="mt-1 text-[32px] font-semibold tracking-tight tabular-nums">{usd(totals.totalCents)}</div><div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-[var(--muted)]">{status === "draft" ? <><PencilLine className="h-3 w-3" />Not sent yet</> : <><LockKeyhole className="h-3 w-3" />V{quote.version} is read-only</>}</div>{signedV1 && opening.progress.approved > 0 && <div className="mt-1 text-[12px] font-medium text-emerald-700">Approved {usd(opening.progress.approvedTotalCents)}{opening.progress.pending ? ` · ${opening.progress.pending} undecided` : ""}</div>}{(approval || opening.signedAt) && <a href={`/receipts/${quote.projectId}/1`} className="mt-1.5 inline-flex items-center gap-1 text-[12px] font-medium text-[var(--primary)] hover:underline"><FileText className="h-3.5 w-3.5" />Signed version receipt<ChevronRight className="h-3.5 w-3.5" /></a>}</div>
           </div>

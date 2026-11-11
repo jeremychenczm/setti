@@ -59,6 +59,8 @@ export interface QuoteView {
   approval: { approvedBy: string; approvedAt: string } | null;
   /** Quote item id → that line's state. */
   lines: Record<string, OpeningLine>;
+  /** The unsent draft's hash, for the designer to save their edits against; null once V1 is sent. */
+  draftHash?: string | null;
 }
 
 /** One signature: the lines the client decides now. Undecided lines can be signed later. */

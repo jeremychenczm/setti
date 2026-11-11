@@ -7,6 +7,7 @@ import { takeAiBudget } from "@/http/ai-budget";
 import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
 import { isSameOriginRequest } from "@/http/origin";
 import { isRefusal, projectScope, refusalResponse } from "@/http/scope";
+import { documentHash } from "@/opening/document";
 import { openingStore } from "@/opening/server";
 import { OpeningStoreError } from "@/opening/store";
 import { DECLINE_REASON_MAX, QUOTE_MESSAGE_MAX } from "@/opening/types";
@@ -182,7 +183,7 @@ export async function getQuoteResponse(req: NextRequest, rawKey: string) {
     if (account.role === "client" && view.opening.status === "draft") {
       return respond({ code: "NOT_SHARED", error: "The designer has not sent this quote yet." }, 404);
     }
-    return respond(view);
+    return respond({ ...view, draftHash: view.opening.status === "draft" ? documentHash(view.document) : null });
   } catch (error) {
     return missingProject(error) ?? respond({ code: "STORAGE_UNAVAILABLE", error: "Quote storage is unavailable. Make sure the database is running and migrated." }, 503);
   }

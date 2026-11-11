@@ -8,6 +8,8 @@ import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import { documentHash, openingDocument } from "./document";
 import { openingQuotes } from "./schema";
 import { sampleProject } from "@/demo/sample-projects";
+import { createProject } from "@/projects/create";
+import { draftSchema, saveDraft } from "@/projects/draft";
 
 describe.skipIf(!testDatabaseUrl)("sending quote V1 from the project chat", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -73,5 +75,36 @@ describe.skipIf(!testDatabaseUrl)("sending quote V1 from the project chat", () =
     await expect(handle.db.insert(openingQuotes).values({ caseId: otherCase.id, messageId: clientMessage, document, contentHash: documentHash(document), sentBy: "Sofia Martinez" })).rejects.toThrow();
     const [{ count }] = await handle.db.select({ count: sql<number>`count(*)::int` }).from(openingQuotes);
     expect(count).toBe(1);
+  });
+
+  it("lets the designer write V1 until it is sent, and sends exactly what was saved", async () => {
+    const key = await createProject(handle.db, sessionId, "Avery Stone", { name: "Harbor Loft", subtitle: "" });
+    const draft = async () => (await store.getQuote(sessionId, key)).document;
+    const line = { name: "Walnut sideboard", category: "furniture" as const, vendor: "Oak & Iron", room: "Dining", sku: "SB-1", specification: "180 cm, oiled walnut",
+      quantity: 1, unitLabel: "each", unitPriceCents: 240_000, taxCents: 19_800, freightCents: 9_000, leadTimeDays: 42, returnPolicy: "No returns once made.",
+      restockingFeeBps: null, customMade: true, nonReturnable: true, sourceUrl: "https://example.com/sideboard" };
+    await expect(store.sendQuote(sessionId, key, { id: randomUUID(), text: "Here is V1.", sentBy: "Avery Stone" })).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
+
+    const first = await saveDraft(handle.db, sessionId, key, { basedOn: documentHash(await draft()), room: "Dining", clientName: "Morgan Lee", lines: [line] });
+    const saved = await draft();
+    expect(saved).toMatchObject({ room: "Dining", clientName: "Morgan Lee", lines: [{ name: "Walnut sideboard", unitPriceCents: 240_000, source: { kind: "public_reference", url: "https://example.com/sideboard" } }] });
+    // A save over a draft changed since is refused, not merged.
+    await expect(saveDraft(handle.db, sessionId, key, { basedOn: documentHash(openingDocument(sampleProject("willow")!)), room: "", clientName: "", lines: [] })).rejects.toMatchObject({ code: "STALE_DRAFT" });
+    // The line keeps its id when edited again.
+    await saveDraft(handle.db, sessionId, key, { basedOn: first.hash, room: "Dining", clientName: "Morgan Lee", lines: [{ ...line, itemId: saved.lines[0].itemId, quantity: 2 }] });
+    expect((await draft()).lines.map(({ itemId, quantity }) => [itemId, quantity])).toEqual([[saved.lines[0].itemId, 2]]);
+    expect(draftSchema.safeParse({ basedOn: first.hash, room: "", clientName: "", lines: [{ ...line, quantity: 0 }] }).success).toBe(false);
+    expect(draftSchema.safeParse({ basedOn: first.hash, room: "", clientName: "", lines: [{ ...line, unitPriceCents: -1 }] }).success).toBe(false);
+
+    const unnamed = await saveDraft(handle.db, sessionId, key, { basedOn: documentHash(await draft()), room: "Dining", clientName: "", lines: [{ ...line, itemId: saved.lines[0].itemId, quantity: 2 }] });
+    await expect(store.sendQuote(sessionId, key, { id: randomUUID(), text: "Here is V1.", sentBy: "Avery Stone" })).rejects.toMatchObject({ code: "NOT_AVAILABLE", message: expect.stringContaining("prepared for") });
+    await saveDraft(handle.db, sessionId, key, { basedOn: unnamed.hash, room: "Dining", clientName: "Morgan Lee", lines: [{ ...line, itemId: saved.lines[0].itemId, quantity: 2 }] });
+    const sent = await store.sendQuote(sessionId, key, { id: randomUUID(), text: "Here is V1.", sentBy: "Avery Stone" });
+    expect(sent.opening).toMatchObject({ status: "sent", lineCount: 1, totalCents: 2 * 240_000 + 19_800 + 9_000 });
+    expect((await store.getQuote(sessionId, key)).document).toEqual(await draft());
+    await expect(saveDraft(handle.db, sessionId, key, { basedOn: documentHash(await draft()), room: "", clientName: "", lines: [] })).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
+    // A project that starts from a V1 approved before Setti has no draft to write.
+    await store.getCase(sessionId, "maple");
+    await expect(saveDraft(handle.db, sessionId, "maple", { basedOn: documentHash(openingDocument(sampleProject("maple")!)), room: "", clientName: "", lines: [] })).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
   });
 });
