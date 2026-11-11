@@ -1,0 +1,108 @@
+"use client";
+/** Sign-up and sign-in forms. Both go through Better Auth's client, so the browser keeps only the httpOnly session cookie. */
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { authClient } from "@/auth/client";
+
+const FIELD = "w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[14px] outline-none focus:border-[var(--primary)]";
+const BUTTON = "flex w-full items-center justify-center rounded-lg bg-[var(--primary-fill)] px-4 py-2.5 text-[13px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:text-slate-400";
+
+export const PASSWORD_HINT = "At least 10 characters.";
+
+function Shell({ title, children, footer }: { title: string; children: ReactNode; footer: ReactNode }) {
+  return <main className="flex min-h-screen items-center justify-center px-4 py-10">
+    <section className="w-full max-w-sm rounded-2xl border border-[var(--line)] bg-white p-6 shadow-sm">
+      <p className="text-[13px] font-semibold tracking-tight text-[var(--primary)]">setti.</p>
+      <h1 className="mt-2 text-[22px] font-semibold tracking-tight">{title}</h1>
+      <div className="mt-5">{children}</div>
+      <p className="mt-5 text-[13px] text-[var(--muted)]">{footer}</p>
+    </section>
+  </main>;
+}
+
+function Field({ label, hint, ...input }: { label: string; hint?: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+  return <label className="block text-[13px] font-medium">
+    {label}
+    <input {...input} className={`mt-1 ${FIELD}`} />
+    {hint && <span className="mt-1 block text-[12px] font-normal text-[var(--muted)]">{hint}</span>}
+  </label>;
+}
+
+function useSubmit() {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const run = async (work: () => Promise<string | null>) => {
+    setBusy(true); setError(null);
+    try { setError(await work()); } catch { setError("Something went wrong. Try again."); } finally { setBusy(false); }
+  };
+  return { error, busy, run };
+}
+
+export function SignUpForm() {
+  const router = useRouter();
+  const { error, busy, run } = useSubmit();
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") ?? "").trim(), studio = String(form.get("studio") ?? "").trim();
+    void run(async () => {
+      const result = await authClient.signUp.email({ name, email: String(form.get("email") ?? "").trim(), password: String(form.get("password") ?? "") });
+      if (result.error) return result.error.message ?? "That account could not be created.";
+      // The new studio exists once sign-up returns; work in it, and give it the name typed.
+      const own = (await authClient.organization.list()).data?.[0];
+      if (own) {
+        await authClient.organization.setActive({ organizationId: own.id });
+        if (studio) await authClient.organization.update({ organizationId: own.id, data: { name: studio } });
+      }
+      router.push("/account");
+      router.refresh();
+      return null;
+    });
+  };
+  return <Shell title="Create your studio" footer={<>Already have an account? <Link className="font-medium text-[var(--primary)]" href="/sign-in">Sign in</Link></>}>
+    <form className="space-y-3" onSubmit={submit}>
+      <Field label="Your name" name="name" autoComplete="name" required maxLength={100} />
+      <Field label="Studio name" name="studio" autoComplete="organization" maxLength={100} hint="Optional. You can change it later." />
+      <Field label="Email" name="email" type="email" autoComplete="email" required />
+      <Field label="Password" name="password" type="password" autoComplete="new-password" required minLength={10} maxLength={128} hint={PASSWORD_HINT} />
+      {error && <p role="alert" className="text-[13px] text-red-700">{error}</p>}
+      <button className={BUTTON} disabled={busy}>{busy ? "Creating…" : "Create account"}</button>
+    </form>
+  </Shell>;
+}
+
+export function SignInForm() {
+  const router = useRouter();
+  const { error, busy, run } = useSubmit();
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    void run(async () => {
+      const result = await authClient.signIn.email({ email: String(form.get("email") ?? "").trim(), password: String(form.get("password") ?? "") });
+      if (result.error) return result.error.status === 429 ? "Too many attempts. Wait a minute and try again." : "That email and password do not match an account.";
+      router.push("/account");
+      router.refresh();
+      return null;
+    });
+  };
+  return <Shell title="Sign in" footer={<>New to Setti? <Link className="font-medium text-[var(--primary)]" href="/sign-up">Create a studio</Link></>}>
+    <form className="space-y-3" onSubmit={submit}>
+      <Field label="Email" name="email" type="email" autoComplete="email" required />
+      <Field label="Password" name="password" type="password" autoComplete="current-password" required />
+      {error && <p role="alert" className="text-[13px] text-red-700">{error}</p>}
+      <button className={BUTTON} disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+    </form>
+  </Shell>;
+}
+
+export function SignOutButton() {
+  const router = useRouter();
+  const { busy, run } = useSubmit();
+  return <button className={BUTTON} disabled={busy} onClick={() => void run(async () => {
+    await authClient.signOut();
+    router.push("/sign-in");
+    router.refresh();
+    return null;
+  })}>{busy ? "Signing out…" : "Sign out"}</button>;
+}

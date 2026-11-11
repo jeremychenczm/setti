@@ -311,3 +311,4 @@ export { holdChecks, inboxReads, inboxSummaries, itemCancellations, paypalCalls,
 export { demoActivity, demoClocks, trySeeds } from "../try/schema";
 export { openingQuotes, openingWithdrawals } from "../opening/schema";
 export { studioThreads } from "../studio/schema";
+export { users, authSessions, authAccounts, authVerifications, studios, studioMembers, studioInvitations, usersRelations, authSessionsRelations, authAccountsRelations, studiosRelations, studioMembersRelations, studioInvitationsRelations } from "../auth/schema";

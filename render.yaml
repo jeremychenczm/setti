@@ -42,6 +42,9 @@ services:
         sync: false
       - key: SETTI_JOB_SECRET
         generateValue: true
+      # Signs the sign-in cookies; the address comes from SETTI_PUBLIC_URL.
+      - key: BETTER_AUTH_SECRET
+        generateValue: true
       - key: SETTI_AI_PER_HOUR
         value: "40"
       - key: SETTI_AI_PER_DAY
