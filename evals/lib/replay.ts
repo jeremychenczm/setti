@@ -13,8 +13,19 @@ import { join } from "node:path";
 
 export type Flow = "change-draft" | "money-answer" | "inbox-summary";
 
-export interface RecordedAttempt { fingerprint: string; output: unknown }
-export interface RecordedRun { rep: number; pass: number; attempts: RecordedAttempt[] }
+export interface RecordedAttempt {
+  fingerprint: string;
+  output: unknown;
+  /** What the server's check found wrong with this answer, as sent back with the next call. Not part of the fingerprint. */
+  feedback?: string[];
+}
+export interface RecordedRun {
+  rep: number;
+  pass: number;
+  attempts: RecordedAttempt[];
+  /** How the grader scored the run, as written to results.jsonl. */
+  explanation?: string;
+}
 export interface Recording { flow: Flow; case: string; source: string; runs: RecordedRun[] }
 
 export class StaleRecordingError extends Error {}
@@ -39,6 +50,19 @@ export function saveRun(flow: Flow, caseId: string, source: string, run: Recorde
   recording.source = source;
   recording.runs = [...recording.runs.filter((entry) => entry.rep !== run.rep), run].sort((a, b) => a.rep - b.rep);
   writeFileSync(path, `${JSON.stringify(recording, null, 2)}\n`);
+}
+
+/**
+ * A run's model calls as recorded attempts. A call that was a rewrite carries the
+ * problems it was sent back with; they belong to the answer before it. `finalProblems`
+ * are the server's findings on the last answer when it was not accepted either.
+ */
+export function recordedAttempts(calls: { fingerprint?: string; output: unknown; problems?: string[] | null }[], finalProblems: string[] = []): RecordedAttempt[] {
+  return calls.map((call, index) => {
+    const next = calls[index + 1]?.problems;
+    const feedback = next?.length ? next : index === calls.length - 1 && finalProblems.length ? finalProblems : null;
+    return { fingerprint: call.fingerprint!, output: call.output, ...(feedback ? { feedback } : {}) };
+  });
 }
 
 /**

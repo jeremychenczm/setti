@@ -14,7 +14,7 @@ import { DEFAULT_MODEL } from "@/ai/model";
 import { inboxFacts, itemsNow, type InboxView } from "@/payments/inbox-view";
 import type { SummarySentence } from "@/payments/schema";
 import { runHeadless } from "../lib/claude-code";
-import { answersFromTrace, fingerprint, loadRecording, replayer, saveRun, type Replayer } from "../lib/replay";
+import { answersFromTrace, fingerprint, loadRecording, recordedAttempts, replayer, saveRun, type Replayer } from "../lib/replay";
 import { stateErrors } from "./grade";
 import { SCENARIOS, truthOf, type Scenario } from "./scenarios";
 
@@ -54,12 +54,17 @@ writeFileSync(join(flow, "_state.json"), JSON.stringify({
   perf_fields: [{ id: "cost_usd", label: "API-equiv $" }, { id: "in_tokens", label: "In tokens" }, { id: "out_tokens", label: "Out tokens" }, { id: "latency_s", label: "Latency", unit: "s" }],
 }, null, 2));
 
-interface Attempt { sentences: SummarySentence[] | null; kind: string; message?: string; costUsd: number; durationMs: number; inTokens: number; outTokens: number; fingerprint?: string }
+interface Attempt { sentences: SummarySentence[] | null; kind: string; message?: string; costUsd: number; durationMs: number; inTokens: number; outTokens: number; fingerprint?: string; problems?: string[] | null }
 
 function model(recordAttempt: (attempt: Attempt) => void, replay?: Replayer): SummaryModel {
   let current = "";
-  const record = (attempt: Attempt) => recordAttempt({ ...attempt, fingerprint: current });
-  const fingerprinted = (call: SummaryModel): SummaryModel => async (request) => { current = summaryFingerprint(request); return call(request); };
+  let sentBack: string[] | null = null;     // the problems this call was sent back with, if it is a rewrite
+  const record = (attempt: Attempt) => recordAttempt({ ...attempt, fingerprint: current, problems: sentBack });
+  const fingerprinted = (call: SummaryModel): SummaryModel => async (request) => {
+    current = summaryFingerprint(request);
+    sentBack = request.previousAttemptProblems ?? null;
+    return call(request);
+  };
   if (backendName === "replay") return fingerprinted(async () => {
     const sentences = summaryOutputSchema.shape.sentences.parse(replay!.answer(current));
     record({ sentences, kind: "ok", costUsd: 0, durationMs: 0, inTokens: 0, outTokens: 0 });
@@ -160,7 +165,10 @@ async function runJob(scenario: Scenario, rep: number) {
   appendFileSync(resultsPath, `${JSON.stringify(row)}\n`);
   if (backendName === "replay" && !fromTraces && recorded && recorded.pass !== row.grade.pass) replayProblems.push(`${scenario.id} #${rep}: recorded ${recorded.pass ? "PASS" : "FAIL"}, replayed ${row.grade.pass ? "PASS" : "FAIL"}`);
   if (recordRuns && (backendName === "api" || fromTraces)) {
-    saveRun("inbox-summary", scenario.id, source, { rep, pass: row.grade.pass, attempts: attempts.map((attempt) => ({ fingerprint: attempt.fingerprint!, output: attempt.sentences })) });
+    saveRun("inbox-summary", scenario.id, source, {
+      rep, pass: row.grade.pass, explanation: row.explanation.pass,
+      attempts: recordedAttempts(attempts.map((attempt) => ({ fingerprint: attempt.fingerprint, output: attempt.sentences, problems: attempt.problems })), written!.written ? [] : written!.problems),
+    });
   }
   console.log(`  ${pass ? "PASS" : "FAIL"} ${scenario.id} #${rep} · ${row.explanation.pass.slice(0, 400)}`);
 }

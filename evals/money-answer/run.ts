@@ -16,7 +16,7 @@ import type { DraftCase } from "../change-draft/cases";
 import type { Attempt } from "../change-draft/grade";
 import { CASES, type MoneyCase } from "./cases";
 import { assertsClaim } from "./grade";
-import { answersFromTrace, loadRecording, replayer, saveRun, type Replayer } from "../lib/replay";
+import { answersFromTrace, loadRecording, recordedAttempts, replayer, saveRun, type Replayer } from "../lib/replay";
 
 const args = new Map<string, string>();
 for (let i = 2; i < process.argv.length; i++) {
@@ -143,7 +143,7 @@ async function runJob(testCase: MoneyCase, rep: number) {
   appendFileSync(resultsPath, `${JSON.stringify(row)}\n`);
   if (backendName === "replay" && !fromTraces && recorded && recorded.pass !== graded.scores.pass) replayProblems.push(`${testCase.id} #${rep}: recorded ${recorded.pass ? "PASS" : "FAIL"}, replayed ${graded.scores.pass ? "PASS" : "FAIL"}`);
   if (recordRuns && (backendName === "api" || fromTraces)) {
-    saveRun("money-answer", testCase.id, source, { rep, pass: graded.scores.pass, attempts: attempts.map((attempt) => ({ fingerprint: attempt.fingerprint!, output: attempt.output })) });
+    saveRun("money-answer", testCase.id, source, { rep, pass: graded.scores.pass, attempts: recordedAttempts(attempts), explanation: graded.explanation });
   }
   console.log(`  ${graded.scores.pass ? "PASS" : "FAIL"} ${testCase.id} #${rep} · ${graded.explanation.slice(0, 420)}`);
 }
