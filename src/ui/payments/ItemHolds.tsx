@@ -7,7 +7,6 @@ import type { ItemHoldView, ItemHoldsView } from "@/payments/item-holds-view";
 import { centsText, dateTime, Field, inputClass, money, parseDollars } from "../pricing/common";
 import { useTryReadiness } from "../try/useTryReadiness";
 import type { CheckoutView } from "@/payments/types";
-import { DEMO_ACCOUNTS } from "@/accounts/demo";
 import type { CancellationReason } from "@/payments/cancellation";
 import { CancellationRecord, CancelItemForm } from "./CancelItemForm";
 import { demoSupplierNumber } from "./demo-supplier";
@@ -151,7 +150,6 @@ export function ItemHolds({ projectKey, orderId }: { projectKey: CaseKey; orderI
   </section>;
 }
 
-const DESIGNER = DEMO_ACCOUNTS.find((account) => account.role === "designer")!.name;
 const shortDate = (value: string) => new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
 
 function ItemStatus({ line }: { line: ItemHoldView }) {
@@ -249,7 +247,7 @@ function ItemDrawer({ line, now, designer, checkout, canHoldAll, busy, blocked, 
     <button type="button" disabled={disabled} onClick={() => void onCancelItem(line.cancellation!.reason as CancellationReason, line.cancellation!.note)} className={primary}>{busy === `cancel-item:${line.itemId}` ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}Release the {money(line.heldCents)} hold again</button>
     <p className={note}>PayPal has not confirmed the release yet. Nothing was charged for this item.</p>
   </> : <p className={note}>{line.heldCents > 0 ? "The studio is releasing this hold on PayPal. Nothing was charged for this item." : "Cancelled. Nothing was charged, and nothing is held for it now."}</p>;
-  else if (cancelling) next = <CancelItemForm itemName={line.label} heldCents={line.heldCents} designer={DESIGNER} disabled={disabled} busy={busy === `cancel-item:${line.itemId}`}
+  else if (cancelling) next = <CancelItemForm itemName={line.label} heldCents={line.heldCents} disabled={disabled} busy={busy === `cancel-item:${line.itemId}`}
     onBack={() => setCancelling(false)} onSubmit={async (reason, text) => { if (await onCancelItem(reason, text)) setCancelling(false); }} />;
   const cancelLink = line.canCancelItem && !cancelling && <button type="button" disabled={disabled} onClick={() => setCancelling(true)}
     className="mt-3 inline-flex w-full items-center justify-center gap-1.5 text-[12px] font-medium text-slate-600 underline-offset-2 hover:text-red-700 hover:underline disabled:opacity-50"><Ban className="h-3.5 w-3.5" />{line.heldCents > 0 ? "Cancel hold…" : "Cancel item…"}</button>;

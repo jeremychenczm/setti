@@ -92,7 +92,7 @@ export function DesignServicesPayment({ projectKey, orderId, onPaid }: { project
   return <section id="design-services" aria-labelledby="design-services-title" className="mt-6 rounded-xl border border-[var(--line)] bg-white p-5">
     <div className="flex flex-wrap items-center gap-2">
       <span className="flex h-8 w-8 items-center justify-center rounded-full bg-violet-50 text-violet-700"><Palette className="h-4 w-4" /></span>
-      <div className="mr-auto"><h2 id="design-services-title" className="text-[13px] font-semibold">Design services · V{view.basis.version}</h2><p className="text-[11px] text-[var(--muted)]">{charged ? 'Already paid · no additional design fee is due for this version' : "Lee Studio’s approved services, paid once with PayPal or a card"}</p></div>
+      <div className="mr-auto"><h2 id="design-services-title" className="text-[13px] font-semibold">Design services · V{view.basis.version}</h2><p className="text-[11px] text-[var(--muted)]">{charged ? 'Already paid · no additional design fee is due for this version' : "The studio’s approved services, paid once with PayPal or a card"}</p></div>
       <span className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${charged ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"}`}>{charged ? "Paid" : `${money(view.dueCents)} due`}</span>
     </div>
     {/* Paying looks like a checkout: what is being paid on the left, how to pay on the right. */}

@@ -4,6 +4,7 @@ import { studios } from "@/auth/schema";
 import { chatCases } from "@/chat/schema";
 import type { CaseKey } from "@/chat/types";
 import type { Db } from "@/db/client";
+import { sampleProject } from "@/demo/sample-projects";
 import type { ProjectQuote, ProjectStart } from "./settings";
 
 type Writer = Pick<Db, "insert" | "select">;
@@ -37,4 +38,17 @@ export async function findProject(db: Pick<Db, "select">, studioId: string, key:
 export async function projectKeys(db: Pick<Db, "select">, studioId: string): Promise<CaseKey[]> {
   const rows = await db.select({ key: chatCases.projectKey }).from(chatCases).where(eq(chatCases.sessionId, studioId)).orderBy(asc(chatCases.createdAt), asc(chatCases.projectKey));
   return rows.map((row) => row.key);
+}
+
+/**
+ * Whether the studio has this project, after giving a demo studio, or a session
+ * from before studios, the sample of that name the first time it opens it. A
+ * real studio has only the projects its designers created.
+ */
+export async function projectAvailable(db: Writer, studioId: string, key: CaseKey): Promise<boolean> {
+  if (await findProject(db, studioId, key)) return true;
+  const sample = sampleProject(key);
+  if (!sample || await isRealStudio(db, studioId)) return false;
+  await insertProject(db, studioId, key, sample);
+  return true;
 }

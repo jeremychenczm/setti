@@ -16,7 +16,7 @@ type Loaded = { receipt: VersionReceipt } | { error: string };
  * sections, ruled tables and a signature certificate. On paper it prints as
  * Letter pages with the receipt number and page count in the footer.
  */
-export function ReceiptPage({ projectKey, version }: { projectKey: string; version: string }) {
+export function ReceiptPage({ projectKey, version, studioName }: { projectKey: string; version: string; studioName: string }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const source = `/api/receipts/${encodeURIComponent(projectKey)}/${encodeURIComponent(version)}`;
 
@@ -44,7 +44,7 @@ export function ReceiptPage({ projectKey, version }: { projectKey: string; versi
       </div>
       {!loaded && <p role="status" className="flex items-center gap-2 rounded-xl bg-white p-8 text-[13px] text-[var(--muted)]"><LoaderCircle className="h-4 w-4 animate-spin" />Loading the receipt…</p>}
       {loaded && "error" in loaded && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-[12px] text-red-800">{loaded.error}</p>}
-      {receipt && <><PrintRules receiptNo={receipt.receiptNo} /><ReceiptDocument receipt={receipt} /></>}
+      {receipt && <><PrintRules receiptNo={receipt.receiptNo} /><ReceiptDocument receipt={receipt} studioName={studioName} /></>}
     </main>
   </div>;
 }
@@ -115,7 +115,7 @@ function Fact({ label, value, strong }: { label: string; value: ReactNode; stron
   return <div className="flex justify-between gap-3 border-b border-dotted border-[var(--line)] py-1.5 text-[12.5px]"><span className="text-[var(--muted)]">{label}</span><span className={`text-right tabular-nums ${strong ? "font-bold" : "font-medium"}`}>{value}</span></div>;
 }
 
-export function ReceiptDocument({ receipt }: { receipt: VersionReceipt }) {
+export function ReceiptDocument({ receipt, studioName = "" }: { receipt: VersionReceipt; studioName?: string }) {
   const { project, version, agreement, totals, pending } = receipt;
   const seal = sealOf(receipt);
   const groups = paymentGroups(receipt);
@@ -146,7 +146,7 @@ export function ReceiptDocument({ receipt }: { receipt: VersionReceipt }) {
     </div>
 
     <dl className="grid border-y border-[var(--line)] sm:grid-cols-3">
-      {[["Client", project.client, project.name], ["Designer", project.designer, "Lee Studio"], ["Agreement", `${project.name} quote`, version.basedOn ? `Version ${version.number}, based on version ${version.basedOn}` : "Version 1"]].map(([label, value, note], index) =>
+      {[["Client", project.client, project.name], ["Designer", project.designer, studioName], ["Agreement", `${project.name} quote`, version.basedOn ? `Version ${version.number}, based on version ${version.basedOn}` : "Version 1"]].map(([label, value, note], index) =>
         <div key={label} className={`py-3 ${index ? "border-t border-[var(--line)] sm:border-l sm:border-t-0 sm:pl-3.5" : ""}`}>
           <dt className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--muted)]">{label}</dt>
           <dd className="mt-1 font-semibold">{value}</dd>

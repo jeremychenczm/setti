@@ -7,7 +7,9 @@ import { chatCases, projectClients } from "@/chat/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "@/db/testing";
 import { actorFrom, homeOf, projectAccess, scopeOf } from "./identity";
 import { sampleProject } from "@/demo/sample-projects";
+import { createProject } from "@/projects/create";
 import { insertProject } from "@/projects/store";
+import { projectsFor } from "@/projects/summary";
 
 const PASSWORD = "correct horse battery";
 /** The `name=value` pairs a response sets, as a request's Cookie header. */
@@ -24,9 +26,10 @@ describe.skipIf(!testDatabaseUrl)("who a request is", () => {
     const studio = await auth.api.createOrganization({ body: { name: defaultStudioName(name), slug: newStudioSlug() }, headers: new Headers({ cookie }) });
     return { cookie, studioId: studio!.id };
   }
-  /** Adds the account with this email as the client of `key` in a studio. */
-  async function addClient(email: string, studioId: string, key: "maple" | "willow") {
-    await insertProject(handle.db, studioId, key, sampleProject(key)!);
+  /** Adds the account as the client of `key`, a sample project unless the studio already has it. */
+  async function addClient(email: string, studioId: string, key: string) {
+    const sample = sampleProject(key);
+    if (sample) await insertProject(handle.db, studioId, key, sample);
     const [project] = await handle.db.select({ id: chatCases.id }).from(chatCases).where(and(eq(chatCases.sessionId, studioId), eq(chatCases.projectKey, key)));
     const [user] = await handle.db.select({ id: users.id }).from(users).where(eq(users.email, email));
     await handle.db.insert(projectClients).values({ caseId: project.id, userId: user.id });
@@ -91,5 +94,25 @@ describe.skipIf(!testDatabaseUrl)("who a request is", () => {
     const actor = (await actorOf(emma))!;
     expect(actor.projects.map((project) => [project.studioId, project.key])).toEqual([[avery.studioId, "maple"], [jordan.studioId, "willow"]]);
     expect(homeOf(actor).sessionId).toBe(avery.studioId);
+  });
+
+  it("lists a designer only their studio's projects, and a client only the ones they were added to", async () => {
+    const jordan = await designer("jordan@example.com", "Jordan Lee");
+    const avery = await designer("avery@example.com", "Avery Stone");
+    const emma = await signUp("emma@example.com", "Emma Park");
+    const kitchen = await createProject(handle.db, jordan.studioId, "Jordan Lee", { name: "Kitchen remodel", subtitle: "Kitchen and dining" });
+    const again = await createProject(handle.db, jordan.studioId, "Jordan Lee", { name: "Kitchen  Remodel!", subtitle: "" });
+    await createProject(handle.db, avery.studioId, "Avery Stone", { name: "Kitchen remodel", subtitle: "" });
+    expect([kitchen, again]).toEqual(["kitchen-remodel", "kitchen-remodel-2"]);
+    await addClient("emma@example.com", jordan.studioId, "kitchen-remodel");
+
+    const ofJordan = await projectsFor(handle.db, (await actorOf(jordan.cookie))!);
+    expect(ofJordan.map((project) => [project.key, project.name, project.client?.name ?? null])).toEqual([
+      ["kitchen-remodel", "Kitchen remodel", "Emma Park"], ["kitchen-remodel-2", "Kitchen  Remodel!", null],
+    ]);
+    expect(ofJordan[0]).toMatchObject({ subtitle: "Kitchen and dining", designer: { name: "Jordan Lee" }, quote: { lines: [] } });
+    expect((await projectsFor(handle.db, (await actorOf(avery.cookie))!)).map((project) => project.key)).toEqual(["kitchen-remodel"]);
+    const ofEmma = await projectsFor(handle.db, (await actorOf(emma))!);
+    expect(ofEmma.map((project) => [project.key, project.designer.name])).toEqual([["kitchen-remodel", "Jordan Lee"]]);
   });
 });

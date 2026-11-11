@@ -2,7 +2,6 @@
 
 import { Check, ClipboardCheck, LoaderCircle, LockKeyhole, RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { DEMO_ACCOUNTS } from "@/accounts/demo";
 import type { ApprovalWorkspace, DecideChangeOrderInput } from "@/approval/types";
 import { dateTime, Field, inputClass } from "./common";
 import { FundingImpactPreview } from "./FundingImpactPreview";
@@ -27,9 +26,9 @@ async function requestWorkspace(orderId: string, input?: DecideChangeOrderInput)
   return body;
 }
 
-const DESIGNER = DEMO_ACCOUNTS.find((account) => account.role === "designer")!.name.split(" ")[0];
 /** What the demo client says to the designer when confirming, prefilled and editable; it is their message in the chat. */
-export const confirmationNote = (version: number) => `Thanks, ${DESIGNER}. V${version} looks right to me, so please go ahead and place the orders.`;
+/** The note a client sends with a confirmation, addressed to the order's designer by first name. */
+export const confirmationNote = (version: number, designerName: string) => `Thanks, ${designerName.replace(/\s*\(demo designer\)$/, "").split(" ")[0]}. V${version} looks right to me, so please go ahead and place the orders.`;
 const today = () => new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" });
 
 interface ApprovalPanelProps {
@@ -44,7 +43,7 @@ export function ApprovalPanel({ workspace, loading, onChange, onBusyChange }: Ap
   const { order, decision } = view;
   // The demo fills in the client's review, signature and message so a test confirmation is one click; each stays editable.
   const [signature, setSignature] = useState(clientName ?? "");
-  const [note, setNote] = useState(() => confirmationNote(order.version));
+  const [note, setNote] = useState(() => confirmationNote(order.version, order.designerName));
   const [acknowledged, setAcknowledged] = useState(true);
   const [busy, setBusy] = useState<"approved" | "changes_requested" | "check" | null>(null);
   const [pending, setPending] = useState<DecideChangeOrderInput | null>(null);

@@ -6,6 +6,7 @@ import type { DemoAccount } from "@/accounts/demo";
 import type { CaseKey } from "@/chat/types";
 import type { QuoteView, SignOpeningInput } from "@/opening/types";
 import { QuoteReport, type QuoteActions } from "./QuoteReport";
+import type { QuoteOption } from "./QuoteReport";
 
 type Loaded = { view: QuoteView } | { notShared: true } | { error: string };
 
@@ -26,8 +27,8 @@ const failure = (body: unknown, fallback: string) => (body as { error?: string }
  * sent, signs only their own project, and only the designer drops lines.
  * Remount it (key) to load another project or account.
  */
-export function QuoteBoard({ projectKey, viewer, options, focusItemId, onBack, onSelectQuote, onOpenChat }: {
-  projectKey: CaseKey; viewer: DemoAccount; options: CaseKey[]; focusItemId?: string | null;
+export function QuoteBoard({ projectKey, studioName, viewer, options, focusItemId, onBack, onSelectQuote, onOpenChat }: {
+  projectKey: CaseKey; studioName: string; viewer: DemoAccount; options: QuoteOption[]; focusItemId?: string | null;
   onBack: () => void; onSelectQuote: (id: CaseKey) => void; onOpenChat: () => void;
 }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -84,7 +85,7 @@ export function QuoteBoard({ projectKey, viewer, options, focusItemId, onBack, o
     },
   };
 
-  if (loaded && "view" in loaded) return <QuoteReport view={loaded.view} viewer={viewer} options={options} focusItemId={focusItemId} actions={actions} onBack={onBack} onSelectQuote={onSelectQuote} onOpenChat={onOpenChat} />;
+  if (loaded && "view" in loaded) return <QuoteReport view={loaded.view} studioName={studioName} viewer={viewer} options={options} focusItemId={focusItemId} actions={actions} onBack={onBack} onSelectQuote={onSelectQuote} onOpenChat={onOpenChat} />;
   return (
     <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-white shadow-sm">
       <header className="flex items-center gap-3 border-b border-[var(--line)] px-6 py-3.5"><button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-[var(--muted)] hover:text-[var(--ink)]"><ArrowLeft className="h-3.5 w-3.5" />Back to chats</button></header>

@@ -1,18 +1,26 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { requireViewer } from "@/auth/viewer";
-import { STUDIO_CASES, studioCase } from "@/demo/studio-cases";
+import { requireWorkspace } from "@/auth/viewer";
+import { studioCase } from "@/demo/studio-cases";
 import { Workspace } from "@/ui/workspace/Workspace";
 
-export const dynamicParams = false;
-export function generateStaticParams() { return STUDIO_CASES.map((project) => ({ caseId: project.id })); }
 export async function generateMetadata({ params }: { params: Promise<{ caseId: string }> }): Promise<Metadata> {
   return { title: `${studioCase((await params).caseId)?.name ?? "Project"} · Chat | Setti`, robots: { index: false, follow: false } };
 }
-export default async function StudioChatPage({ params }: { params: Promise<{ caseId: string }> }) {
-  const project = studioCase((await params).caseId);
-  if (!project) notFound();
-  const { account, demo } = await requireViewer(`/chats/${project.id}`);
-  if (account.role !== "designer") redirect(account.projectKey ? `/chats/${account.projectKey}` : "/account");
-  return <Workspace account={account} demo={demo} initialView="chats" initialPreparedCase={project.id} initialCase="maple" initialQuote="maple" />;
+
+/** A project's chat: one of the viewer's projects, or one of the demo's prepared studio projects. */
+export default async function ProjectChatPage({ params }: { params: Promise<{ caseId: string }> }) {
+  const key = (await params).caseId;
+  const prepared = studioCase(key);
+  const { account, demo, projects } = await requireWorkspace(`/chats/${encodeURIComponent(key)}`, prepared ? undefined : key);
+  const home = projects[0]?.key;
+  if (prepared) {
+    if (account.role !== "designer") redirect(home ? `/chats/${home}` : "/chats");
+    return <Workspace account={account} demo={demo} projects={projects} initialView="chats" initialPreparedCase={prepared.id} initialCase={home} initialQuote={home} />;
+  }
+  if (!projects.some((project) => project.key === key)) {
+    if (account.role === "client" && home) redirect(`/chats/${home}`);
+    notFound();
+  }
+  return <Workspace account={account} demo={demo} projects={projects} initialView="chats" initialCase={key} initialQuote={key} />;
 }

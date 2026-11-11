@@ -5,9 +5,13 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { DemoAccount } from "@/accounts/demo";
+import { isCaseKey } from "@/chat/cases";
 import type { CaseKey } from "@/chat/types";
 import { appDb } from "@/db/shared";
 import { actorFrom, homeOf, scopeOf, type Actor } from "@/http/identity";
+import { projectAvailable } from "@/projects/store";
+import { projectsFor } from "@/projects/summary";
+import type { ProjectSummary } from "@/projects/types";
 import { appAuth } from "./app";
 
 export interface Viewer {
@@ -32,4 +36,14 @@ export async function requireViewer(path: string, key?: CaseKey): Promise<Viewer
   if (!actor) redirect(signInPath(path));
   const account = (key && scopeOf(actor, key)?.account) || homeOf(actor).account;
   return { actor, account, demo: actor.demoPersona !== null };
+}
+
+/**
+ * What a workspace page needs: the signed-in viewer and the projects they work
+ * in. Opening `key` in a demo studio first gives it the sample of that name.
+ */
+export async function requireWorkspace(path: string, key?: CaseKey): Promise<Viewer & { projects: ProjectSummary[] }> {
+  const viewer = await requireViewer(path, key);
+  if (key && isCaseKey(key) && viewer.actor.studio) await projectAvailable(appDb(), viewer.actor.studio.id, key);
+  return { ...viewer, projects: await projectsFor(appDb(), viewer.actor) };
 }

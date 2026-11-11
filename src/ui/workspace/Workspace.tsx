@@ -1,17 +1,16 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { FolderPlus, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
-import { canOpenProject, clientOf, DEMO_ACCOUNTS, type AccountId, type DemoAccount } from "@/accounts/demo";
+import { DEMO_ACCOUNTS, type AccountId, type DemoAccount } from "@/accounts/demo";
 import type { CaseKey, CaseMessage } from "@/chat/types";
 import { isCaseKey } from "@/chat/cases";
 import { STUDIO_CASES, studioCase } from "@/demo/studio-cases";
-import { mapleApprovedQuote } from "@/quotes/demo-quote";
-import type { QuoteDocument } from "@/quotes/types";
-import { willowQuote } from "@/quotes/willow-quote";
+import type { ProjectPerson, ProjectSummary } from "@/projects/types";
 import { latestChatMessage } from "../chat/activity";
-import type { Person } from "../demo-data";
 import { ConversationList, type ChatPreview, type ProjectChat } from "./ConversationList";
+import { NewProjectDialog } from "./NewProjectDialog";
 import { Sidebar, type View } from "./Sidebar";
 import { useInboxBadge } from "./useInboxBadge";
 import { TrySeedNotice } from "../try/TrySeedNotice";
@@ -36,35 +35,31 @@ const MoneyModule = dynamic(() => import("../money/MoneyDesk").then((m) => m.Mon
 const StudioProjectChat = dynamic(() => import("../studio/StudioProjectChat").then((m) => m.StudioProjectChat));
 const StudioProjectRecords = dynamic(() => import("../studio/PreparedProject").then((m) => m.StudioProjectRecords));
 
-/** Each project's prepared V1, shown until the server's snapshot arrives. */
-const quotes: Record<CaseKey, QuoteDocument> = { willow: willowQuote, maple: mapleApprovedQuote };
-
-const projects: Omit<ProjectChat, "counterpart">[] = [
-  { key: "willow", title: "Willow Residence", subtitle: "Whole home" },
-  { key: "maple", title: "Maple Ave Café", subtitle: "Counter and back bar" },
-];
-const designer = DEMO_ACCOUNTS.find((person) => person.role === "designer")!;
+/** A project's client before one is added. */
+const NO_CLIENT: ProjectPerson = { id: "no-client", name: "No client yet", role: "client" };
 
 /** How the chat list names a message: "You" for the signed-in account, otherwise the sender's first name. */
-function chatPreview(account: DemoAccount, client: Person, message: { actor: CaseMessage["actor"]; text: string; at: string }): ChatPreview {
-  const from = message.actor === "assistant" ? "Setti" : message.actor === account.role ? "You" : (message.actor === "designer" ? designer : client).name.split(" ")[0];
+function chatPreview(account: DemoAccount, people: { designer: ProjectPerson; client: ProjectPerson }, message: { actor: CaseMessage["actor"]; text: string; at: string }): ChatPreview {
+  const from = message.actor === "assistant" ? "Setti" : message.actor === account.role ? "You" : people[message.actor].name.split(" ")[0];
   return { from, text: message.text.replace(/\s+/g, " ").trim(), at: message.at };
-}
-
-/** A client account only ever lands on its own project. */
-function reachable(account: DemoAccount, wanted: CaseKey): CaseKey {
-  return canOpenProject(account, wanted) ? wanted : account.projectKey ?? wanted;
 }
 
 /**
  * The signed-in workspace. `account` is who the server signed in, as the page's
- * project sees them; `demo` lets a demo visitor switch between the demo's people.
+ * project sees them; `projects` are the ones they work in, read on the server;
+ * `demo` lets a demo visitor switch between the demo's people.
  */
-export function Workspace({ account, demo = false, initialView = "chats", initialQuote = "willow", initialCase, initialPreparedCase = null, initialRecordsTab = "quote" }: { account: DemoAccount; demo?: boolean; initialView?: View; initialQuote?: CaseKey; initialCase?: CaseKey; initialPreparedCase?: string | null; initialRecordsTab?: "quote" | "payments" }) {
+export function Workspace({ account, projects, demo = false, initialView = "chats", initialQuote, initialCase, initialPreparedCase = null, initialRecordsTab = "quote" }: { account: DemoAccount; projects: ProjectSummary[]; demo?: boolean; initialView?: View; initialQuote?: CaseKey; initialCase?: CaseKey; initialPreparedCase?: string | null; initialRecordsTab?: "quote" | "payments" }) {
+  const canOpen = (key: string) => projects.some((project) => project.key === key);
+  /** A project the viewer works in: the one asked for, else their first. */
+  const reachable = (wanted: CaseKey | undefined): CaseKey | null => wanted && canOpen(wanted) ? wanted : projects[0]?.key ?? null;
   const [switchError, setSwitchError] = useState<string | null>(null);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [view, setView] = useState<View>(initialView);
-  const [quoteId, setQuoteId] = useState<CaseKey>(() => reachable(account, initialQuote));
-  const [activeId, setActiveId] = useState<CaseKey>(() => reachable(account, initialCase ?? (initialView === "quotes" ? initialQuote : "willow")));
+  const [quoteId, setQuoteId] = useState<CaseKey | null>(() => reachable(initialQuote ?? initialCase));
+  const [activeId, setActiveId] = useState<CaseKey | null>(() => reachable(initialCase ?? initialQuote));
+  const activeProject = projects.find((project) => project.key === activeId) ?? null;
+  const peopleOf = (project: ProjectSummary) => ({ designer: project.designer, client: project.client ?? NO_CLIENT });
   /** The quote line to open, when the report is opened from a message about it. */
   const [focusItemId, setFocusItemId] = useState<string | null>(null);
   const [preparedCaseId, setPreparedCaseId] = useState<string | null>(initialPreparedCase);
@@ -83,21 +78,22 @@ export function Workspace({ account, demo = false, initialView = "chats", initia
       if (!match) return;
       const id = decodeURIComponent(match[2]);
       if (studioCase(id) && account.role === "designer") setPreparedCaseId(id);
-      else if (isCaseKey(id) && canOpenProject(account, id)) { setPreparedCaseId(null); setActiveId(id); setQuoteId(id); }
+      else if (isCaseKey(id) && canOpen(id)) { setPreparedCaseId(null); setActiveId(id); setQuoteId(id); }
       else return;
       setRecordsTab(url.searchParams.get("tab") === "payments" ? "payments" : "quote");
       setView(match[1] === "quotes" ? "quotes" : "chats");
     }
     window.addEventListener("popstate", restoreRoute);
     return () => window.removeEventListener("popstate", restoreRoute);
-  }, [account]);
+  });
 
   function showView(next: View) {
     if ((next === "projects" || next === "money") && account.role !== "designer") return;
     setView(next);
     if (next === "quotes") setRecordsTab("quote");
-    const path = next === "projects" ? "/studio" : next === "money" ? "/money" : next === "inbox" ? "/inbox" : next === "quotes" ? `/quotes/${preparedProject?.id ?? quoteId}` : `/chats/${preparedProject?.id ?? activeId}`;
-    window.history.replaceState(window.history.state, "", path);
+    const project = next === "quotes" ? preparedProject?.id ?? quoteId : preparedProject?.id ?? activeId;
+    const path = next === "projects" ? "/studio" : next === "money" ? "/money" : next === "inbox" ? "/inbox" : project ? `/${next === "quotes" ? "quotes" : "chats"}/${project}` : null;
+    if (path) window.history.replaceState(window.history.state, "", path);
   }
 
   function openPreparedProject(id: string) {
@@ -109,34 +105,39 @@ export function Workspace({ account, demo = false, initialView = "chats", initia
 
   /** The latest message of each live project chat: read once per account, then kept current by the open chat. */
   const [livePreviews, setLivePreviews] = useState<Partial<Record<CaseKey, ChatPreview | null>>>({});
-  const showLatest = (key: CaseKey, message: CaseMessage | null) =>
-    setLivePreviews((previous) => ({ ...previous, [key]: message ? chatPreview(account, clientOf(key), { ...message, at: message.createdAt }) : null }));
+  const showLatest = (project: ProjectSummary, message: CaseMessage | null) =>
+    setLivePreviews((previous) => ({ ...previous, [project.key]: message ? chatPreview(account, peopleOf(project), { ...message, at: message.createdAt }) : null }));
   useEffect(() => {
     const controller = new AbortController();
     for (const project of projects) {
-      if (!canOpenProject(account, project.key)) continue;
       fetch(`/api/chat/${project.key}`, { cache: "no-store", signal: controller.signal })
         .then((response) => response.ok ? response.json() as Promise<{ messages?: CaseMessage[] }> : null)
         .then((snapshot) => {
           const latest = Array.isArray(snapshot?.messages) ? latestChatMessage(snapshot.messages) : null;
-          setLivePreviews((previous) => ({ ...previous, [project.key]: latest ? chatPreview(account, clientOf(project.key), { ...latest, at: latest.createdAt }) : null }));
+          setLivePreviews((previous) => ({ ...previous, [project.key]: latest ? chatPreview(account, peopleOf(project), { ...latest, at: latest.createdAt }) : null }));
         })
         .catch(() => undefined);
     }
     return () => controller.abort();
-  }, [account]);
+    // The list is read once per page: a new project opens a new page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account.id]);
 
-  const visibleProjects: ProjectChat[] = projects.filter((project) => canOpenProject(account, project.key))
-    .map((project) => ({ ...project, counterpart: account.role === "designer" ? clientOf(project.key) : designer, preview: livePreviews[project.key] ?? null }));
-  const conversations: ProjectChat<string>[] = [...visibleProjects, ...(account.role === "designer" ? STUDIO_CASES.map((project) => {
+  const visibleProjects: ProjectChat[] = projects.map((project) => {
+    const counterpart = account.role === "designer" ? project.client ?? { id: `${project.key}:project`, name: project.name, role: "client" as const } : project.designer;
+    const subtitle = account.role === "designer" && !project.client ? ["No client yet", project.subtitle].filter(Boolean).join(" · ") : project.subtitle;
+    return { key: project.key, title: project.name, subtitle, counterpart, preview: livePreviews[project.key] ?? null };
+  });
+  // The demo's prepared studio projects sit beside a demo studio's own.
+  const conversations: ProjectChat<string>[] = [...visibleProjects, ...(account.role === "designer" && demo ? STUDIO_CASES.map((project) => {
     const counterpart = { id: project.id, name: project.client.name, role: "client" as const };
     const latest = project.messages.at(-1);
-    return { key: project.id, title: project.name, subtitle: project.industry, counterpart, preview: latest ? chatPreview(account, counterpart, latest) : null };
+    return { key: project.id, title: project.name, subtitle: project.industry, counterpart, preview: latest ? chatPreview(account, { designer: { id: account.id, name: account.name, role: "designer" }, client: counterpart }, latest) : null };
   }) : [])];
 
   const open = (key: string) => {
     if (studioCase(key)) { openPreparedProject(key); return; }
-    if (!isCaseKey(key) || !canOpenProject(account, key)) return;
+    if (!isCaseKey(key) || !canOpen(key)) return;
     setPreparedCaseId(null);
     setActiveId(key);
     setView("chats");
@@ -144,6 +145,7 @@ export function Workspace({ account, demo = false, initialView = "chats", initia
   };
 
   const openCaseQuote = (itemId?: string) => {
+    if (!activeId) return;
     setQuoteId(activeId);
     setFocusItemId(itemId ?? null);
     setView("quotes");
@@ -153,7 +155,8 @@ export function Workspace({ account, demo = false, initialView = "chats", initia
   const openQuoteChat = () => {
     setActiveId(quoteId);
     setView("chats");
-    window.history.replaceState(window.history.state, "", `/chats/${preparedProject?.id ?? quoteId}`);
+    const project = preparedProject?.id ?? quoteId;
+    if (project) window.history.replaceState(window.history.state, "", `/chats/${project}`);
   };
 
   const openPreparedRecords = (tab: "quote" | "payments") => {
@@ -168,7 +171,7 @@ export function Workspace({ account, demo = false, initialView = "chats", initia
     if (!demo) return;
     const person = DEMO_ACCOUNTS.find((option) => option.id === id);
     if (!person) return;
-    const clientOnly = person.role === "client" && (view === "projects" || view === "money" || preparedCaseId || !canOpenProject(person, view === "quotes" ? quoteId : activeId));
+    const clientOnly = person.role === "client" && (view === "projects" || view === "money" || !!preparedCaseId || (view === "quotes" ? quoteId : activeId) !== person.projectKey);
     setSwitchError(null);
     void switchPersona(id, next ?? (clientOnly ? `/chats/${person.projectKey}` : undefined)).then(setSwitchError);
   };
@@ -178,26 +181,48 @@ export function Workspace({ account, demo = false, initialView = "chats", initia
       {/* The icon rail and the chat list are one panel, as in a messaging app; other modules keep only the rail. */}
       <div className="flex min-h-0 shrink-0 overflow-hidden rounded-xl bg-white shadow-sm">
         <Sidebar view={view} onView={showView} account={account} demo={demo} onSwitchAccount={switchAccount} badges={{ inbox: inboxCount }} />
-        {view === "chats" && <div className="hidden min-h-0 border-l border-[var(--line)] lg:flex"><ConversationList projects={conversations} activeId={preparedProject?.id ?? activeId} onOpen={open} /></div>}
+        {view === "chats" && <div className="hidden min-h-0 border-l border-[var(--line)] lg:flex"><ConversationList projects={conversations} activeId={preparedProject?.id ?? activeId} onOpen={open}
+          action={account.role === "designer" ? <button type="button" onClick={() => setNewProjectOpen(true)} aria-label="New project" title="New project" className="rounded-lg p-1.5 text-[var(--primary)] hover:bg-[var(--primary-soft)]"><Plus className="h-4 w-4" /></button> : undefined} /></div>}
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
         <DemoEndedNotice />
         {switchError && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-800">{switchError}</p>}
-        {view !== "projects" && view !== "money" && !preparedProject && <TrySeedNotice projectKey={view === "chats" ? activeId : quoteId} account={account} onSwitchAccount={switchAccount} onOpenChat={() => { setActiveId(view === "quotes" ? quoteId : activeId); setView("chats"); }} onOpenInbox={() => showView("inbox")} currentView={view} />}
+        {demo && view !== "projects" && view !== "money" && !preparedProject && (view === "chats" ? activeId : quoteId) && <TrySeedNotice projectKey={(view === "chats" ? activeId : quoteId)!} account={account} onSwitchAccount={switchAccount} onOpenChat={() => { setActiveId(view === "quotes" ? quoteId : activeId); setView("chats"); }} onOpenInbox={() => showView("inbox")} currentView={view} />}
         <div className="flex min-h-0 min-w-0 flex-1 gap-2">
           {view === "projects" && account.role === "designer" && <StudioProjectsModule onOpenProject={openPreparedProject} />}
           {view === "inbox" && <InboxModule key={account.id} account={account} />}
           {view === "money" && account.role === "designer" && <MoneyModule onOpenInbox={() => showView("inbox")} />}
           {view === "chats" && (preparedProject
             ? <StudioProjectChat key={preparedProject.id} project={preparedProject} projects={conversations} onSelectProject={open} onOpenRecords={openPreparedRecords} />
-            : <CaseChat key={`${account.id}:${activeId}`} projectKey={activeId} quote={quotes[activeId]} account={account} demo={demo} onSwitchAccount={switchAccount} onOpenQuote={openCaseQuote} onSelectCase={open} conversationOptions={conversations} onSelectProject={open} onLatest={(message) => showLatest(activeId, message)} />)}
+            : activeProject
+              ? <CaseChat key={`${account.id}:${activeProject.key}`} projectKey={activeProject.key} quote={activeProject.quote} designer={activeProject.designer} client={activeProject.client ?? NO_CLIENT} account={account} demo={demo} onSwitchAccount={switchAccount} onOpenQuote={openCaseQuote} onSelectCase={open} conversationOptions={conversations} onSelectProject={open} onLatest={(message) => showLatest(activeProject, message)} />
+              : <NoProject designer={account.role === "designer"} onNew={() => setNewProjectOpen(true)} />)}
 
           {view === "quotes" && preparedProject && <StudioProjectRecords key={`${preparedProject.id}:${recordsTab}`} project={preparedProject} initialTab={recordsTab} onBack={openQuoteChat} onSelectTab={openPreparedRecords} />}
-          {view === "quotes" && !preparedProject && <QuoteBoard key={`${account.id}:${quoteId}:${focusItemId ?? ""}`} projectKey={quoteId} viewer={account} options={visibleProjects.map((project) => project.key)} focusItemId={focusItemId}
-            onSelectQuote={(id) => { setQuoteId(id); setActiveId(id); setFocusItemId(null); }} onBack={openQuoteChat} onOpenChat={openQuoteChat} />}
+          {view === "quotes" && !preparedProject && (quoteId ? <QuoteBoard key={`${account.id}:${quoteId}:${focusItemId ?? ""}`} projectKey={quoteId} studioName={projects.find((project) => project.key === quoteId)?.studio ?? ""} viewer={account} options={projects.map((project) => ({ key: project.key, label: project.subtitle ? `${project.name} · ${project.subtitle}` : project.name }))} focusItemId={focusItemId}
+            onSelectQuote={(id) => { setQuoteId(id); setActiveId(id); setFocusItemId(null); }} onBack={openQuoteChat} onOpenChat={openQuoteChat} />
+            : <NoProject designer={account.role === "designer"} onNew={() => setNewProjectOpen(true)} />)}
         </div>
       </div>
+      {newProjectOpen && <NewProjectDialog onClose={() => setNewProjectOpen(false)} />}
     </div>
   );
+}
+
+/** A studio without projects yet, or a client not yet added to one. */
+function NoProject({ designer, onNew }: { designer: boolean; onNew: () => void }) {
+  return <section className="flex min-w-0 flex-1 items-center justify-center rounded-xl bg-white p-6 shadow-sm">
+    <div className="max-w-sm text-center">
+      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-[var(--primary)]"><FolderPlus className="h-6 w-6" strokeWidth={1.5} /></span>
+      {designer ? <>
+        <h1 className="mt-4 text-[17px] font-semibold">Create your first project</h1>
+        <p className="mt-2 text-[13px] leading-relaxed text-slate-500">Each project has its own chat with the client, its quotes and its payments.</p>
+        <button type="button" onClick={onNew} className="mt-5 inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-4 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]"><Plus className="h-3.5 w-3.5" />New project</button>
+      </> : <>
+        <h1 className="mt-4 text-[17px] font-semibold">No project yet</h1>
+        <p className="mt-2 text-[13px] leading-relaxed text-slate-500">Your designer adds you to a project. It appears here once they do.</p>
+      </>}
+    </div>
+  </section>;
 }

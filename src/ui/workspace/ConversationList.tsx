@@ -29,12 +29,12 @@ export function previewTime(value: string, now = new Date()): string {
     : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-/** `top` sits above the chats, as the designer's reminders do. */
-export function ConversationList<Key extends string>({ projects, activeId, onOpen, top }: { projects: ProjectChat<Key>[]; activeId: Key; onOpen: (key: Key) => void; top?: ReactNode }) {
+/** `top` sits above the chats, as the designer's reminders do; `action` beside the heading, as a new project does. */
+export function ConversationList<Key extends string>({ projects, activeId, onOpen, top, action }: { projects: ProjectChat<Key>[]; activeId: Key | null; onOpen: (key: Key) => void; top?: ReactNode; action?: ReactNode }) {
   return (
     <section aria-label="Chats" className="flex w-[296px] shrink-0 flex-col">
       {top}
-      <h2 className="px-4 pb-2 pt-4 text-[15px] font-semibold">Chats</h2>
+      <div className="flex items-center justify-between gap-2 px-4 pb-2 pt-4"><h2 className="text-[15px] font-semibold">Chats</h2>{action}</div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {projects.map((project) => (
           <button
@@ -50,7 +50,7 @@ export function ConversationList<Key extends string>({ projects, activeId, onOpe
                 {project.preview && <time dateTime={project.preview.at} className="shrink-0 text-[10px] text-[var(--muted)]">{previewTime(project.preview.at)}</time>}
               </span>
               <span className="mt-0.5 block truncate text-[12px] text-[var(--muted)]">
-                {project.preview ? `${project.preview.from}: ${project.preview.text}` : `${project.counterpart.name} · ${project.subtitle}`}
+                {project.preview ? `${project.preview.from}: ${project.preview.text}` : project.counterpart.name === project.title ? project.subtitle : [project.counterpart.name, project.subtitle].filter(Boolean).join(" · ")}
               </span>
             </span>
           </button>

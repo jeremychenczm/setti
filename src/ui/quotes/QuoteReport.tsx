@@ -84,15 +84,16 @@ function dateLabel(value: string): string {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" }).format(new Date(value));
 }
 
-const QUOTE_LABELS: Record<CaseKey, string> = { willow: "Willow Residence · 28-line test quote", maple: "Maple Ave Café · counter and back bar" };
+/** A project to switch the report to. */
+export interface QuoteOption { key: CaseKey; label: string }
 
 /**
  * One project's V1 as the signed-in account may see it: a designer's draft, a
  * sent version, or an approved one. On an open V1 the client decides line by
  * line and signs; the designer resolves the lines that are not agreed.
  */
-export function QuoteReport({ view, viewer, options, focusItemId, actions, onBack, onSelectQuote, onOpenChat }: {
-  view: QuoteView; viewer: DemoAccount; options: CaseKey[]; focusItemId?: string | null; actions: QuoteActions;
+export function QuoteReport({ view, studioName, viewer, options, focusItemId, actions, onBack, onSelectQuote, onOpenChat }: {
+  view: QuoteView; studioName: string; viewer: DemoAccount; options: QuoteOption[]; focusItemId?: string | null; actions: QuoteActions;
   onBack: () => void; onSelectQuote: (id: CaseKey) => void; onOpenChat: () => void;
 }) {
   const { document: quote, opening, approval, lines: lineStates } = view;
@@ -248,8 +249,8 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
       <header className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] px-6 py-3.5">
         <button onClick={onBack} className="flex items-center gap-1.5 text-[12px] text-[var(--muted)] hover:text-[var(--ink)]"><ArrowLeft className="h-3.5 w-3.5" />Back to chats</button>
         <span className="text-[var(--line)]">/</span>
-        {options.length > 1 ? <select aria-label="Select quote example" value={quote.projectId} onChange={(event) => onSelectQuote(event.target.value as CaseKey)} className="max-w-full rounded-md border border-[var(--line)] bg-white px-2 py-1.5 text-[12px] font-medium">
-          {options.map((key) => <option key={key} value={key}>{QUOTE_LABELS[key]}</option>)}
+        {options.length > 1 ? <select aria-label="Select project" value={quote.projectId} onChange={(event) => onSelectQuote(event.target.value as CaseKey)} className="max-w-full rounded-md border border-[var(--line)] bg-white px-2 py-1.5 text-[12px] font-medium">
+          {options.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
         </select> : <span className="text-[12px] font-medium">{quote.projectName}</span>}
         <span className="ml-auto rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700">Demo quote</span>
       </header>
@@ -268,7 +269,7 @@ export function QuoteReport({ view, viewer, options, focusItemId, actions, onBac
           <div className="my-6 grid grid-cols-2 gap-5 border-y border-[var(--line)] py-5 xl:grid-cols-4">
             <Meta label="Project" value={quote.projectName} note={quote.room} />
             <Meta label="Prepared for" value={quote.clientName} note="Client" />
-            <Meta label="Prepared by" value={quote.designerName} note="Lee Studio" />
+            <Meta label="Prepared by" value={quote.designerName} note={studioName} />
             {approval ? <Meta label="Sample approval" value={approvedDate ?? ""} note={`By ${approval.approvedBy}`} /> : opening.signedAt ? <Meta label="Signed" value={dateLabel(opening.signedAt)} note={`By ${clientName}`} /> : sentDate ? <Meta label="Sent" value={sentDate} note={`By ${opening.sentBy ?? quote.designerName}`} /> : <Meta label="Status" value="Draft" note="Not sent to the client" />}
           </div>
 

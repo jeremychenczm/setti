@@ -4,7 +4,7 @@ import { Bot, Check, Circle, FileText, LoaderCircle, MessageSquare, PanelRight, 
 import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { isAiInvocation } from "@/ai/intent";
-import { clientOf, DEMO_ACCOUNTS, type AccountId, type DemoAccount } from "@/accounts/demo";
+import type { AccountId, DemoAccount } from "@/accounts/demo";
 import type { AiStage, CaseKey, CaseMessage, HumanActor } from "@/chat/types";
 import type { QuoteDocument } from "@/quotes/types";
 import { isMapleSampleScope, MAPLE_MIXED_CHANGE_MESSAGE } from "@/demo/maple-materials";
@@ -32,6 +32,9 @@ interface CaseChatProps {
   quote: QuoteDocument;
   /** The signed-in demo account; it is the only sender of new messages. */
   account: DemoAccount;
+  /** The studio's designer and the project's client, as the server read them. */
+  designer: Person;
+  client: Person;
   /** A demo visitor, who can continue as the demo's other person. */
   demo?: boolean;
   onSwitchAccount: (id: AccountId) => void;
@@ -67,7 +70,7 @@ function ReplySteps({ stage, rewrote }: { stage: AiStage | null; rewrote: boolea
   </ol>;
 }
 
-export function CaseChat({ projectKey, quote, account, demo = false, onSwitchAccount, onOpenQuote, onSelectCase, conversationOptions, onSelectProject, onLatest }: CaseChatProps) {
+export function CaseChat({ projectKey, quote, account, designer, client, demo = false, onSwitchAccount, onOpenQuote, onSelectCase, conversationOptions, onSelectProject, onLatest }: CaseChatProps) {
   const { snapshot, messages, loading, running, stage, rewrote, aiReplying, error, canRetry, unsavedMessageId, hasUnsent, send, sendQuote, retry, editUnsent, reload } = useCaseChat(projectKey);
   const latest = latestChatMessage(messages);
   const reportLatest = useRef(onLatest);
@@ -92,9 +95,9 @@ export function CaseChat({ projectKey, quote, account, demo = false, onSwitchAcc
   const confirmedQuoteHref = currentQuote.version > quote.version && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentQuote.id)
     ? `/change-orders/${currentQuote.id}` : null;
   const draft = snapshot?.draft ?? null;
-  const designer: Person = DEMO_ACCOUNTS.find((person) => person.role === "designer")!;
-  const client: Person = clientOf(projectKey);
   const sendDisabled = loading || running || !snapshot || hasUnsent;
+  /** The project has a client to send to; before one is added, the chat names none. */
+  const hasClient = client.id !== "no-client";
   useEffect(() => {
     if (loading || !snapshot) return;
     const url = new URL(window.location.href);
@@ -118,7 +121,7 @@ export function CaseChat({ projectKey, quote, account, demo = false, onSwitchAcc
   const latestVersion = versions.at(-1) ?? null;
   /** V1 is still a draft or with the client: there is no approved baseline to change yet. */
   const openingPending = opening !== null && opening.status !== "approved";
-  const canSendQuote = account.role === "designer" && opening?.status === "draft" && !sendDisabled;
+  const canSendQuote = account.role === "designer" && opening?.status === "draft" && opening.lineCount > 0 && !sendDisabled;
   /** Where V1 is with the client, until a confirmed change order becomes the baseline. */
   const openingStatusLine = () => {
     if (latestVersion && latestVersion.status !== "approved" && !confirmedQuoteHref) {
@@ -141,7 +144,7 @@ export function CaseChat({ projectKey, quote, account, demo = false, onSwitchAcc
   };
   const lineName = (itemId: string) => (currentQuote.lines.find((line) => line.itemId === itemId) ?? quote.lines.find((line) => line.itemId === itemId))?.name ?? itemId;
   const sentOn = opening?.sentAt ? new Date(opening.sentAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
-  const mixedExampleAvailable = projectKey === "maple" && !draft && isMapleSampleScope(currentQuote);
+  const mixedExampleAvailable = !draft && isMapleSampleScope(currentQuote);
   const home = isHomeQuote(currentQuote);
   const discussionStart = home ? messages.findIndex((message) => message.model === "demo-scenario-discussion") : -1;
   const homeRequestStarted = discussionStart >= 0 && messages.slice(discussionStart).some((message) => message.actor === "designer" && isAiInvocation(message.text));
@@ -217,8 +220,8 @@ export function CaseChat({ projectKey, quote, account, demo = false, onSwitchAcc
 
   return (
     <section className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-white shadow-sm">
-      <ChatHeader person={account.role === "designer" ? client : designer} projectId={projectKey} projectName={currentQuote.projectName}
-        projects={account.role === "designer" ? conversationOptions ?? [{ key: "willow", title: "Willow Residence" }, { key: "maple", title: "Maple Ave Café" }] : undefined}
+      <ChatHeader person={account.role === "designer" ? hasClient ? client : { id: `${projectKey}:project`, name: currentQuote.projectName, role: "client" } : designer} projectId={projectKey} projectName={currentQuote.projectName}
+        projects={account.role === "designer" ? conversationOptions ?? [] : undefined}
         onSelectProject={account.role === "designer" ? (id) => onSelectProject ? onSelectProject(id) : onSelectCase(id as CaseKey) : undefined}
         subtitle={`${designer.name} · ${client.name} · Setti`}>
         {opening?.status === "draft" && account.role === "client" ? null : confirmedQuoteHref ? <Link href={confirmedQuoteHref} aria-label={`View client-confirmed quote V${currentQuote.version}`} className="flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--primary-soft)] px-3 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-brand-100"><FileText className="h-3.5 w-3.5" />Quote V{currentQuote.version}</Link> : <button onClick={() => onOpenQuote()} className="flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--primary-soft)] px-3 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-brand-100"><FileText className="h-3.5 w-3.5" />Quote V{currentQuote.version}{opening?.status === "draft" ? " · Draft" : ""}</button>}
@@ -234,7 +237,7 @@ export function CaseChat({ projectKey, quote, account, demo = false, onSwitchAcc
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
             <div className="mx-auto max-w-3xl space-y-4">
               {loading && <div role="status" className="flex items-center justify-center gap-2 py-12 text-[12px] text-[var(--muted)]"><LoaderCircle className="h-4 w-4 animate-spin" />Loading saved conversation…</div>}
-              {!loading && snapshot && messages.length === 0 && opening?.status === "draft" && <div className="mx-auto max-w-md px-2 py-10 text-center sm:py-16"><span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-[var(--primary)]"><FileText className="h-6 w-6" strokeWidth={1.5} /></span>{account.role === "designer" ? <><h1 className="mt-4 text-[17px] font-semibold">Quote V1 is ready to send</h1><p className="mt-2 text-[13px] leading-relaxed text-slate-500">{opening.lineCount} items prepared from your supplier quotes, {usd(opening.totalCents)} in total. Send it to {client.name} to start the project conversation.</p><div className="mt-5 flex flex-wrap justify-center gap-2"><button onClick={() => setSendQuoteOpen(true)} disabled={!canSendQuote} className="flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-4 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:text-slate-400"><SendHorizontal className="h-3.5 w-3.5" />Send quote V1</button><button onClick={() => onOpenQuote()} className="rounded-lg px-3 py-2 text-[12px] font-medium text-[var(--primary)] hover:bg-brand-50">Preview the quote</button></div></> : <><h1 className="mt-4 text-[17px] font-semibold">Waiting for the quote from {designer.name}</h1><p className="mt-2 text-[13px] leading-relaxed text-slate-500">The studio will send quote V1 here. You can message the studio in the meantime.</p></>}</div>}
+              {!loading && snapshot && messages.length === 0 && opening?.status === "draft" && <div className="mx-auto max-w-md px-2 py-10 text-center sm:py-16"><span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-[var(--primary)]"><FileText className="h-6 w-6" strokeWidth={1.5} /></span>{account.role === "designer" && opening.lineCount === 0 ? <><h1 className="mt-4 text-[17px] font-semibold">Quote V1 has no lines yet</h1><p className="mt-2 text-[13px] leading-relaxed text-slate-500">Add the items and services {hasClient ? client.name : "the client"} will decide on. You can send V1 once it has lines.</p></> : account.role === "designer" ? <><h1 className="mt-4 text-[17px] font-semibold">Quote V1 is ready to send</h1><p className="mt-2 text-[13px] leading-relaxed text-slate-500">{opening.lineCount} items prepared from your supplier quotes, {usd(opening.totalCents)} in total. Send it to {client.name} to start the project conversation.</p><div className="mt-5 flex flex-wrap justify-center gap-2"><button onClick={() => setSendQuoteOpen(true)} disabled={!canSendQuote} className="flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-4 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:text-slate-400"><SendHorizontal className="h-3.5 w-3.5" />Send quote V1</button><button onClick={() => onOpenQuote()} className="rounded-lg px-3 py-2 text-[12px] font-medium text-[var(--primary)] hover:bg-brand-50">Preview the quote</button></div></> : <><h1 className="mt-4 text-[17px] font-semibold">Waiting for the quote from {designer.name}</h1><p className="mt-2 text-[13px] leading-relaxed text-slate-500">The studio will send quote V1 here. You can message the studio in the meantime.</p></>}</div>}
               {!loading && snapshot && messages.length === 0 && !openingPending && <div className="mx-auto max-w-md px-2 py-10 text-center sm:py-16"><span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-50 text-[var(--primary)]"><MessageSquare className="h-6 w-6" strokeWidth={1.5} /></span><h1 className="mt-4 text-[17px] font-semibold">Start with the project conversation</h1><p className="mt-2 text-[13px] leading-relaxed text-slate-500">Discuss changes together and paste product links here. Mention <strong className="font-medium text-slate-700">@Setti</strong> with what you want it to do when you are ready.</p><p className="mt-3 text-[11px] leading-relaxed text-[var(--muted)]">{confirmedQuoteHref ? "New changes use the client-confirmed" : "This case starts with the initial approved"} V{currentQuote.version} demo quote. The AI drafts for designer review; it cannot approve, order or move money.</p></div>}
 
               {discussionStart > 0 && <details open={historyOpen} onToggle={(event) => setHistoryOpen(event.currentTarget.open)} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-500"><summary className="cursor-pointer font-medium">Earlier project history</summary><p className="mt-2">The initial agreement was prepared for this walkthrough. The new design discussion starts below.</p><div className="mt-4 space-y-4">{renderTimeline(messages.slice(0, discussionStart))}</div></details>}

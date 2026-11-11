@@ -56,8 +56,8 @@ export function accountOf(actor: Actor, key: CaseKey | null): DemoAccount {
   const persona = actor.demoPersona && DEMO_ACCOUNTS.find((account) => account.id === actor.demoPersona);
   if (persona) return persona;
   return actor.role === "designer"
-    ? { id: actor.userId, name: actor.name, role: "designer", title: `Designer · ${actor.studio!.name}`, projectKey: null, avatar: "/avatars/designer.webp" }
-    : { id: actor.userId, name: actor.name, role: "client", title: "Client", projectKey: key, avatar: "/avatars/client.webp" };
+    ? { id: actor.userId, name: actor.name, role: "designer", title: `Designer · ${actor.studio!.name}`, projectKey: null }
+    : { id: actor.userId, name: actor.name, role: "client", title: "Client", projectKey: key };
 }
 
 /** Where `key`'s data lives for this actor, and who they act as there; null when they may not open it. */

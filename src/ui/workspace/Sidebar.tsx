@@ -25,7 +25,7 @@ function itemsFor(account: DemoAccount): NavItem[] {
 export function Sidebar({ view, onView, account, demo, onSwitchAccount, badges = {} }: { view: View; onView: (v: View) => void; account: DemoAccount; demo: boolean; onSwitchAccount: (id: AccountId) => void; badges?: Partial<Record<View, number>> }) {
   return (
     <aside aria-label="Workspace sidebar" className="flex w-[64px] shrink-0 flex-col items-center bg-[var(--rail)] py-3">
-      <span title="Setti · Lee Studio" className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary-fill)] text-[15px] font-bold text-[var(--on-primary)]">S</span>
+      <span title="Setti" className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary-fill)] text-[15px] font-bold text-[var(--on-primary)]">S</span>
 
       <nav aria-label="Workspace modules" className="mt-5 flex flex-1 flex-col items-center gap-1.5">
         {itemsFor(account).map(({ view: v, label, icon: Icon }) => {

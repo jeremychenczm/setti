@@ -164,7 +164,9 @@ export async function postQuoteResponse(req: NextRequest, rawKey: string) {
       IDEMPOTENCY_CONFLICT: [409, "This send was already used for another message. Reload the chat and try again."],
       INVALID_INPUT: [400, "Send the quote with a short message to the client."],
     };
-    const [status, message] = known[code] ?? [503, "Chat storage is unavailable. Check the database and migrations."];
+    const [status, fallback] = known[code] ?? [503, "Chat storage is unavailable. Check the database and migrations."];
+    // Why V1 cannot be sent is the store's to say: an approved start, or no lines yet.
+    const message = code === "NOT_AVAILABLE" && error instanceof Error ? error.message : fallback;
     return respond({ code: known[code] ? code : "STORAGE_UNAVAILABLE", error: message }, status);
   }
 }

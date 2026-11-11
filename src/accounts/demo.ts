@@ -17,7 +17,8 @@ export interface DemoAccount {
   title: string;
   /** A client sees only this project; the designer sees every project. */
   projectKey: CaseKey | null;
-  avatar: string;
+  /** A demo person's portrait; a real account shows its initials. */
+  avatar?: string;
 }
 
 export const DEMO_ACCOUNTS: readonly (DemoAccount & { id: AccountId })[] = [

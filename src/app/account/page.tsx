@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { currentAccount } from "@/auth/app";
 import { SignOutButton } from "@/ui/account/AuthForm";
@@ -20,7 +21,7 @@ export default async function AccountPage() {
         <div className="flex justify-between gap-4"><dt className="text-[var(--muted)]">Studio</dt><dd className="font-medium">{studio?.name ?? "None"}</dd></div>
         <div className="flex justify-between gap-4"><dt className="text-[var(--muted)]">Role</dt><dd className="font-medium">{studio ? ROLE[studio.role] ?? studio.role : "—"}</dd></div>
       </dl>
-      <div className="mt-6"><SignOutButton /></div>
+      <div className="mt-6 space-y-2"><Link href="/chats" className="flex w-full items-center justify-center rounded-lg border border-[var(--line)] px-4 py-2.5 text-[13px] font-semibold text-[var(--primary)] hover:bg-[var(--primary-soft)]">Open your projects</Link><SignOutButton /></div>
     </section>
   </main>;
 }

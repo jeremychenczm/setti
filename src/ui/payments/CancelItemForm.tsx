@@ -11,8 +11,8 @@ import { dateTime, Field, inputClass, money } from "../pricing/common";
  * client reads it in the project chat as a message from the designer, so the
  * form shows that exact message first. "Other" needs the designer's own words.
  */
-export function CancelItemForm({ itemName, heldCents, designer, disabled, busy, onBack, onSubmit }: {
-  itemName: string; heldCents: number; designer: string; disabled: boolean; busy: boolean; onBack: () => void; onSubmit: (reason: CancellationReason, note: string) => void;
+export function CancelItemForm({ itemName, heldCents, disabled, busy, onBack, onSubmit }: {
+  itemName: string; heldCents: number; disabled: boolean; busy: boolean; onBack: () => void; onSubmit: (reason: CancellationReason, note: string) => void;
 }) {
   const [reason, setReason] = useState<CancellationReason | null>(null);
   const [text, setText] = useState("");
@@ -29,7 +29,7 @@ export function CancelItemForm({ itemName, heldCents, designer, disabled, busy, 
         placeholder={reason === "other" ? "The client reads this in the chat." : "For example: the supplier discontinued this finish."} />
     </Field>
     {reason && !missing && <div className="rounded-lg bg-[var(--canvas)] p-2.5 text-[11px] leading-relaxed text-slate-600">
-      <p className="font-medium text-slate-700">Setti sends this to the client in the chat, as you ({designer}):</p>
+      <p className="font-medium text-slate-700">Setti sends this to the client in the chat, as you:</p>
       <p className="mt-1 italic">&ldquo;{cancellationMessage({ itemName, reason, note: text, heldCents })}&rdquo;</p>
     </div>}
     <p className="text-[11px] leading-relaxed text-[var(--muted)]">{heldCents > 0 ? `PayPal releases the ${money(heldCents)} hold; nothing is charged.` : "Nothing is held or charged for this item."} A replacement would come as a new version for the client to confirm.</p>

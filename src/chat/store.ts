@@ -12,9 +12,8 @@ import { documentHash, openingDocument } from "../opening/document";
 import { readOpening } from "../opening/read";
 import { openingQuotes } from "../opening/schema";
 import { QUOTE_MESSAGE_MAX } from "../opening/types";
-import { sampleProject } from "../demo/sample-projects";
 import { sentFromChat } from "../projects/settings";
-import { insertProject, isRealStudio } from "../projects/store";
+import { projectAvailable } from "../projects/store";
 import { insertBaseline } from "../pricing/bridge";
 import { changeOrders } from "../pricing/schema";
 import { isCaseKey } from "./cases";
@@ -44,20 +43,11 @@ function validateMessageId(id: string): void {
   if (!UUID.test(id)) throw new ChatStoreError("INVALID_INPUT", "Message id must be a UUID.");
 }
 
-/**
- * Locks the project. A real studio has only the projects its designers created;
- * a demo studio, or a session from before studios, gets a sample project the
- * first time it opens one.
- */
+/** Locks the project, if the studio has it (see `projectAvailable`). */
 async function lockCase(tx: Transaction, sessionId: string, projectKey: CaseKey): Promise<CaseRow> {
-  const lock = () => tx.select().from(chatCases).where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, projectKey))).for("update");
-  const [found] = await lock();
-  if (found) return found;
-  const sample = sampleProject(projectKey);
-  if (!sample || await isRealStudio(tx, sessionId)) throw new ChatStoreError("PROJECT_NOT_FOUND", "This studio has no such project.");
-  await insertProject(tx, sessionId, projectKey, sample);
-  const [created] = await lock();
-  return created;
+  if (!await projectAvailable(tx, sessionId, projectKey)) throw new ChatStoreError("PROJECT_NOT_FOUND", "This studio has no such project.");
+  const [row] = await tx.select().from(chatCases).where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, projectKey))).for("update");
+  return row;
 }
 
 async function readMessage(tx: Transaction, caseId: string, messageId: string): Promise<MessageRow> {
@@ -174,6 +164,7 @@ export function createChatStore(db: Db): ChatStore {
         if (existing) throw new ChatStoreError("IDEMPOTENCY_CONFLICT", "This message id has already been used for different content.");
         if (row.activeRunId) throw new ChatStoreError("CASE_BUSY", "Wait for the current AI reply before sending the quote.");
         const document = openingDocument(row);
+        if (!document.lines.length) throw new ChatStoreError("NOT_AVAILABLE", "Quote V1 has no lines yet. Add its items before sending it.");
         await tx.insert(chatMessages).values({ caseId: row.id, id: input.id, actor: "designer", text });
         await tx.insert(openingQuotes).values({ caseId: row.id, messageId: input.id, document, contentHash: documentHash(document), sentBy: input.sentBy.trim() });
         await insertBaseline(tx, row.id, document);

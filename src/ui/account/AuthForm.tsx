@@ -53,7 +53,7 @@ export function SignUpForm() {
       // A designer's account comes with the studio they run; it becomes the one they work in.
       const created = await authClient.organization.create({ name: studio || defaultStudioName(name), slug: newStudioSlug() });
       if (created.error) return "Your account was created, but its studio was not. Sign in to try again.";
-      router.push("/account");
+      router.push("/chats");
       router.refresh();
       return null;
     });
@@ -71,7 +71,7 @@ export function SignUpForm() {
 }
 
 /** `next` is a path on this site, checked by the page. */
-export function SignInForm({ next = "/account" }: { next?: string }) {
+export function SignInForm({ next = "/chats" }: { next?: string }) {
   const router = useRouter();
   const { error, busy, run } = useSubmit();
   const submit = (event: FormEvent<HTMLFormElement>) => {

@@ -14,7 +14,6 @@ import { PaymentFees } from "./PaymentFees";
 import { PayMethodChooser, SavedMethodCard, savedMethodName } from "./PaymentMethods";
 import { PayPalButtons } from "./PayPalButtons";
 import { useTryReadiness } from "../try/useTryReadiness";
-import { DEMO_ACCOUNTS } from "@/accounts/demo";
 import type { CancellationReason } from "@/payments/cancellation";
 import { CancellationRecord, CancelItemForm } from "./CancelItemForm";
 import { paymentChanged, usePaymentRefresh } from "./usePaymentRefresh";
@@ -297,7 +296,6 @@ type LineActionInput = Extract<Action, { itemId: string }> extends infer A ? A e
 /** What a line needs to take the client's payment: the payment choices, the saved method and the raw step request. */
 interface LinePayment { checkout: CheckoutView | null; savedMethod: SavedMethodView | null; request: (action: Action, key: string) => Promise<Reply | null> }
 
-const DESIGNER = DEMO_ACCOUNTS.find((account) => account.role === "designer")!.name;
 
 /** What one item needs in its side card: its amounts, the supplier's records, and each step it can take next. */
 function LineDetails({ line, operations, version, busy, disabled, canAct, canReconcile, pay, onAction, onCheck, onCancelItem }: { line: PaymentLineView; operations: readonly OperationView[]; version: number; busy: string | null; disabled: boolean; canAct: boolean; canReconcile: boolean; pay: LinePayment; onAction: (action: LineActionInput, key: string) => Promise<boolean>; onCheck: (operationId: string) => void; onCancelItem: (reason: CancellationReason, note: string) => Promise<boolean> }) {
@@ -362,7 +360,7 @@ function LineDetails({ line, operations, version, busy, disabled, canAct, canRec
 
     {line.cancellation && <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3"><p className="mb-1 flex items-center gap-1.5 text-[12px] font-semibold text-slate-700"><Ban className="h-3.5 w-3.5" />Cancelled by the studio</p><CancellationRecord cancellation={line.cancellation} /></div>}
     {line.canCancelItem && canAct && (cancelling
-      ? <div className="mt-3 max-w-[440px] rounded-lg border border-red-100 p-3"><CancelItemForm itemName={line.label} heldCents={line.heldCents} designer={DESIGNER} disabled={disabled} busy={busy === `cancel-item:${line.side}:${line.itemId}`}
+      ? <div className="mt-3 max-w-[440px] rounded-lg border border-red-100 p-3"><CancelItemForm itemName={line.label} heldCents={line.heldCents} disabled={disabled} busy={busy === `cancel-item:${line.side}:${line.itemId}`}
         onBack={() => setCancelling(false)} onSubmit={(reason, note) => void onCancelItem(reason, note).then((ok) => { if (ok) setCancelling(false); })} /></div>
       : <button type="button" disabled={disabled} onClick={() => setCancelling(true)} className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium text-slate-600 underline-offset-2 hover:text-red-700 hover:underline disabled:opacity-50"><Ban className="h-3.5 w-3.5" />{line.heldCents > 0 ? "Cancel hold…" : "Cancel item…"}</button>)}
 
