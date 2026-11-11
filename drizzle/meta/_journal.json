@@ -351,6 +351,13 @@
       "when": 1794420771173,
       "tag": "0049_project_invites",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1794424283773,
+      "tag": "0050_supplier_events_real",
+      "breakpoints": true
     }
   ]
 }

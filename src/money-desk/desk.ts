@@ -1,11 +1,11 @@
 import { canOpenProject, type DemoAccount } from "@/accounts/demo";
 import type { Db } from "@/db/client";
-import { projectKeys } from "@/projects/store";
+import { isRealStudio, projectKeys } from "@/projects/store";
 import { exampleProjects } from "./examples";
 import { liveProject } from "./live";
 import type { DeskProject, MoneyDesk } from "./types";
 
-/** Every project the designer runs: the studio's own projects first, then the prepared examples. */
+/** Every project the designer runs: the studio's own projects, then, in a demo, the prepared examples. */
 export async function moneyDesk(db: Db, sessionId: string | null, account: DemoAccount, now = new Date()): Promise<MoneyDesk> {
   if (account.role !== "designer") throw new Error("Only the designer sees the money desk.");
   const live: DeskProject[] = [];
@@ -16,5 +16,6 @@ export async function moneyDesk(db: Db, sessionId: string | null, account: DemoA
       if (project) live.push(project);
     }
   }
-  return { checkedAt: now.toISOString(), projects: [...live, ...exampleProjects()] };
+  const real = !!sessionId && await isRealStudio(db, sessionId);
+  return { checkedAt: now.toISOString(), projects: real ? live : [...live, ...exampleProjects()] };
 }

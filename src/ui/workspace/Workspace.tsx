@@ -14,6 +14,7 @@ import { NewProjectDialog } from "./NewProjectDialog";
 import { Sidebar, type View } from "./Sidebar";
 import { useInboxBadge } from "./useInboxBadge";
 import { TrySeedNotice } from "../try/TrySeedNotice";
+import { DemoModeProvider } from "../demo-mode";
 import { DemoEndedNotice } from "../try/DemoEndedNotice";
 import { switchPersona } from "../account/switchPersona";
 
@@ -177,6 +178,7 @@ export function Workspace({ account, projects, demo = false, initialView = "chat
   };
 
   return (
+    <DemoModeProvider value={demo}>
     <div className="flex h-dvh min-h-0 gap-2 bg-[var(--canvas)] p-2 text-[var(--ink)]">
       {/* The icon rail and the chat list are one panel, as in a messaging app; other modules keep only the rail. */}
       <div className="flex min-h-0 shrink-0 overflow-hidden rounded-xl bg-white shadow-sm">
@@ -207,6 +209,7 @@ export function Workspace({ account, projects, demo = false, initialView = "chat
       </div>
       {newProjectOpen && <NewProjectDialog onClose={() => setNewProjectOpen(false)} />}
     </div>
+    </DemoModeProvider>
   );
 }
 

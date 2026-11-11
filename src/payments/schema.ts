@@ -40,7 +40,6 @@ export const supplierEvents = pgTable("supplier_events", {
   unique("supplier_events_one_per_kind_on_v1").on(t.revisionId, t.itemId, t.kind),
   check("supplier_events_one_version", sql`(${t.changeOrderId} IS NULL) <> (${t.revisionId} IS NULL)`),
   check("supplier_events_kind_valid", sql`${t.kind} IN ('order_confirmed', 'credit_confirmed')`),
-  check("supplier_events_demo", sql`${t.isDemo}`),
   check("supplier_events_reference", sql`length(btrim(${t.reference})) > 0`),
   check("supplier_events_total", sql`${t.totalCents} >= 0`),
   check(

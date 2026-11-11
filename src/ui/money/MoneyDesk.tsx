@@ -83,12 +83,12 @@ export function MoneyDesk({ onOpenInbox }: { onOpenInbox: () => void }) {
         <h1 id="money-title" className="text-[15px] font-semibold">Money</h1>
         <p className="text-[11px] text-[var(--muted)]">Where client money stands in every project, from the quotes and PayPal Sandbox records.</p>
       </div>
-      <div role="group" aria-label="Show projects" className="flex gap-0.5 rounded-[10px] border border-[var(--line)] bg-[var(--canvas)] p-[3px]">
+      {counts.example > 0 && <div role="group" aria-label="Show projects" className="flex gap-0.5 rounded-[10px] border border-[var(--line)] bg-[var(--canvas)] p-[3px]">
         {(["all", "live", "example"] as const).map((id) => <button key={id} type="button" aria-pressed={filter === id} onClick={() => setFilter(id)}
           className={`min-h-[30px] rounded-[7px] px-3 text-[12px] font-medium ${filter === id ? "bg-white text-[var(--ink)] shadow-sm" : "text-[var(--muted)]"}`}>
           {id === "all" ? "All" : id === "live" ? "Live" : "Examples"} <span className="ml-0.5 font-normal text-[var(--muted)]">{counts[id]}</span>
         </button>)}
-      </div>
+      </div>}
     </header>
 
     <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-6 pt-4">
@@ -114,7 +114,7 @@ export function MoneyDesk({ onOpenInbox }: { onOpenInbox: () => void }) {
             return <button key={project.id} type="button" aria-pressed={on} onClick={() => setSelectedId(project.id)}
               className={`grid min-h-12 w-full grid-cols-[minmax(120px,200px)_minmax(0,1fr)_110px_30px] items-center gap-3 rounded-lg px-2 py-1 text-left ${on ? "bg-brand-50 shadow-[inset_3px_0_0_var(--primary-fill)]" : "hover:bg-[var(--canvas)]"}`}>
               <span className="min-w-0">
-                <span className="block truncate text-[13px] font-medium">{project.name} <span className={`ml-1 rounded px-1.5 py-px text-[10px] font-medium ${project.source === "live" ? "bg-[var(--agent)] text-slate-600" : "bg-[var(--canvas)] text-[var(--muted)] ring-1 ring-[var(--line)]"}`}>{project.source === "live" ? "Live" : "Example"}</span></span>
+                <span className="block truncate text-[13px] font-medium">{project.name}{counts.example > 0 && <> <span className={`ml-1 rounded px-1.5 py-px text-[10px] font-medium ${project.source === "live" ? "bg-[var(--agent)] text-slate-600" : "bg-[var(--canvas)] text-[var(--muted)] ring-1 ring-[var(--line)]"}`}>{project.source === "live" ? "Live" : "Example"}</span></>}</span>
                 <span className="block truncate text-[11px] text-[var(--muted)]">{project.stage}</span>
               </span>
               <span role="img" aria-label={`${project.name}: ${bar.blocks.map((block) => `${part(block.part).label} ${usd(block.cents)}`).join(", ") || `${usd(project.proposedCents ?? 0)} proposed`}`} className="flex h-[22px] gap-0.5">

@@ -10,6 +10,7 @@ import { centsText, dateTime, Field, inputClass, money, parseDollars, signedMone
 import { emptyPaymentFeedback, feedbackMessage, paymentFeedback, paymentReturnNotice } from "./feedback";
 import { lineProgress, paymentScopeTotals } from "./progress";
 import { demoSupplierNumber } from "./demo-supplier";
+import { useDemoMode } from "../demo-mode";
 import { PaymentFees } from "./PaymentFees";
 import { PayMethodChooser, SavedMethodCard, savedMethodName } from "./PaymentMethods";
 import { PayPalButtons } from "./PayPalButtons";
@@ -409,14 +410,15 @@ function SupplierOrderForm({ line, disabled, onSubmit }: { line: PaymentLineView
   const [freight, setFreight] = useState(centsText(terms?.freightCents ?? null));
   const [leadTime, setLeadTime] = useState("");
   const [inStock, setInStock] = useState(true);
-  const [reference, setReference] = useState(() => demoSupplierNumber("order", line.itemId));
+  const demo = useDemoMode();
+  const [reference, setReference] = useState(() => demo ? demoSupplierNumber("order", line.itemId) : "");
   const [note, setNote] = useState("");
   const amounts = [parseDollars(unit), parseDollars(tax), parseDollars(freight)];
   const count = Number(quantity), days = leadTime.trim() ? Number(leadTime) : null;
   const valid = Number.isSafeInteger(count) && count >= 1 && amounts.every((amount) => amount.value !== null) && (days === null || (Number.isSafeInteger(days) && days >= 0)) && reference.trim().length > 0 && inStock;
   return <form className="mt-3 space-y-3 rounded-lg bg-slate-50 p-3" onSubmit={(event) => { event.preventDefault(); if (valid) onSubmit({ quantity: count, unitPriceCents: amounts[0].value!, taxCents: amounts[1].value!, freightCents: amounts[2].value!, inStock, leadTimeDays: days, reference: reference.trim(), note: note.trim() }); }}>
-    <div><p className="text-[12px] font-semibold text-slate-800">{retainedCost ? "Demo supplier retained-cost confirmation" : "Demo supplier confirmation"}</p><p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">There is no real supplier in this demo, so the confirmation is filled in from the client-confirmed line. Check it and save it.</p></div>
-    <p className="text-[11px] leading-relaxed text-slate-600">{retainedCost ? "Confirm the supplier's total retained cost for the cancelled or replaced item. The client-confirmed total already includes applicable tax and delivery. Closing the original hold after capturing this cost releases the unused balance." : "Enter what the supplier confirmed. This demo record is entered by the designer. If any amount differs from the client-confirmed terms, Setti refuses it and the change goes back to pricing and client confirmation."}</p>
+    <div><p className="text-[12px] font-semibold text-slate-800">{demo ? "Demo supplier" : "Supplier"} {retainedCost ? "retained-cost confirmation" : "confirmation"}</p><p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{demo ? "There is no real supplier in this demo, so the confirmation is filled in from the client-confirmed line. Check it and save it." : "Filled in from the client-confirmed line. Enter the supplier's reference and check the rest."}</p></div>
+    <p className="text-[11px] leading-relaxed text-slate-600">{retainedCost ? "Confirm the supplier's total retained cost for the cancelled or replaced item. The client-confirmed total already includes applicable tax and delivery. Closing the original hold after capturing this cost releases the unused balance." : `Enter what the supplier confirmed. ${demo ? "This demo record is entered by the designer." : "The designer enters this record."} If any amount differs from the client-confirmed terms, Setti refuses it and the change goes back to pricing and client confirmation.`}</p>
     <div className="grid grid-cols-2 gap-3"><Field label={retainedCost ? "Cost items" : "Quantity"}><input value={quantity} onChange={(event) => setQuantity(event.target.value)} readOnly={retainedCost} inputMode="numeric" className={inputClass} /></Field><Field label={retainedCost ? "Total retained cost · USD" : "Unit price · USD"} error={amounts[0].error ?? undefined}><input value={unit} onChange={(event) => setUnit(event.target.value)} inputMode="decimal" className={inputClass} /></Field><Field label="Line tax · USD" error={amounts[1].error ?? undefined}><input value={tax} onChange={(event) => setTax(event.target.value)} readOnly={retainedCost} inputMode="decimal" className={inputClass} /></Field><Field label="Line delivery · USD" error={amounts[2].error ?? undefined}><input value={freight} onChange={(event) => setFreight(event.target.value)} readOnly={retainedCost} inputMode="decimal" className={inputClass} /></Field></div>
     <div className="grid grid-cols-2 gap-3"><Field label={retainedCost ? "Supplier's reference" : "Supplier's order number"}><input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={200} placeholder="From the supplier's confirmation" className={inputClass} /></Field>{!retainedCost && <Field label="Lead time · days (optional)"><input value={leadTime} onChange={(event) => setLeadTime(event.target.value)} inputMode="numeric" className={inputClass} /></Field>}<Field label="Note (optional)"><input value={note} onChange={(event) => setNote(event.target.value)} maxLength={1000} className={inputClass} /></Field></div>
     <label className="flex items-center gap-2 text-[12px]"><input type="checkbox" checked={inStock} onChange={(event) => setInStock(event.target.checked)} />{retainedCost ? "The supplier confirmed this total retained cost for the cancellation or replacement." : "The supplier confirmed the item is in stock and accepted the order."}</label>
@@ -426,12 +428,13 @@ function SupplierOrderForm({ line, disabled, onSubmit }: { line: PaymentLineView
 
 function SupplierCreditForm({ amountCents, itemId, disabled, onSubmit }: { amountCents: number; itemId: string; disabled: boolean; onSubmit: (input: { creditCents: number; reference: string; note: string }) => void }) {
   const [credit, setCredit] = useState(centsText(amountCents));
-  const [reference, setReference] = useState(() => demoSupplierNumber("credit", itemId));
+  const demo = useDemoMode();
+  const [reference, setReference] = useState(() => demo ? demoSupplierNumber("credit", itemId) : "");
   const [note, setNote] = useState("");
   const parsed = parseDollars(credit);
   const valid = parsed.value !== null && reference.trim().length > 0;
   return <form className="mt-3 space-y-3 rounded-lg bg-slate-50 p-3" onSubmit={(event) => { event.preventDefault(); if (valid) onSubmit({ creditCents: parsed.value!, reference: reference.trim(), note: note.trim() }); }}>
-    <div><p className="text-[12px] font-semibold text-slate-800">Demo supplier credit</p><p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">There is no real supplier in this demo, so the credit note is filled in from the confirmed refund. Check it and save it.</p></div>
+    <div><p className="text-[12px] font-semibold text-slate-800">{demo ? "Demo supplier credit" : "Supplier credit"}</p><p className="mt-0.5 text-[11px] leading-relaxed text-slate-500">{demo ? "There is no real supplier in this demo, so the credit note is filled in from the confirmed refund. Check it and save it." : "Filled in from the confirmed refund. Enter the supplier's credit note number and check the amount."}</p></div>
     <p className="text-[11px] leading-relaxed text-slate-600">The credit the supplier issued for the return. It must equal the confirmed refund of {money(amountCents)}; a different credit means the non-refundable fees changed and the return goes back to pricing.</p>
     <div className="grid grid-cols-2 gap-3"><Field label="Supplier credit · USD" error={parsed.error ?? undefined}><input value={credit} onChange={(event) => setCredit(event.target.value)} inputMode="decimal" className={inputClass} /></Field><Field label="Supplier's credit note number"><input value={reference} onChange={(event) => setReference(event.target.value)} maxLength={200} placeholder="From the supplier's credit note" className={inputClass} /></Field><Field label="Note (optional)"><input value={note} onChange={(event) => setNote(event.target.value)} maxLength={1000} className={inputClass} /></Field></div>
     <button type="submit" disabled={disabled || !valid} className="rounded-lg bg-slate-900 px-3.5 py-2 text-[12px] font-semibold text-white disabled:bg-slate-200 disabled:text-slate-400">Save supplier credit</button>

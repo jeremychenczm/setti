@@ -5,9 +5,9 @@ import { Workspace } from "@/ui/workspace/Workspace";
 
 export const metadata: Metadata = { title: "Studio projects | Setti", robots: { index: false, follow: false } };
 
-/** The studio's projects, for its designers; a client lands on their own chat. */
+/** The demo's prepared studio projects, for its designer; anyone else lands on their chats. */
 export default async function StudioPage() {
   const { account, demo, projects } = await requireWorkspace("/studio");
-  if (account.role !== "designer") redirect(projects[0] ? `/chats/${projects[0].key}` : "/chats");
+  if (account.role !== "designer" || !demo) redirect(projects[0] ? `/chats/${projects[0].key}` : "/chats");
   return <Workspace account={account} demo={demo} projects={projects} initialView="projects" />;
 }

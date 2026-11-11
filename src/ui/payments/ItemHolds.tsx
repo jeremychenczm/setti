@@ -10,6 +10,7 @@ import type { CheckoutView } from "@/payments/types";
 import type { CancellationReason } from "@/payments/cancellation";
 import { CancellationRecord, CancelItemForm } from "./CancelItemForm";
 import { demoSupplierNumber } from "./demo-supplier";
+import { useDemoMode } from "../demo-mode";
 import { PayMethodChooser, SavedMethodCard, savedMethodName } from "./PaymentMethods";
 import { paymentChanged, usePaymentRefresh } from "./usePaymentRefresh";
 
@@ -173,7 +174,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 /**
  * One item's card in a drawer beside the table: what the client approved, what
  * PayPal holds or captured, the supplier's confirmation, and the one next step,
- * which takes a single click (the demo supplier confirmation is filled in).
+ * which takes a single click in the demo, where the supplier confirmation is filled in.
  */
 type SupplierOrder = { quantity: number; unitPriceCents: number; taxCents: number; freightCents: number; inStock: boolean; leadTimeDays: number | null; reference: string };
 
@@ -184,8 +185,9 @@ function ItemDrawer({ line, now, designer, checkout, canHoldAll, busy, blocked, 
   onCancelItem: (reason: CancellationReason, note: string) => Promise<boolean>;
 }) {
   const [save, setSave] = useState(true);
-  // What the supplier confirmed: filled in from the approved line (there is no real supplier), and editable.
-  const [reference, setReference] = useState(() => demoSupplierNumber("order", line.itemId));
+  const demo = useDemoMode();
+  // What the supplier confirmed: filled in from the approved line, and editable. The demo has no real supplier, so it also fills in the order number.
+  const [reference, setReference] = useState(() => demo ? demoSupplierNumber("order", line.itemId) : "");
   const [quantity, setQuantity] = useState(String(line.terms?.quantity ?? ""));
   const [unit, setUnit] = useState(centsText(line.terms?.unitPriceCents ?? null));
   const [tax, setTax] = useState(centsText(line.terms?.taxCents ?? null));
@@ -296,9 +298,9 @@ function ItemDrawer({ line, now, designer, checkout, canHoldAll, busy, blocked, 
         <div className="mt-1.5"><CancellationRecord cancellation={line.cancellation} /></div>
       </section>}
       {terms && !line.cancellation && <section aria-label="Supplier confirmation">
-        <h4 className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Supplier confirmation{line.supplier ? "" : " · demo"}</h4>
+        <h4 className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Supplier confirmation{line.supplier || !demo ? "" : " · demo"}</h4>
         {editing ? <div className="mt-2 space-y-2.5">
-          <p className="text-[11px] leading-relaxed text-[var(--muted)]">There is no real supplier in this demo, so this is filled in from the approved line. Change anything the supplier confirmed differently.</p>
+          <p className="text-[11px] leading-relaxed text-[var(--muted)]">{demo ? "There is no real supplier in this demo, so this is filled in from the approved line. Change anything the supplier confirmed differently." : "Filled in from the approved line. Enter the supplier's order number and change anything the supplier confirmed differently."}</p>
           <Field label="Supplier's order number"><input className={inputClass} value={reference} onChange={(event) => setReference(event.target.value)} maxLength={200} placeholder="From the supplier's order confirmation" /></Field>
           <div className="grid grid-cols-2 gap-2.5">
             <Field label="Quantity"><input className={inputClass} inputMode="numeric" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></Field>

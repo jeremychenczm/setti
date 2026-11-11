@@ -1,0 +1,1 @@
+ALTER TABLE "supplier_events" DROP CONSTRAINT "supplier_events_demo";

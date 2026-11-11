@@ -12,7 +12,7 @@ import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
 import { isSameOriginRequest } from "@/http/origin";
 import { requestActor } from "@/http/actor";
 import { isRefusal, refusalResponse, SIGN_IN_REQUIRED, studioScope } from "@/http/scope";
-import { createProject, PROJECT_NAME_MAX, PROJECT_SUBTITLE_MAX } from "./create";
+import { createProject, DEMO_PROJECTS_MAX, demoStudioFull, PROJECT_NAME_MAX, PROJECT_SUBTITLE_MAX } from "./create";
 import { DraftError, draftSchema, saveDraft, type DraftInput } from "./draft";
 import { acceptInvite, createInvite, InviteError } from "./invite";
 
@@ -29,6 +29,9 @@ export async function postProjectResponse(req: NextRequest) {
   noteRequest(scope.sessionId);
   const ended = await refuseIfEnded(scope.sessionId);
   if (ended) return ended;
+  if (scope.actor.studio?.kind === "demo" && await demoStudioFull(appDb(), scope.sessionId)) {
+    return NextResponse.json({ code: "LIMIT_REACHED", error: `A demo holds up to ${DEMO_PROJECTS_MAX} projects. Use End demo & reset to start a new one.` }, { status: 429, headers });
+  }
   const text = await req.text();
   if (text.length > 2_048) return NextResponse.json({ code: "INVALID_REQUEST", error: "The request is too large." }, { status: 413, headers });
   let input: z.infer<typeof schema>;

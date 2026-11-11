@@ -15,6 +15,7 @@ import { LineReview, LineStateBadge, type LineChoice } from "./LineReview";
 import { ResolvePanel, type ResolveItem } from "./ResolvePanel";
 import { BulkDecisionBar } from "./BulkDecisionBar";
 import { SignBar } from "./SignBar";
+import { useDemoMode } from "../demo-mode";
 
 type QuoteRow = QuoteLine & QuoteLineTotals;
 type CategoryFilter = "all" | "furniture" | "service";
@@ -98,6 +99,7 @@ export function QuoteReport({ view, studioName, viewer, options, focusItemId, ac
   view: QuoteView; studioName: string; viewer: DemoAccount; options: QuoteOption[]; focusItemId?: string | null; actions: QuoteActions;
   onBack: () => void; onSelectQuote: (id: CaseKey) => void; onOpenChat: () => void;
 }) {
+  const demo = useDemoMode();
   const { document: quote, opening, approval, lines: lineStates } = view;
   const status = opening.status;
   const signedV1 = !approval && !!opening.sentAt;
@@ -254,7 +256,7 @@ export function QuoteReport({ view, studioName, viewer, options, focusItemId, ac
         {options.length > 1 ? <select aria-label="Select project" value={quote.projectId} onChange={(event) => onSelectQuote(event.target.value as CaseKey)} className="max-w-full rounded-md border border-[var(--line)] bg-white px-2 py-1.5 text-[12px] font-medium">
           {options.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
         </select> : <span className="text-[12px] font-medium">{quote.projectName}</span>}
-        <span className="ml-auto rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700">Demo quote</span>
+        {demo && <span className="ml-auto rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700">Demo quote</span>}
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -365,7 +367,7 @@ export function QuoteReport({ view, studioName, viewer, options, focusItemId, ac
 
           {open && opening.progress.approved > 0 && <ProjectPayments projectKey={quote.projectId as CaseKey} orderId={null} onServicesPaid={viewer.role === "client" ? onOpenChat : undefined} />}
 
-          <div className="mt-6 rounded-xl border border-dashed border-slate-200 px-4 py-3 text-[11px] leading-relaxed text-[var(--muted)]"><span className="font-medium text-slate-600">About this example. </span>{quote.demoNotice}<ul className="mt-2 list-disc space-y-1 pl-4">{quote.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul><p className="mt-2 font-medium">{quote.paymentNote}</p></div>
+          {demo && <div className="mt-6 rounded-xl border border-dashed border-slate-200 px-4 py-3 text-[11px] leading-relaxed text-[var(--muted)]"><span className="font-medium text-slate-600">About this example. </span>{quote.demoNotice}<ul className="mt-2 list-disc space-y-1 pl-4">{quote.assumptions.map((assumption) => <li key={assumption}>{assumption}</li>)}</ul><p className="mt-2 font-medium">{quote.paymentNote}</p></div>}
         </div>
       </div>
       {reviewing && <SignBar clientName={clientName} version={quote.version} approveCount={toApprove.length} approveCents={calculateQuoteTotals(toApprove).totalCents} declineCount={chosen.length - toApprove.length} undecided={pendingLines.length - chosen.length} missingReasons={missingReasons}

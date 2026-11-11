@@ -9,6 +9,13 @@ import { projectKeys, insertProject } from "./store";
 
 export const PROJECT_NAME_MAX = 80;
 export const PROJECT_SUBTITLE_MAX = 120;
+/** The most projects a visitor's demo studio holds, its sample project included. */
+export const DEMO_PROJECTS_MAX = 6;
+
+/** Whether the demo studio already holds as many projects as a demo may. */
+export async function demoStudioFull(db: Pick<Db, "select">, studioId: string): Promise<boolean> {
+  return (await projectKeys(db, studioId)).length >= DEMO_PROJECTS_MAX;
+}
 
 /** The demo's prepared studio projects use these in the same URLs. */
 const RESERVED = new Set(STUDIO_CASES.map((project) => project.id));

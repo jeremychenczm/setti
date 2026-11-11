@@ -12,6 +12,7 @@ import type { FundingPlan } from "../approval/funding";
 import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
 import { supplierEvents } from "../db/schema";
+import { isRealStudio } from "../projects/store";
 import { businessItem, confirmedPlan, lockConfirmedVersion, PaymentActionError, type LineRef, type ShownVersion, type Tx } from "./binding";
 import { noteInCase } from "./notes";
 import { lockOpeningVersion, openingPlan } from "./opening";
@@ -129,13 +130,15 @@ async function recordOrder(tx: Tx, sessionId: string, scope: OrderScope, input: 
     throw new PaymentActionError("SUPPLIER_TERMS_CHANGED", `The supplier's terms differ from what the client confirmed in V${scope.version}, so nothing will be captured. Re-price the change and send the client a new version.`, differences);
   }
   const totalCents = terms.quantity * terms.unitPriceCents + terms.taxCents + terms.freightCents;
+  const demo = !await isRealStudio(tx, sessionId);
   const [event] = await tx.insert(supplierEvents).values({
     projectId: scope.projectId, ...scope.at, itemId, kind: "order_confirmed", ...terms,
-    inStock: true, leadTimeDays: input.leadTimeDays, totalCents, reference, note, sessionId,
+    inStock: true, leadTimeDays: input.leadTimeDays, totalCents, reference, note, isDemo: demo, sessionId,
   }).returning();
+  const supplier = demo ? "Demo supplier" : "Supplier";
   await noteInCase(tx, { ...scope.at, itemId }, ({ version: number, itemName }) => line.purpose === "retained_cost"
-    ? `Demo supplier retained-cost confirmation recorded by the designer for V${number} · ${itemName}: ${money(totalCents)} total (reference ${reference}). Only the client-confirmed retained cost can be captured; closing the authorization releases its unused balance.`
-    : `Demo supplier confirmation recorded by the designer for V${number} · ${itemName}: ${terms.quantity} × ${money(terms.unitPriceCents)} + tax ${money(terms.taxCents)} + delivery ${money(terms.freightCents)} = ${money(totalCents)}, in stock (reference ${reference}). The authorized amount can now be captured.`);
+    ? `${supplier} retained-cost confirmation recorded by the designer for V${number} · ${itemName}: ${money(totalCents)} total (reference ${reference}). Only the client-confirmed retained cost can be captured; closing the authorization releases its unused balance.`
+    : `${supplier} confirmation recorded by the designer for V${number} · ${itemName}: ${terms.quantity} × ${money(terms.unitPriceCents)} + tax ${money(terms.taxCents)} + delivery ${money(terms.freightCents)} = ${money(totalCents)}, in stock (reference ${reference}). The authorized amount can now be captured.`);
   return event;
 }
 
@@ -159,8 +162,9 @@ export async function recordSupplierCredit(db: Db, sessionId: string, orderId: s
     if (credit !== refund.amountCents) {
       throw new PaymentActionError("SUPPLIER_TERMS_CHANGED", `The supplier credited ${money(credit)}, but V${version.order.version} confirms a refund of ${money(refund.amountCents)} after the non-refundable fees. Nothing will be refunded on other terms: re-price the return and send the client a new version.`);
     }
-    const [event] = await tx.insert(supplierEvents).values({ projectId: version.projectId, changeOrderId: version.order.id, itemId, kind: "credit_confirmed", totalCents: credit, reference, note, sessionId }).returning();
-    await noteInCase(tx, { changeOrderId: version.order.id, itemId }, ({ version: number, itemName }) => `Demo supplier credit recorded by the designer for V${number} · ${itemName}: ${money(credit)} (reference ${reference}). The confirmed refund can now be sent through PayPal.`);
+    const demo = !await isRealStudio(tx, sessionId);
+    const [event] = await tx.insert(supplierEvents).values({ projectId: version.projectId, changeOrderId: version.order.id, itemId, kind: "credit_confirmed", totalCents: credit, reference, note, isDemo: demo, sessionId }).returning();
+    await noteInCase(tx, { changeOrderId: version.order.id, itemId }, ({ version: number, itemName }) => `${demo ? "Demo supplier" : "Supplier"} credit recorded by the designer for V${number} · ${itemName}: ${money(credit)} (reference ${reference}). The confirmed refund can now be sent through PayPal.`);
     return event;
   });
 }

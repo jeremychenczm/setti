@@ -11,12 +11,13 @@ interface NavItem {
   icon: ComponentType<{ className?: string }>;
 }
 
-/** The designer sends quotes and keeps the money desk; a client receives quotes as proposals. */
-function itemsFor(account: DemoAccount): NavItem[] {
+/** The designer sends quotes and keeps the money desk; a client receives quotes as proposals. Projects lists the demo's prepared projects. */
+function itemsFor(account: DemoAccount, demo: boolean): NavItem[] {
   return [
     { view: "inbox", label: "Inbox", icon: Inbox },
     { view: "chats", label: "Chats", icon: MessageCircle },
-    ...(account.role === "designer" ? [{ view: "projects" as const, label: "Projects", icon: FolderOpen }, { view: "money" as const, label: "Money", icon: Wallet }] : []),
+    ...(account.role === "designer" && demo ? [{ view: "projects" as const, label: "Projects", icon: FolderOpen }] : []),
+    ...(account.role === "designer" ? [{ view: "money" as const, label: "Money", icon: Wallet }] : []),
     { view: "quotes", label: account.role === "designer" ? "Quotes" : "Proposals", icon: FileSpreadsheet },
   ];
 }
@@ -28,7 +29,7 @@ export function Sidebar({ view, onView, account, demo, onSwitchAccount, badges =
       <span title="Setti" className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary-fill)] text-[15px] font-bold text-[var(--on-primary)]">S</span>
 
       <nav aria-label="Workspace modules" className="mt-5 flex flex-1 flex-col items-center gap-1.5">
-        {itemsFor(account).map(({ view: v, label, icon: Icon }) => {
+        {itemsFor(account, demo).map(({ view: v, label, icon: Icon }) => {
           const active = view === v;
           const count = badges[v] ?? 0;
           // The designer's number is what still needs doing; the client's is what is new.
