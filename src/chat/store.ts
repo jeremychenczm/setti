@@ -11,9 +11,13 @@ import { withRevisedLine, withV1Lines } from "../opening/carry";
 import { documentHash, openingDocument } from "../opening/document";
 import { readOpening } from "../opening/read";
 import { openingQuotes } from "../opening/schema";
-import { QUOTE_MESSAGE_MAX, sentFromChat } from "../opening/types";
+import { QUOTE_MESSAGE_MAX } from "../opening/types";
+import { sampleProject } from "../demo/sample-projects";
+import { sentFromChat } from "../projects/settings";
+import { insertProject, isRealStudio } from "../projects/store";
 import { insertBaseline } from "../pricing/bridge";
 import { changeOrders } from "../pricing/schema";
+import { isCaseKey } from "./cases";
 import { chatCases, chatMessages } from "./schema";
 import type { AppendMessageInput, BeginAiResult, CaseKey, CaseMessage, ChatStore, SendQuoteInput, SentVersion, StoredCase } from "./types";
 
@@ -31,8 +35,8 @@ export class ChatStoreError extends Error {
 }
 
 function validateScope(sessionId: string, projectKey: CaseKey): void {
-  if (!UUID.test(sessionId) || !["willow", "maple"].includes(projectKey)) {
-    throw new ChatStoreError("INVALID_INPUT", "A valid demo session and case are required.");
+  if (!UUID.test(sessionId) || !isCaseKey(projectKey)) {
+    throw new ChatStoreError("INVALID_INPUT", "A valid studio and project are required.");
   }
 }
 
@@ -40,10 +44,20 @@ function validateMessageId(id: string): void {
   if (!UUID.test(id)) throw new ChatStoreError("INVALID_INPUT", "Message id must be a UUID.");
 }
 
+/**
+ * Locks the project. A real studio has only the projects its designers created;
+ * a demo studio, or a session from before studios, gets a sample project the
+ * first time it opens one.
+ */
 async function lockCase(tx: Transaction, sessionId: string, projectKey: CaseKey): Promise<CaseRow> {
-  await tx.insert(chatCases).values({ sessionId, projectKey }).onConflictDoNothing({ target: [chatCases.sessionId, chatCases.projectKey] });
-  const [row] = await tx.select().from(chatCases).where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, projectKey))).for("update");
-  return row;
+  const lock = () => tx.select().from(chatCases).where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, projectKey))).for("update");
+  const [found] = await lock();
+  if (found) return found;
+  const sample = sampleProject(projectKey);
+  if (!sample || await isRealStudio(tx, sessionId)) throw new ChatStoreError("PROJECT_NOT_FOUND", "This studio has no such project.");
+  await insertProject(tx, sessionId, projectKey, sample);
+  const [created] = await lock();
+  return created;
 }
 
 async function readMessage(tx: Transaction, caseId: string, messageId: string): Promise<MessageRow> {
@@ -83,7 +97,7 @@ async function sentVersions(tx: Transaction, row: CaseRow): Promise<SentVersion[
 
 async function snapshot(tx: Transaction, row: CaseRow): Promise<StoredCase> {
   const messages = await tx.select().from(chatMessages).where(eq(chatMessages.caseId, row.id)).orderBy(asc(chatMessages.sequence));
-  return { id: row.id, projectKey: row.projectKey, messages: messages.map(publicMessage), draft: row.draft, activeMessageId: row.activeMessageId, activeRunStage: row.activeMessageId ? row.activeRunStage : null, quote: (await currentCaseQuote(tx, row.id, row.projectKey)) ?? undefined, opening: (await readOpening(tx, row)).opening, versions: await sentVersions(tx, row) };
+  return { id: row.id, projectKey: row.projectKey, messages: messages.map(publicMessage), draft: row.draft, activeMessageId: row.activeMessageId, activeRunStage: row.activeMessageId ? row.activeRunStage : null, quote: (await currentCaseQuote(tx, row.id)) ?? undefined, opening: (await readOpening(tx, row)).opening, versions: await sentVersions(tx, row) };
 }
 
 async function expireRun(tx: Transaction, row: CaseRow): Promise<CaseRow> {
@@ -147,19 +161,19 @@ export function createChatStore(db: Db): ChatStore {
 
     async sendQuote(sessionId, projectKey, input: SendQuoteInput) {
       validateMessageId(input.id);
-      if (!sentFromChat(projectKey)) throw new ChatStoreError("NOT_AVAILABLE", "This project starts from a quote the client already approved.");
       const text = input.text.trim();
       if (!text || text.length > QUOTE_MESSAGE_MAX || !input.sentBy.trim()) {
         throw new ChatStoreError("INVALID_INPUT", `Add a message of at most ${QUOTE_MESSAGE_MAX.toLocaleString("en-US")} characters to send with the quote.`);
       }
       return withinCase(sessionId, projectKey, async (tx, row) => {
+        if (!sentFromChat(row)) throw new ChatStoreError("NOT_AVAILABLE", "This project starts from a quote the client already approved.");
         // A retry, a double click or a second window finds V1 already sent and changes nothing.
         const [sent] = await tx.select({ caseId: openingQuotes.caseId }).from(openingQuotes).where(eq(openingQuotes.caseId, row.id));
         if (sent) return snapshot(tx, row);
         const [existing] = await tx.select({ id: chatMessages.id }).from(chatMessages).where(and(eq(chatMessages.caseId, row.id), eq(chatMessages.id, input.id)));
         if (existing) throw new ChatStoreError("IDEMPOTENCY_CONFLICT", "This message id has already been used for different content.");
         if (row.activeRunId) throw new ChatStoreError("CASE_BUSY", "Wait for the current AI reply before sending the quote.");
-        const document = openingDocument(projectKey);
+        const document = openingDocument(row);
         await tx.insert(chatMessages).values({ caseId: row.id, id: input.id, actor: "designer", text });
         await tx.insert(openingQuotes).values({ caseId: row.id, messageId: input.id, document, contentHash: documentHash(document), sentBy: input.sentBy.trim() });
         await insertBaseline(tx, row.id, document);
@@ -216,27 +230,27 @@ export function createChatStore(db: Db): ChatStore {
           return { state: await snapshot(tx, row), stale: true };
         }
         if (result.draft) {
-          const quote = await currentCaseQuote(tx, row.id, projectKey);
+          const quote = await currentCaseQuote(tx, row.id);
           if (!quote || result.draft.basedOnQuoteId !== quote.id || result.draft.basedOnVersion !== quote.version || result.draft.basedOnQuoteFingerprint !== quoteFingerprint(quote)) {
             throw new ChatStoreError("STALE_BASELINE", "The approved quote changed. Start a new @Setti request against the current approved version.");
           }
         }
         if (result.moneyAnswer) {
-          const quote = await currentCaseQuote(tx, row.id, projectKey);
+          const quote = await currentCaseQuote(tx, row.id);
           if (!quote || result.moneyAnswer.quoteId !== quote.id || result.moneyAnswer.version !== quote.version) {
             throw new ChatStoreError("STALE_BASELINE", "The approved quote changed while the recorded money answer was prepared. Ask again against the latest version.");
           }
           if ("draft" in result) throw new ChatStoreError("INVALID_INPUT", "A recorded money answer cannot modify a draft.");
         }
         if (result.quoteAnswer) {
-          const quote = await currentCaseQuote(tx, row.id, projectKey);
+          const quote = await currentCaseQuote(tx, row.id);
           if (!quote || result.quoteAnswer.quoteId !== quote.id || result.quoteAnswer.version !== quote.version) {
             throw new ChatStoreError("STALE_BASELINE", "The approved quote changed while the lookup ran. Ask again against the latest version.");
           }
           if ("draft" in result) throw new ChatStoreError("INVALID_INPUT", "A quote lookup cannot modify a draft.");
         }
         let draft = result.draft ?? null;
-        if (draft && sentFromChat(projectKey)) {
+        if (draft && sentFromChat(row)) {
           // An AI draft keeps the designer's own revisions of declined V1 lines and carries every undecided V1 line.
           const read = await readOpening(tx, row);
           for (const change of row.draft?.changes ?? []) {

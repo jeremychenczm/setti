@@ -11,6 +11,9 @@ import { authAccounts, authSessions, studioMembers, studios, users, type DemoPer
 import type { Auth } from "@/auth/server";
 import { chatCases, projectClients } from "@/chat/schema";
 import type { Db } from "@/db/client";
+import { TRY_PROJECT } from "@/demo/sample-projects";
+import { insertProject } from "@/projects/store";
+import { TRY_PROJECT_KEY } from "./preparation";
 
 /** A reserved domain (RFC 2606): mail to it is never delivered. */
 const DEMO_EMAIL_DOMAIN = "demo.setti.invalid";
@@ -48,10 +51,10 @@ async function ensurePerson(db: Db, auth: Auth, runId: string, persona: DemoPers
   return { persona, userId: created, email };
 }
 
-/** The Maple project's case in this run, created as the chat creates it on first read. */
+/** The run's Maple project, which Emma is the client of. */
 async function mapleCaseId(db: Db, runId: string): Promise<string> {
-  await db.insert(chatCases).values({ sessionId: runId, projectKey: "maple" }).onConflictDoNothing({ target: [chatCases.sessionId, chatCases.projectKey] });
-  const [found] = await db.select({ id: chatCases.id }).from(chatCases).where(and(eq(chatCases.sessionId, runId), eq(chatCases.projectKey, "maple")));
+  await insertProject(db, runId, TRY_PROJECT_KEY, TRY_PROJECT);
+  const [found] = await db.select({ id: chatCases.id }).from(chatCases).where(and(eq(chatCases.sessionId, runId), eq(chatCases.projectKey, TRY_PROJECT_KEY)));
   return found.id;
 }
 

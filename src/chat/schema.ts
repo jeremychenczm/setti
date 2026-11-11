@@ -2,14 +2,24 @@ import { sql } from "drizzle-orm";
 import { check, integer, jsonb, pgTable, primaryKey, serial, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import type { AiStage, AiState, CaseKey, ChangeDraft, HumanActor } from "./types";
 import type { MoneyAnswer } from "../ai/money-types";
+import type { ProjectQuote, ProjectStart } from "../projects/settings";
 import type { QuoteAnswer } from "../ai/quote-query";
 import { users } from "../auth/schema";
 
-/** Demo conversations are independent of real projects, quotes and payments. */
+/**
+ * A studio's project: its chat, and what it is set up as. `sessionId` is the
+ * owning studio's id; `projectKey` is the project's short name, unique in the studio.
+ */
 export const chatCases = pgTable("chat_cases", {
   id: uuid("id").primaryKey().defaultRandom(),
   sessionId: uuid("session_id").notNull(),
   projectKey: text("project_key").$type<CaseKey>().notNull(),
+  name: text("name").notNull(),
+  subtitle: text("subtitle").notNull().default(""),
+  /** Whether V1 is a draft the designer sends from the chat, or was approved before Setti. */
+  startsFrom: text("starts_from").$type<ProjectStart>().notNull(),
+  /** The project's own V1: the lines being prepared, or the quote approved before Setti. */
+  quote: jsonb("quote").$type<ProjectQuote>().notNull(),
   draft: jsonb("draft").$type<ChangeDraft>(),
   activeMessageId: uuid("active_message_id"),
   activeRunId: uuid("active_run_id"),
@@ -21,7 +31,8 @@ export const chatCases = pgTable("chat_cases", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   unique("chat_cases_session_project_unique").on(t.sessionId, t.projectKey),
-  check("chat_cases_project_key_valid", sql`${t.projectKey} IN ('willow', 'maple')`),
+  check("chat_cases_project_key_format", sql`${t.projectKey} ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND length(${t.projectKey}) <= 48`),
+  check("chat_cases_starts_from_valid", sql`${t.startsFrom} IN ('draft_quote', 'approved_quote')`),
   check("chat_cases_active_run_complete", sql`(${t.activeMessageId} IS NULL AND ${t.activeRunId} IS NULL AND ${t.activeRunStartedAt} IS NULL) OR (${t.activeMessageId} IS NOT NULL AND ${t.activeRunId} IS NOT NULL AND ${t.activeRunStartedAt} IS NOT NULL)`),
 ]);
 

@@ -6,6 +6,8 @@ import { createAuth, type Auth } from "@/auth/server";
 import { chatCases, projectClients } from "@/chat/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "@/db/testing";
 import { actorFrom, homeOf, projectAccess, scopeOf } from "./identity";
+import { sampleProject } from "@/demo/sample-projects";
+import { insertProject } from "@/projects/store";
 
 const PASSWORD = "correct horse battery";
 /** The `name=value` pairs a response sets, as a request's Cookie header. */
@@ -24,7 +26,7 @@ describe.skipIf(!testDatabaseUrl)("who a request is", () => {
   }
   /** Adds the account with this email as the client of `key` in a studio. */
   async function addClient(email: string, studioId: string, key: "maple" | "willow") {
-    await handle.db.insert(chatCases).values({ sessionId: studioId, projectKey: key }).onConflictDoNothing();
+    await insertProject(handle.db, studioId, key, sampleProject(key)!);
     const [project] = await handle.db.select({ id: chatCases.id }).from(chatCases).where(and(eq(chatCases.sessionId, studioId), eq(chatCases.projectKey, key)));
     const [user] = await handle.db.select({ id: users.id }).from(users).where(eq(users.email, email));
     await handle.db.insert(projectClients).values({ caseId: project.id, userId: user.id });

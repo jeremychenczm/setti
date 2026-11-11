@@ -51,7 +51,7 @@ export async function startLineChange(db: Db, sessionId: string, key: CaseKey, i
     const [row] = await tx.select().from(chatCases).where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, key))).for("update");
     if (!row) throw new PricingStoreError("PRICING_NOT_FOUND", "This demo project has not started yet.");
     if (row.activeRunId) throw new PricingStoreError("PRICING_BUSY", "Wait for the current AI reply before changing a line.");
-    const quote = await currentCaseQuote(tx, row.id, key);
+    const quote = await currentCaseQuote(tx, row.id);
     if (!quote) throw new PricingStoreError("PRICING_NOT_READY", "The client has not approved any line yet. A change starts from an approved line.");
     const line = quote.lines.find((candidate) => candidate.itemId === input.itemId);
     if (!line) throw new PricingStoreError("PRICING_NOT_FOUND", "This line is not part of the current agreement.");

@@ -74,10 +74,6 @@ export interface SignOpeningInput {
 export const QUOTE_MESSAGE_MAX = 2_000;
 export const DECLINE_REASON_MAX = 1_000;
 
-export function sentFromChat(key: CaseKey): boolean {
-  return key === "willow";
-}
-
 /** The client's name as typed to sign: the document's name without its demo label. */
 export function clientSignatureName(document: Pick<QuoteDocument, "clientName">): string {
   return document.clientName.replace(/\s*\(demo client\)$/, "");

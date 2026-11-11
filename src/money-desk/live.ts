@@ -82,9 +82,9 @@ export const OPENING_STAGE: Record<OpeningStatus, string> = { draft: "V1 not sen
 
 export async function liveProject(db: Db, sessionId: string, key: CaseKey, account: DemoAccount, now = new Date()): Promise<DeskProject | null> {
   const reader: Reader = db;
-  const [row] = await reader.select({ id: chatCases.id }).from(chatCases).where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, key)));
+  const [row] = await reader.select({ id: chatCases.id, startsFrom: chatCases.startsFrom, quote: chatCases.quote }).from(chatCases).where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, key)));
   if (!row) return null;
-  const opening = await readOpening(reader, { id: row.id, projectKey: key });
+  const opening = await readOpening(reader, row);
   const project = { id: key, name: opening.document.projectName, client: clientName(opening.document.clientName), source: "live" as const };
 
   const [approved] = await reader.select({ orderId: changeOrders.id, version: revisions.number }).from(changeOrders)

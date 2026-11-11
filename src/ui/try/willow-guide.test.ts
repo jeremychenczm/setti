@@ -3,18 +3,19 @@ import { defaultOpening } from "@/opening/document";
 import type { ItemHoldView, ItemHoldsView } from "@/payments/item-holds-view";
 import type { ServicesPaymentView } from "@/payments/services-view";
 import { willowGuideStep, type WillowGuideData } from "./willow-guide";
+import { sampleProject } from "@/demo/sample-projects";
 
 const serviceView = (patch: Partial<ServicesPaymentView> = {}): ServicesPaymentView => ({ projectKey: "willow", basis: { version: 1, orderId: null }, services: [{ itemId: "consultation", label: "Consultation", targetCents: 30_000, capturedCents: 30_000, captures: [] }], dueCents: 0, furnitureToHold: { count: 0, cents: 0 }, checkout: null, savedPayPal: true, savedMethod: { kind: "paypal", label: "b•••@personal.example.com", savedAt: "2026-10-30T12:00:00.000Z" }, canRemoveSaved: false, checkoutOptions: null, canPay: false, canFinish: false, canCheck: false, reason: null, paypalClientId: null, ...patch });
 const item = (patch: Partial<ItemHoldView> = {}): ItemHoldView => ({ itemId: "chair", side: "baseline", label: "Chair", targetCents: 10_000, heldCents: 10_000, capturedCents: 0, state: "held", operationId: "hold", approvalUrl: null, canCheck: false, canCancel: false, canCancelItem: false, cancellation: null, canCheckout: false, paypalAuthorizationId: "AUTH", expiresAt: null, timing: null, expiredAt: null, renewal: null, failureMessage: null, vendor: "Alder Row", terms: { quantity: 1, unitPriceCents: 10_000, taxCents: 0, freightCents: 0, leadTimeDays: 21 }, supplier: null, ...patch });
 const holdsView = (patch: Partial<ItemHoldsView> = {}): ItemHoldsView => ({ clock: { now: "2026-11-01T12:00:00.000Z", simulatedDays: 0 }, projectKey: "willow", basis: { version: 1, orderId: null }, items: [item()], toHoldCents: 0, savedPayPal: true, savedMethod: { kind: "paypal", label: "b•••@personal.example.com", savedAt: "2026-10-30T12:00:00.000Z" }, canRemoveSaved: false, checkoutOptions: null, canHold: false, canConfirmSupplier: true, contentHash: "hash", reason: null, ...patch });
 function approved(): WillowGuideData {
-  return { snapshot: { opening: { ...defaultOpening("willow"), status: "approved", sentAt: "2026-10-24T00:00:00Z", progress: { approved: 2, declined: 1, withdrawn: 0, pending: 25, approvedTotalCents: 40_000 } }, versions: [] }, services: serviceView(), holds: holdsView() };
+  return { snapshot: { opening: { ...defaultOpening(sampleProject("willow")!), status: "approved", sentAt: "2026-10-24T00:00:00Z", progress: { approved: 2, declined: 1, withdrawn: 0, pending: 25, approvedTotalCents: 40_000 } }, versions: [] }, services: serviceView(), holds: holdsView() };
 }
 
 describe("Willow first-quote guide", () => {
   it("asks Jordan to send a draft without inventing a client approval", () => {
     const data = approved();
-    data.snapshot.opening = defaultOpening("willow");
+    data.snapshot.opening = defaultOpening(sampleProject("willow")!);
     expect(willowGuideStep(data, "client")).toMatchObject({ index: 0, role: "jordan", destination: "chat" });
   });
 

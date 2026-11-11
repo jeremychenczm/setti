@@ -5,13 +5,12 @@
  * records; nothing here infers an approval.
  */
 import { and, eq, isNotNull, sql } from "drizzle-orm";
-import { caseDocument, preapprovedQuote } from "../chat/cases";
 import { chatMessages } from "../chat/schema";
-import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
 import { approvals, revisionLines, revisions } from "../db/schema";
 import { itemMappingKey } from "../pricing/document";
 import { pricingCases } from "../pricing/schema";
+import { approvedStart, preparedQuote, type ProjectSettings } from "../projects/settings";
 import type { ApprovedQuoteReport } from "../quotes/types";
 import { openingSummary, pendingLine, withoutApproval } from "./document";
 import { openingQuotes, openingWithdrawals } from "./schema";
@@ -29,10 +28,11 @@ export interface OpeningRead extends Omit<QuoteView, "projectKey"> {
   decisions: Map<string, ApprovalRow>;
 }
 
-export async function readOpening(db: Reader, row: { id: string; projectKey: CaseKey }): Promise<OpeningRead> {
+/** Where the project's V1 stands. `row` is the project's own row: its id and what it is set up as. */
+export async function readOpening(db: Reader, row: { id: string } & ProjectSettings): Promise<OpeningRead> {
   const [bridge] = await db.select().from(pricingCases).where(eq(pricingCases.caseId, row.id));
   const [sent] = await db.select().from(openingQuotes).where(eq(openingQuotes.caseId, row.id));
-  const quote = bridge?.baselineQuote ?? preapprovedQuote(row.projectKey);
+  const quote = bridge?.baselineQuote ?? approvedStart(row);
   if (quote && !sent) {
     const document = withoutApproval(quote);
     const lines = Object.fromEntries(document.lines.map((line) => [line.itemId, { state: "approved", note: null, decidedAt: quote.approvedAt, by: quote.approvedBy, questions: 0 } satisfies OpeningLine]));
@@ -43,7 +43,7 @@ export async function readOpening(db: Reader, row: { id: string; projectKey: Cas
   }
 
   if (!sent) {
-    const document = caseDocument(row.projectKey);
+    const document = withoutApproval(preparedQuote(row));
     const lines = Object.fromEntries(document.lines.map((line) => [line.itemId, pendingLine()]));
     return { document, lines, approval: null, revision: null, lineIds: new Map(), decisions: new Map(), opening: openingSummary(document, lines, { messageId: null, sentAt: null, sentBy: null, contentHash: null, closed: false, signedAt: null }, true) };
   }

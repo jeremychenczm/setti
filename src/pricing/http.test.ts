@@ -97,7 +97,7 @@ describe("pricing HTTP boundaries", () => {
   });
 
   it("rejects unknown cases, injected approval/payment fields, and malformed amounts before writing", async () => {
-    expect((await getPricingResponse(request("/api/pricing/other"), "other")).status).toBe(404);
+    expect((await getPricingResponse(request("/api/pricing/Other"), "Other")).status).toBe(404);
     expect(mock.getWorkspace).not.toHaveBeenCalled();
     for (const body of [{ ...saveBody(), approved: true }, { ...saveBody(), actor: "designer" }, { ...saveBody(), expectedVersion: 0 }]) {
       expect((await savePricingResponse(request("/api/pricing/willow", "PUT", body), "willow")).status).toBe(400);

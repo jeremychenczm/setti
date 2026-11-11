@@ -14,6 +14,7 @@ vi.mock("./service", () => ({ runCaseAi: mocks.run, CaseAiError: class CaseAiErr
 vi.mock("@/ai/model", () => ({ aiConfigured: mocks.configured }));
 import { getCaseResponse, getQuoteResponse, postCaseResponse, postQuoteDropResponse, postQuoteResponse, postQuoteSignResponse } from "./http";
 import { defaultOpening, openingDocument } from "@/opening/document";
+import { sampleProject } from "@/demo/sample-projects";
 
 /** The demo studio: Jordan designs, Sofia is Willow's client and Emma is Maple's. */
 const studio = randomUUID();
@@ -26,10 +27,10 @@ let state: StoredCase;
 beforeEach(() => {
   vi.clearAllMocks();
   as(jordan);
-  state = { id: randomUUID(), projectKey: "willow", messages: [], draft: null, activeMessageId: null };
+  state = { id: randomUUID(), projectKey: "willow", messages: [], draft: null, activeMessageId: null, opening: defaultOpening(sampleProject("willow")!) };
   mocks.store = {
     getCase: vi.fn().mockResolvedValue(state), appendMessage: vi.fn().mockResolvedValue(state), sendQuote: vi.fn().mockResolvedValue(state),
-    getQuote: vi.fn().mockResolvedValue({ projectKey: "willow", opening: defaultOpening("willow"), document: openingDocument("willow"), approval: null, lines: {} }),
+    getQuote: vi.fn().mockResolvedValue({ projectKey: "willow", opening: defaultOpening(sampleProject("willow")!), document: openingDocument(sampleProject("willow")!), approval: null, lines: {} }),
     beginAi: vi.fn(), completeAi: vi.fn(), failAi: vi.fn(),
   };
   mocks.run.mockResolvedValue(state);
@@ -112,7 +113,11 @@ describe("case chat HTTP boundary", () => {
   it("rejects other origins, unknown cases and client-supplied approval or prices", async () => {
     const input = { id: randomUUID(), actor: "client", text: "@Setti change" };
     expect((await postCaseResponse(post(input, { origin: "https://another.example" }), "willow")).status).toBe(403);
-    expect((await postCaseResponse(post(input), "not-a-case")).status).toBe(404);
+    expect((await postCaseResponse(post(input), "Not a project")).status).toBe(404);
+    // A well-formed key the studio has no project for.
+    as(jordan);
+    vi.mocked(mocks.store.getCase).mockRejectedValueOnce(Object.assign(new Error("missing"), { code: "PROJECT_NOT_FOUND" }));
+    expect((await getCaseResponse(new NextRequest("http://localhost:3002/api/chat/kitchen"), "kitchen")).status).toBe(404);
     expect((await postCaseResponse(post({ ...input, approved: true, quote: { unitPriceCents: 1 } }), "willow")).status).toBe(400);
     expect((await postCaseResponse(post({ ...input, actor: "assistant" }), "willow")).status).toBe(400);
     expect(mocks.store.appendMessage).not.toHaveBeenCalled();
@@ -185,7 +190,7 @@ describe("quote V1 HTTP boundary", () => {
     expect(client.status).toBe(404);
     expect((await client.json()).code).toBe("NOT_SHARED");
     expect((await quote(emma)).status).toBe(403);
-    vi.mocked(mocks.store.getQuote).mockResolvedValueOnce({ projectKey: "willow", opening: { ...defaultOpening("willow"), status: "sent", messageId: randomUUID(), sentAt: new Date().toISOString(), sentBy: "Jordan Lee", contentHash: "a".repeat(64) }, document: openingDocument("willow"), approval: null, lines: {} });
+    vi.mocked(mocks.store.getQuote).mockResolvedValueOnce({ projectKey: "willow", opening: { ...defaultOpening(sampleProject("willow")!), status: "sent", messageId: randomUUID(), sentAt: new Date().toISOString(), sentBy: "Jordan Lee", contentHash: "a".repeat(64) }, document: openingDocument(sampleProject("willow")!), approval: null, lines: {} });
     expect((await quote(sofia)).status).toBe(200);
   });
 });

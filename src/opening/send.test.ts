@@ -7,6 +7,7 @@ import type { ChatStore } from "../chat/types";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import { documentHash, openingDocument } from "./document";
 import { openingQuotes } from "./schema";
+import { sampleProject } from "@/demo/sample-projects";
 
 describe.skipIf(!testDatabaseUrl)("sending quote V1 from the project chat", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -33,10 +34,10 @@ describe.skipIf(!testDatabaseUrl)("sending quote V1 from the project chat", () =
     const id = randomUUID();
     const state = await send(id);
     expect(state.messages).toEqual([expect.objectContaining({ id, actor: "designer", text: "Here is the full quote for Willow Residence.", aiState: "none" })]);
-    const hash = documentHash(openingDocument("willow"));
+    const hash = documentHash(openingDocument(sampleProject("willow")!));
     expect(state.opening).toMatchObject({ status: "sent", messageId: id, sentBy: "Jordan Lee", contentHash: hash, lineCount: 26 });
     const view = await store.getQuote(sessionId, "willow");
-    expect(view.document).toEqual(openingDocument("willow"));
+    expect(view.document).toEqual(openingDocument(sampleProject("willow")!));
     expect(view.approval).toBeNull();
     expect(documentHash(view.document)).toBe(view.opening.contentHash);
   });
@@ -68,7 +69,7 @@ describe.skipIf(!testDatabaseUrl)("sending quote V1 from the project chat", () =
     const clientMessage = randomUUID();
     await store.appendMessage(otherSession, "willow", { id: clientMessage, actor: "client", text: "Hi" });
     const [otherCase] = await handle.db.select().from(chatCases).where(eq(chatCases.sessionId, otherSession));
-    const document = openingDocument("willow");
+    const document = openingDocument(sampleProject("willow")!);
     await expect(handle.db.insert(openingQuotes).values({ caseId: otherCase.id, messageId: clientMessage, document, contentHash: documentHash(document), sentBy: "Sofia Martinez" })).rejects.toThrow();
     const [{ count }] = await handle.db.select({ count: sql<number>`count(*)::int` }).from(openingQuotes);
     expect(count).toBe(1);

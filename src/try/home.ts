@@ -5,6 +5,9 @@ import { chatCases, chatMessages } from "../chat/schema";
 import type { Db } from "../db/client";
 import { approvals } from "../db/schema";
 import { HOME_APPROVED_QUOTE, HOME_DISCUSSION, HOME_SCENARIO, HOME_SUPPLIER_NOTES } from "../demo/living-dining";
+import { TRY_PROJECT } from "../demo/sample-projects";
+import { insertProject } from "../projects/store";
+import { TRY_PROJECT_KEY } from "./preparation";
 import { documentHash, withoutApproval } from "../opening/document";
 import { openingQuotes } from "../opening/schema";
 import { insertBaseline } from "../pricing/bridge";
@@ -17,7 +20,7 @@ const HOME_BASELINE_IDS = [HOME_APPROVED_QUOTE.id, "demo-maple-living-dining-v1"
 
 async function ensureBaseline(db: Db, session: string): Promise<ApprovedQuoteReport> {
   return db.transaction(async (tx) => {
-    await tx.insert(chatCases).values({ sessionId: session, projectKey: "maple" }).onConflictDoNothing({ target: [chatCases.sessionId, chatCases.projectKey] });
+    await insertProject(tx, session, TRY_PROJECT_KEY, TRY_PROJECT);
     const [row] = await tx.select().from(chatCases).where(and(eq(chatCases.sessionId, session), eq(chatCases.projectKey, "maple"))).for("update");
     const [existing] = await tx.select().from(pricingCases).where(eq(pricingCases.caseId, row.id));
     if (existing) {

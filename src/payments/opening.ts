@@ -13,7 +13,7 @@ import { chatCases } from "../chat/schema";
 import type { CaseKey } from "../chat/types";
 import { revisions } from "../db/schema";
 import { readOpening } from "../opening/read";
-import { sentFromChat } from "../opening/types";
+import { sentFromChat } from "../projects/settings";
 import { itemMappingKey } from "../pricing/document";
 import { pricingCases } from "../pricing/schema";
 import { calculateLineTotals } from "../quotes/totals";
@@ -42,7 +42,7 @@ export async function lockOpeningVersion(tx: Tx, sessionId: string, key: CaseKey
   const [row] = await tx.select().from(chatCases).where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, key))).for("update");
   const read = row ? await readOpening(tx, row) : null;
   const [bridge] = row ? await tx.select().from(pricingCases).where(eq(pricingCases.caseId, row.id)) : [];
-  if (!sentFromChat(key) && !bridge?.baselineQuote) throw new PaymentActionError("NOT_FOUND", "This project's quote was approved before Setti. Payments start from its confirmed versions.");
+  if (row && !sentFromChat(row) && !bridge?.baselineQuote) throw new PaymentActionError("NOT_FOUND", "This project's quote was approved before Setti. Payments start from its confirmed versions.");
   if (!row || !read?.revision || !read.opening.contentHash || !bridge) throw new PaymentActionError("NOT_FOUND", "Quote V1 has not been sent in this demo project yet.");
   const [revision] = await tx.select().from(revisions).where(eq(revisions.id, read.revision.id)).for("share");
   if (revision.status !== "sent") throw new PaymentActionError("STALE_VERSION", "A newer version replaced quote V1. Start payment steps from that version.");

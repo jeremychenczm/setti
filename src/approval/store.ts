@@ -203,7 +203,7 @@ export function createApprovalStore(db: Db) {
         if (!scope) throw new ApprovalStoreError("NOT_FOUND", "This change order could not be found.");
         const [caseRow] = await tx.select().from(chatCases).where(eq(chatCases.id, scope.caseId)).for("update");
         if (caseRow.sessionId !== sessionId) throw new ApprovalStoreError("FORBIDDEN", "This demo session cannot confirm this document.");
-        if (caseRow.projectKey === "maple" && await paymentPreparationPending(tx, sessionId)) throw new ApprovalStoreError("PREPARATION_PENDING", PREPARATION_MESSAGE);
+        if (await paymentPreparationPending(tx, sessionId, caseRow.projectKey)) throw new ApprovalStoreError("PREPARATION_PENDING", PREPARATION_MESSAGE);
         const [orderRow] = await tx.select().from(changeOrders).where(eq(changeOrders.id, id));
         const [revision] = await tx.select().from(revisions).where(eq(revisions.id, orderRow.revisionId)).for("update");
         const order = orderRow.document;

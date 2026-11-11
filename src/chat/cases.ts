@@ -1,21 +1,25 @@
-import { mapleApprovedQuote } from "@/quotes/demo-quote";
+import { sampleProject } from "@/demo/sample-projects";
+import { approvedStart } from "@/projects/settings";
 import type { ApprovedQuoteReport, QuoteDocument } from "@/quotes/types";
-import { willowQuote } from "@/quotes/willow-quote";
 import type { CaseKey } from "./types";
 
+export const PROJECT_KEY_MAX = 48;
+const PROJECT_KEY = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+/** A well-formed project short name. Whether the project exists is the studio's to say. */
 export function isCaseKey(value: string): value is CaseKey {
-  return value === "willow" || value === "maple";
+  return value.length <= PROJECT_KEY_MAX && PROJECT_KEY.test(value);
 }
 
-/** Server-owned V1 contents; a request can never supply or change these prices. */
+/** The sample project's V1 (demo data, for tests and seeding). Product code reads the project's own row. */
 export function caseDocument(key: CaseKey): QuoteDocument {
-  return key === "willow" ? willowQuote : mapleApprovedQuote;
+  const sample = sampleProject(key);
+  if (!sample) throw new Error(`There is no sample project "${key}".`);
+  return sample.quote;
 }
 
-/**
- * Maple's demo starts from a V1 its client already approved. Willow has none:
- * its baseline is whatever the client approves of the V1 the designer sends.
- */
+/** The sample project's V1 approved before Setti, or null when it starts from a draft (demo data). */
 export function preapprovedQuote(key: CaseKey): ApprovedQuoteReport | null {
-  return key === "maple" ? mapleApprovedQuote : null;
+  const sample = sampleProject(key);
+  return sample ? approvedStart(sample) : null;
 }

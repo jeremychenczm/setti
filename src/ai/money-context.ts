@@ -2,6 +2,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { currentCaseQuote } from "../approval/baseline";
 import { ledgerFacts, readLedger, type FundingIdentity, type ProjectLedger } from "../approval/store";
 import { changeOrderDecisions } from "../approval/schema";
+import { isCaseKey } from "../chat/cases";
 import { chatCases } from "../chat/schema";
 import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
@@ -33,11 +34,11 @@ export class MoneyContextError extends Error {
 
 /** No model, provider call, write, or case creation occurs while reading evidence. */
 export async function readCaseMoneyContext(db: Db, sessionId: string, key: CaseKey): Promise<MoneyContext> {
-  if (!UUID.test(sessionId) || !["willow", "maple"].includes(key)) {
+  if (!UUID.test(sessionId) || !isCaseKey(key)) {
     throw new MoneyContextError("INVALID_MONEY_SCOPE", "Money evidence requires the owning project session.");
   }
   return db.transaction(async (tx) => {
-    const [owned] = await tx.select({ id: chatCases.id }).from(chatCases)
+    const [owned] = await tx.select({ id: chatCases.id, startsFrom: chatCases.startsFrom, quote: chatCases.quote }).from(chatCases)
       .where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, key)));
     if (!owned) throw new MoneyContextError("INVALID_MONEY_SCOPE", "Money evidence requires the owning project session.");
     const [approved] = await tx.select({ document: changeOrders.document, decision: changeOrderDecisions })
@@ -48,9 +49,9 @@ export async function readCaseMoneyContext(db: Db, sessionId: string, key: CaseK
       .orderBy(desc(revisions.number)).limit(1);
     const now = new Date();
     if (!approved) {
-      const quote = await currentCaseQuote(tx, owned.id, key);
+      const quote = await currentCaseQuote(tx, owned.id);
       if (!quote) throw new MoneyContextError("MONEY_EVIDENCE_UNAVAILABLE", "The client has not approved any line of quote V1 yet.");
-      const opening = await readOpening(tx, { id: owned.id, projectKey: key });
+      const opening = await readOpening(tx, owned);
       if (opening.revision && opening.opening.contentHash && opening.document.id === quote.id && quote.version === 1) {
         const [bridge] = await tx.select().from(pricingCases).where(eq(pricingCases.caseId, owned.id));
         if (!bridge || quote.lines.some((line) => opening.lines[line.itemId]?.state !== "approved" || opening.decisions.get(line.itemId)?.decision !== "approved")) throw new MoneyContextError("MONEY_EVIDENCE_UNAVAILABLE", "The approved V1 and its signed line decisions could not be verified.");

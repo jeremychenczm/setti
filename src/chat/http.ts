@@ -7,11 +7,10 @@ import { takeAiBudget } from "@/http/ai-budget";
 import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
 import { isSameOriginRequest } from "@/http/origin";
 import { isRefusal, projectScope, refusalResponse } from "@/http/scope";
-import { defaultOpening } from "@/opening/document";
 import { openingStore } from "@/opening/server";
 import { OpeningStoreError } from "@/opening/store";
 import { DECLINE_REASON_MAX, QUOTE_MESSAGE_MAX } from "@/opening/types";
-import { isCaseKey, preapprovedQuote } from "./cases";
+import { isCaseKey } from "./cases";
 import { chatStore } from "./server";
 import { CaseAiError, runCaseAi } from "./service";
 import type { CaseKey, CaseSnapshot, HumanActor, StoredCase } from "./types";
@@ -31,7 +30,8 @@ const dropSchema = z.strictObject({ itemId: z.string().min(1).max(100) });
 
 /** A client sees that a draft is being prepared, never the designer's draft itself. */
 function snapshot(state: StoredCase, account: DemoAccount): CaseSnapshot {
-  const base = { ...state, quote: state.quote ?? preapprovedQuote(state.projectKey), opening: state.opening ?? defaultOpening(state.projectKey), aiConfigured: aiConfigured() };
+  if (!state.opening) throw new Error("The project's V1 state is missing.");
+  const base = { ...state, quote: state.quote ?? null, opening: state.opening, aiConfigured: aiConfigured() };
   // A draft already sent as a version is no longer being prepared.
   const preparing = !!state.draft && !state.versions?.some((version) => version.fromCurrentDraft);
   return account.role === "client" ? { ...base, draft: null, draftPreparing: preparing } : base;
@@ -47,6 +47,12 @@ async function scoped(req: NextRequest, key: CaseKey): Promise<{ sessionId: stri
 
 function respond(body: unknown, status = 200) {
   return NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
+}
+
+/** The studio has no project with this key: a 404, whatever was being done to it. */
+function missingProject(error: unknown) {
+  const missing = !!error && typeof error === "object" && "code" in error && error.code === "PROJECT_NOT_FOUND";
+  return missing ? respond({ code: "NOT_FOUND", error: "Project not found." }, 404) : null;
 }
 
 async function boundedJson(req: NextRequest): Promise<unknown> {
@@ -82,7 +88,7 @@ export async function getCaseResponse(req: NextRequest, rawKey: string) {
   if (scope instanceof NextResponse) return scope;
   const { sessionId, account } = scope;
   try { return respond(snapshot(await chatStore().getCase(sessionId, rawKey), account)); }
-  catch { return respond({ code: "STORAGE_UNAVAILABLE", error: "Chat storage is unavailable. Make sure the database is running and migrated." }, 503); }
+  catch (error) { return missingProject(error) ?? respond({ code: "STORAGE_UNAVAILABLE", error: "Chat storage is unavailable. Make sure the database is running and migrated." }, 503); }
 }
 
 export async function postCaseResponse(req: NextRequest, rawKey: string, retry = false) {
@@ -121,6 +127,8 @@ export async function postCaseResponse(req: NextRequest, rawKey: string, retry =
     if (error instanceof HttpError) return respond({ code: "INVALID_REQUEST", error: error.message, state }, error.status);
     if (error instanceof z.ZodError) return respond({ code: "INVALID_REQUEST", error: "Invalid message: it needs a valid ID, a speaker and text of no more than 8,000 characters.", state }, 400);
     if (error instanceof CaseAiError) return respond({ code: "AI_FAILED", error: error.message, state }, 502);
+    const missing = missingProject(error);
+    if (missing) return missing;
     const code = error && typeof error === "object" && "code" in error ? String(error.code) : "STORAGE_UNAVAILABLE";
     const statuses: Record<string, number> = { CASE_BUSY: 409, IDEMPOTENCY_CONFLICT: 409, MESSAGE_NOT_FOUND: 404, INVALID_AI_TRIGGER: 400, STALE_AI_RUN: 409, STALE_MESSAGE: 409, STALE_BASELINE: 409, INVALID_INPUT: 400 };
     if (statuses[code]) {
@@ -147,6 +155,8 @@ export async function postQuoteResponse(req: NextRequest, rawKey: string) {
   } catch (error) {
     if (error instanceof HttpError) return respond({ code: "INVALID_REQUEST", error: error.message }, error.status);
     if (error instanceof z.ZodError) return respond({ code: "INVALID_REQUEST", error: `Send the quote with a message of at most ${QUOTE_MESSAGE_MAX.toLocaleString("en-US")} characters.` }, 400);
+    const missing = missingProject(error);
+    if (missing) return missing;
     const code = error && typeof error === "object" && "code" in error ? String(error.code) : "STORAGE_UNAVAILABLE";
     const known: Record<string, [number, string]> = {
       NOT_AVAILABLE: [409, "This project starts from a quote the client already approved, so there is nothing to send."],
@@ -171,8 +181,8 @@ export async function getQuoteResponse(req: NextRequest, rawKey: string) {
       return respond({ code: "NOT_SHARED", error: "The designer has not sent this quote yet." }, 404);
     }
     return respond(view);
-  } catch {
-    return respond({ code: "STORAGE_UNAVAILABLE", error: "Quote storage is unavailable. Make sure the database is running and migrated." }, 503);
+  } catch (error) {
+    return missingProject(error) ?? respond({ code: "STORAGE_UNAVAILABLE", error: "Quote storage is unavailable. Make sure the database is running and migrated." }, 503);
   }
 }
 
@@ -182,6 +192,8 @@ function openingFailure(error: unknown, invalid: string) {
   if (error instanceof HttpError) return respond({ code: "INVALID_REQUEST", error: error.message }, error.status);
   if (error instanceof z.ZodError) return respond({ code: "INVALID_REQUEST", error: invalid }, 400);
   if (error instanceof OpeningStoreError && openingStatuses[error.code]) return respond({ code: error.code, error: error.message }, openingStatuses[error.code]);
+  const missing = missingProject(error);
+  if (missing) return missing;
   return respond({ code: "STORAGE_UNAVAILABLE", error: "Quote storage is unavailable. Make sure the database is running and migrated." }, 503);
 }
 

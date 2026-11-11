@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCaseKey } from "@/chat/cases";
+import { sampleProject } from "./sample-projects";
 import { STUDIO_CASES, studioCase } from "./studio-cases";
 import { studioLineState, studioLineTotal, studioMoneyTotals, studioQuoteTotal } from "./studio-types";
 
@@ -10,7 +10,7 @@ describe("prepared designer project collection", () => {
     expect(new Set(STUDIO_CASES.map((project) => project.industry)).size).toBe(6);
     expect(new Set(STUDIO_CASES.map((project) => project.stage)).size).toBe(6);
     for (const project of STUDIO_CASES) {
-      expect(isCaseKey(project.id)).toBe(false);
+      expect(sampleProject(project.id)).toBeNull();
       expect(project.messages.length).toBeGreaterThanOrEqual(12);
       expect(new Set(project.messages.map((message) => message.at.slice(0, 10))).size).toBeGreaterThan(1);
       project.messages.forEach((message, index) => {

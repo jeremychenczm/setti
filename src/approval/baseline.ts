@@ -1,8 +1,8 @@
 import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { revisions } from "../db/schema";
-import { caseDocument, preapprovedQuote } from "../chat/cases";
-import type { CaseKey } from "../chat/types";
+import { chatCases } from "../chat/schema";
+import { approvedStart, preparedQuote } from "../projects/settings";
 import { changeOrders, pricingCases } from "../pricing/schema";
 import type { FrozenChangeOrder } from "../pricing/types";
 import { approvedBaseline, readOpening } from "../opening/read";
@@ -12,7 +12,7 @@ import { changeOrderDecisions } from "./schema";
 type ConfirmedBy = Pick<typeof changeOrderDecisions.$inferSelect, "clientName" | "signature" | "decidedAt">;
 
 /** Restore the complete signed snapshot, including unchanged and old-item cost lines. */
-export function approvedQuoteFromOrder(order: FrozenChangeOrder, decision: ConfirmedBy, original: QuoteDocument = caseDocument(order.projectKey)): ApprovedQuoteReport {
+export function approvedQuoteFromOrder(order: FrozenChangeOrder, decision: ConfirmedBy, original: QuoteDocument): ApprovedQuoteReport {
   const approvedAt = decision.decidedAt.toISOString();
   const approval = { status: "approved" as const, approvedBy: decision.clientName, approvedAt, signature: decision.signature, isDemo: true as const };
   const lines: ApprovedQuoteLine[] = order.lines.map((line) => {
@@ -48,10 +48,10 @@ export function approvedQuoteFromOrder(order: FrozenChangeOrder, decision: Confi
 
 /**
  * The caller holds the case lock while changing or using this baseline: the
- * latest client-confirmed change order, else Maple's demo-approved V1, else the
- * Willow V1 lines the client approved. Null while the client has approved nothing.
+ * latest client-confirmed change order, else the V1 approved before Setti, else
+ * the V1 lines the client approved. Null while the client has approved nothing.
  */
-export async function currentCaseQuote(db: Pick<Db, "select">, caseId: string, key: CaseKey): Promise<ApprovedQuoteReport | null> {
+export async function currentCaseQuote(db: Pick<Db, "select">, caseId: string): Promise<ApprovedQuoteReport | null> {
   const [approved] = await db.select({ document: changeOrders.document, clientName: changeOrderDecisions.clientName, signature: changeOrderDecisions.signature, decidedAt: changeOrderDecisions.decidedAt })
     .from(changeOrders)
     .innerJoin(revisions, eq(changeOrders.revisionId, revisions.id))
@@ -59,6 +59,7 @@ export async function currentCaseQuote(db: Pick<Db, "select">, caseId: string, k
     .where(and(eq(changeOrders.caseId, caseId), eq(changeOrderDecisions.decision, "approved")))
     .orderBy(desc(revisions.number)).limit(1);
   const [bridge] = await db.select({ quote: pricingCases.baselineQuote }).from(pricingCases).where(eq(pricingCases.caseId, caseId));
-  if (approved) return approvedQuoteFromOrder(approved.document, approved, bridge?.quote ?? caseDocument(key));
-  return bridge?.quote ?? preapprovedQuote(key) ?? approvedBaseline(await readOpening(db, { id: caseId, projectKey: key }));
+  const [project] = await db.select({ id: chatCases.id, startsFrom: chatCases.startsFrom, quote: chatCases.quote }).from(chatCases).where(eq(chatCases.id, caseId));
+  if (approved) return approvedQuoteFromOrder(approved.document, approved, bridge?.quote ?? preparedQuote(project));
+  return bridge?.quote ?? approvedStart(project) ?? approvedBaseline(await readOpening(db, project));
 }

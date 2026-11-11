@@ -41,7 +41,7 @@ describe("customer-confirmed quote baseline", () => {
     const order = frozenOrder();
     const chair = order.lines.find((line) => line.itemId === "willow-dining-chair")!;
     Object.assign(chair, { name: "BERGMUND Chair", quantity: 6, unitPriceCents: 12_500, sku: "NEW-SKU", origin: "changed", sourceUrl: "https://shop.example/new-chair", brand: "IKEA" });
-    const quote = approvedQuoteFromOrder(order, confirmation);
+    const quote = approvedQuoteFromOrder(order, confirmation, caseDocument(order.projectKey));
     expect(quote).toMatchObject({ id: order.id, version: 3, projectId: "willow", approvedAt: confirmation.decidedAt.toISOString(), signature: confirmation.signature, status: "approved", isDemo: true });
     expect(quote.lines).toHaveLength(order.lines.length);
     expect(quote.lines.find((line) => line.itemId === chair.itemId)).toMatchObject({
@@ -53,7 +53,7 @@ describe("customer-confirmed quote baseline", () => {
     expect(quote.assumptions).toContain(order.terms);
     expect(quote.assumptions).toContain(order.constraints[0]);
     expect(quoteFingerprint(quote)).not.toBe(quoteFingerprint(approvedForTest("willow")));
-    expect(quoteFingerprint(approvedQuoteFromOrder(order, confirmation))).toBe(quoteFingerprint(quote));
+    expect(quoteFingerprint(approvedQuoteFromOrder(order, confirmation, caseDocument(order.projectKey)))).toBe(quoteFingerprint(quote));
   });
 
   it("keeps unknown return eligibility, unit details and retained old-item costs in the next baseline", () => {
@@ -69,7 +69,7 @@ describe("customer-confirmed quote baseline", () => {
       sourceUrl: null, origin: "old_item_cost", returnPolicy: "Confirmed handling fee.",
     };
     order.lines.push(cost);
-    const result = approvedQuoteFromOrder(order, confirmation);
+    const result = approvedQuoteFromOrder(order, confirmation, caseDocument(order.projectKey));
     expect(result.lines[0]).toMatchObject({ nonReturnable: null, unitLabel: "pair", taxCents: 234, freightCents: 567 });
     expect(result.lines.find((item) => item.itemId === cost.itemId)).toMatchObject({
       category: "service", quantity: 1, unitPriceCents: 2_500, unitLabel: "fee", returnPolicy: cost.returnPolicy,
@@ -81,7 +81,7 @@ describe("customer-confirmed quote baseline", () => {
     const order = frozenOrder();
     const before = structuredClone(order);
     const original = structuredClone(caseDocument("willow"));
-    const quote = approvedQuoteFromOrder(order, confirmation);
+    const quote = approvedQuoteFromOrder(order, confirmation, caseDocument(order.projectKey));
     expect(quote.lines[0].source).toEqual(order.baselineLines[0].source);
     quote.lines[0].source.note = "An unsaved local edit";
     quote.lines[0].approval.signature = "An unsaved signature";

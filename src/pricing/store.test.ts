@@ -144,12 +144,11 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
       sourceDraftId: draft.id, sourceDraftRevision: draft.revision, expectedVersion: 1,
       input: { ...saved.review!.input, title: "Another review not yet issued" },
     });
-    const quote = preapprovedQuote("maple")!;
-    // Change an untouched baseline line while keeping the quote id and version.
-    const changedLine = quote.lines[0];
-    const originalPrice = changedLine.unitPriceCents;
-    try {
-      changedLine.unitPriceCents = originalPrice + 100;
+    // Change an untouched line of the project's approved V1 while keeping the quote id and version.
+    const quote = structuredClone(preapprovedQuote("maple")!);
+    quote.lines[0].unitPriceCents += 100;
+    await handle.db.update(chatCases).set({ quote }).where(eq(chatCases.id, workspace.caseId));
+    {
       const stale = await store.getWorkspace(sessionId, "maple");
       expect(stale.stale).toBe(true);
       expect(stale.preview).toBeNull();
@@ -172,8 +171,6 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
       await expect(issue(reset)).rejects.toMatchObject({ code: "PRICING_STALE_SOURCE" });
       expect(await handle.db.select().from(changeOrders)).toHaveLength(1);
       expect(await handle.db.select().from(revisions)).toHaveLength(2);
-    } finally {
-      changedLine.unitPriceCents = originalPrice;
     }
     const historical = (await store.getOrder(originalOrder.order.id))!;
     expect(historical.order).toEqual(originalOrder.order);

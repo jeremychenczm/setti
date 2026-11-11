@@ -16,7 +16,8 @@ import { withRevisedLine, withV1Lines } from "./carry";
 import { documentHash } from "./document";
 import { approvedBaseline, readOpening, type OpeningRead } from "./read";
 import { openingWithdrawals } from "./schema";
-import { clientSignatureName, DECLINE_REASON_MAX, sentFromChat, type QuoteView, type SignOpeningInput } from "./types";
+import { sentFromChat } from "../projects/settings";
+import { clientSignatureName, DECLINE_REASON_MAX, type QuoteView, type SignOpeningInput } from "./types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -51,9 +52,9 @@ async function record(tx: Transaction, row: CaseRow, text: string) {
 export function createOpeningStore(db: Db) {
   async function withinSentV1<T>(sessionId: string, key: CaseKey, work: (tx: Transaction, row: CaseRow, read: OpeningRead & { revision: NonNullable<OpeningRead["revision"]> }) => Promise<T>): Promise<T> {
     if (!UUID.test(sessionId)) throw new OpeningStoreError("FORBIDDEN", "Open this quote from the browser that owns the demo project.");
-    if (!sentFromChat(key)) throw new OpeningStoreError("NOT_AVAILABLE", "This project starts from a quote the client already approved.");
     return db.transaction(async (tx) => {
       const [row] = await tx.select().from(chatCases).where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, key))).for("update");
+      if (row && !sentFromChat(row)) throw new OpeningStoreError("NOT_AVAILABLE", "This project starts from a quote the client already approved.");
       const read = row ? await readOpening(tx, row) : null;
       if (!row || !read?.opening.sentAt || !read.revision) throw new OpeningStoreError("NOT_SENT", "Quote V1 has not been sent in this demo project yet.");
       // Lock V1 too: a V2 issued at the same moment closes it either before or after this write.

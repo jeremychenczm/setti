@@ -11,7 +11,6 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { buildFundingPlan, buildOpeningPlan, type FundingPlan } from "../approval/funding";
 import { changeOrderDecisions } from "../approval/schema";
 import { fundingFactsFrom, fundingIdentities, ledgerFacts, readLedger, type FundingIdentity, type ProjectLedger } from "../approval/store";
-import { caseDocument, preapprovedQuote } from "../chat/cases";
 import { chatCases } from "../chat/schema";
 import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
@@ -23,6 +22,7 @@ import { paypalCalls, paypalWebhookEvents } from "../payments/schema";
 import { changeOrderContentHash, itemMappingKey } from "../pricing/document";
 import { changeOrders, pricingCases } from "../pricing/schema";
 import type { FrozenChangeOrder } from "../pricing/types";
+import { approvedStart, preparedQuote } from "../projects/settings";
 import type { LineSnapshot } from "../quotes/hash";
 import { calculateLineTotals, calculateQuoteTotals } from "../quotes/totals";
 import type { QuoteDocument } from "../quotes/types";
@@ -53,7 +53,7 @@ export async function readVersionReceipt(db: Db, sessionId: string, key: CaseKey
     const versions = new Versions(orders, decisions);
     return version === 1
       ? openingReceipt(tx, caseRow, bridge ?? null, versions, now)
-      : changeReceipt(tx, key, bridge ?? null, versions, version, now);
+      : changeReceipt(tx, caseRow, bridge ?? null, versions, version, now);
   }, { isolationLevel: "repeatable read", accessMode: "read only" });
 }
 
@@ -89,12 +89,14 @@ function receiptNo(key: CaseKey, version: number, fingerprint: string | null): s
   return `${key.toUpperCase()}-V${version}-${fingerprint ? fingerprint.slice(0, 8).toUpperCase() : "SAMPLE"}`;
 }
 
-function project(key: CaseKey, document: Pick<QuoteDocument, "projectName" | "clientName" | "designerName">, bridge: Bridge | null): VersionReceipt["project"] {
-  // Later versions keep the project but not the room line; it is the session's V1's, else the demo quote's.
-  return { key, name: document.projectName, room: bridge?.baselineQuote?.room ?? caseDocument(key).room, client: clientSignatureName(document), designer: document.designerName.replace(/\s*\(demo designer\)$/, "") };
+function project(caseRow: CaseRow, document: Pick<QuoteDocument, "projectName" | "clientName" | "designerName">, bridge: Bridge | null): VersionReceipt["project"] {
+  // Later versions keep the project but not the room line; it is the approved V1's, else the project's own V1's.
+  return { key: caseRow.projectKey, name: document.projectName, room: bridge?.baselineQuote?.room ?? preparedQuote(caseRow).room, client: clientSignatureName(document), designer: document.designerName.replace(/\s*\(demo designer\)$/, "") };
 }
 
-async function openingReceipt(db: Reader, caseRow: { id: string; projectKey: CaseKey }, bridge: Bridge | null, versions: Versions, now: Date): Promise<VersionReceipt> {
+type CaseRow = Pick<typeof chatCases.$inferSelect, "id" | "projectKey" | "startsFrom" | "quote">;
+
+async function openingReceipt(db: Reader, caseRow: CaseRow, bridge: Bridge | null, versions: Versions, now: Date): Promise<VersionReceipt> {
   const key = caseRow.projectKey;
   const read = await readOpening(db, caseRow);
   const sample = !!read.approval;
@@ -104,8 +106,8 @@ async function openingReceipt(db: Reader, caseRow: { id: string; projectKey: Cas
 
   const signatures: ReceiptSignature[] = [];
   if (sample) {
-    // Maple's V1 came already approved: its approval is the demo's sample, never a signature typed in Setti.
-    const quote = bridge?.baselineQuote ?? preapprovedQuote(key)!;
+    // A V1 approved before Setti carries its own approval, never a signature typed in Setti.
+    const quote = bridge?.baselineQuote ?? approvedStart(caseRow)!;
     const imported = bridge ? await db.select().from(approvals).where(eq(approvals.revisionId, bridge.baselineRevisionId)) : [];
     const recorded = imported[0];
     signatures.push({
@@ -164,7 +166,7 @@ async function openingReceipt(db: Reader, caseRow: { id: string; projectKey: Cas
 
   const fingerprint = read.opening.contentHash ?? revision?.contentHash ?? null;
   return {
-    format: RECEIPT_FORMAT, receiptNo: receiptNo(key, 1, fingerprint), issuedAt: now.toISOString(), project: project(key, document, bridge),
+    format: RECEIPT_FORMAT, receiptNo: receiptNo(key, 1, fingerprint), issuedAt: now.toISOString(), project: project(caseRow, document, bridge),
     version: {
       number: 1, basedOn: null,
       status: approvedCount === 0 ? "declined" : approvedCount === lines.length ? "approved" : "partly_approved",
@@ -180,7 +182,8 @@ async function openingReceipt(db: Reader, caseRow: { id: string; projectKey: Cas
   };
 }
 
-async function changeReceipt(db: Reader, key: CaseKey, bridge: Bridge | null, versions: Versions, version: number, now: Date): Promise<VersionReceipt> {
+async function changeReceipt(db: Reader, caseRow: CaseRow, bridge: Bridge | null, versions: Versions, version: number, now: Date): Promise<VersionReceipt> {
+  const key = caseRow.projectKey;
   const row = versions.orders.find((order) => order.document.version === version);
   if (!row) throw new ReceiptError("NOT_FOUND", `This project has no version ${version}.`);
   const decision = versions.decisions.find((entry) => entry.orderId === row.id);
@@ -217,7 +220,7 @@ async function changeReceipt(db: Reader, key: CaseKey, bridge: Bridge | null, ve
   }
 
   return {
-    format: RECEIPT_FORMAT, receiptNo: receiptNo(key, version, contentHash), issuedAt: now.toISOString(), project: project(key, order, bridge),
+    format: RECEIPT_FORMAT, receiptNo: receiptNo(key, version, contentHash), issuedAt: now.toISOString(), project: project(caseRow, order, bridge),
     version: {
       number: version, basedOn: order.basedOnVersion, status: approved ? "approved" : "changes_requested", replacedBy,
       sentAt: row.issuedAt.toISOString(), sentBy: order.designerName.replace(/\s*\(demo designer\)$/, ""), contentHash, document,

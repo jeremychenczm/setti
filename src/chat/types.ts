@@ -4,7 +4,8 @@ import type { QuoteAnswer } from "../ai/quote-query";
 import type { OpeningQuote, QuoteView } from "../opening/types";
 import type { ChangeSource } from "../pricing/types";
 
-export type CaseKey = "willow" | "maple";
+/** A project's short name, unique in its studio, as in /chats/{key}: lowercase words joined by hyphens. */
+export type CaseKey = string;
 export type HumanActor = "designer" | "client";
 export type AiState = "none" | "running" | "completed" | "failed";
 

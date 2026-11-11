@@ -337,6 +337,13 @@
       "when": 1794375143304,
       "tag": "0047_studio_kinds_and_project_clients",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1794385498561,
+      "tag": "0048_project_settings",
+      "breakpoints": true
     }
   ]
 }

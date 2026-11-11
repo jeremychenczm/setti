@@ -4,6 +4,7 @@ import { messageUrls, runCaseAi } from "./service";
 import { defaultOpening } from "../opening/document";
 import { approvedForTest } from "../opening/testing";
 import { quoteFingerprint } from "../quotes/fingerprint";
+import { sampleProject } from "@/demo/sample-projects";
 
 function scenario(text = "@Setti Change the dining chairs from four to six.") {
   const state: StoredCase = {
@@ -24,7 +25,7 @@ describe("AI orchestration", () => {
   it("lets Setti answer, without a quote to draft against, until the client approves V1", async () => {
     for (const status of ["draft", "sent"] as const) {
       const s = scenario();
-      s.state.opening = { ...defaultOpening("willow"), status };
+      s.state.opening = { ...defaultOpening(sampleProject("willow")!), status };
       const answer = { ...s.modelOutput, intent: "answer" as const, message: "Quote V1 is not approved yet, so there is nothing to change.", title: "", changes: [] };
       s.deps.callModel.mockResolvedValue({ model: "test-model", output: answer });
       await runCaseAi(s.store, "session", "willow", "request", s.deps);
@@ -34,7 +35,7 @@ describe("AI orchestration", () => {
   });
   it("does not save a draft before V1 is approved, even if the model returns one twice", async () => {
     const s = scenario();
-    s.state.opening = { ...defaultOpening("willow"), status: "sent" };
+    s.state.opening = { ...defaultOpening(sampleProject("willow")!), status: "sent" };
     await expect(runCaseAi(s.store, "session", "willow", "request", s.deps)).rejects.toThrow("did not pass verification");
     expect(s.deps.callModel).toHaveBeenCalledTimes(2);
     expect(s.deps.callModel.mock.calls[1][0].previousAttemptProblems.join(" ")).toContain("not approved yet");

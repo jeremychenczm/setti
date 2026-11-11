@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import type { AiStage, ChatStore, CaseKey, ChangeDraft, StoredCase, ProductPage } from "./types";
-import { preapprovedQuote } from "./cases";
 import { isAiInvocation } from "@/ai/intent";
 import { aiConfigured, callChangeModel, type ChangeModelOutput } from "@/ai/model";
 import { buildDraft, draftReplyProblems, InvalidAiOutputError } from "@/ai/draft";
@@ -51,7 +50,7 @@ export async function runCaseAi(store: ChatStore, sessionId: string, key: CaseKe
     if (!deps.configured()) throw new Error("The model API is not configured. Set the server key and restart, then retry this message. No AI draft was created.");
     // Before the client approves V1 there is nothing to change yet; Setti still answers, from where V1 stands.
     const openingStatus = state.opening && state.opening.status !== "approved" ? state.opening.status : null;
-    const quote = openingStatus ? null : state.quote ?? preapprovedQuote(key);
+    const quote = openingStatus ? null : state.quote ?? null;
     if (!openingStatus && !quote) throw new Error("This project's context has no approved quote yet. The client approves quote V1 first.");
     const messages = state.messages.slice(0, triggerIndex + 1);
     const urls = [...new Set(messages.filter((message) => message.actor !== "assistant").flatMap((message) => messageUrls(message.text)))];

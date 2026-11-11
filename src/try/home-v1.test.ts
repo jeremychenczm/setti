@@ -23,6 +23,7 @@ import { pricingCases } from "../pricing/schema";
 import { createPricingStore } from "../pricing/store";
 import { trySeeds } from "./schema";
 import { prepareTry, startTry, type TryDeps } from "./service";
+import { findProject } from "../projects/store";
 
 describe.skipIf(!testDatabaseUrl)("instant café V1 workspace", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>, paypal: FakePayPal;
@@ -57,7 +58,7 @@ describe.skipIf(!testDatabaseUrl)("instant café V1 workspace", () => {
     expect(chat.versions).toEqual([]);
     expect(chat.draft).toBeNull();
     expect(chat.messages.filter((message) => message.model === "demo-scenario-discussion").map(({ actor, text }) => ({ actor, text }))).toEqual(HOME_DISCUSSION);
-    const opening = await readOpening(handle.db, chat);
+    const opening = await readOpening(handle.db, (await findProject(handle.db, run.session, "maple"))!);
     expect(opening.opening).toMatchObject({ version: 1, status: "approved", closed: false, progress: { approved: 6, pending: 0 } });
     expect(opening.revision?.status).toBe("sent");
     expect(opening.decisions.size).toBe(6);

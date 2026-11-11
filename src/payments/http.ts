@@ -130,7 +130,7 @@ const statuses: Record<string, number> = {
 };
 
 async function pendingPreparation(sessionId: string, key: CaseKey) {
-  return key === "maple" && await paymentPreparationPending(db(), sessionId)
+  return await paymentPreparationPending(db(), sessionId, key)
     ? NextResponse.json({ code: "PREPARATION_PENDING", error: PREPARATION_MESSAGE }, { status: 409, headers }) : null;
 }
 

@@ -5,7 +5,6 @@
  */
 import { and, eq } from "drizzle-orm";
 import { canOpenProject, type DemoAccount } from "../accounts/demo";
-import { caseDocument } from "../chat/cases";
 import { chatCases } from "../chat/schema";
 import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
@@ -13,9 +12,8 @@ import { pricingCases } from "../pricing/schema";
 import { projectAttention, sortAttention, type AttentionItem } from "./attention";
 import { lastDailyCheck } from "./daily-check";
 import { itemHoldsView } from "./item-holds-view";
+import { projectKeys } from "../projects/store";
 import { demoDays, demoNow } from "../try/demo-time";
-
-const PROJECTS: CaseKey[] = ["willow", "maple"];
 
 export interface AttentionView {
   items: AttentionItem[];
@@ -27,11 +25,11 @@ export interface AttentionView {
   simulatedDays: number;
 }
 
-/** The project's name in this session's V1: a walkthrough's own V1 replaces the case's built-in quote. */
+/** The project's name as its approved V1 gives it, else as the project is named. */
 export async function sessionProjectName(db: Pick<Db, "select">, sessionId: string, key: CaseKey): Promise<string> {
-  const [row] = await db.select({ quote: pricingCases.baselineQuote }).from(chatCases).innerJoin(pricingCases, eq(pricingCases.caseId, chatCases.id))
+  const [row] = await db.select({ name: chatCases.name, quote: pricingCases.baselineQuote }).from(chatCases).leftJoin(pricingCases, eq(pricingCases.caseId, chatCases.id))
     .where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, key)));
-  return row?.quote?.projectName ?? caseDocument(key).projectName;
+  return row?.quote?.projectName ?? row?.name ?? key;
 }
 
 /** `now` defaults to the session's clock: real time, or a demo session's simulated time. */
@@ -40,7 +38,7 @@ export async function attentionView(db: Db, sessionId: string | null, account: D
   const now = at ?? demoNow(simulatedDays);
   const items: AttentionItem[] = [];
   if (sessionId && account?.role === "designer") {
-    for (const key of PROJECTS) {
+    for (const key of await projectKeys(db, sessionId)) {
       if (!canOpenProject(account, key)) continue;
       const view = await itemHoldsView(db, sessionId, key, account);
       items.push(...projectAttention(view, await sessionProjectName(db, sessionId, key), now));

@@ -148,7 +148,7 @@ export function buildDraft(input: {
   return {
     text: output.message,
     draft: {
-      id: current?.id ?? randomUUID(), projectKey: quote.projectId as "willow" | "maple",
+      id: current?.id ?? randomUUID(), projectKey: quote.projectId,
       basedOnQuoteId: quote.id, basedOnVersion: quote.version,
       basedOnQuoteFingerprint: quoteFingerprint(quote),
       revision: (current?.revision ?? 0) + 1, status: "needs_designer_review",

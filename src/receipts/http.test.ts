@@ -43,7 +43,7 @@ describe("GET /api/receipts/{project}/{version}", () => {
   });
 
   it("refuses an unknown project or version before reading anything", async () => {
-    for (const [key, version] of [["oak", "1"], ["maple", "0"], ["maple", "x"], ["maple", "1000"]]) {
+    for (const [key, version] of [["Oak", "1"], ["maple", "0"], ["maple", "x"], ["maple", "1000"]]) {
       expect((await get(key, version)).status).toBe(404);
     }
     expect(mock.readVersionReceipt).not.toHaveBeenCalled();

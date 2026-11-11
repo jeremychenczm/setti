@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { isCaseKey } from "../chat/cases";
 import type { Db } from "../db/client";
 import { approvals, items, revisionLines, revisions } from "../db/schema";
 import { chatCases, chatMessages } from "../chat/schema";
@@ -147,11 +148,11 @@ async function businessBridge(tx: Transaction, caseId: string, quote: ApprovedQu
 export function createPricingStore(db: Db): PricingStore {
   const chat = createChatStore(db);
   async function withinCase<T>(sessionId: string, key: CaseKey, work: (tx: Transaction, row: CaseRow, quote: ApprovedQuoteReport) => Promise<T>): Promise<T> {
-    if (!UUID.test(sessionId) || !["willow", "maple"].includes(key)) throw new PricingStoreError("INVALID_INPUT", "A valid demo session and case are required.");
+    if (!UUID.test(sessionId) || !isCaseKey(key)) throw new PricingStoreError("INVALID_INPUT", "A valid studio and project are required.");
     await chat.getCase(sessionId, key); // Also recovers expired AI leases before taking the pricing lock.
     return db.transaction(async (tx) => {
       const [row] = await tx.select().from(chatCases).where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, key))).for("update");
-      const quote = await currentCaseQuote(tx, row.id, key);
+      const quote = await currentCaseQuote(tx, row.id);
       if (!quote) throw new PricingStoreError("PRICING_NOT_FOUND", "The client has not approved any line of quote V1 yet, so there is nothing to change.");
       return work(tx, row, quote);
     });
@@ -190,7 +191,7 @@ export function createPricingStore(db: Db): PricingStore {
 
     issueReview(sessionId, key, command) {
       return withinCase(sessionId, key, async (tx, row, quote) => {
-        if (key === "maple" && await paymentPreparationPending(tx, sessionId)) throw new PricingStoreError("PREPARATION_PENDING", PREPARATION_MESSAGE);
+        if (await paymentPreparationPending(tx, sessionId, key)) throw new PricingStoreError("PREPARATION_PENDING", PREPARATION_MESSAGE);
         if (!UUID.test(command.reviewId) || !Number.isSafeInteger(command.expectedVersion) || command.expectedVersion < 1) throw new PricingStoreError("INVALID_INPUT", "A saved pricing review and version are required.");
         const review = await currentReview(tx, row.id);
         if (!review || review.id !== command.reviewId) throw new PricingStoreError("PRICING_NOT_FOUND", "The review does not belong to this case.");
