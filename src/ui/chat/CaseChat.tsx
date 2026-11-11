@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, Check, Circle, FileText, LoaderCircle, MessageSquare, PanelRight, Plus, RefreshCw, SendHorizontal, X } from "lucide-react";
+import { Bot, Check, Circle, FileText, LoaderCircle, MessageSquare, PanelRight, Plus, RefreshCw, SendHorizontal, UserPlus, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { isAiInvocation } from "@/ai/intent";
@@ -22,6 +22,7 @@ import { ChatComposer, ChatHeader, ChatStatusBar } from "./ChatLayout";
 import { QuoteCard } from "./QuoteCard";
 import { VersionCard } from "./VersionCard";
 import { ReviewPanel } from "./ReviewPanel";
+import { InviteClientDialog } from "./InviteClientDialog";
 import { SendQuoteDialog } from "./SendQuoteDialog";
 import { useCaseChat } from "./useCaseChat";
 import { PAYMENT_QUESTION, takePaymentQuestion } from "./payment-question";
@@ -37,6 +38,8 @@ interface CaseChatProps {
   client: Person;
   /** A demo visitor, who can continue as the demo's other person. */
   demo?: boolean;
+  /** A real studio's designer, before the project's client has joined: they may send an invite link. */
+  canInvite?: boolean;
   onSwitchAccount: (id: AccountId) => void;
   /** Opens the quote report, at one line when a message is about it. */
   onOpenQuote: (itemId?: string) => void;
@@ -70,7 +73,7 @@ function ReplySteps({ stage, rewrote }: { stage: AiStage | null; rewrote: boolea
   </ol>;
 }
 
-export function CaseChat({ projectKey, quote, account, designer, client, demo = false, onSwitchAccount, onOpenQuote, onSelectCase, conversationOptions, onSelectProject, onLatest }: CaseChatProps) {
+export function CaseChat({ projectKey, quote, account, designer, client, demo = false, canInvite = false, onSwitchAccount, onOpenQuote, onSelectCase, conversationOptions, onSelectProject, onLatest }: CaseChatProps) {
   const { snapshot, messages, loading, running, stage, rewrote, aiReplying, error, canRetry, unsavedMessageId, hasUnsent, send, sendQuote, retry, editUnsent, reload } = useCaseChat(projectKey);
   const latest = latestChatMessage(messages);
   const reportLatest = useRef(onLatest);
@@ -81,6 +84,7 @@ export function CaseChat({ projectKey, quote, account, designer, client, demo = 
   const [draftOpen, setDraftOpen] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
   const [sendQuoteOpen, setSendQuoteOpen] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const attachRoot = useRef<HTMLDivElement>(null);
   // The draft panel keeps at least 360px for the chat beside it.
@@ -225,6 +229,7 @@ export function CaseChat({ projectKey, quote, account, designer, client, demo = 
         onSelectProject={account.role === "designer" ? (id) => onSelectProject ? onSelectProject(id) : onSelectCase(id as CaseKey) : undefined}
         subtitle={`${designer.name} · ${client.name} · Setti`}>
         {opening?.status === "draft" && account.role === "client" ? null : confirmedQuoteHref ? <Link href={confirmedQuoteHref} aria-label={`View client-confirmed quote V${currentQuote.version}`} className="flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--primary-soft)] px-3 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-brand-100"><FileText className="h-3.5 w-3.5" />Quote V{currentQuote.version}</Link> : <button onClick={() => onOpenQuote()} className="flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--primary-soft)] px-3 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-brand-100"><FileText className="h-3.5 w-3.5" />Quote V{currentQuote.version}{opening?.status === "draft" ? " · Draft" : ""}</button>}
+        {canInvite && <button onClick={() => setInviteOpen(true)} className="flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-[var(--primary-soft)]"><UserPlus className="h-3.5 w-3.5" />Invite client</button>}
         {account.role === "designer" && <button onClick={() => setDraftOpen((open) => !open)} aria-label={draftOpen ? "Close current draft" : "Open current draft"} aria-pressed={draftOpen} className={`rounded-lg p-2 ${draftOpen ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "text-[var(--muted)] hover:bg-[var(--canvas)]"}`}><PanelRight className="h-4 w-4" /></button>}
       </ChatHeader>
 
@@ -266,6 +271,7 @@ export function CaseChat({ projectKey, quote, account, designer, client, demo = 
 
         {draftOpen && <aside aria-label="Current change draft" style={{ "--panel-width": `${panel.width}px` } as CSSProperties} className="absolute inset-y-0 right-0 z-20 flex w-full shrink-0 flex-col border-l border-[var(--line)] bg-white shadow-xl sm:w-[var(--panel-width)] 2xl:relative 2xl:shadow-none"><div role="separator" aria-orientation="vertical" aria-label="Resize the draft panel" tabIndex={0} {...panel.handleProps} className="absolute inset-y-0 -left-1.5 z-30 hidden w-3 cursor-col-resize sm:block after:absolute after:inset-y-0 after:left-1.5 after:w-px after:bg-transparent hover:after:bg-brand-300 focus-visible:outline-none focus-visible:after:bg-brand-400" /><div className="flex items-center gap-2 border-b border-[var(--line)] px-4 py-3"><FileText className="h-4 w-4 text-[var(--primary)]" /><h2 className="flex-1 text-[13px] font-semibold">Current draft</h2><button onClick={() => setDraftOpen(false)} aria-label="Close draft panel" className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--canvas)]"><X className="h-4 w-4" /></button></div><div className="min-h-0 flex-1 overflow-y-auto">{draft ? <ReviewPanel projectKey={projectKey} draft={draft} messages={messages} onSourceMessage={sourceMessage} canPrice={actor === "designer" && !running} /> : <div className="p-6 text-center"><FileText className="mx-auto h-6 w-6 text-slate-300" /><h3 className="mt-3 text-[13px] font-medium">No draft yet</h3><p className="mt-2 text-[12px] leading-relaxed text-[var(--muted)]">Discuss your changes, then mention @Setti and ask it to prepare a draft.</p>{confirmedQuoteHref ? <Link href={confirmedQuoteHref} className="mt-4 inline-block text-[12px] font-medium text-[var(--primary)] hover:underline">View client-confirmed quote V{currentQuote.version}</Link> : <button onClick={() => onOpenQuote()} className="mt-4 text-[12px] font-medium text-[var(--primary)] hover:underline">{openingPending ? "View quote V1" : `View approved quote V${currentQuote.version}`}</button>}</div>}</div></aside>}
       </div>
+      {inviteOpen && <InviteClientDialog projectKey={projectKey} projectName={currentQuote.projectName} onClose={() => setInviteOpen(false)} />}
       {sendQuoteOpen && <SendQuoteDialog quote={currentQuote} clientName={client.name} onClose={() => setSendQuoteOpen(false)} onSend={sendQuote} onViewQuote={() => { setSendQuoteOpen(false); onOpenQuote(); }} />}
     </section>
   );

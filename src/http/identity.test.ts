@@ -3,11 +3,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { defaultStudioName, newStudioSlug } from "@/auth/names";
 import { users } from "@/auth/schema";
 import { createAuth, type Auth } from "@/auth/server";
-import { chatCases, projectClients } from "@/chat/schema";
+import { chatCases, projectClients, projectInvites } from "@/chat/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "@/db/testing";
 import { actorFrom, homeOf, projectAccess, scopeOf } from "./identity";
 import { sampleProject } from "@/demo/sample-projects";
 import { createProject } from "@/projects/create";
+import { acceptInvite, createInvite, InviteError, readInvite } from "@/projects/invite";
 import { insertProject } from "@/projects/store";
 import { projectsFor } from "@/projects/summary";
 
@@ -114,5 +115,44 @@ describe.skipIf(!testDatabaseUrl)("who a request is", () => {
     expect((await projectsFor(handle.db, (await actorOf(avery.cookie))!)).map((project) => project.key)).toEqual(["kitchen-remodel"]);
     const ofEmma = await projectsFor(handle.db, (await actorOf(emma))!);
     expect(ofEmma.map((project) => [project.key, project.designer.name])).toEqual([["kitchen-remodel", "Jordan Lee"]]);
+  });
+
+  it("brings a client in through a link that works once, expires, and is replaced by a newer one", async () => {
+    const jordan = await designer("jordan@example.com", "Jordan Lee");
+    const avery = await designer("avery@example.com", "Avery Stone");
+    const jordanActor = (await actorOf(jordan.cookie))!;
+    await createProject(handle.db, jordan.studioId, "Jordan Lee", { name: "Harbor loft", subtitle: "" });
+    await createProject(handle.db, jordan.studioId, "Jordan Lee", { name: "Pier house", subtitle: "" });
+    const now = new Date("2026-11-11T12:00:00Z");
+    const refusal = (work: Promise<unknown>) => work.then(() => "accepted", (error: unknown) => error instanceof InviteError ? error.code : error);
+
+    // Only the project's own studio makes its link, and a new link turns off the earlier one.
+    expect(await refusal(createInvite(handle.db, avery.studioId, "harbor-loft", jordanActor.userId, now))).toBe("NOT_FOUND");
+    const first = await createInvite(handle.db, jordan.studioId, "harbor-loft", jordanActor.userId, now);
+    const second = await createInvite(handle.db, jordan.studioId, "harbor-loft", jordanActor.userId, now);
+    expect(second.expiresAt).toEqual(new Date("2026-11-18T12:00:00Z"));
+    expect(await readInvite(handle.db, first.token, now)).toMatchObject({ status: "replaced" });
+    expect(await readInvite(handle.db, second.token, now)).toMatchObject({ status: "open", projectName: "Harbor loft", studioName: defaultStudioName("Jordan Lee"), designerName: "Jordan Lee" });
+    expect(await readInvite(handle.db, "a-link-that-was-never-made", now)).toBeNull();
+    const stored = (await handle.db.select({ tokenHash: projectInvites.tokenHash }).from(projectInvites)).map((row) => row.tokenHash);
+    expect(stored).toHaveLength(2);
+    expect(stored).not.toContain(second.token);
+
+    const emma = await signUp("emma@example.com", "Emma Park");
+    const emmaActor = (await actorOf(emma))!;
+    expect(await refusal(acceptInvite(handle.db, first.token, emmaActor, now))).toBe("REPLACED");
+    expect(await refusal(acceptInvite(handle.db, second.token, jordanActor, now))).toBe("STUDIO_ACCOUNT");
+    expect(await refusal(acceptInvite(handle.db, second.token, emmaActor, second.expiresAt))).toBe("EXPIRED");
+    expect(await acceptInvite(handle.db, second.token, emmaActor, now)).toEqual({ studioId: jordan.studioId, key: "harbor-loft" });
+
+    // Once in, she opens this project only; the link is spent and the project needs no other.
+    const joined = (await actorOf(emma))!;
+    expect(joined.projects.map((project) => project.key)).toEqual(["harbor-loft"]);
+    expect(scopeOf(joined, "pier-house")).toBeNull();
+    const noah = await signUp("noah@example.com", "Noah Kim");
+    expect(await refusal(acceptInvite(handle.db, second.token, (await actorOf(noah))!, now))).toBe("USED");
+    expect(await refusal(createInvite(handle.db, jordan.studioId, "harbor-loft", jordanActor.userId, now))).toBe("HAS_CLIENT");
+    const [loft] = await projectsFor(handle.db, jordanActor);
+    expect(loft).toMatchObject({ key: "harbor-loft", client: { name: "Emma Park" }, clientJoined: true });
   });
 });

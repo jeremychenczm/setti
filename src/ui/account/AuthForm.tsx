@@ -7,11 +7,11 @@ import { authClient } from "@/auth/client";
 import { defaultStudioName, newStudioSlug } from "@/auth/names";
 
 const FIELD = "w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[14px] outline-none focus:border-[var(--primary)]";
-const BUTTON = "flex w-full items-center justify-center rounded-lg bg-[var(--primary-fill)] px-4 py-2.5 text-[13px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:text-slate-400";
+export const BUTTON = "flex w-full items-center justify-center rounded-lg bg-[var(--primary-fill)] px-4 py-2.5 text-[13px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:text-slate-400";
 
 export const PASSWORD_HINT = "At least 10 characters.";
 
-function Shell({ title, children, footer }: { title: string; children: ReactNode; footer: ReactNode }) {
+export function Shell({ title, children, footer }: { title: string; children: ReactNode; footer: ReactNode }) {
   return <main className="flex min-h-screen items-center justify-center px-4 py-10">
     <section className="w-full max-w-sm rounded-2xl border border-[var(--line)] bg-white p-6 shadow-sm">
       <p className="text-[13px] font-semibold tracking-tight text-[var(--primary)]">setti.</p>
@@ -22,7 +22,7 @@ function Shell({ title, children, footer }: { title: string; children: ReactNode
   </main>;
 }
 
-function Field({ label, hint, ...input }: { label: string; hint?: string } & React.InputHTMLAttributes<HTMLInputElement>) {
+export function Field({ label, hint, ...input }: { label: string; hint?: string } & React.InputHTMLAttributes<HTMLInputElement>) {
   return <label className="block text-[13px] font-medium">
     {label}
     <input {...input} className={`mt-1 ${FIELD}`} />
@@ -30,7 +30,7 @@ function Field({ label, hint, ...input }: { label: string; hint?: string } & Rea
   </label>;
 }
 
-function useSubmit() {
+export function useSubmit() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const run = async (work: () => Promise<string | null>) => {

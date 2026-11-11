@@ -1,13 +1,20 @@
-/** POST /api/projects creates a project; PUT /api/quotes/{key}/draft saves its unsent V1. Only designers in the project's studio may call them. */
+/**
+ * POST /api/projects creates a project; PUT /api/quotes/{key}/draft saves its
+ * unsent V1; POST /api/projects/{key}/invite makes the link that brings its
+ * client in. Only designers in the project's studio may call these. POST
+ * /api/invites/accept is the client's side: it joins the link's project.
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { isCaseKey } from "@/chat/cases";
 import { appDb } from "@/db/shared";
 import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
 import { isSameOriginRequest } from "@/http/origin";
-import { isRefusal, refusalResponse, studioScope } from "@/http/scope";
+import { requestActor } from "@/http/actor";
+import { isRefusal, refusalResponse, SIGN_IN_REQUIRED, studioScope } from "@/http/scope";
 import { createProject, PROJECT_NAME_MAX, PROJECT_SUBTITLE_MAX } from "./create";
 import { DraftError, draftSchema, saveDraft, type DraftInput } from "./draft";
+import { acceptInvite, createInvite, InviteError } from "./invite";
 
 const headers = { "Cache-Control": "no-store" };
 const schema = z.strictObject({
@@ -59,5 +66,40 @@ export async function putQuoteDraftResponse(req: NextRequest, rawKey: string) {
   } catch (error) {
     if (error instanceof DraftError) return NextResponse.json({ code: error.code, error: error.message }, { status: draftStatuses[error.code], headers });
     return NextResponse.json({ code: "STORAGE_UNAVAILABLE", error: "The quote could not be saved right now. Your edits are still on this page; try again." }, { status: 503, headers });
+  }
+}
+
+const inviteStatuses = { NOT_FOUND: 404, HAS_CLIENT: 409, EXPIRED: 410, USED: 410, REPLACED: 410, STUDIO_ACCOUNT: 403, DEMO_ACCOUNT: 403 } as const;
+
+export async function postInviteResponse(req: NextRequest, rawKey: string) {
+  if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
+  if (!isSameOriginRequest(req)) return NextResponse.json({ code: "FORBIDDEN", error: "Invite clients from this app's pages." }, { status: 403, headers });
+  const scope = await studioScope(req);
+  if (isRefusal(scope)) return refusalResponse(scope.status === 403 ? { ...scope, error: "Only the studio's designers invite clients." } : scope, headers);
+  if (scope.actor.studio?.kind === "demo") return NextResponse.json({ code: "FORBIDDEN", error: "The demo's projects already have their client." }, { status: 403, headers });
+  try {
+    const { token, expiresAt } = await createInvite(appDb(), scope.sessionId, rawKey, scope.actor.userId);
+    return NextResponse.json({ path: `/invite/${token}`, expiresAt: expiresAt.toISOString() }, { status: 201, headers });
+  } catch (error) {
+    if (error instanceof InviteError) return NextResponse.json({ code: error.code, error: error.message }, { status: inviteStatuses[error.code], headers });
+    return NextResponse.json({ code: "STORAGE_UNAVAILABLE", error: "The link could not be made right now. Try again shortly." }, { status: 503, headers });
+  }
+}
+
+const acceptSchema = z.strictObject({ token: z.string().regex(/^[A-Za-z0-9_-]{20,100}$/) });
+
+export async function postAcceptInviteResponse(req: NextRequest) {
+  if (!isSameOriginRequest(req)) return NextResponse.json({ code: "FORBIDDEN", error: "Join from the invite page." }, { status: 403, headers });
+  const actor = await requestActor(req);
+  if (!actor) return refusalResponse(SIGN_IN_REQUIRED, headers);
+  let token: string;
+  try { token = acceptSchema.parse(JSON.parse(await req.text())).token; }
+  catch { return NextResponse.json({ code: "NOT_FOUND", error: "This invite link does not work. Ask your designer for a new one." }, { status: 404, headers }); }
+  try {
+    const { key } = await acceptInvite(appDb(), token, actor);
+    return NextResponse.json({ href: `/chats/${key}` }, { headers });
+  } catch (error) {
+    if (error instanceof InviteError) return NextResponse.json({ code: error.code, error: error.message }, { status: inviteStatuses[error.code], headers });
+    return NextResponse.json({ code: "STORAGE_UNAVAILABLE", error: "You could not join right now. Try again shortly." }, { status: 503, headers });
   }
 }

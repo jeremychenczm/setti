@@ -196,7 +196,7 @@ export function Workspace({ account, projects, demo = false, initialView = "chat
           {view === "chats" && (preparedProject
             ? <StudioProjectChat key={preparedProject.id} project={preparedProject} projects={conversations} onSelectProject={open} onOpenRecords={openPreparedRecords} />
             : activeProject
-              ? <CaseChat key={`${account.id}:${activeProject.key}`} projectKey={activeProject.key} quote={activeProject.quote} designer={activeProject.designer} client={activeProject.client ?? NO_CLIENT} account={account} demo={demo} onSwitchAccount={switchAccount} onOpenQuote={openCaseQuote} onSelectCase={open} conversationOptions={conversations} onSelectProject={open} onLatest={(message) => showLatest(activeProject, message)} />
+              ? <CaseChat key={`${account.id}:${activeProject.key}`} projectKey={activeProject.key} quote={activeProject.quote} designer={activeProject.designer} client={activeProject.client ?? NO_CLIENT} account={account} demo={demo} canInvite={account.role === "designer" && !demo && !activeProject.clientJoined} onSwitchAccount={switchAccount} onOpenQuote={openCaseQuote} onSelectCase={open} conversationOptions={conversations} onSelectProject={open} onLatest={(message) => showLatest(activeProject, message)} />
               : <NoProject designer={account.role === "designer"} onNew={() => setNewProjectOpen(true)} />)}
 
           {view === "quotes" && preparedProject && <StudioProjectRecords key={`${preparedProject.id}:${recordsTab}`} project={preparedProject} initialTab={recordsTab} onBack={openQuoteChat} onSelectTab={openPreparedRecords} />}

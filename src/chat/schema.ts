@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, integer, jsonb, pgTable, primaryKey, serial, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { check, integer, jsonb, pgTable, primaryKey, serial, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import type { AiStage, AiState, CaseKey, ChangeDraft, HumanActor } from "./types";
 import type { MoneyAnswer } from "../ai/money-types";
 import type { ProjectQuote, ProjectStart } from "../projects/settings";
@@ -43,6 +43,28 @@ export const projectClients = pgTable("project_clients", {
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [unique("project_clients_one_per_user").on(t.caseId, t.userId)]);
+
+/**
+ * A link the studio's designer sends to bring a client into the project. It works
+ * once and expires; making a new one turns off the project's earlier links.
+ * Only the token's SHA-256 is kept, so the link itself is never stored.
+ */
+export const projectInvites = pgTable("project_invites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  caseId: uuid("case_id").notNull().references(() => chatCases.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  /** When the client used the link, and who they are. */
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  acceptedBy: uuid("accepted_by").references(() => users.id, { onDelete: "set null" }),
+  /** When a newer link for the project replaced this one. */
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+}, (t) => [
+  uniqueIndex("project_invites_one_open").on(t.caseId).where(sql`${t.acceptedAt} IS NULL AND ${t.revokedAt} IS NULL`),
+  check("project_invites_closed_once", sql`${t.acceptedAt} IS NULL OR ${t.revokedAt} IS NULL`),
+]);
 
 export const chatMessages = pgTable("chat_messages", {
   caseId: uuid("case_id").notNull().references(() => chatCases.id, { onDelete: "cascade" }),

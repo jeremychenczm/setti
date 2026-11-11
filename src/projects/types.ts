@@ -21,4 +21,6 @@ export interface ProjectSummary {
   designer: ProjectPerson;
   /** The project's client: the account added to it, else the person its quote names; null before either. */
   client: ProjectPerson | null;
+  /** Whether a client's account has joined the project, so no invite link is needed. */
+  clientJoined: boolean;
 }

@@ -344,6 +344,13 @@
       "when": 1794385498561,
       "tag": "0048_project_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1794420771173,
+      "tag": "0049_project_invites",
+      "breakpoints": true
     }
   ]
 }
