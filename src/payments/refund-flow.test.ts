@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { DEMO_ACCOUNTS } from "../accounts/demo";
 import { createChatStore } from "../chat/store";
 import { paymentOperations, paypalCaptures, paypalRefunds } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import type { FrozenChangeOrder } from "../pricing/types";
+import { addTestProject, TEST_KEY, testDesigner } from "../projects/testing";
 import { checkPayment, startCapture, startRefund } from "./actions";
 import { requestRefund } from "./testing/requests";
 import { recordSupplierCredit } from "./supplier";
@@ -23,18 +23,19 @@ describe.skipIf(!testDatabaseUrl)("returning captured chairs refunds the confirm
     await truncate(handle.db, "projects", "chat_cases");
     session = randomUUID();
     paypal = new FakePayPal();
+    await addTestProject(handle.db, session);
     const { v3 } = await sixChairsHeld(handle.db, paypal, session);
     await confirmSupplier(handle.db, session, v3, "baseline");
     await startCapture(handle.db, paypal, session, v3.id, { itemId: CHAIR, side: "baseline", ...shown(v3) });
     // The client returns all six chairs; the supplier keeps a reviewed $25 handling cost.
-    v4 = await confirmChange(handle.db, session, "willow", { action: "remove", itemId: CHAIR, oldItemHandling: "returned", oldItemCostCents: 2_500 });
+    v4 = await confirmChange(handle.db, session, TEST_KEY, { action: "remove", itemId: CHAIR, oldItemHandling: "returned", oldItemCostCents: 2_500 });
   });
   afterAll(() => handle?.pool.end());
 
   const line = { itemId: CHAIR, side: "baseline" as const };
   const refund = () => startRefund(handle.db, paypal, session, v4.id, { ...line, ...shown(v4) });
   const credit = (creditCents: number) => recordSupplierCredit(handle.db, session, v4.id, { ...line, ...shown(v4), creditCents, reference: "DEMO-CREDIT-1", note: "Demo supplier credit entered by the designer." });
-  const chair = async () => (await paymentsWorkspace(handle.db, session, v4.id, undefined, DEMO_ACCOUNTS[0]))!.lines.find((entry) => entry.itemId === CHAIR)!;
+  const chair = async () => (await paymentsWorkspace(handle.db, session, v4.id, undefined, testDesigner))!.lines.find((entry) => entry.itemId === CHAIR)!;
   const refundCalls = () => paypal.calls.filter((call) => "paypalCaptureId" in call);
 
   it("waits for the supplier credit before any refund", async () => {
@@ -61,7 +62,7 @@ describe.skipIf(!testDatabaseUrl)("returning captured chairs refunds the confirm
     for (const entry of refunds) expect(captures.some((capture) => capture.id === entry.captureId)).toBe(true);
     expect(new Set(refunds.map((entry) => entry.paypalRefundId)).size).toBe(2);
     expect(await chair()).toMatchObject({ capturedCents: 81_563, refundedCents: 79_063, steps: [] });
-    expect((await createChatStore(handle.db).getCase(session, "willow")).messages.filter((message) => message.text.includes("refund completed"))).toHaveLength(2);
+    expect((await createChatStore(handle.db).getCase(session, TEST_KEY)).messages.filter((message) => message.text.includes("refund completed"))).toHaveLength(2);
     // Repeating the step finds the same refunds and sends nothing new.
     expect((await refund()).map((operation) => operation.id)).toEqual(done.map((operation) => operation.id));
     expect(refundCalls()).toHaveLength(2);

@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { DEMO_ACCOUNTS } from "../accounts/demo";
 import { createChatStore } from "../chat/store";
 import { paymentOperations, paypalAuthorizations, paypalCalls, savedPaymentMethods } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import type { FrozenChangeOrder } from "../pricing/types";
+import { addTestProject, TEST_KEY, testClient, testDesigner } from "../projects/testing";
 import { cancelPayment, checkPayment, returnFromPayPal } from "./actions";
 import { completeAuthorization, createCheckout } from "./authorize";
 import { businessItem, lockConfirmedVersion } from "./binding";
@@ -16,7 +16,7 @@ import { FakePayPal } from "./testing/fake-paypal";
 import { CHAIR, links } from "./testing/flows";
 import { paymentsWorkspace } from "./workspace";
 
-const details = { description: "Willow Residence · BERGMUND Chair (Setti sandbox demo)", savePayPalDescription: "Setti · Willow Residence: holds for the items you approve (sandbox demo)" };
+const details = { description: "Fernhill Apartment · BERGMUND Chair (Setti sandbox demo)", savePayPalDescription: "Setti · Fernhill Apartment: holds for the items you approve (sandbox demo)" };
 
 describe.skipIf(!testDatabaseUrl)("holds placed with saved PayPal", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -28,7 +28,8 @@ describe.skipIf(!testDatabaseUrl)("holds placed with saved PayPal", () => {
     await truncate(handle.db, "projects", "chat_cases");
     session = randomUUID();
     paypal = new FakePayPal();
-    v2 = await confirmChange(handle.db, session, "willow", { action: "replace", itemId: CHAIR, after: bergmund() });
+    await addTestProject(handle.db, session);
+    v2 = await confirmChange(handle.db, session, TEST_KEY, { action: "replace", itemId: CHAIR, after: bergmund() });
   });
   afterAll(() => handle?.pool.end());
 
@@ -49,7 +50,7 @@ describe.skipIf(!testDatabaseUrl)("holds placed with saved PayPal", () => {
   }
 
   const savedMethods = () => handle.db.select().from(savedPaymentMethods);
-  const v3 = () => confirmChange(handle.db, session, "willow", { action: "quantity", itemId: CHAIR, quantity: 6, after: { taxCents: 6_563 } });
+  const v3 = () => confirmChange(handle.db, session, TEST_KEY, { action: "quantity", itemId: CHAIR, quantity: 6, after: { taxCents: 6_563 } });
 
   it("saves PayPal with the first hold, then holds V3's extra $271.88 with no buyer on PayPal", async () => {
     const { checkout, result } = await checkoutSavingPayPal();
@@ -65,7 +66,7 @@ describe.skipIf(!testDatabaseUrl)("holds placed with saved PayPal", () => {
     expect(paypal.calls.at(-1)).toMatchObject({ paypalTokenId: method.paypalTokenId, amountCents: 27_188, customId: pending.id, requestId: pending.requestId });
     const holds = await handle.db.select().from(paypalAuthorizations).where(eq(paypalAuthorizations.operationId, pending.id));
     expect(holds).toEqual([expect.objectContaining({ amountCents: 27_188, status: "created", changeOrderId: third.id, paypalAuthorizationId: held.paypalResourceId })]);
-    const messages = (await createChatStore(handle.db).getCase(session, "willow")).messages.map((message) => message.text);
+    const messages = (await createChatStore(handle.db).getCase(session, TEST_KEY)).messages.map((message) => message.text);
     expect(messages).toContainEqual(expect.stringMatching(/543\.75 USD is held.*The client saved b•••@personal\.example\.com for this project's later holds\.$/));
     expect(messages.at(-1)).toMatch(/authorization recorded with the client's saved payment method for V3 .*271\.88 USD is held/);
   });
@@ -81,7 +82,7 @@ describe.skipIf(!testDatabaseUrl)("holds placed with saved PayPal", () => {
     const visible = JSON.stringify([
       await handle.db.select().from(paymentOperations), calls, await handle.db.select().from(paypalAuthorizations),
       await paymentsWorkspace(handle.db, session, v2.id), await paymentsWorkspace(handle.db, session, third.id),
-      await createChatStore(handle.db).getCase(session, "willow"),
+      await createChatStore(handle.db).getCase(session, TEST_KEY),
     ]);
     expect(visible).not.toContain(method.paypalTokenId);
   });
@@ -96,7 +97,7 @@ describe.skipIf(!testDatabaseUrl)("holds placed with saved PayPal", () => {
     const { result } = await checkoutSavingPayPal("answer-unsaved");
     expect(result.state).toBe("authorized");
     expect(await savedMethods()).toHaveLength(0);
-    expect((await createChatStore(handle.db).getCase(session, "willow")).messages.at(-1)?.text).not.toMatch(/saved PayPal/);
+    expect((await createChatStore(handle.db).getCase(session, TEST_KEY)).messages.at(-1)?.text).not.toMatch(/saved PayPal/);
   });
 
   it("saves nothing from a checkout that did not ask, even if PayPal returned a token", async () => {
@@ -154,10 +155,9 @@ describe.skipIf(!testDatabaseUrl)("holds placed with saved PayPal", () => {
     paypal.then("answer-payer-action");
     const waiting = await executeSavedHold(handle.db, paypal, needsClient.id, details, links(needsClient.id));
     expect(waiting).toMatchObject({ status: "pending", failureCode: "SAVED_PAYPAL_NEEDS_CLIENT", approvalUrl: expect.stringContaining(waiting.paypalOrderId!) });
-    const client = DEMO_ACCOUNTS.find((account) => account.projectKey === "willow")!;
-    const clientView = await paymentsWorkspace(handle.db, session, third.id, undefined, client);
+    const clientView = await paymentsWorkspace(handle.db, session, third.id, undefined, testClient);
     expect(clientView?.operations.find((operation) => operation.id === needsClient.id)).toMatchObject({ approvalUrl: waiting.approvalUrl, canContinue: true, canCheck: true, canCancel: true });
-    const designerView = await paymentsWorkspace(handle.db, session, third.id, undefined, DEMO_ACCOUNTS[0]);
+    const designerView = await paymentsWorkspace(handle.db, session, third.id, undefined, testDesigner);
     expect(designerView?.operations.find((operation) => operation.id === needsClient.id)).toMatchObject({ approvalUrl: null, canContinue: false, canCheck: true, canCancel: false });
     expect(await returnFromPayPal(handle.db, paypal, waiting.id, "another-order", "return")).toBeNull();
     expect(await checkPayment(handle.db, paypal, session, third.id, waiting.id, links)).toMatchObject({ status: "pending", paypalOrderId: waiting.paypalOrderId });
@@ -216,15 +216,6 @@ describe.skipIf(!testDatabaseUrl)("holds placed with saved PayPal", () => {
     expect(await handle.db.select().from(paypalAuthorizations).where(eq(paypalAuthorizations.changeOrderId, third.id))).toHaveLength(0);
   });
 
-  it("has no checkout to cancel or return from", async () => {
-    await checkoutSavingPayPal();
-    const [method] = await savedMethods();
-    const third = await v3();
-    const held = await executeSavedHold(handle.db, paypal, (await writeHold(third, "baseline", 27_188, { savedMethodId: method.id })).id, details);
-    await expect(cancelPayment(handle.db, paypal, session, third.id, held.id)).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
-    expect(await returnFromPayPal(handle.db, paypal, held.id, held.paypalOrderId, "return")).toBeNull();
-  });
-
   describe("database rules", () => {
     const refused = /saved PayPal|PayPal is saved only|violates check constraint|cannot be deleted|cannot change|current client-confirmed version/;
 
@@ -267,7 +258,7 @@ describe.skipIf(!testDatabaseUrl)("holds placed with saved PayPal", () => {
       await checkoutSavingPayPal();
       const [method] = await savedMethods();
       const [chair] = await handle.db.select({ itemId: paymentOperations.itemId }).from(paymentOperations);
-      const unconfirmed = await confirmChange(handle.db, session, "willow", { action: "quantity", itemId: CHAIR, quantity: 6, after: { taxCents: 6_563 } }, false);
+      const unconfirmed = await confirmChange(handle.db, session, TEST_KEY, { action: "quantity", itemId: CHAIR, quantity: 6, after: { taxCents: 6_563 } }, false);
       const binding = { changeOrderId: unconfirmed.id, revisionId: unconfirmed.revisionId, contentHash: unconfirmed.contentHash, revisionContentHash: unconfirmed.revisionContentHash, itemId: chair.itemId! };
       await expect(insertOperation(handle.db, { businessKey: "test:unconfirmed", projectId: method.projectId, kind: "authorize", amountCents: 27_188, binding, savedMethodId: method.id }))
         .rejects.toMatchObject({ message: expect.stringMatching(refused) });

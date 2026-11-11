@@ -104,7 +104,6 @@ describe("README payment statuses", () => {
 describe("README labels", () => {
   /** Buttons and labels the README quotes, with how each appears in the code. */
   const LABELS: [quoted: string, inCode: string | RegExp][] = [
-    ["Start with first quote", "Start with first quote"],
     ["I'm a designer", "I'm a designer"],
     ["I'm a client", "I'm a client"],
     ["End demo & reset", "End demo & reset"],
@@ -118,7 +117,7 @@ describe("README labels", () => {
     ["Review pricing", "Review pricing"],
     ["Save pricing review", "Save pricing review"],
     ["Send to Emma as V2", /`Send to \$\{clientFirstName\} as V\$\{nextVersion\}`/],
-    ["Send to Sofia as V2", /`Send to \$\{clientFirstName\} as V\$\{nextVersion\}`/],
+    ["Send to (client) as V2", /`Send to \$\{clientFirstName\} as V\$\{nextVersion\}`/],
     ["Ask about payments", "Ask about payments"],
     ["Approve ticked", "Approve ticked"],
     ["Review & sign", "Review & sign"],

@@ -12,6 +12,7 @@ import { confirmChanges, shown } from "../payments/testing/cases";
 import { FakePayPal } from "../payments/testing/fake-paypal";
 import { links } from "../payments/testing/flows";
 import { pricingCases } from "../pricing/schema";
+import { addTestProject, TEST_KEY } from "../projects/testing";
 import type { FrozenChangeOrder, PricingItem } from "../pricing/types";
 import { readCaseMoneyContext } from "./money-context";
 import type { MoneyContext } from "./money-types";
@@ -82,7 +83,7 @@ describe.skipIf(!testDatabaseUrl)("read-only case money evidence", () => {
     const ids = new Set(context.sources.map((source) => source.id));
     expect(ids.size).toBe(context.sources.length);
     expect(context.facts.every((entry) => entry.sourceIds.length && entry.sourceIds.every((id) => ids.has(id)))).toBe(true);
-    expect(context.sources.every((source) => /^\/(?:quotes\/(?:maple|willow)|change-orders\/[0-9a-f-]{36}(?:#payment-line-[^\s]+|#payments)?)$/i.test(source.href))).toBe(true);
+    expect(context.sources.every((source) => /^\/(?:quotes\/maple|change-orders\/[0-9a-f-]{36}(?:#payment-line-[^\s]+|#payments)?)$/i.test(source.href))).toBe(true);
     expect(JSON.stringify(context)).not.toMatch(/approvalUrl|setti-demo-chat|signature|requestId|fake-\d/);
   }
 
@@ -150,10 +151,11 @@ describe.skipIf(!testDatabaseUrl)("read-only case money evidence", () => {
     expect(other.quoteId).not.toBe(mixed.id);
     expect(JSON.stringify(other)).not.toContain("Oak writing desk");
     expect(other.sources.every((source) => !source.href.includes(mixed.id))).toBe(true);
-    await createChatStore(handle.db).getCase(session, "willow");
-    await expect(readCaseMoneyContext(handle.db, session, "willow")).rejects.toMatchObject({ code: "MONEY_EVIDENCE_UNAVAILABLE" });
-    await signOpeningForTest(handle.db, session, "willow");
-    expect((await readCaseMoneyContext(handle.db, session, "willow")).version).toBe(1);
+    // A V1 sent from the chat has no money evidence until its client signs it.
+    await addTestProject(handle.db, session);
+    await expect(readCaseMoneyContext(handle.db, session, TEST_KEY)).rejects.toMatchObject({ code: "MONEY_EVIDENCE_UNAVAILABLE" });
+    await signOpeningForTest(handle.db, session, TEST_KEY);
+    expect((await readCaseMoneyContext(handle.db, session, TEST_KEY)).version).toBe(1);
     expectSources(context);
   });
 

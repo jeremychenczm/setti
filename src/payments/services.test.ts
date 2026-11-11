@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { caseDocument } from "../chat/cases";
 import { createChatStore } from "../chat/store";
 import { items, paymentOperations, paypalAuthorizations, paypalCaptures, savedPaymentMethods, servicesHoldLines } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import { signOpeningForTest } from "../opening/testing";
+import { addTestProject, CONSULTATION, DESK, PLANNING, SERVICES_CENTS, SOFA, TEST_KEY, testQuote, TILE } from "../projects/testing";
 import { completeAuthorization } from "./authorize";
 import { lockOpeningVersion } from "./opening";
 import { insertOperation } from "./operations";
@@ -14,9 +14,6 @@ import { bergmund, confirmChange } from "./testing/cases";
 import { FakePayPal } from "./testing/fake-paypal";
 import { authorizeLine, CHAIR, links } from "./testing/flows";
 import { paymentsWorkspace } from "./workspace";
-
-const SOFA = "willow-sofa", TILE = "willow-entry-tile", DESK = "willow-desk", CONSULTATION = "willow-consultation";
-const SERVICES_CENTS = 453_000;
 
 describe.skipIf(!testDatabaseUrl)("design services: one hold, one capture per service", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -27,20 +24,21 @@ describe.skipIf(!testDatabaseUrl)("design services: one hold, one capture per se
     await truncate(handle.db, "projects", "chat_cases");
     session = randomUUID();
     paypal = new FakePayPal();
+    await addTestProject(handle.db, session);
   });
   afterAll(() => handle?.pool.end());
 
-  /** V1 signed with every line approved except the sofa (declined) and the entry tile (undecided). */
+  /** V1 signed with every line approved except the sofa (declined) and the tile (undecided). */
   async function signMostOfV1() {
-    const decisions = caseDocument("willow").lines.filter((line) => line.itemId !== TILE).map((line) => line.itemId === SOFA
+    const decisions = testQuote.lines.filter((line) => line.itemId !== TILE).map((line) => line.itemId === SOFA
       ? { itemId: line.itemId, decision: "declined" as const, note: "Too big for the room." }
       : { itemId: line.itemId, decision: "approved" as const });
-    await signOpeningForTest(handle.db, session, "willow", decisions);
+    await signOpeningForTest(handle.db, session, TEST_KEY, decisions);
   }
 
-  const start = () => startServicesCheckout(handle.db, paypal, session, "willow", links);
-  const charge = () => chargeServices(handle.db, paypal, session, "willow");
-  const basis = () => handle.db.transaction((tx) => lockPaymentBasis(tx, session, "willow"));
+  const start = () => startServicesCheckout(handle.db, paypal, session, TEST_KEY, links);
+  const charge = () => chargeServices(handle.db, paypal, session, TEST_KEY);
+  const basis = () => handle.db.transaction((tx) => lockPaymentBasis(tx, session, TEST_KEY));
 
   async function approveServices() {
     const checkout = await start();
@@ -57,9 +55,10 @@ describe.skipIf(!testDatabaseUrl)("design services: one hold, one capture per se
     await signMostOfV1();
     const checkout = await start();
     expect(checkout).toMatchObject({ kind: "authorize", servicesHold: true, itemId: null, changeOrderId: null, amountCents: SERVICES_CENTS, savePaymentMethod: true });
-    expect(paypal.calls[0]).toMatchObject({ amountCents: SERVICES_CENTS, referenceId: "design-services", description: "Willow Residence · Design services · V1 (Setti sandbox demo)", savePayPal: { description: expect.stringContaining("Willow Residence") } });
+    expect(paypal.calls[0]).toMatchObject({ amountCents: SERVICES_CENTS, referenceId: "design-services", description: "Fernhill Apartment · Design services · V1 (Setti sandbox demo)", savePayPal: { description: expect.stringContaining("Fernhill Apartment") } });
     const split = await handle.db.select().from(servicesHoldLines).where(eq(servicesHoldLines.operationId, checkout.id));
-    expect(split).toHaveLength(6);
+    // Consultation 2 × $150.00 and planning 4 × $125.00.
+    expect(split.map((line) => line.amountCents).sort((a, b) => a - b)).toEqual([30_000, 50_000]);
     expect(split.reduce((total, line) => total + line.amountCents, 0)).toBe(SERVICES_CENTS);
     expect((await start()).id).toBe(checkout.id);
     expect(await handle.db.select().from(paymentOperations)).toHaveLength(1);
@@ -71,13 +70,13 @@ describe.skipIf(!testDatabaseUrl)("design services: one hold, one capture per se
     const [hold] = await handle.db.select().from(paypalAuthorizations);
     expect(hold).toMatchObject({ itemId: null, amountCents: SERVICES_CENTS, operationId: checkout.id });
     expect(await handle.db.select().from(savedPaymentMethods)).toHaveLength(1);
-    expect((await createChatStore(handle.db).getCase(session, "willow")).messages.at(-1)?.text)
-      .toMatch(/authorization recorded for V1 · Design services: 4530\.00 USD is held .*Each design service is charged from it next\. The client saved b•••@personal\.example\.com/);
+    expect((await createChatStore(handle.db).getCase(session, TEST_KEY)).messages.at(-1)?.text)
+      .toMatch(/authorization recorded for V1 · Design services: 800\.00 USD is held .*Each design service is charged from it next\. The client saved b•••@personal\.example\.com/);
 
     const charged = await charge();
-    expect(charged).toHaveLength(6);
+    expect(charged).toHaveLength(2);
     expect(charged.every((operation) => operation.status === "succeeded")).toBe(true);
-    expect(charged.map((operation) => operation.finalCapture)).toEqual([false, false, false, false, false, true]);
+    expect(charged.map((operation) => operation.finalCapture)).toEqual([false, true]);
     const captures = await handle.db.select().from(paypalCaptures);
     const services = await serviceItems();
     expect(new Set(captures.map((capture) => capture.itemId))).toEqual(new Set(services.keys()));
@@ -92,26 +91,25 @@ describe.skipIf(!testDatabaseUrl)("design services: one hold, one capture per se
     await expect(start()).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
   });
 
-  it("resumes a capture whose answer was lost and finishes the rest", async () => {
+  it("resumes a capture whose answer was lost", async () => {
     await signMostOfV1();
     await approveServices();
     paypal.then("succeed", "lose-response");
     const first = await charge();
     expect(first.map((operation) => operation.status)).toEqual(["succeeded", "unknown"]);
     const rest = await charge();
-    expect(rest[0]).toMatchObject({ id: first[1].id, status: "succeeded" });
-    expect(rest).toHaveLength(5);
-    expect(await handle.db.select().from(paypalCaptures)).toHaveLength(6);
+    expect(rest).toEqual([expect.objectContaining({ id: first[1].id, status: "succeeded" })]);
+    expect(await handle.db.select().from(paypalCaptures)).toHaveLength(2);
   });
 
   it("refuses to take payment until the client approves a design service", async () => {
-    await signOpeningForTest(handle.db, session, "willow", [{ itemId: DESK, decision: "approved" }]);
+    await signOpeningForTest(handle.db, session, TEST_KEY, [{ itemId: DESK, decision: "approved" }]);
     await expect(start()).rejects.toMatchObject({ code: "NOT_AVAILABLE", message: expect.stringMatching(/Approve at least one design service/) });
     expect(await handle.db.select().from(paymentOperations)).toHaveLength(0);
   });
 
   it("charges design services under the latest confirmed version once V1 was replaced", async () => {
-    const v2 = await confirmChange(handle.db, session, "willow", { action: "replace", itemId: CHAIR, after: bergmund() });
+    const v2 = await confirmChange(handle.db, session, TEST_KEY, { action: "replace", itemId: CHAIR, after: bergmund() });
     expect((await basis()).version).toBe(2);
     const checkout = await approveServices();
     expect(checkout).toMatchObject({ changeOrderId: v2.id, amountCents: SERVICES_CENTS });
@@ -127,7 +125,7 @@ describe.skipIf(!testDatabaseUrl)("design services: one hold, one capture per se
   describe("database rules", () => {
     async function openServicesHold(amountCents = SERVICES_CENTS) {
       return handle.db.transaction(async (tx) => {
-        const version = await lockOpeningVersion(tx, session, "willow", null);
+        const version = await lockOpeningVersion(tx, session, TEST_KEY, null);
         return { version, operation: await insertOperation(tx, { businessKey: `test:${randomUUID()}`, projectId: version.projectId, kind: "authorize", amountCents, binding: version.bind(null), servicesHold: true }) };
       });
     }
@@ -140,7 +138,7 @@ describe.skipIf(!testDatabaseUrl)("design services: one hold, one capture per se
       await expect(split(await itemOf(version, DESK), 10_000)).rejects.toThrow();
       await expect(split(await itemOf(version, CONSULTATION), 30_001)).rejects.toThrow();
       await split(await itemOf(version, CONSULTATION), 30_000);
-      await expect(split(await itemOf(version, "willow-space-planning"), 10_001)).rejects.toThrow();
+      await expect(split(await itemOf(version, PLANNING), 10_001)).rejects.toThrow();
       await expect(handle.db.update(servicesHoldLines).set({ amountCents: 1 }).where(eq(servicesHoldLines.operationId, operation.id))).rejects.toThrow();
     });
 
@@ -152,14 +150,14 @@ describe.skipIf(!testDatabaseUrl)("design services: one hold, one capture per se
       await handle.db.update(paymentOperations).set({ paypalOrderId: "ORDER-1" }).where(eq(paymentOperations.id, operation.id));
       await expect(handle.db.insert(paypalAuthorizations).values({ projectId: operation.projectId, paypalOrderId: "ORDER-1", paypalAuthorizationId: "AUTH-1", amountCents: 40_000, operationId: operation.id }))
         .rejects.toThrow();
-      await expect(handle.db.insert(servicesHoldLines).values({ operationId: operation.id, itemId: await itemOf(version, "willow-space-planning"), amountCents: 10_000 })).rejects.toThrow();
+      await expect(handle.db.insert(servicesHoldLines).values({ operationId: operation.id, itemId: await itemOf(version, PLANNING), amountCents: 10_000 })).rejects.toThrow();
     });
 
     it("captures from the hold only a service of its split, within that service's share", async () => {
       await signMostOfV1();
       const checkout = await approveServices();
       const [hold] = await handle.db.select().from(paypalAuthorizations);
-      const version = await handle.db.transaction((tx) => lockOpeningVersion(tx, session, "willow", null));
+      const version = await handle.db.transaction((tx) => lockOpeningVersion(tx, session, TEST_KEY, null));
       const capture = async (quoteItemId: string, amountCents: number) => insertOperation(handle.db, {
         businessKey: `test:${randomUUID()}`, projectId: checkout.projectId, kind: "capture", authorizationId: hold.id, amountCents,
         binding: version.bind(version.approved.find((entry) => entry.line.itemId === quoteItemId)!.itemId),
@@ -172,7 +170,7 @@ describe.skipIf(!testDatabaseUrl)("design services: one hold, one capture per se
     });
 
     it("still makes a furniture capture of a confirmed version wait for the supplier", async () => {
-      const v2 = await confirmChange(handle.db, session, "willow", { action: "replace", itemId: CHAIR, after: bergmund() });
+      const v2 = await confirmChange(handle.db, session, TEST_KEY, { action: "replace", itemId: CHAIR, after: bergmund() });
       const checkout = await authorizeLine(handle.db, paypal, session, v2, "proposed");
       const [hold] = await handle.db.select().from(paypalAuthorizations).where(eq(paypalAuthorizations.operationId, checkout.id));
       await expect(insertOperation(handle.db, {

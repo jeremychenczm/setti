@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { DEMO_ACCOUNTS } from "../accounts/demo";
-import { caseDocument } from "../chat/cases";
 import { chatMessages } from "../chat/schema";
 import { holdChecks, items, paypalAuthorizations, renewalNotices } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import { signOpeningForTest } from "../opening/testing";
+import { addTestProject, CHAIR, DESK, SOFA, TEST_KEY, testDesigner as designer, testLine, testQuote } from "../projects/testing";
 import { attentionView } from "./attention-view";
 import { completeAuthorization } from "./authorize";
 import { cancelApprovedItem } from "./cancel-item";
@@ -19,11 +18,10 @@ import { noteActivity } from "../try/activity";
 import { FakePayPal } from "./testing/fake-paypal";
 import { links } from "./testing/flows";
 
-const [designer] = DEMO_ACCOUNTS;
 const DAY = 24 * 60 * 60 * 1000;
-const DESK = "willow-desk", ARMCHAIR = "willow-armchair", SOFA = "willow-sofa";
-const desk = caseDocument("willow").lines.find((line) => line.itemId === DESK)!;
-const ITEMS = 19;
+const desk = testLine(DESK);
+/** The sofa is declined, so the chair, desk and tile are held. */
+const ITEMS = 3;
 
 describe.skipIf(!testDatabaseUrl)("the daily check", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -34,14 +32,15 @@ describe.skipIf(!testDatabaseUrl)("the daily check", () => {
     await truncate(handle.db, "projects", "chat_cases", "hold_checks", "renewal_notices");
     session = randomUUID();
     paypal = new FakePayPal();
-    await signOpeningForTest(handle.db, session, "willow", caseDocument("willow").lines.map((line) => line.itemId === SOFA
+    await addTestProject(handle.db, session);
+    await signOpeningForTest(handle.db, session, TEST_KEY, testQuote.lines.map((line) => line.itemId === SOFA
       ? { itemId: line.itemId, decision: "declined" as const, note: "Too big for the room." }
       : { itemId: line.itemId, decision: "approved" as const }));
-    const checkout = await startServicesCheckout(handle.db, paypal, session, "willow", links);
+    const checkout = await startServicesCheckout(handle.db, paypal, session, TEST_KEY, links);
     paypal.approve(checkout.paypalOrderId!);
     await completeAuthorization(handle.db, paypal, checkout.id);
-    await chargeServices(handle.db, paypal, session, "willow");
-    await holdApprovedItems(handle.db, paypal, session, "willow");
+    await chargeServices(handle.db, paypal, session, TEST_KEY);
+    await holdApprovedItems(handle.db, paypal, session, TEST_KEY);
   });
   afterAll(() => handle?.pool.end());
 
@@ -61,9 +60,10 @@ describe.skipIf(!testDatabaseUrl)("the daily check", () => {
     const posted = await notices();
     expect(posted).toHaveLength(1);
     expect(posted[0]).toMatchObject({ actor: "assistant", replyToMessageId: null });
-    expect(posted[0].text).toMatch(/^Heads-up for Sofia and Jordan: 19 holds end .+, because PayPal holds last 29 days, and their suppliers haven't confirmed the orders yet:/);
-    expect(posted[0].text).toMatch(/• and 11 more: /);
-    expect(posted[0].text).toMatch(/Setti will replace each with a new hold of the same amount on Sofia's saved PayPal \(\$[\d,.]+ in all\), so nothing is charged and Sofia doesn't need to do anything\. If the project or any of these items has stopped, Jordan can cancel those holds before then\.$/);
+    expect(posted[0].text).toMatch(/^Heads-up for Ava and Jordan: 3 holds end .+, because PayPal holds last 29 days, and their suppliers haven't confirmed the orders yet:/);
+    for (const line of ["• Dining chair · $345.60", "• Writing desk · $270.00", "• Porcelain floor tile · $243.00"]) expect(posted[0].text).toContain(line);
+    // $345.60 + $270.00 + $243.00.
+    expect(posted[0].text).toMatch(/Setti will replace each with a new hold of the same amount on Ava's saved PayPal \(\$858\.60 in all\), so nothing is charged and Ava doesn't need to do anything\. If the project or any of these items has stopped, Jordan can cancel those holds before then\.$/);
     expect(await handle.db.select().from(renewalNotices)).toHaveLength(ITEMS);
     // The same day again announces nothing new.
     expect((await check(23.5)).notices).toBe(0);
@@ -74,16 +74,15 @@ describe.skipIf(!testDatabaseUrl)("the daily check", () => {
   });
 
   it("leaves out items the designer already settled", async () => {
-    const { contentHash } = await handle.db.transaction((tx) => lockOpeningVersion(tx, session, "willow", null));
-    await recordOpeningSupplierOrder(handle.db, session, "willow", {
+    const { contentHash } = await handle.db.transaction((tx) => lockOpeningVersion(tx, session, TEST_KEY, null));
+    await recordOpeningSupplierOrder(handle.db, session, TEST_KEY, {
       itemId: DESK, contentHash, quantity: desk.quantity, unitPriceCents: desk.unitPriceCents, taxCents: desk.taxCents, freightCents: desk.freightCents,
-      inStock: true, leadTimeDays: 10, reference: "QMO-SO-1001", note: "",
+      inStock: true, leadTimeDays: 10, reference: "BD-SO-1001", note: "",
     });
-    await cancelApprovedItem(handle.db, paypal, session, "willow", { itemId: ARMCHAIR, reason: "no_response", note: "", by: designer.name });
-    expect((await check(23)).notices).toBe(ITEMS - 2);
+    await cancelApprovedItem(handle.db, paypal, session, TEST_KEY, { itemId: CHAIR, reason: "no_response", note: "", by: designer.name });
+    expect((await check(23)).notices).toBe(1);
     const [notice] = await notices();
-    expect(notice.text).toMatch(/^Heads-up for Sofia and Jordan: 17 holds end/);
-    expect(notice.text.includes("Writing desk") || notice.text.includes("Lounge armchair")).toBe(false);
+    expect(notice.text).toMatch(/^Heads-up for Ava and Jordan: the \$243\.00 hold for Porcelain floor tile ends /);
   });
 
   it("asks PayPal about holds past their 29 days, and records only what PayPal confirms", async () => {

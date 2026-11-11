@@ -2,14 +2,13 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { readLedger } from "../approval/store";
-import { createChatStore } from "../chat/store";
 import { changeOrders, paymentOperations, paypalCaptures } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import type { TestCardApproval } from "../payments/paypal";
 import { FakePayPal } from "../payments/testing/fake-paypal";
 import { links } from "../payments/testing/flows";
 import { trySeeds } from "./schema";
-import { openWillowWorkspace, prepareTry, readTryRuns, readTrySeed, resumeTry, startTry, type TryDeps, type TrySeed } from "./service";
+import { prepareTry, readTryRuns, readTrySeed, resumeTry, startTry, type TryDeps, type TrySeed } from "./service";
 
 describe.skipIf(!testDatabaseUrl)("/try durable preparation with fake PayPal", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -213,20 +212,6 @@ describe.skipIf(!testDatabaseUrl)("/try durable preparation with fake PayPal", (
     expect(paypal.calls).toHaveLength(writes);
     expect(await handle.db.select().from(paymentOperations)).toHaveLength(1);
     expect((await readTrySeed(handle.db, run.session))?.error).not.toContain("CARD_REJECTED");
-  });
-
-  it("prepares Willow's sent V1 once through the designer action, without approving lines or moving money", async () => {
-    const session = await openWillowWorkspace(handle.db, null);
-    const chat = createChatStore(handle.db);
-    const sent = await chat.getCase(session, "willow");
-    expect(sent.opening).toMatchObject({ status: "sent", progress: { approved: 0, pending: 26 } });
-    expect(await openWillowWorkspace(handle.db, session)).toBe(session);
-    expect((await chat.getCase(session, "willow")).messages).toHaveLength(1);
-    expect(await handle.db.select().from(trySeeds)).toHaveLength(0);
-    expect(await handle.db.select().from(paymentOperations)).toHaveLength(0);
-    expect(paypal.calls).toHaveLength(0);
-    const maple = await startTry(deps(), session);
-    expect(maple.kind !== "limited" && maple.session).toBe(session);
   });
 
   it("refuses another run identity before doing any work", async () => {

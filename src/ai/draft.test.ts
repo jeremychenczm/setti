@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { approvedForTest } from "@/opening/testing";
-
-const willowApprovedQuote = approvedForTest("willow");
-import { quoteFingerprint } from "@/quotes/fingerprint";
 import type { CaseMessage, ProductPage } from "@/chat/types";
+import { approvedTestQuote, CHAIR, CONSULTATION, TILE } from "@/projects/testing";
+import { quoteFingerprint } from "@/quotes/fingerprint";
 import { buildDraft } from "./draft";
 import { CONTEXT_CHAR_LIMIT, modelContext } from "./model";
+
+const approvedQuote = approvedTestQuote();
 
 const messages: CaseMessage[] = [
   { id: "discussion", actor: "client", text: "We mean the dining chairs, not the study chairs.", createdAt: "2026-10-18T10:00:00Z", replyToMessageId: null, aiState: "none", error: null, model: null },
@@ -18,26 +18,27 @@ const page: ProductPage = {
 };
 const output = {
   intent: "draft" as const, message: "Prepared a dining chair replacement draft for designer review.", title: "Dining chair replacement",
-  changes: [{ action: "replace" as const, itemId: "willow-dining-chair", quantity: 4, productOptionId: "page-test:0", description: "New dining chair", sourceMessageIds: ["discussion", "request"] }],
+  changes: [{ action: "replace" as const, itemId: CHAIR, quantity: 4, productOptionId: "page-test:0", description: "New dining chair", sourceMessageIds: ["discussion", "request"] }],
   unresolved: [], constraints: ["Keep the rest unchanged"],
 };
 
 function input() {
-  return { output: structuredClone(output), quote: willowApprovedQuote, messages: structuredClone(messages), pages: [structuredClone(page)], current: null, triggerId: "request", model: "test-model", now: "2026-10-18T10:02:00Z" };
+  return { output: structuredClone(output), quote: approvedQuote, messages: structuredClone(messages), pages: [structuredClone(page)], current: null, triggerId: "request", model: "test-model", now: "2026-10-18T10:02:00Z" };
 }
 
 describe("server-validated change drafts", () => {
+  // Four $80.00 chairs become four $125.00 chairs: $500.00 − $320.00 = $180.00 before tax.
   it("replaces four old chairs with four new chairs and computes a $180 pretax reference delta", () => {
-    const original = JSON.stringify(willowApprovedQuote);
+    const original = JSON.stringify(approvedQuote);
     const draft = buildDraft(input()).draft!;
     expect(draft.changes).toHaveLength(1);
     expect(draft.changes[0]).toMatchObject({ action: "replace", before: { quantity: 4, unitPriceCents: 8000 }, after: { quantity: 4, unitPriceCents: 12500 }, beforeSubtotalCents: 32000, afterSubtotalCents: 50000, deltaSubtotalCents: 18000 });
     expect(draft.status).toBe("needs_designer_review");
-    expect(draft.basedOnQuoteFingerprint).toBe(quoteFingerprint(willowApprovedQuote));
+    expect(draft.basedOnQuoteFingerprint).toBe(quoteFingerprint(approvedQuote));
     expect(draft.deltaSubtotalCents).toBe(18000);
     expect(draft.unresolved.join(" ")).not.toContain("whether the old item was purchased");
     expect(draft.unresolved.join(" ")).not.toContain("Tax, delivery");
-    expect(JSON.stringify(willowApprovedQuote)).toBe(original);
+    expect(JSON.stringify(approvedQuote)).toBe(original);
     expect(draft.sources[0].text).toBe("");
   });
   it("rejects invented quote IDs, product IDs, foreign sources and repeated changes", () => {
@@ -85,10 +86,10 @@ describe("server-validated change drafts", () => {
   });
   it("can explicitly withdraw the current unapproved draft without changing V1", () => {
     const current = buildDraft(input()).draft!;
-    const original = JSON.stringify(willowApprovedQuote);
+    const original = JSON.stringify(approvedQuote);
     const result = buildDraft({ ...input(), current, output: { ...output, intent: "cancel", message: "Withdrew the current draft; V1 stands. No order was cancelled and no payment was made.", changes: [] } });
     expect(result.draft).toBeNull();
-    expect(JSON.stringify(willowApprovedQuote)).toBe(original);
+    expect(JSON.stringify(approvedQuote)).toBe(original);
     expect(() => buildDraft({ ...input(), output: { ...output, intent: "cancel", changes: [] } })).toThrow("No current draft");
   });
   it("keeps an unknown replacement useful while marking prices as pending", () => {
@@ -100,7 +101,7 @@ describe("server-validated change drafts", () => {
     expect(draft.deltaSubtotalCents).toBeNull();
   });
   it("preserves purchase-unit counts for boxed and hourly quote lines", () => {
-    for (const itemId of ["willow-oak-flooring", "willow-consultation"]) {
+    for (const itemId of [TILE, CONSULTATION]) {
       const data = input();
       Object.assign(data.output.changes[0], { action: "quantity", itemId, quantity: 3, productOptionId: null });
       const change = buildDraft(data).draft!.changes[0];

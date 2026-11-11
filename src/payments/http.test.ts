@@ -40,22 +40,22 @@ vi.mock("./server", () => ({ sandboxPayPal: () => ({}) }));
 vi.mock("../try/preparation", () => ({ paymentPreparationPending: mock.paymentPreparationPending, PREPARATION_MESSAGE: "The starting payments are being prepared." }));
 vi.mock("@/db/client", () => ({ createDb: () => ({ db: mock.db, pool: {} }) }));
 
-/** `sessionId` is the studio that owns the projects: Jordan designs, Sofia is Willow's client and Emma is Maple's. */
+/** `sessionId` is the studio that owns the projects: Jordan designs, Ava is Fernhill's client and Emma is Maple's. */
 const orderId = randomUUID(), sessionId = randomUUID(), operationId = randomUUID();
 const origin = "http://localhost:3002";
 const people = {
   jordan: designerActor(sessionId, { persona: "jordan" }),
-  sofia: clientActor(sessionId, ["willow"], { name: "Sofia Martinez" }),
+  ava: clientActor(sessionId, ["fernhill"], { name: "Ava Chen" }),
   emma: clientActor(sessionId, ["maple"], { persona: "emma" }),
 };
 /** Signs one of the project's people in for the next request; null signs out. */
 function signIn(account: keyof typeof people | string | null) {
   mock.requestActor.mockResolvedValue(account ? people[account as keyof typeof people] : null);
 }
-const authorize = { action: "authorize", itemId: "willow-dining-chair", side: "proposed", contentHash: "a".repeat(64), revisionContentHash: "b".repeat(64) };
+const authorize = { action: "authorize", itemId: "fernhill-chair", side: "proposed", contentHash: "a".repeat(64), revisionContentHash: "b".repeat(64) };
 
 function post(body: unknown, options: { signedOut?: boolean; account?: string | null; origin?: string } = {}) {
-  const account = options.account === undefined ? ((body as { action?: string }).action === "authorize" ? "sofia" : "jordan") : options.account;
+  const account = options.account === undefined ? ((body as { action?: string }).action === "authorize" ? "ava" : "jordan") : options.account;
   signIn(options.signedOut ? null : account);
   return new NextRequest(`${origin}/api/change-orders/${orderId}/payments`, {
     method: "POST", body: JSON.stringify(body),
@@ -67,11 +67,11 @@ describe("payment HTTP boundaries", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mock.paymentPreparationPending.mockResolvedValue(false);
-    mock.changeOrderOwner.mockResolvedValue({ studioId: sessionId, key: "willow" });
+    mock.changeOrderOwner.mockResolvedValue({ studioId: sessionId, key: "fernhill" });
     vi.stubEnv("PAYPAL_ENV", "sandbox");
     vi.stubEnv("PAYPAL_CLIENT_ID", "http-test-client");
     vi.stubEnv("PAYPAL_CLIENT_SECRET", "http-test-secret");
-    mock.paymentsWorkspace.mockResolvedValue({ orderId, projectKey: "willow", version: 3, lines: [], operations: [{ id: operationId, kind: "authorize", status: "pending" }] });
+    mock.paymentsWorkspace.mockResolvedValue({ orderId, projectKey: "fernhill", version: 3, lines: [], operations: [{ id: operationId, kind: "authorize", status: "pending" }] });
     mock.startAuthorization.mockResolvedValue({ id: operationId, status: "pending", approvalUrl: "https://www.sandbox.paypal.com/checkoutnow?token=ORDER-1", paypalResourceId: null });
     mock.checkPayment.mockResolvedValue({ id: operationId });
     mock.cancelPayment.mockResolvedValue({ id: operationId });
@@ -143,10 +143,10 @@ describe("payment HTTP boundaries", () => {
 
   it("reads the order as its studio for someone in the project, and as a share link for anyone else", async () => {
     const read = () => getPaymentsResponse(new NextRequest(`${origin}/api/change-orders/${orderId}/payments`), orderId);
-    signIn("sofia");
+    signIn("ava");
     expect((await read()).status).toBe(200);
-    expect(mock.paymentsWorkspace).toHaveBeenLastCalledWith(mock.db, sessionId, orderId, undefined, expect.objectContaining({ name: "Sofia Martinez", role: "client" }), expect.anything());
-    for (const outsider of [people.emma, designerActor(), clientActor(randomUUID(), ["willow"])]) {
+    expect(mock.paymentsWorkspace).toHaveBeenLastCalledWith(mock.db, sessionId, orderId, undefined, expect.objectContaining({ name: "Ava Chen", role: "client" }), expect.anything());
+    for (const outsider of [people.emma, designerActor(), clientActor(randomUUID(), ["fernhill"])]) {
       mock.requestActor.mockResolvedValue(outsider);
       expect((await read()).status).toBe(200);
       expect(mock.paymentsWorkspace).toHaveBeenLastCalledWith(mock.db, null, orderId, undefined, null, expect.anything());
@@ -174,19 +174,19 @@ describe("payment HTTP boundaries", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ operationId, redirectUrl: "https://www.sandbox.paypal.com/checkoutnow?token=ORDER-1" });
     const [, , session, id, input, links] = mock.startAuthorization.mock.calls[0];
-    expect([session, id, input.itemId]).toEqual([sessionId, orderId, "willow-dining-chair"]);
+    expect([session, id, input.itemId]).toEqual([sessionId, orderId, "fernhill-chair"]);
     expect(links(operationId)).toEqual({ returnUrl: `${origin}/api/payments/paypal/return?op=${operationId}&state=${callbackState(operationId, "return")}`, cancelUrl: `${origin}/api/payments/paypal/cancel?op=${operationId}&state=${callbackState(operationId, "cancel")}` });
   });
 
   it("sets no cookie before leaving for PayPal: the sign-in session is the only one", async () => {
-    const response = await postPaymentsResponse(post(authorize, { account: "sofia" }), orderId);
+    const response = await postPaymentsResponse(post(authorize, { account: "ava" }), orderId);
     expect(response.status).toBe(200);
     expect(response.headers.get("set-cookie")).toBeNull();
   });
 
   it("routes designer steps without accepting any client-supplied amount", async () => {
     mock.startCapture.mockResolvedValue([{ id: operationId }]);
-    const lineRef = { itemId: "willow-dining-chair", side: "baseline", contentHash: "a".repeat(64), revisionContentHash: "b".repeat(64) };
+    const lineRef = { itemId: "fernhill-chair", side: "baseline", contentHash: "a".repeat(64), revisionContentHash: "b".repeat(64) };
     expect(await (await postPaymentsResponse(post({ action: "capture", ...lineRef }), orderId)).json()).toMatchObject({ operationId, redirectUrl: null });
     expect((await postPaymentsResponse(post({ action: "capture", ...lineRef, amountCents: 81_563 }), orderId)).status).toBe(400);
     expect((await postPaymentsResponse(post({ action: "refund", ...lineRef, amountCents: 79_063 }), orderId)).status).toBe(400);
@@ -205,14 +205,14 @@ describe("payment HTTP boundaries", () => {
   });
 
   it("enforces the designer role for supplier records and money execution", async () => {
-    const lineRef = { itemId: "willow-dining-chair", side: "baseline", contentHash: "a".repeat(64), revisionContentHash: "b".repeat(64) };
+    const lineRef = { itemId: "fernhill-chair", side: "baseline", contentHash: "a".repeat(64), revisionContentHash: "b".repeat(64) };
     const actions = [
       { action: "capture", ...lineRef }, { action: "release", ...lineRef }, { action: "refund", ...lineRef },
       { action: "supplier_order", ...lineRef, quantity: 1, unitPriceCents: 100, taxCents: 0, freightCents: 0, inStock: true, leadTimeDays: 1, reference: "SUP-1", note: "" },
       { action: "supplier_credit", ...lineRef, creditCents: 100, reference: "CREDIT-1", note: "" },
     ];
     for (const action of actions) {
-      for (const [account, status] of [["sofia", 403], ["emma", 403], [null, 401]] as const) expect((await postPaymentsResponse(post(action, { account }), orderId)).status).toBe(status);
+      for (const [account, status] of [["ava", 403], ["emma", 403], [null, 401]] as const) expect((await postPaymentsResponse(post(action, { account }), orderId)).status).toBe(status);
     }
     expect(mock.startCapture).not.toHaveBeenCalled();
     expect(mock.startRelease).not.toHaveBeenCalled();
@@ -224,17 +224,17 @@ describe("payment HTTP boundaries", () => {
   });
 
   it("allows participants to check authorization, but only the client to leave it", async () => {
-    for (const account of ["jordan", "sofia"]) expect((await postPaymentsResponse(post({ action: "check", operationId }, { account }), orderId)).status).toBe(200);
+    for (const account of ["jordan", "ava"]) expect((await postPaymentsResponse(post({ action: "check", operationId }, { account }), orderId)).status).toBe(200);
     expect((await postPaymentsResponse(post({ action: "cancel", operationId }, { account: "jordan" }), orderId)).status).toBe(403);
-    expect((await postPaymentsResponse(post({ action: "cancel", operationId }, { account: "sofia" }), orderId)).status).toBe(200);
-    mock.paymentsWorkspace.mockResolvedValue({ orderId, projectKey: "willow", operations: [{ id: operationId, kind: "refund" }] });
-    expect((await postPaymentsResponse(post({ action: "check", operationId }, { account: "sofia" }), orderId)).status).toBe(403);
+    expect((await postPaymentsResponse(post({ action: "cancel", operationId }, { account: "ava" }), orderId)).status).toBe(200);
+    mock.paymentsWorkspace.mockResolvedValue({ orderId, projectKey: "fernhill", operations: [{ id: operationId, kind: "refund" }] });
+    expect((await postPaymentsResponse(post({ action: "check", operationId }, { account: "ava" }), orderId)).status).toBe(403);
     expect((await postPaymentsResponse(post({ action: "check", operationId }, { account: "jordan" }), orderId)).status).toBe(200);
     expect((await postPaymentsResponse(post({ action: "check", operationId: randomUUID() }), orderId)).status).toBe(404);
   });
 
   it("sends the returning buyer to the change order with the outcome PayPal reported", async () => {
-    mock.operationPage.mockResolvedValue({ path: `/change-orders/${orderId}`, anchor: "payments", projectKey: "willow" });
+    mock.operationPage.mockResolvedValue({ path: `/change-orders/${orderId}`, anchor: "payments", projectKey: "fernhill" });
     mock.returnFromPayPal.mockResolvedValue({ orderId, state: "authorized" });
     const back = await paypalRedirectResponse(new NextRequest(`${origin}/api/payments/paypal/return?op=${operationId}&token=ORDER-1&PayerID=X&state=${callbackState(operationId, "return")}`), "return");
     expect(back.status).toBe(303);
@@ -252,13 +252,13 @@ describe("payment HTTP boundaries", () => {
 
   it("sends a returning client to the quote and charges the design services they approved", async () => {
     // The services are charged in the operation's own studio, whoever's browser comes back.
-    mock.operationPage.mockResolvedValue({ path: "/quotes/willow", anchor: "design-services", projectKey: "willow", studioId: sessionId });
+    mock.operationPage.mockResolvedValue({ path: "/quotes/fernhill", anchor: "design-services", projectKey: "fernhill", studioId: sessionId });
     mock.returnFromPayPal.mockResolvedValue({ orderId: null, servicesHold: true, state: "authorized" });
     mock.chargeServices.mockResolvedValue([]);
     signIn(null);
     const back = await paypalRedirectResponse(new NextRequest(`${origin}/api/payments/paypal/return?op=${operationId}&token=ORDER-1&state=${callbackState(operationId, "return")}`), "return");
-    expect(back.headers.get("location")).toBe(`${origin}/quotes/willow?paypal=authorized#design-services`);
-    expect(mock.chargeServices).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow");
+    expect(back.headers.get("location")).toBe(`${origin}/quotes/fernhill?paypal=authorized#design-services`);
+    expect(mock.chargeServices).toHaveBeenCalledWith(mock.db, {}, sessionId, "fernhill");
   });
 
   it("refuses callbacks reconstructed from the public operation and order ids", async () => {
@@ -272,13 +272,13 @@ describe("payment HTTP boundaries", () => {
 });
 
 describe("design-services payment HTTP boundaries", () => {
-  const services = (body: unknown, account: string | null, key = "willow") => {
+  const services = (body: unknown, account: string | null, key = "fernhill") => {
     signIn(account);
     return new NextRequest(`${origin}/api/quotes/${key}/services-payment`, {
       method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json", Origin: origin },
     });
   };
-  const view = { projectKey: "willow", canPay: true };
+  const view = { projectKey: "fernhill", canPay: true };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -294,54 +294,54 @@ describe("design-services payment HTTP boundaries", () => {
   afterEach(() => vi.unstubAllEnvs());
 
   it("lets only the project's client start the PayPal checkout, and returns PayPal's order id", async () => {
-    expect((await postServicesPaymentResponse(services({ action: "checkout" }, "jordan"), "willow")).status).toBe(403);
-    expect((await postServicesPaymentResponse(services({ action: "checkout" }, "emma"), "willow")).status).toBe(403);
+    expect((await postServicesPaymentResponse(services({ action: "checkout" }, "jordan"), "fernhill")).status).toBe(403);
+    expect((await postServicesPaymentResponse(services({ action: "checkout" }, "emma"), "fernhill")).status).toBe(403);
     expect(mock.startServicesCheckout).not.toHaveBeenCalled();
-    const response = await postServicesPaymentResponse(services({ action: "checkout" }, "sofia"), "willow");
+    const response = await postServicesPaymentResponse(services({ action: "checkout" }, "ava"), "fernhill");
     expect(await response.json()).toMatchObject({ operationId, paypalOrderId: "ORDER-1", view });
-    expect(mock.startServicesCheckout.mock.calls[0].slice(2, 4)).toEqual([sessionId, "willow"]);
+    expect(mock.startServicesCheckout.mock.calls[0].slice(2, 4)).toEqual([sessionId, "fernhill"]);
   });
 
   it("charges the services once PayPal confirms the client's approval", async () => {
-    await postServicesPaymentResponse(services({ action: "approve", operationId }, "sofia"), "willow");
+    await postServicesPaymentResponse(services({ action: "approve", operationId }, "ava"), "fernhill");
     expect(mock.completeAuthorization).toHaveBeenCalledWith(mock.db, {}, operationId);
-    expect(mock.chargeServices).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow");
+    expect(mock.chargeServices).toHaveBeenCalledWith(mock.db, {}, sessionId, "fernhill");
 
     mock.lockPaymentBasis.mockResolvedValue({ ledger: { operations: [] } });
-    expect((await postServicesPaymentResponse(services({ action: "approve", operationId }, "sofia"), "willow")).status).toBe(404);
+    expect((await postServicesPaymentResponse(services({ action: "approve", operationId }, "ava"), "fernhill")).status).toBe(404);
   });
 
   it("lets the designer finish charging a hold the client approved, but not start one", async () => {
-    expect((await postServicesPaymentResponse(services({ action: "charge" }, "jordan"), "willow")).status).toBe(200);
-    expect((await postServicesPaymentResponse(services({ action: "approve", operationId }, "jordan"), "willow")).status).toBe(403);
-    expect((await postServicesPaymentResponse(services({ action: "checkout", amountCents: 1 }, "sofia"), "willow")).status).toBe(400);
+    expect((await postServicesPaymentResponse(services({ action: "charge" }, "jordan"), "fernhill")).status).toBe(200);
+    expect((await postServicesPaymentResponse(services({ action: "approve", operationId }, "jordan"), "fernhill")).status).toBe(403);
+    expect((await postServicesPaymentResponse(services({ action: "checkout", amountCents: 1 }, "ava"), "fernhill")).status).toBe(400);
   });
 
   it("lets either project participant reconcile the same service checkout", async () => {
-    for (const account of ["sofia", "jordan"]) {
-      const response = await postServicesPaymentResponse(services({ action: "check", operationId }, account), "willow");
+    for (const account of ["ava", "jordan"]) {
+      const response = await postServicesPaymentResponse(services({ action: "check", operationId }, account), "fernhill");
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({ operationId, paypalOrderId: "ORDER-1" });
     }
-    expect(mock.checkServicesCheckout).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow", operationId, expect.any(Function));
-    expect((await postServicesPaymentResponse(services({ action: "check", operationId }, "emma"), "willow")).status).toBe(403);
+    expect(mock.checkServicesCheckout).toHaveBeenCalledWith(mock.db, {}, sessionId, "fernhill", operationId, expect.any(Function));
+    expect((await postServicesPaymentResponse(services({ action: "check", operationId }, "emma"), "fernhill")).status).toBe(403);
     mock.checkServicesCheckout.mockRejectedValueOnce(new PaymentActionError("NOT_FOUND", "Checkout not found."));
-    expect((await postServicesPaymentResponse(services({ action: "check", operationId }, "sofia"), "willow")).status).toBe(404);
+    expect((await postServicesPaymentResponse(services({ action: "check", operationId }, "ava"), "fernhill")).status).toBe(404);
   });
 
   it("shows the payment only to accounts that can open the project", async () => {
-    const get = (account: string | null) => { signIn(account); return getServicesPaymentResponse(new NextRequest(`${origin}/api/quotes/willow/services-payment`), "willow"); };
+    const get = (account: string | null) => { signIn(account); return getServicesPaymentResponse(new NextRequest(`${origin}/api/quotes/fernhill/services-payment`), "fernhill"); };
     expect((await get(null)).status).toBe(401);
     expect((await get("emma")).status).toBe(403);
-    expect((await get("sofia")).status).toBe(200);
-    expect(mock.servicesPaymentView).toHaveBeenCalledWith(mock.db, sessionId, "willow", expect.objectContaining({ name: "Sofia Martinez", role: "client" }), "http-test-client", expect.objectContaining({ testCard: expect.any(Boolean) }));
+    expect((await get("ava")).status).toBe(200);
+    expect(mock.servicesPaymentView).toHaveBeenCalledWith(mock.db, sessionId, "fernhill", expect.objectContaining({ name: "Ava Chen", role: "client" }), "http-test-client", expect.objectContaining({ testCard: expect.any(Boolean) }));
   });
 });
 
 describe("item-holds HTTP boundaries", () => {
   const holds = (body: unknown, account: string | null, signedIn = true) => {
     signIn(signedIn ? account : null);
-    return new NextRequest(`${origin}/api/quotes/willow/item-holds`, {
+    return new NextRequest(`${origin}/api/quotes/fernhill/item-holds`, {
       method: "POST", body: JSON.stringify(body), headers: { "Content-Type": "application/json", Origin: origin },
     });
   };
@@ -351,46 +351,46 @@ describe("item-holds HTTP boundaries", () => {
     vi.stubEnv("PAYPAL_ENV", "sandbox");
     vi.stubEnv("PAYPAL_CLIENT_ID", "http-test-client");
     vi.stubEnv("PAYPAL_CLIENT_SECRET", "http-test-secret");
-    mock.itemHoldsView.mockResolvedValue({ projectKey: "willow", items: [] });
+    mock.itemHoldsView.mockResolvedValue({ projectKey: "fernhill", items: [] });
     mock.holdApprovedItems.mockResolvedValue([{ id: operationId }]);
   });
   afterEach(() => vi.unstubAllEnvs());
 
   it("lets the project's client or designer hold the approved items, and no one else", async () => {
-    expect((await postItemHoldsResponse(holds({ action: "hold" }, "emma"), "willow")).status).toBe(403);
-    expect((await postItemHoldsResponse(holds({ action: "hold" }, "sofia", false), "willow")).status).toBe(401);
-    expect((await postItemHoldsResponse(holds({ action: "hold", amountCents: 1 }, "sofia"), "willow")).status).toBe(400);
+    expect((await postItemHoldsResponse(holds({ action: "hold" }, "emma"), "fernhill")).status).toBe(403);
+    expect((await postItemHoldsResponse(holds({ action: "hold" }, "ava", false), "fernhill")).status).toBe(401);
+    expect((await postItemHoldsResponse(holds({ action: "hold", amountCents: 1 }, "ava"), "fernhill")).status).toBe(400);
     expect(mock.holdApprovedItems).not.toHaveBeenCalled();
-    for (const account of ["sofia", "jordan"]) {
-      const response = await postItemHoldsResponse(holds({ action: "hold" }, account), "willow");
-      expect(await response.json()).toMatchObject({ attempted: 1, view: { projectKey: "willow" } });
+    for (const account of ["ava", "jordan"]) {
+      const response = await postItemHoldsResponse(holds({ action: "hold" }, account), "fernhill");
+      expect(await response.json()).toMatchObject({ attempted: 1, view: { projectKey: "fernhill" } });
     }
-    expect(mock.holdApprovedItems).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow", expect.any(Function));
+    expect(mock.holdApprovedItems).toHaveBeenCalledWith(mock.db, {}, sessionId, "fernhill", expect.any(Function));
     signIn("emma");
-    const get = await getItemHoldsResponse(new NextRequest(`${origin}/api/quotes/willow/item-holds`), "willow");
+    const get = await getItemHoldsResponse(new NextRequest(`${origin}/api/quotes/fernhill/item-holds`), "fernhill");
     expect(get.status).toBe(403);
   });
 
   it("checks saved holds for either participant and only lets the client leave checkout", async () => {
-    for (const account of ["sofia", "jordan"]) expect((await postItemHoldsResponse(holds({ action: "check", operationId }, account), "willow")).status).toBe(200);
-    expect(mock.checkItemHold).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow", operationId, expect.any(Function));
-    expect((await postItemHoldsResponse(holds({ action: "check", operationId }, "emma"), "willow")).status).toBe(403);
-    expect((await postItemHoldsResponse(holds({ action: "cancel", operationId }, "jordan"), "willow")).status).toBe(403);
-    expect((await postItemHoldsResponse(holds({ action: "cancel", operationId }, "sofia"), "willow")).status).toBe(200);
-    expect(mock.cancelItemHold).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow", operationId);
+    for (const account of ["ava", "jordan"]) expect((await postItemHoldsResponse(holds({ action: "check", operationId }, account), "fernhill")).status).toBe(200);
+    expect(mock.checkItemHold).toHaveBeenCalledWith(mock.db, {}, sessionId, "fernhill", operationId, expect.any(Function));
+    expect((await postItemHoldsResponse(holds({ action: "check", operationId }, "emma"), "fernhill")).status).toBe(403);
+    expect((await postItemHoldsResponse(holds({ action: "cancel", operationId }, "jordan"), "fernhill")).status).toBe(403);
+    expect((await postItemHoldsResponse(holds({ action: "cancel", operationId }, "ava"), "fernhill")).status).toBe(200);
+    expect(mock.cancelItemHold).toHaveBeenCalledWith(mock.db, {}, sessionId, "fernhill", operationId);
   });
 
   it("lets only the designer cancel an item, with a reason from the list", async () => {
     mock.cancelApprovedItem.mockResolvedValue({ cancellation: { id: "c" }, operations: [{ id: operationId }] });
-    const body = { action: "cancel_item", itemId: "willow-desk", reason: "no_response", note: "  Three emails, no answer.  " };
-    expect((await postItemHoldsResponse(holds(body, "sofia"), "willow")).status).toBe(403);
-    expect((await postItemHoldsResponse(holds(body, "jordan", false), "willow")).status).toBe(401);
-    expect((await postItemHoldsResponse(holds({ ...body, reason: "too_expensive" }, "jordan"), "willow")).status).toBe(400);
-    expect((await postItemHoldsResponse(holds({ ...body, amountCents: 1 }, "jordan"), "willow")).status).toBe(400);
+    const body = { action: "cancel_item", itemId: "fernhill-desk", reason: "no_response", note: "  Three emails, no answer.  " };
+    expect((await postItemHoldsResponse(holds(body, "ava"), "fernhill")).status).toBe(403);
+    expect((await postItemHoldsResponse(holds(body, "jordan", false), "fernhill")).status).toBe(401);
+    expect((await postItemHoldsResponse(holds({ ...body, reason: "too_expensive" }, "jordan"), "fernhill")).status).toBe(400);
+    expect((await postItemHoldsResponse(holds({ ...body, amountCents: 1 }, "jordan"), "fernhill")).status).toBe(400);
     expect(mock.cancelApprovedItem).not.toHaveBeenCalled();
-    const response = await postItemHoldsResponse(holds(body, "jordan"), "willow");
-    expect(await response.json()).toMatchObject({ attempted: 1, view: { projectKey: "willow" } });
-    expect(mock.cancelApprovedItem).toHaveBeenCalledWith(mock.db, {}, sessionId, "willow", { action: "cancel_item", itemId: "willow-desk", reason: "no_response", note: "Three emails, no answer.", by: "Jordan Lee" });
+    const response = await postItemHoldsResponse(holds(body, "jordan"), "fernhill");
+    expect(await response.json()).toMatchObject({ attempted: 1, view: { projectKey: "fernhill" } });
+    expect(mock.cancelApprovedItem).toHaveBeenCalledWith(mock.db, {}, sessionId, "fernhill", { action: "cancel_item", itemId: "fernhill-desk", reason: "no_response", note: "Three emails, no answer.", by: "Jordan Lee" });
   });
 });
 
@@ -399,7 +399,7 @@ describe("studio reminders HTTP boundary", () => {
   beforeEach(() => { vi.clearAllMocks(); mock.attentionView.mockResolvedValue({ items: [], checkedAt: "2026-11-01T00:00:00.000Z" }); });
 
   it("serves the reminders to the designer only", async () => {
-    for (const [account, status] of [["sofia", 403], ["emma", 403], [null, 401]] as const) expect((await getAttentionResponse(get(account))).status).toBe(status);
+    for (const [account, status] of [["ava", 403], ["emma", 403], [null, 401]] as const) expect((await getAttentionResponse(get(account))).status).toBe(status);
     expect(mock.attentionView).not.toHaveBeenCalled();
     const response = await getAttentionResponse(get("jordan"));
     expect(await response.json()).toEqual({ items: [], checkedAt: "2026-11-01T00:00:00.000Z" });
@@ -466,7 +466,7 @@ describe("demo clock HTTP boundary", () => {
   });
 
   it("lets only the designer skip ahead, by whole days up to day 30", async () => {
-    expect((await postDemoClockResponse(skip({ days: 2 }, "sofia"))).status).toBe(403);
+    expect((await postDemoClockResponse(skip({ days: 2 }, "ava"))).status).toBe(403);
     expect((await postDemoClockResponse(skip({ days: 2 }, null))).status).toBe(401);
     for (const days of [0, 31, 2.5, "2"]) expect((await postDemoClockResponse(skip({ days }, "jordan"))).status).toBe(400);
     expect(mock.skipAhead).not.toHaveBeenCalled();

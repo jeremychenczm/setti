@@ -45,8 +45,8 @@ describe("local supplier evidence for the café proposal", () => {
     expect(input.reviewNotes).toContain("Demo walkthrough");
     expect(previewPricing(HOME_APPROVED_QUOTE, draft, input).ready).toBe(true);
     expect(JSON.stringify(draft)).toBe(original);
-    const otherQuote = { ...HOME_APPROVED_QUOTE, projectId: "willow" };
-    const other = createReviewInput(otherQuote, { ...draft, projectKey: "willow", basedOnQuoteFingerprint: undefined });
+    const otherQuote = { ...HOME_APPROVED_QUOTE, projectId: "fernhill" };
+    const other = createReviewInput(otherQuote, { ...draft, projectKey: "fernhill", basedOnQuoteFingerprint: undefined });
     expect(other.changes.every((change) => !change.confirmed)).toBe(true);
     expect(other.issues.every((issue) => !issue.resolved)).toBe(true);
   });

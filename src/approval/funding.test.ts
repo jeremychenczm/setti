@@ -38,8 +38,8 @@ function order(options: { handling?: OldItemHandling; cost?: number; action?: Re
   return {
     id: "order-1", version: 3, issuedAt: "2026-10-20T10:10:00.000Z", reviewId: "review-1", reviewVersion: 2,
     revisionId: "revision-1", revisionContentHash: "revision-hash", contentHash: "full-hash",
-    baselineFingerprint: "baseline", projectKey: "willow", basedOnQuoteId: "quote-1", basedOnVersion: 1,
-    projectName: "Willow", clientName: "Client", designerName: "Designer", currency: "USD", isDemo: true,
+    baselineFingerprint: "baseline", projectKey: "fernhill", basedOnQuoteId: "quote-1", basedOnVersion: 1,
+    projectName: "Fernhill Apartment", clientName: "Client", designerName: "Designer", currency: "USD", isDemo: true,
     title: "Chair replacement", sourceDraftId: "draft-1", sourceDraftRevision: 1,
     changes: [change], lines, baselineLines: [before], baselineTotals, totals,
     deltaTotalCents: totals.totalCents - baselineTotals.totalCents, terms: "Checked", reviewNotes: "",

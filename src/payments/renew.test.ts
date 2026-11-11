@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { DEMO_ACCOUNTS } from "../accounts/demo";
-import { caseDocument } from "../chat/cases";
 import { chatMessages } from "../chat/schema";
 import { items, paymentOperations, paypalAuthorizations } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import { signOpeningForTest } from "../opening/testing";
+import { addTestProject, CHAIR, DESK, SOFA, TEST_KEY, testDesigner as designer, testLine, testQuote } from "../projects/testing";
 import { attentionView } from "./attention-view";
 import { completeAuthorization } from "./authorize";
 import { cancelApprovedItem } from "./cancel-item";
@@ -21,11 +20,10 @@ import { recordOpeningSupplierOrder } from "./supplier";
 import { FakePayPal } from "./testing/fake-paypal";
 import { links } from "./testing/flows";
 
-const [designer] = DEMO_ACCOUNTS;
 const DAY = 24 * 60 * 60 * 1000;
-const DESK = "willow-desk", ARMCHAIR = "willow-armchair", SOFA = "willow-sofa";
-const desk = caseDocument("willow").lines.find((line) => line.itemId === DESK)!;
-const ITEMS = 19;
+const desk = testLine(DESK);
+/** The sofa is declined, so the chair, desk and tile are held. */
+const ITEMS = 3;
 
 /** The database's own refusal, wherever the driver puts its message. */
 const databaseRefused = (pattern: RegExp) => (error: unknown) => {
@@ -43,14 +41,15 @@ describe.skipIf(!testDatabaseUrl)("renewing holds that still wait for their supp
     await truncate(handle.db, "projects", "chat_cases", "hold_checks", "renewal_notices");
     session = randomUUID();
     paypal = new FakePayPal();
-    await signOpeningForTest(handle.db, session, "willow", caseDocument("willow").lines.map((line) => line.itemId === SOFA
+    await addTestProject(handle.db, session);
+    await signOpeningForTest(handle.db, session, TEST_KEY, testQuote.lines.map((line) => line.itemId === SOFA
       ? { itemId: line.itemId, decision: "declined" as const, note: "Too big for the room." }
       : { itemId: line.itemId, decision: "approved" as const }));
-    const checkout = await startServicesCheckout(handle.db, paypal, session, "willow", links);
+    const checkout = await startServicesCheckout(handle.db, paypal, session, TEST_KEY, links);
     paypal.approve(checkout.paypalOrderId!);
     await completeAuthorization(handle.db, paypal, checkout.id);
-    await chargeServices(handle.db, paypal, session, "willow");
-    await holdApprovedItems(handle.db, paypal, session, "willow");
+    await chargeServices(handle.db, paypal, session, TEST_KEY);
+    await holdApprovedItems(handle.db, paypal, session, TEST_KEY);
   });
   afterAll(() => handle?.pool.end());
 
@@ -60,9 +59,11 @@ describe.skipIf(!testDatabaseUrl)("renewing holds that still wait for their supp
     await noteActivity(handle.db, session, later(days));
     return runDailyCheck(handle.db, paypal, { now: later(days) });
   };
-  const holdsOf = async (name: string) => (await handle.db.select({ hold: paypalAuthorizations }).from(paypalAuthorizations)
-    .innerJoin(items, eq(items.id, paypalAuthorizations.itemId)).where(and(eq(items.name, name), isNotNull(paypalAuthorizations.itemId))))
-    .map(({ hold }) => hold).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  // The original hold first, then the one renewing it. Not by createdAt: two holds can share one.
+  const holdsOf = async (name: string) => (await handle.db.select({ hold: paypalAuthorizations, replaces: paymentOperations.replacesAuthorizationId }).from(paypalAuthorizations)
+    .innerJoin(items, eq(items.id, paypalAuthorizations.itemId)).innerJoin(paymentOperations, eq(paymentOperations.id, paypalAuthorizations.operationId))
+    .where(and(eq(items.name, name), isNotNull(paypalAuthorizations.itemId))))
+    .sort((a, b) => Number(!!a.replaces) - Number(!!b.replaces)).map(({ hold }) => hold);
   const reports = async () => (await handle.db.select().from(chatMessages).where(eq(chatMessages.model, "notice"))).filter((message) => /^Setti (renewed|released|could not renew)/.test(message.text));
 
   it("renews two days after the notice: a new hold of the same amount first, then the old one is released", async () => {
@@ -82,8 +83,9 @@ describe.skipIf(!testDatabaseUrl)("renewing holds that still wait for their supp
     expect(renewal.createdAt.getTime()).toBeLessThanOrEqual(release.createdAt.getTime());
 
     const [report] = await reports();
-    expect(report.text).toMatch(/^Setti renewed 19 holds with Sofia's saved PayPal \(\$[\d,.]+ in all\)\. Nothing was charged; each old hold is released once its new one is in place:\n/);
-    expect(report.text).toMatch(/\n• Lounge armchair · \$162\.04 · new \S+ · old \S+ released\n/);
+    // Chair $345.60 + desk $270.00 + tile $243.00.
+    expect(report.text).toMatch(/^Setti renewed 3 holds with Ava's saved PayPal \(\$858\.60 in all\)\. Nothing was charged; each old hold is released once its new one is in place:\n/);
+    expect(report.text).toMatch(/\n• Dining chair · \$345\.60 · new \S+ · old \S+ released\n/);
 
     // The new holds start a new clock: nothing needs the designer today, and a repeat run changes nothing.
     expect((await attentionView(handle.db, session, designer)).items).toEqual([]);
@@ -102,12 +104,12 @@ describe.skipIf(!testDatabaseUrl)("renewing holds that still wait for their supp
   });
 
   it("leaves confirmed and cancelled items alone", async () => {
-    const { contentHash } = await handle.db.transaction((tx) => lockOpeningVersion(tx, session, "willow", null));
-    await recordOpeningSupplierOrder(handle.db, session, "willow", {
+    const { contentHash } = await handle.db.transaction((tx) => lockOpeningVersion(tx, session, TEST_KEY, null));
+    await recordOpeningSupplierOrder(handle.db, session, TEST_KEY, {
       itemId: DESK, contentHash, quantity: desk.quantity, unitPriceCents: desk.unitPriceCents, taxCents: desk.taxCents, freightCents: desk.freightCents,
-      inStock: true, leadTimeDays: 10, reference: "QMO-SO-1001", note: "",
+      inStock: true, leadTimeDays: 10, reference: "BD-SO-1001", note: "",
     });
-    await cancelApprovedItem(handle.db, paypal, session, "willow", { itemId: ARMCHAIR, reason: "no_response", note: "", by: designer.name });
+    await cancelApprovedItem(handle.db, paypal, session, TEST_KEY, { itemId: CHAIR, reason: "no_response", note: "", by: designer.name });
     await check(23);
     expect(await check(25.1)).toMatchObject({ renewals: ITEMS - 2 });
     expect((await holdsOf("Writing desk")).map((hold) => hold.status)).toEqual(["created"]);
@@ -121,11 +123,11 @@ describe.skipIf(!testDatabaseUrl)("renewing holds that still wait for their supp
     expect(run.renewals).toBe(0);
     expect(run.problems).toHaveLength(ITEMS);
     expect((await holdsOf("Writing desk")).map((hold) => hold.status)).toEqual(["created"]);
-    const line = (await itemHoldsView(handle.db, session, "willow", designer)).items.find((entry) => entry.itemId === DESK)!;
+    const line = (await itemHoldsView(handle.db, session, TEST_KEY, designer)).items.find((entry) => entry.itemId === DESK)!;
     expect(line).toMatchObject({ state: "held", renewal: { message: expect.any(String) } });
     const reminder = (await attentionView(handle.db, session, designer, later(25.2))).items.find((entry) => entry.itemId === DESK)!;
     expect(reminder).toMatchObject({ kind: "renewal_failed", urgency: "now", detail: expect.stringMatching(/^Setti could not renew the hold: .+ The current hold still ends .+\. Ask the client to approve a new hold, or cancel the item\.$/) });
-    expect((await reports())[0].text).toMatch(/^Setti could not renew the hold for Lounge armchair, .+: .+ Their current holds stay as before, and Jordan will follow up\.$/);
+    expect((await reports())[0].text).toMatch(/^Setti could not renew the hold for Dining chair, .+: .+ Their current holds stay as before, and Jordan will follow up\.$/);
   });
 
   it("tries the release again when it did not go through", async () => {
@@ -134,27 +136,27 @@ describe.skipIf(!testDatabaseUrl)("renewing holds that still wait for their supp
     const first = await check(25.1);
     expect(first.renewals).toBe(ITEMS);
     expect(first.problems).toEqual([expect.stringMatching(/was renewed but not released yet/)]);
-    const [old, renewed] = await holdsOf("Lounge armchair");
+    const [old, renewed] = await holdsOf("Dining chair");
     expect([old.status, renewed.status]).toEqual(["created", "created"]);
 
     const second = await check(25.2);
     expect(second).toMatchObject({ renewals: 0, problems: [] });
-    expect((await holdsOf("Lounge armchair")).map((hold) => hold.status)).toEqual(["voided", "created"]);
-    expect((await reports()).at(-1)!.text).toMatch(/^Setti released the old hold \S+ for Lounge armchair, which an earlier renewal replaced\.$/);
+    expect((await holdsOf("Dining chair")).map((hold) => hold.status)).toEqual(["voided", "created"]);
+    expect((await reports()).at(-1)!.text).toMatch(/^Setti released the old hold \S+ for Dining chair, which an earlier renewal replaced\.$/);
   });
 
   it("refuses a renewal of another item's hold, a second one at a time, or a changed one", async () => {
-    const opening = await handle.db.transaction((tx) => lockOpeningVersion(tx, session, "willow", null));
+    const opening = await handle.db.transaction((tx) => lockOpeningVersion(tx, session, TEST_KEY, null));
     const [deskHold] = await holdsOf("Writing desk");
-    const [armchairHold] = await holdsOf("Lounge armchair");
+    const [chairHold] = await holdsOf("Dining chair");
     const savedMethodId = (await handle.db.select().from(paymentOperations).where(isNotNull(paymentOperations.savedMethodId)))[0].savedMethodId!;
     const renewalOf = (hold: typeof deskHold, itemId = hold.itemId!) => insertOperation(handle.db, {
       businessKey: `test-renew:${randomUUID()}`, projectId: opening.projectId, kind: "authorize", amountCents: hold.amountCents,
       binding: opening.bind(itemId), savedMethodId, replacesAuthorizationId: hold.id, renewedAt: new Date(),
     });
-    await expect(renewalOf(deskHold, armchairHold.itemId!)).rejects.toSatisfy(databaseRefused(/same project and item/));
+    await expect(renewalOf(deskHold, chairHold.itemId!)).rejects.toSatisfy(databaseRefused(/same project and item/));
     const created = await renewalOf(deskHold);
-    await expect(handle.db.update(paymentOperations).set({ replacesAuthorizationId: armchairHold.id }).where(eq(paymentOperations.id, created.id)))
+    await expect(handle.db.update(paymentOperations).set({ replacesAuthorizationId: chairHold.id }).where(eq(paymentOperations.id, created.id)))
       .rejects.toSatisfy(databaseRefused(/and when, cannot change/));
     await expect(renewalOf(deskHold)).rejects.toSatisfy(databaseRefused(/unresolved authorization|payment_operations_one_renewal|duplicate key/));
   });

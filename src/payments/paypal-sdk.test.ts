@@ -141,17 +141,17 @@ describe("PayPal SDK adapter", () => {
     expect(await approve("ORDER-1")).toMatchObject({ kind: "rejected", code: "UNPROCESSABLE_ENTITY", debugId: "debug-422", trace: { httpStatus: 422 } });
   });
 
-  const checkout = { requestId: "setti-op-1-order", amountCents: 54_375, referenceId: "item-1", customId: "op-1", invoiceId: "setti-op-1", description: "Willow Residence · Chair · V2", returnUrl: "https://setti.test/return", cancelUrl: "https://setti.test/cancel" };
+  const checkout = { requestId: "setti-op-1-order", amountCents: 54_375, referenceId: "item-1", customId: "op-1", invoiceId: "setti-op-1", description: "Fernhill Apartment · Chair · V2", returnUrl: "https://setti.test/return", cancelUrl: "https://setti.test/cancel" };
 
   it("asks PayPal to save the buyer's PayPal on success only when the checkout says so", async () => {
     const sent: { body: { paymentSource: { paypal: Record<string, unknown> } } }[] = [];
     const paypal = adapter({}, { createOrder: async (request: never) => { sent.push(request); return response({ id: "ORDER-1", status: "PAYER_ACTION_REQUIRED" }, 200); } } as never);
     await paypal.createOrder(checkout);
-    await paypal.createOrder({ ...checkout, savePayPal: { description: "Setti · Willow Residence: holds for the items you approve" } });
+    await paypal.createOrder({ ...checkout, savePayPal: { description: "Setti · Fernhill Apartment: holds for the items you approve" } });
     expect(sent[0].body.paymentSource.paypal).not.toHaveProperty("attributes");
     expect(sent[1].body.paymentSource.paypal).toMatchObject({
       experienceContext: { returnUrl: checkout.returnUrl },
-      attributes: { vault: { storeInVault: "ON_SUCCESS", usageType: "MERCHANT", usagePattern: "UNSCHEDULED_POSTPAID", description: "Setti · Willow Residence: holds for the items you approve" } },
+      attributes: { vault: { storeInVault: "ON_SUCCESS", usageType: "MERCHANT", usagePattern: "UNSCHEDULED_POSTPAID", description: "Setti · Fernhill Apartment: holds for the items you approve" } },
     });
   });
 

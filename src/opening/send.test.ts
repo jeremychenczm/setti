@@ -10,36 +10,35 @@ import { openingQuotes } from "./schema";
 import { sampleProject } from "@/demo/sample-projects";
 import { createProject } from "@/projects/create";
 import { draftSchema, saveDraft } from "@/projects/draft";
+import { addTestProject, TEST_KEY, testProject, V1_CENTS } from "@/projects/testing";
 
 describe.skipIf(!testDatabaseUrl)("sending quote V1 from the project chat", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
   let store: ChatStore;
   let sessionId: string;
-  const send = (id = randomUUID(), text = "Here is the full quote for Willow Residence.") => store.sendQuote(sessionId, "willow", { id, text, sentBy: "Jordan Lee" });
+  const send = (id = randomUUID(), text = "Here is the full quote for Fernhill Apartment.") => store.sendQuote(sessionId, TEST_KEY, { id, text, sentBy: "Jordan Lee" });
 
   beforeAll(async () => { handle = await openTestDb(); });
   beforeEach(async () => {
     await truncate(handle.db, "opening_quotes", "chat_messages", "chat_cases");
     store = createChatStore(handle.db);
     sessionId = randomUUID();
+    await addTestProject(handle.db, sessionId);
   });
   afterAll(() => handle?.pool.end());
 
-  it("starts as an empty chat with a draft V1 the client cannot see yet", async () => {
-    const state = await store.getCase(sessionId, "willow");
-    expect(state.messages).toEqual([]);
-    expect(state.opening).toMatchObject({ status: "draft", messageId: null, contentHash: null, lineCount: 26, totalCents: 1_517_489 });
-    expect((await store.getQuote(sessionId, "willow")).opening.status).toBe("draft");
-  });
+  it("starts as a draft V1, then posts one designer message and freezes the server's own copy of V1 with its hash", async () => {
+    const draft = await store.getCase(sessionId, TEST_KEY);
+    expect(draft.messages).toEqual([]);
+    expect(draft.opening).toMatchObject({ status: "draft", messageId: null, contentHash: null, lineCount: 6, totalCents: V1_CENTS });
 
-  it("posts one designer message and freezes the server's own copy of V1 with its hash", async () => {
     const id = randomUUID();
     const state = await send(id);
-    expect(state.messages).toEqual([expect.objectContaining({ id, actor: "designer", text: "Here is the full quote for Willow Residence.", aiState: "none" })]);
-    const hash = documentHash(openingDocument(sampleProject("willow")!));
-    expect(state.opening).toMatchObject({ status: "sent", messageId: id, sentBy: "Jordan Lee", contentHash: hash, lineCount: 26 });
-    const view = await store.getQuote(sessionId, "willow");
-    expect(view.document).toEqual(openingDocument(sampleProject("willow")!));
+    expect(state.messages).toEqual([expect.objectContaining({ id, actor: "designer", text: "Here is the full quote for Fernhill Apartment.", aiState: "none" })]);
+    const hash = documentHash(openingDocument(testProject));
+    expect(state.opening).toMatchObject({ status: "sent", messageId: id, sentBy: "Jordan Lee", contentHash: hash, lineCount: 6, totalCents: V1_CENTS });
+    const view = await store.getQuote(sessionId, TEST_KEY);
+    expect(view.document).toEqual(openingDocument(testProject));
     expect(view.approval).toBeNull();
     expect(documentHash(view.document)).toBe(view.opening.contentHash);
   });
@@ -58,9 +57,9 @@ describe.skipIf(!testDatabaseUrl)("sending quote V1 from the project chat", () =
     await expect(store.sendQuote(sessionId, "maple", { id: randomUUID(), text: "Quote", sentBy: "Jordan Lee" })).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
     await expect(send(randomUUID(), "   ")).rejects.toMatchObject({ code: "INVALID_INPUT" });
     const used = randomUUID();
-    await store.appendMessage(sessionId, "willow", { id: used, actor: "designer", text: "Hello Sofia" });
+    await store.appendMessage(sessionId, TEST_KEY, { id: used, actor: "designer", text: "Hello Ava" });
     await expect(send(used)).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
-    expect((await store.getCase(sessionId, "willow")).opening?.status).toBe("draft");
+    expect((await store.getCase(sessionId, TEST_KEY)).opening?.status).toBe("draft");
   });
 
   it("keeps a sent V1 frozen in the database and bound to a designer message of its own case", async () => {
@@ -69,10 +68,11 @@ describe.skipIf(!testDatabaseUrl)("sending quote V1 from the project chat", () =
     await expect(handle.db.delete(openingQuotes)).rejects.toThrow();
     const otherSession = randomUUID();
     const clientMessage = randomUUID();
-    await store.appendMessage(otherSession, "willow", { id: clientMessage, actor: "client", text: "Hi" });
+    await addTestProject(handle.db, otherSession);
+    await store.appendMessage(otherSession, TEST_KEY, { id: clientMessage, actor: "client", text: "Hi" });
     const [otherCase] = await handle.db.select().from(chatCases).where(eq(chatCases.sessionId, otherSession));
-    const document = openingDocument(sampleProject("willow")!);
-    await expect(handle.db.insert(openingQuotes).values({ caseId: otherCase.id, messageId: clientMessage, document, contentHash: documentHash(document), sentBy: "Sofia Martinez" })).rejects.toThrow();
+    const document = openingDocument(testProject);
+    await expect(handle.db.insert(openingQuotes).values({ caseId: otherCase.id, messageId: clientMessage, document, contentHash: documentHash(document), sentBy: "Ava Chen" })).rejects.toThrow();
     const [{ count }] = await handle.db.select({ count: sql<number>`count(*)::int` }).from(openingQuotes);
     expect(count).toBe(1);
   });
@@ -89,7 +89,7 @@ describe.skipIf(!testDatabaseUrl)("sending quote V1 from the project chat", () =
     const saved = await draft();
     expect(saved).toMatchObject({ room: "Dining", clientName: "Morgan Lee", lines: [{ name: "Walnut sideboard", unitPriceCents: 240_000, source: { kind: "public_reference", url: "https://example.com/sideboard" } }] });
     // A save over a draft changed since is refused, not merged.
-    await expect(saveDraft(handle.db, sessionId, key, { basedOn: documentHash(openingDocument(sampleProject("willow")!)), room: "", clientName: "", lines: [] })).rejects.toMatchObject({ code: "STALE_DRAFT" });
+    await expect(saveDraft(handle.db, sessionId, key, { basedOn: documentHash(openingDocument(testProject)), room: "", clientName: "", lines: [] })).rejects.toMatchObject({ code: "STALE_DRAFT" });
     // The line keeps its id when edited again.
     await saveDraft(handle.db, sessionId, key, { basedOn: first.hash, room: "Dining", clientName: "Morgan Lee", lines: [{ ...line, itemId: saved.lines[0].itemId, quantity: 2 }] });
     expect((await draft()).lines.map(({ itemId, quantity }) => [itemId, quantity])).toEqual([[saved.lines[0].itemId, 2]]);

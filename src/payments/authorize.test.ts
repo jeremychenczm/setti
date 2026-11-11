@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEMO_ACCOUNTS } from "../accounts/demo";
 import { createChatStore } from "../chat/store";
 import { paymentOperations, paypalAuthorizations, paypalCalls } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import type { FrozenChangeOrder } from "../pricing/types";
+import { addTestProject, CHAIR, TEST_KEY, testClient, testDesigner } from "../projects/testing";
 import { cancelPayment, checkPayment, returnFromPayPal, startAuthorization } from "./actions";
 import { cancelCheckout, completeAuthorization } from "./authorize";
 import type { OrderReceipt } from "./paypal";
@@ -14,7 +14,8 @@ import { FakePayPal } from "./testing/fake-paypal";
 import { paymentsWorkspace } from "./workspace";
 import { confirmSupplier } from "./testing/flows";
 
-const CHAIR = "willow-dining-chair";
+/** A client of another project in the same studio. */
+const otherClient = { ...testClient, id: "other-client", name: "Other Client", projectKey: "other-project" };
 const links = (operationId: string) => ({ returnUrl: `http://localhost:3002/api/payments/paypal/return?op=${operationId}`, cancelUrl: `http://localhost:3002/api/payments/paypal/cancel?op=${operationId}` });
 const gate = () => {
   let resolve!: () => void;
@@ -32,7 +33,8 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     await truncate(handle.db, "projects", "chat_cases");
     session = randomUUID();
     paypal = new FakePayPal();
-    v2 = await confirmChange(handle.db, session, "willow", { action: "replace", itemId: CHAIR, after: bergmund() });
+    await addTestProject(handle.db, session);
+    v2 = await confirmChange(handle.db, session, TEST_KEY, { action: "replace", itemId: CHAIR, after: bergmund() });
   });
   afterAll(() => handle?.pool.end());
 
@@ -53,7 +55,7 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     expect(hold.expiresAt).toBeTruthy();
     expect(hold.honorExpiresAt!.getTime() - hold.createdAt.getTime()).toBeLessThan(4 * 86_400_000);
 
-    const workspace = (await paymentsWorkspace(handle.db, session, v2.id, undefined, DEMO_ACCOUNTS[0]))!;
+    const workspace = (await paymentsWorkspace(handle.db, session, v2.id, undefined, testDesigner))!;
     const chair = workspace.lines.find((line) => line.itemId === CHAIR && line.side === "proposed")!;
     expect(chair).toMatchObject({ targetCents: 54_375, heldCents: 54_375, capturedCents: 0, refundedCents: 0, holds: [{ paypalAuthorizationId: hold.paypalAuthorizationId, version: v2.version, status: "created" }] });
     expect(chair.steps.map((step) => [step.kind, step.amountCents, step.available])).toEqual([["supplier_confirmation", 54_375, true], ["capture", 54_375, false]]);
@@ -61,7 +63,7 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
     expect(workspace.others.lineCount).toBe(v2.lines.length - 1);
     expect(workspace.operations[0]).toMatchObject({ status: "succeeded", paypalResourceId: hold.paypalAuthorizationId, approvalUrl: null });
     expect(workspace.operations[0].calls.map((call) => call.step)).toEqual(["authorize_order", "get_order", "create_order"]);
-    expect((await createChatStore(handle.db).getCase(session, "willow")).messages.at(-1)?.text).toMatch(/authorization recorded for V2 .*543\.75 USD is held.*Nothing has been charged/);
+    expect((await createChatStore(handle.db).getCase(session, TEST_KEY)).messages.at(-1)?.text).toMatch(/authorization recorded for V2 .*543\.75 USD is held.*Nothing has been charged/);
   });
 
   it("returns the same checkout for repeated clicks and a second window", async () => {
@@ -249,30 +251,30 @@ describe.skipIf(!testDatabaseUrl)("initial authorization of a confirmed line", (
 
   it("refuses new authorizations from a stale version while an already started checkout keeps its version", async () => {
     const checkout = await start();
-    const v3 = await confirmChange(handle.db, session, "willow", { action: "quantity", itemId: CHAIR, quantity: 6, after: { taxCents: 6_563 } });
+    const v3 = await confirmChange(handle.db, session, TEST_KEY, { action: "quantity", itemId: CHAIR, quantity: 6, after: { taxCents: 6_563 } });
     await expect(start(v2)).rejects.toMatchObject({ code: "STALE_VERSION" });
     paypal.approve(checkout.paypalOrderId!);
     expect(await back(checkout.id, checkout.paypalOrderId)).toEqual({ orderId: v2.id, servicesHold: false, state: "authorized" });
     expect((await holds())[0]).toMatchObject({ changeOrderId: v2.id, amountCents: 54_375 });
     // The newer version counts the held $543.75 and asks only for the uncovered amount.
-    const next = (await paymentsWorkspace(handle.db, session, v3.id, undefined, DEMO_ACCOUNTS[1]))!;
+    const next = (await paymentsWorkspace(handle.db, session, v3.id, undefined, testClient))!;
     expect(next.lines.find((line) => line.itemId === CHAIR)).toMatchObject({ targetCents: 81_563, heldCents: 54_375, steps: expect.arrayContaining([expect.objectContaining({ kind: "authorize", amountCents: 27_188, available: true })]) });
   });
 
   it("offers payment steps only to the account responsible for them", async () => {
-    const stepsFor = async (account: (typeof DEMO_ACCOUNTS)[number] | null) => (await paymentsWorkspace(handle.db, session, v2.id, undefined, account))!.lines.flatMap((line) => line.steps);
-    for (const account of [null, DEMO_ACCOUNTS[2]]) expect((await stepsFor(account)).every((step) => !step.available)).toBe(true);
-    expect((await stepsFor(DEMO_ACCOUNTS[1])).filter((step) => step.available).map((step) => step.kind)).toEqual(["authorize"]);
-    expect((await stepsFor(DEMO_ACCOUNTS[0])).filter((step) => step.available).every((step) => step.actor === "designer")).toBe(true);
+    const stepsFor = async (account: typeof testDesigner | null) => (await paymentsWorkspace(handle.db, session, v2.id, undefined, account))!.lines.flatMap((line) => line.steps);
+    for (const account of [null, otherClient]) expect((await stepsFor(account)).every((step) => !step.available)).toBe(true);
+    expect((await stepsFor(testClient)).filter((step) => step.available).map((step) => step.kind)).toEqual(["authorize"]);
+    expect((await stepsFor(testDesigner)).filter((step) => step.available).every((step) => step.actor === "designer")).toBe(true);
 
     const checkout = await start();
     paypal.approve(checkout.paypalOrderId!);
     await back(checkout.id, checkout.paypalOrderId);
-    expect((await stepsFor(DEMO_ACCOUNTS[0])).filter((step) => step.available).map((step) => step.kind)).toEqual(["supplier_confirmation"]);
-    expect((await stepsFor(DEMO_ACCOUNTS[1])).every((step) => !step.available)).toBe(true);
+    expect((await stepsFor(testDesigner)).filter((step) => step.available).map((step) => step.kind)).toEqual(["supplier_confirmation"]);
+    expect((await stepsFor(testClient)).every((step) => !step.available)).toBe(true);
     await confirmSupplier(handle.db, session, v2, "proposed");
-    expect((await stepsFor(DEMO_ACCOUNTS[0])).filter((step) => step.available).map((step) => step.kind)).toEqual(["capture"]);
-    expect((await stepsFor(DEMO_ACCOUNTS[1])).every((step) => !step.available)).toBe(true);
+    expect((await stepsFor(testDesigner)).filter((step) => step.available).map((step) => step.kind)).toEqual(["capture"]);
+    expect((await stepsFor(testClient)).every((step) => !step.available)).toBe(true);
   });
 
   it("lets neither a shared read-only link nor another session start or reconcile a checkout", async () => {

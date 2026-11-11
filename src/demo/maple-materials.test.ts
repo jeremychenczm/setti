@@ -62,7 +62,7 @@ describe("Maple walkthrough supplier materials", () => {
   it("never loads over another project's quote, a changed baseline or an externally sourced desk", () => {
     const { quote, input } = fixture();
     expect(isMapleSampleScope(quote)).toBe(true);
-    quote.projectId = "willow";
+    quote.projectId = "fernhill";
     expect(loadMapleSampleMaterials(quote, input)).toBeNull();
     quote.projectId = "maple";
     quote.lines.find((line) => line.itemId === "chair")!.taxCents = 1;

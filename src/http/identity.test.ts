@@ -10,6 +10,7 @@ import { sampleProject } from "@/demo/sample-projects";
 import { createProject } from "@/projects/create";
 import { acceptInvite, createInvite, InviteError, readInvite } from "@/projects/invite";
 import { insertProject } from "@/projects/store";
+import { TEST_KEY, testProject } from "@/projects/testing";
 import { projectsFor } from "@/projects/summary";
 
 const PASSWORD = "correct horse battery";
@@ -27,9 +28,9 @@ describe.skipIf(!testDatabaseUrl)("who a request is", () => {
     const studio = await auth.api.createOrganization({ body: { name: defaultStudioName(name), slug: newStudioSlug() }, headers: new Headers({ cookie }) });
     return { cookie, studioId: studio!.id };
   }
-  /** Adds the account as the client of `key`, a sample project unless the studio already has it. */
+  /** Adds the account as the client of `key`, a sample or the test project unless the studio already has it. */
   async function addClient(email: string, studioId: string, key: string) {
-    const sample = sampleProject(key);
+    const sample = key === TEST_KEY ? testProject : sampleProject(key);
     if (sample) await insertProject(handle.db, studioId, key, sample);
     const [project] = await handle.db.select({ id: chatCases.id }).from(chatCases).where(and(eq(chatCases.sessionId, studioId), eq(chatCases.projectKey, key)));
     const [user] = await handle.db.select({ id: users.id }).from(users).where(eq(users.email, email));
@@ -63,9 +64,9 @@ describe.skipIf(!testDatabaseUrl)("who a request is", () => {
     const actor = (await actorOf(emma))!;
     expect(actor).toMatchObject({ role: "client", studio: null, projects: [{ studioId: jordan.studioId, key: "maple" }] });
     expect(scopeOf(actor, "maple")).toEqual({ sessionId: jordan.studioId, account: expect.objectContaining({ role: "client", projectKey: "maple", name: "Emma Park" }) });
-    expect(scopeOf(actor, "willow")).toBeNull();
+    expect(scopeOf(actor, TEST_KEY)).toBeNull();
     expect(projectAccess(actor, { studioId: jordan.studioId, key: "maple" })).toMatchObject({ role: "client" });
-    expect(projectAccess(actor, { studioId: jordan.studioId, key: "willow" })).toBeNull();
+    expect(projectAccess(actor, { studioId: jordan.studioId, key: TEST_KEY })).toBeNull();
   });
 
   it("keeps studios apart: no one opens another studio's project", async () => {
@@ -90,10 +91,10 @@ describe.skipIf(!testDatabaseUrl)("who a request is", () => {
     const jordan = await designer("jordan@example.com", "Jordan Lee");
     const avery = await designer("avery@example.com", "Avery Stone");
     const emma = await signUp("emma@example.com", "Emma Park");
-    await addClient("emma@example.com", jordan.studioId, "willow");
+    await addClient("emma@example.com", jordan.studioId, TEST_KEY);
     await addClient("emma@example.com", avery.studioId, "maple");
     const actor = (await actorOf(emma))!;
-    expect(actor.projects.map((project) => [project.studioId, project.key])).toEqual([[avery.studioId, "maple"], [jordan.studioId, "willow"]]);
+    expect(actor.projects.map((project) => [project.studioId, project.key])).toEqual([[avery.studioId, "maple"], [jordan.studioId, TEST_KEY]]);
     expect(homeOf(actor).sessionId).toBe(avery.studioId);
   });
 

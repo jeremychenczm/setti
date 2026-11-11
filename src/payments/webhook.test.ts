@@ -1,11 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { DEMO_ACCOUNTS } from "../accounts/demo";
-import { caseDocument } from "../chat/cases";
 import { paymentOperations, paypalAuthorizations } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import { signOpeningForTest } from "../opening/testing";
+import { addTestProject, DESK, SOFA, TEST_KEY, testDesigner, testQuote } from "../projects/testing";
 import { completeAuthorization } from "./authorize";
 import { cancelApprovedItem } from "./cancel-item";
 import { holdApprovedItems } from "./item-holds";
@@ -14,8 +13,6 @@ import { chargeServices, startServicesCheckout } from "./services";
 import { FakePayPal } from "./testing/fake-paypal";
 import { links } from "./testing/flows";
 import { recordWebhookEvent } from "./webhook";
-
-const [designer] = DEMO_ACCOUNTS;
 
 describe.skipIf(!testDatabaseUrl)("PayPal webhook events", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -26,14 +23,15 @@ describe.skipIf(!testDatabaseUrl)("PayPal webhook events", () => {
     await truncate(handle.db, "projects", "chat_cases", "paypal_webhook_events");
     session = randomUUID();
     paypal = new FakePayPal();
-    await signOpeningForTest(handle.db, session, "willow", caseDocument("willow").lines.map((line) => line.itemId === "willow-sofa"
+    await addTestProject(handle.db, session);
+    await signOpeningForTest(handle.db, session, TEST_KEY, testQuote.lines.map((line) => line.itemId === SOFA
       ? { itemId: line.itemId, decision: "declined" as const, note: "Too big for the room." }
       : { itemId: line.itemId, decision: "approved" as const }));
-    const checkout = await startServicesCheckout(handle.db, paypal, session, "willow", links);
+    const checkout = await startServicesCheckout(handle.db, paypal, session, TEST_KEY, links);
     paypal.approve(checkout.paypalOrderId!);
     await completeAuthorization(handle.db, paypal, checkout.id);
-    await chargeServices(handle.db, paypal, session, "willow");
-    await holdApprovedItems(handle.db, paypal, session, "willow");
+    await chargeServices(handle.db, paypal, session, TEST_KEY);
+    await holdApprovedItems(handle.db, paypal, session, TEST_KEY);
   });
   afterAll(() => handle?.pool.end());
 
@@ -47,12 +45,12 @@ describe.skipIf(!testDatabaseUrl)("PayPal webhook events", () => {
     expect(first).toEqual({ stored: true, operationId: hold.operationId });
     expect(await recordWebhookEvent(handle.db, created)).toEqual({ stored: false, operationId: hold.operationId });
 
-    const held = (await moneyEvents(handle.db, session, "willow")).find((entry) => entry.id === hold.operationId)!;
+    const held = (await moneyEvents(handle.db, session, TEST_KEY)).find((entry) => entry.id === hold.operationId)!;
     expect(held.checked).toMatchObject({ via: "webhook", status: "CREATED" });
   });
 
   it("matches a voided hold to its release, and keeps events about nothing Setti knows", async () => {
-    await cancelApprovedItem(handle.db, paypal, session, "willow", { itemId: "willow-desk", reason: "unavailable", note: "", by: designer.name });
+    await cancelApprovedItem(handle.db, paypal, session, TEST_KEY, { itemId: DESK, reason: "unavailable", note: "", by: testDesigner.name });
     const [release] = await handle.db.select().from(paymentOperations).where(eq(paymentOperations.kind, "void"));
     const voided = await handle.db.select().from(paypalAuthorizations).where(eq(paypalAuthorizations.id, release.authorizationId!));
     expect(await recordWebhookEvent(handle.db, event("PAYMENT.AUTHORIZATION.VOIDED", voided[0].paypalAuthorizationId, "VOIDED"))).toMatchObject({ stored: true, operationId: release.id });

@@ -4,6 +4,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import { studios } from "../auth/schema";
 import { insertProject } from "../projects/store";
+import { addTestProject, TEST_KEY } from "../projects/testing";
 import { chatCases } from "./schema";
 import { createChatStore } from "./store";
 import { preapprovedQuote } from "./cases";
@@ -22,6 +23,8 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     await truncate(handle.db, "chat_messages", "chat_cases");
     store = createChatStore(handle.db);
     sessionId = randomUUID();
+    // A second project in the same studio, to show what stays with each project.
+    await addTestProject(handle.db, sessionId);
   });
   afterAll(() => handle?.pool.end());
 
@@ -66,11 +69,11 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     expect(first.id).toBe(duplicate.id);
     const message = human("Only this Maple session can see me.");
     await store.appendMessage(sessionId, "maple", message);
-    expect((await store.getCase(sessionId, "willow")).messages).toEqual([]);
+    expect((await store.getCase(sessionId, TEST_KEY)).messages).toEqual([]);
     expect((await store.getCase(randomUUID(), "maple")).messages).toEqual([]);
     expect((await store.getCase(sessionId, "maple")).messages[0].id).toBe(message.id);
     expect((await store.getCase(sessionId, "maple")).quote).toEqual(preapprovedQuote("maple")!);
-    expect((await store.getCase(sessionId, "willow")).quote).toBeUndefined();
+    expect((await store.getCase(sessionId, TEST_KEY)).quote).toBeUndefined();
   });
 
   it("opens only a real studio's own projects, while a demo studio gets the samples on first use", async () => {
@@ -79,7 +82,7 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
       { id: real, name: "Lee Studio", slug: `real-${real}`, kind: "real", createdAt: new Date() },
       { id: demo, name: "Lee Studio", slug: `demo-${demo}`, kind: "demo", createdAt: new Date() },
     ]);
-    for (const key of ["maple", "willow", "kitchen"]) await expect(store.getCase(real, key)).rejects.toMatchObject({ code: "PROJECT_NOT_FOUND" });
+    for (const key of ["maple", TEST_KEY, "kitchen"]) await expect(store.getCase(real, key)).rejects.toMatchObject({ code: "PROJECT_NOT_FOUND" });
     expect(await handle.db.select().from(chatCases).where(eq(chatCases.sessionId, real))).toHaveLength(0);
     expect((await store.getCase(demo, "maple")).opening?.status).toBe("approved");
     await expect(store.getCase(demo, "kitchen")).rejects.toMatchObject({ code: "PROJECT_NOT_FOUND" });
@@ -171,14 +174,14 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     expect(first.messages).toHaveLength(1);
     expect(duplicate.messages).toHaveLength(1);
     await expect(store.appendMessage(sessionId, "maple", { ...input, text: "Changed content" })).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
-    expect((await store.appendMessage(sessionId, "willow", input)).messages).toHaveLength(1);
+    expect((await store.appendMessage(sessionId, TEST_KEY, input)).messages).toHaveLength(1);
   });
 
   it("requires an AI mention on a human message belonging to this exact case", async () => {
     const input = human("We like the original chair.");
     await store.appendMessage(sessionId, "maple", input);
     await expect(store.beginAi(sessionId, "maple", input.id)).rejects.toMatchObject({ code: "INVALID_AI_TRIGGER" });
-    await expect(store.beginAi(sessionId, "willow", input.id)).rejects.toMatchObject({ code: "MESSAGE_NOT_FOUND" });
+    await expect(store.beginAi(sessionId, TEST_KEY, input.id)).rejects.toMatchObject({ code: "MESSAGE_NOT_FOUND" });
     await expect(store.beginAi(randomUUID(), "maple", input.id)).rejects.toMatchObject({ code: "MESSAGE_NOT_FOUND" });
     expect((await store.getCase(sessionId, "maple")).messages[0].aiState).toBe("none");
   });

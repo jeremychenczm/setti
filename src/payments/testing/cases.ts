@@ -8,6 +8,8 @@ import type { CaseKey } from "../../chat/types";
 import type { Db } from "../../db/client";
 import type { FrozenChangeOrder, PricingItem } from "../../pricing/types";
 import { signOpeningForTest } from "../../opening/testing";
+import { sentFromChat } from "../../projects/settings";
+import { findProject } from "../../projects/store";
 import { confirmScriptedChanges, type ScriptedChange } from "../../try/scripted-change";
 
 export { shown } from "../../try/scripted-change";
@@ -29,7 +31,8 @@ export function confirmChange(db: Db, session: string, key: CaseKey, change: Tes
 
 /** Several changes share one draft, frozen document, approval and set of version hashes. */
 export async function confirmChanges(db: Db, session: string, key: CaseKey, changes: TestChange[], confirm = true): Promise<FrozenChangeOrder> {
-  // Willow's baseline is the V1 its client signed: send and approve it first, as the app does.
-  if (key === "willow") await signOpeningForTest(db, session, key);
+  // A V1 sent from the chat is the baseline once its client signed it: send and approve it first, as the app does.
+  const project = await findProject(db, session, key);
+  if (project && sentFromChat(project)) await signOpeningForTest(db, session, key);
   return confirmScriptedChanges(db, session, key, changes, { confirm });
 }

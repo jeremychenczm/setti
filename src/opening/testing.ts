@@ -1,19 +1,18 @@
 /**
- * Test helpers. A test that needs an approved Willow baseline sends V1 and
- * signs it through the real stores, exactly as the designer and client do.
+ * Test helpers. A test that needs an approved baseline for a project whose V1
+ * starts as a draft sends V1 and signs it through the real stores, exactly as
+ * the designer and client do.
  */
 import { randomUUID } from "node:crypto";
-import { caseDocument } from "../chat/cases";
 import { createChatStore } from "../chat/store";
 import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
-import type { ApprovedQuoteReport } from "../quotes/types";
+import type { ApprovedQuoteReport, QuoteDocument } from "../quotes/types";
 import { createOpeningStore } from "./store";
 import { clientSignatureName, type QuoteView } from "./types";
 
 /** A pure-test stand-in for a V1 whose client approved every line. */
-export function approvedForTest(key: CaseKey, approvedAt = "2026-10-22T12:00:00.000Z"): ApprovedQuoteReport {
-  const document = caseDocument(key);
+export function approvedForTest(document: QuoteDocument, approvedAt = "2026-10-22T12:00:00.000Z"): ApprovedQuoteReport {
   const name = clientSignatureName(document);
   const approval = { status: "approved" as const, approvedBy: name, approvedAt, signature: name, isDemo: true as const };
   return { ...document, status: "approved", approvedAt, approvedBy: name, signature: name, lines: document.lines.map((line) => ({ ...line, approval: { ...approval } })) };

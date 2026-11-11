@@ -1,17 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { caseDocument } from "@/chat/cases";
 import type { ChangeDraft, DraftChange } from "@/chat/types";
 import { v1Change } from "@/opening/carry";
-import { approvedForTest } from "@/opening/testing";
+import { approvedTestQuote, CHAIR, DESK, TEST_KEY, testLine, TILE } from "@/projects/testing";
 import { createPricingInput, validatePricingInput } from "./calculation";
 import { carryOverReview } from "./carry-over";
 
-const quote = approvedForTest("willow");
-quote.lines = quote.lines.filter((line) => !["willow-office-chair", "willow-floor-lamp"].includes(line.itemId));
-const v1 = caseDocument("willow");
-const chair = v1.lines.find((line) => line.itemId === "willow-office-chair")!;
-const lamp = v1.lines.find((line) => line.itemId === "willow-floor-lamp")!;
-const dining = quote.lines.find((line) => line.itemId === "willow-dining-chair")!;
+// V1 is approved except the desk (revised from V1) and the tile (carried from V1).
+const quote = approvedTestQuote();
+quote.lines = quote.lines.filter((line) => line.itemId !== DESK && line.itemId !== TILE);
+const desk = testLine(DESK);
+const tile = testLine(TILE);
+const dining = quote.lines.find((line) => line.itemId === CHAIR)!;
 const now = "2026-10-22T12:00:00.000Z";
 
 function diningQuantity(quantity: number): DraftChange {
@@ -21,16 +20,16 @@ function diningQuantity(quantity: number): DraftChange {
 
 function draft(revision: number, changes: DraftChange[], unresolved: string[] = []): ChangeDraft {
   return {
-    id: "draft-1", projectKey: "willow", basedOnQuoteId: quote.id, basedOnVersion: 1, revision, status: "needs_designer_review",
+    id: "draft-1", projectKey: TEST_KEY, basedOnQuoteId: quote.id, basedOnVersion: 1, revision, status: "needs_designer_review",
     title: "Revised lines from quote V1", summary: "", changes, sourceMessageIds: [], sources: [], unresolved, constraints: [], deltaSubtotalCents: null, createdAt: now, updatedAt: now, model: "designer",
   };
 }
 
-const first = draft(1, [v1Change(chair, "revised", "Too plain."), diningQuantity(6)], ["Check the delivery date"]);
+const first = draft(1, [v1Change(desk, "revised", "Too plain."), diningQuantity(6)], ["Check the delivery date"]);
 const proposed = createPricingInput(quote, first);
 function savedReview(edit: (input: ReturnType<typeof createPricingInput>) => void) {
   const input = structuredClone(proposed);
-  input.title = "Willow V2 · study and dining";
+  input.title = "Fernhill V2 · study and dining";
   input.terms = "Prices hold for 14 days.";
   input.issues[0] = { ...input.issues[0], resolved: true, note: "Supplier confirmed Nov 3." };
   edit(input);
@@ -53,18 +52,18 @@ describe("carrying a saved pricing review onto a newer draft", () => {
       input.changes[0].after = { ...input.changes[0].after!, unitPriceCents: 8_888 };
       input.changes[0].confirmed = true;
     });
-    const second = draft(2, [v1Change(chair, "revised", "Too plain."), diningQuantity(8), v1Change(lamp, "carried", null)], ["Check the delivery date", "Confirm the bulb colour"]);
+    const second = draft(2, [v1Change(desk, "revised", "Too plain."), diningQuantity(8), v1Change(tile, "carried", null)], ["Check the delivery date", "Confirm the tile colour"]);
     const carried = carryOverReview(quote, proposed, saved, createPricingInput(quote, second));
-    expect(carried).toMatchObject({ kept: ["Office chair"], updated: ["Dining chair"], added: ["Floor lamp"], removed: [], conflicts: [] });
+    expect(carried).toMatchObject({ kept: ["Writing desk"], updated: ["Dining chair"], added: ["Porcelain floor tile"], removed: [], conflicts: [] });
     expect(carried.input.changes.map((change) => [change.key, change.after?.unitPriceCents ?? null, change.after?.quantity ?? null, change.confirmed])).toEqual([
-      ["change-0", 8_888, chair.quantity, true],
+      ["change-0", 8_888, desk.quantity, true],
       ["change-1", dining.unitPriceCents, 8, false],
-      ["change-2", lamp.unitPriceCents, lamp.quantity, false],
+      ["change-2", tile.unitPriceCents, tile.quantity, false],
     ]);
-    expect(carried.input).toMatchObject({ title: "Willow V2 · study and dining", terms: "Prices hold for 14 days." });
+    expect(carried.input).toMatchObject({ title: "Fernhill V2 · study and dining", terms: "Prices hold for 14 days." });
     expect(carried.input.issues).toEqual([
       { id: "issue-0", label: "Check the delivery date", resolved: true, note: "Supplier confirmed Nov 3." },
-      { id: "issue-1", label: "Confirm the bulb colour", resolved: false, note: "" },
+      { id: "issue-1", label: "Confirm the tile colour", resolved: false, note: "" },
     ]);
     expect(() => validatePricingInput(quote, second, carried.input)).not.toThrow();
   });
@@ -74,7 +73,7 @@ describe("carrying a saved pricing review onto a newer draft", () => {
       input.changes[1].after = { ...input.changes[1].after!, taxCents: 1_234 };
       input.changes[1].confirmed = true;
     });
-    const second = draft(2, [v1Change(chair, "revised", "Too plain."), diningQuantity(8)], ["Check the delivery date"]);
+    const second = draft(2, [v1Change(desk, "revised", "Too plain."), diningQuantity(8)], ["Check the delivery date"]);
     const carried = carryOverReview(quote, proposed, saved, createPricingInput(quote, second));
     expect(carried).toMatchObject({ updated: ["Dining chair"], kept: [], conflicts: [] });
     expect(carried.input.changes[1]).toMatchObject({ after: { quantity: 8, taxCents: 1_234 }, confirmed: false });
@@ -82,7 +81,7 @@ describe("carrying a saved pricing review onto a newer draft", () => {
 
   it("leaves a field both sides changed for the designer, holding the designer's value until they choose", () => {
     const saved = savedReview((input) => { input.changes[1].after = { ...input.changes[1].after!, quantity: 7, taxCents: 1_234 }; });
-    const second = draft(2, [v1Change(chair, "revised", "Too plain."), diningQuantity(8)], ["Check the delivery date"]);
+    const second = draft(2, [v1Change(desk, "revised", "Too plain."), diningQuantity(8)], ["Check the delivery date"]);
     const carried = carryOverReview(quote, proposed, saved, createPricingInput(quote, second));
     expect(carried.updated).toEqual([]);
     expect(carried.conflicts).toHaveLength(1);
@@ -107,7 +106,7 @@ describe("carrying a saved pricing review onto a newer draft", () => {
     const saved = savedReview((input) => { input.title = proposed.title; });
     const second = { ...draft(2, [diningQuantity(6)]), title: "Dining chairs only" };
     const carried = carryOverReview(quote, proposed, saved, createPricingInput(quote, second));
-    expect(carried).toMatchObject({ removed: ["Office chair"], kept: [], updated: [], added: [], conflicts: [] });
+    expect(carried).toMatchObject({ removed: ["Writing desk"], kept: [], updated: [], added: [], conflicts: [] });
     expect(carried.input.title).toBe("Dining chairs only");
     expect(carried.input.changes.map((change) => change.key)).toEqual(["change-0"]);
   });

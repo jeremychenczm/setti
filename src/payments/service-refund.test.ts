@@ -5,6 +5,7 @@ import { paypalAuthorizations, paypalCaptures, paypalRefunds } from "../db/schem
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import { signOpeningForTest } from "../opening/testing";
 import type { FrozenChangeOrder } from "../pricing/types";
+import { addTestProject, CONSULTATION, PLANNING, TEST_KEY } from "../projects/testing";
 import { startRefund } from "./actions";
 import { completeAuthorization } from "./authorize";
 import { businessItem, lockConfirmedVersion } from "./binding";
@@ -14,8 +15,6 @@ import { confirmChange, shown } from "./testing/cases";
 import { FakePayPal } from "./testing/fake-paypal";
 import { links } from "./testing/flows";
 import { paymentsWorkspace } from "./workspace";
-
-const CONSULTATION = "willow-consultation", PLANNING = "willow-space-planning";
 
 describe.skipIf(!testDatabaseUrl)("refunding one service captured from the shared design-services hold", () => {
   let handle: Awaited<ReturnType<typeof openTestDb>>;
@@ -28,13 +27,14 @@ describe.skipIf(!testDatabaseUrl)("refunding one service captured from the share
     await truncate(handle.db, "projects", "chat_cases");
     session = randomUUID();
     paypal = new FakePayPal();
-    await signOpeningForTest(handle.db, session, "willow");
-    const checkout = await startServicesCheckout(handle.db, paypal, session, "willow", links);
+    await addTestProject(handle.db, session);
+    await signOpeningForTest(handle.db, session, TEST_KEY);
+    const checkout = await startServicesCheckout(handle.db, paypal, session, TEST_KEY, links);
     paypal.approve(checkout.paypalOrderId!);
     await completeAuthorization(handle.db, paypal, checkout.id);
-    await chargeServices(handle.db, paypal, session, "willow");
-    // The client paid for two consultation hours and now confirms one hour instead.
-    v2 = await confirmChange(handle.db, session, "willow", {
+    await chargeServices(handle.db, paypal, session, TEST_KEY);
+    // The client paid for two consultation hours (2 × $150.00) and now confirms one hour instead.
+    v2 = await confirmChange(handle.db, session, TEST_KEY, {
       action: "quantity", itemId: CONSULTATION, quantity: 1, oldItemHandling: "not_ordered", oldItemCostCents: 0,
     });
   });

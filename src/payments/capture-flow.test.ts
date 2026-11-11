@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { DEMO_ACCOUNTS } from "../accounts/demo";
 import { createChatStore } from "../chat/store";
 import { paymentOperations, paypalAuthorizations, paypalCaptures, supplierEvents } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import type { FrozenChangeOrder } from "../pricing/types";
+import { addTestProject, TEST_KEY, testDesigner } from "../projects/testing";
 import { checkPayment, startCapture } from "./actions";
 import { confirmChange, shown } from "./testing/cases";
 import { FakePayPal } from "./testing/fake-paypal";
@@ -21,12 +21,13 @@ describe.skipIf(!testDatabaseUrl)("supplier confirmation and capture", () => {
     await truncate(handle.db, "projects", "chat_cases");
     session = randomUUID();
     paypal = new FakePayPal();
+    await addTestProject(handle.db, session);
     ({ v3 } = await sixChairsHeld(handle.db, paypal, session));
   });
   afterAll(() => handle?.pool.end());
 
   const capture = () => startCapture(handle.db, paypal, session, v3.id, { itemId: CHAIR, side: "baseline", ...shown(v3) });
-  const chair = async () => (await paymentsWorkspace(handle.db, session, v3.id, undefined, DEMO_ACCOUNTS[0]))!.lines.find((line) => line.itemId === CHAIR)!;
+  const chair = async () => (await paymentsWorkspace(handle.db, session, v3.id, undefined, testDesigner))!.lines.find((line) => line.itemId === CHAIR)!;
   const captureCalls = () => paypal.calls.filter((call) => "finalCapture" in call);
 
   it("captures nothing until the supplier confirmation is recorded", async () => {
@@ -60,7 +61,7 @@ describe.skipIf(!testDatabaseUrl)("supplier confirmation and capture", () => {
     const line = await chair();
     expect(line).toMatchObject({ targetCents: 81_563, capturedCents: 81_563, heldCents: 0, steps: [] });
     expect((await paymentsWorkspace(handle.db, session, v3.id))!.lines).toHaveLength(1); // no other line is shown as funded or paid
-    expect((await createChatStore(handle.db).getCase(session, "willow")).messages.filter((message) => message.text.includes("capture completed"))).toHaveLength(2);
+    expect((await createChatStore(handle.db).getCase(session, TEST_KEY)).messages.filter((message) => message.text.includes("capture completed"))).toHaveLength(2);
 
     // Repeating the step finds the same captures and never sends them again.
     const again = await capture();
@@ -91,7 +92,7 @@ describe.skipIf(!testDatabaseUrl)("supplier confirmation and capture", () => {
     paypal.then("succeed", "answer-pending");
     const [, second] = await capture();
     const pending = (await handle.db.select().from(paypalCaptures)).find((entry) => entry.status === "pending")!;
-    await confirmChange(handle.db, session, "willow", { action: "quantity", itemId: CHAIR, quantity: 7, after: { taxCents: 7_656 } });
+    await confirmChange(handle.db, session, TEST_KEY, { action: "quantity", itemId: CHAIR, quantity: 7, after: { taxCents: 7_656 } });
 
     const historical = (await paymentsWorkspace(handle.db, session, v3.id))!;
     expect(historical).toMatchObject({ current: false, canAct: false, canReconcile: true });

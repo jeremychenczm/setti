@@ -7,6 +7,7 @@ import { chatCases, chatMessages } from "../chat/schema";
 import { createChatStore } from "../chat/store";
 import { preapprovedQuote } from "../chat/cases";
 import { signOpeningForTest } from "../opening/testing";
+import { addTestProject, CHAIR, TEST_KEY } from "../projects/testing";
 import { quoteFingerprint } from "../quotes/fingerprint";
 import type { CaseKey, ChangeDraft } from "../chat/types";
 import { createPricingInput } from "./calculation";
@@ -28,9 +29,12 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
   afterAll(() => handle?.pool.end());
 
   async function seed(key: CaseKey = "maple", action: "quantity" | "replace" = "quantity") {
-    if (key === "willow") await signOpeningForTest(handle.db, sessionId, key);
+    if (key === TEST_KEY) {
+      await addTestProject(handle.db, sessionId);
+      await signOpeningForTest(handle.db, sessionId, key);
+    }
     const quote = (await createChatStore(handle.db).getCase(sessionId, key)).quote!;
-    const old = quote.lines.find((line) => line.itemId === (key === "maple" ? "chair" : "willow-dining-chair"))!;
+    const old = quote.lines.find((line) => line.itemId === (key === "maple" ? "chair" : CHAIR))!;
     const before = { name: old.name, vendor: old.vendor, brand: null, sku: old.sku, specification: old.specification, quantity: old.quantity, unitLabel: old.unitLabel ?? "each", unitPriceCents: old.unitPriceCents, currency: "USD" };
     const after = action === "quantity" ? { ...before, quantity: old.quantity + 1 } : {
       ...before, name: "BERGMUND Chair", vendor: "IKEA US (test reference)", sku: "TEST-BERGMUND", specification: "Test-only replacement option", quantity: 1, unitPriceCents: 9_500,
@@ -249,7 +253,9 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
     const saved = await saveReady(workspace);
     const issued = await issue(saved);
     expect((await store.getWorkspace(randomUUID(), "maple")).review).toBeNull();
-    await expect(store.getWorkspace(sessionId, "willow")).rejects.toMatchObject({ code: "PRICING_NOT_FOUND" });
+    // Another project of the same studio sees none of this one's review.
+    await addTestProject(handle.db, sessionId);
+    await expect(store.getWorkspace(sessionId, TEST_KEY)).rejects.toMatchObject({ code: "PRICING_NOT_FOUND" });
     await expect(store.issueReview(randomUUID(), "maple", { reviewId: saved.review!.id, expectedVersion: 1 })).rejects.toMatchObject({ code: "PRICING_NOT_FOUND" });
     const publicView = await createPricingStore(handle.db).getOrder(issued.order.id);
     expect(publicView).toEqual(issued);
@@ -282,7 +288,7 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
   });
 
   it("preserves unknown baseline terms and gives replacements a new business item identity", async () => {
-    const { workspace } = await seed("willow", "replace");
+    const { workspace } = await seed(TEST_KEY, "replace");
     const saved = await saveReady(workspace);
     const issued = await issue(saved);
     const bridge = (await handle.db.select().from(pricingCases).where(eq(pricingCases.caseId, workspace.caseId)))[0];
@@ -296,8 +302,8 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
     expect(newChair).toBeDefined();
     expect(newChair.itemId).not.toBe(oldChair.itemId);
     expect(changed.find((line) => line.name === "Writing desk")?.itemId).toBe(baseline.find((line) => line.name === "Writing desk")?.itemId);
-    expect(issued.order.lines).toHaveLength(26);
-    expect(issued.order.baselineLines.find((line) => line.itemId === "willow-dining-chair")?.name).toBe("Dining chair");
+    expect(issued.order.lines).toHaveLength(6);
+    expect(issued.order.baselineLines.find((line) => line.itemId === CHAIR)?.name).toBe("Dining chair");
   });
 
   it("rolls back baseline import, revision creation and approvals if the final order insert fails", async () => {

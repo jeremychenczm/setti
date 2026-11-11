@@ -6,7 +6,7 @@ import { clientActor, designerActor } from "@/http/testing";
 import { getTryResponse, postDemoPersonaResponse, postTryResponse } from "./http";
 
 const mock = vi.hoisted(() => ({
-  startTry: vi.fn(), readTrySeed: vi.fn(), readTryRuns: vi.fn(), prepareTry: vi.fn(), resumeTry: vi.fn(), openWillowWorkspace: vi.fn(),
+  startTry: vi.fn(), readTrySeed: vi.fn(), readTryRuns: vi.fn(), prepareTry: vi.fn(), resumeTry: vi.fn(),
   sandboxPayPal: vi.fn(() => ({})), sandboxTestCard: vi.fn(() => async () => ({ kind: "ok", value: {} })),
   createDb: vi.fn(() => ({ db: {}, pool: {} })),
 }));
@@ -17,7 +17,7 @@ const auth = vi.hoisted(() => ({
 vi.mock("./service", () => ({
   MAPLE_SCENARIO: "maple-mixed-change-v1", TRY_PROJECT_HREF: "/chats/maple",
   startTry: mock.startTry, readTrySeed: mock.readTrySeed, readTryRuns: mock.readTryRuns,
-  prepareTry: mock.prepareTry, resumeTry: mock.resumeTry, openWillowWorkspace: mock.openWillowWorkspace,
+  prepareTry: mock.prepareTry, resumeTry: mock.resumeTry,
 }));
 vi.mock("@/payments/server", () => ({ sandboxPayPal: mock.sandboxPayPal, sandboxTestCard: mock.sandboxTestCard }));
 vi.mock("@/db/client", () => ({ createDb: mock.createDb }));
@@ -60,7 +60,6 @@ describe("/try HTTP boundaries", () => {
     mock.readTryRuns.mockResolvedValue([]);
     mock.prepareTry.mockResolvedValue({ kind: "progress", seed });
     mock.resumeTry.mockResolvedValue(seed);
-    mock.openWillowWorkspace.mockResolvedValue(session);
     auth.requestActor.mockResolvedValue(null);
     auth.ensureDemoPeople.mockResolvedValue(people);
     auth.findDemoPerson.mockImplementation(async (_db: unknown, _run: string, persona: "jordan" | "emma") => people[persona]);
@@ -88,7 +87,7 @@ describe("/try HTTP boundaries", () => {
       expect(response.cookies.get(name)?.domain).toBeUndefined();
     }
     // Ending records the end in storage; it never starts, resumes or prepares a run.
-    for (const fn of [mock.startTry, mock.readTrySeed, mock.readTryRuns, mock.prepareTry, mock.resumeTry, mock.openWillowWorkspace, mock.sandboxTestCard]) expect(fn).not.toHaveBeenCalled();
+    for (const fn of [mock.startTry, mock.readTrySeed, mock.readTryRuns, mock.prepareTry, mock.resumeTry, mock.sandboxTestCard]) expect(fn).not.toHaveBeenCalled();
   });
 
   it("leaves a real account signed in when its browser ends no demo", async () => {
@@ -260,18 +259,6 @@ describe("/try HTTP boundaries", () => {
     expect(denied.cookies.get(SESSION_COOKIE)).toBeUndefined();
   });
 
-  it("opens Willow in the visitor's own run, and only once a demo is running", async () => {
-    const response = await postTryResponse(post({ action: "workspace", scenario: "willow-first-payment-v1" }, { actor: jordan, visitor }));
-    expect(mock.openWillowWorkspace).toHaveBeenCalledWith({}, session);
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ seed, href: "/quotes/willow", hasWorkspace: true, reused: true });
-    expect(mock.startTry).not.toHaveBeenCalled();
-    expect(mock.sandboxPayPal).not.toHaveBeenCalled();
-    mock.openWillowWorkspace.mockClear();
-    expect((await postTryResponse(post({ action: "workspace", scenario: "willow-first-payment-v1" }))).status).toBe(403);
-    expect(mock.openWillowWorkspace).not.toHaveBeenCalled();
-  });
-
   it("keeps rate limiting atomic in the service and signs no one in when allocation is limited", async () => {
     vi.stubEnv("SETTI_TRY_PER_HOUR", "5");
     await postTryResponse(post());
@@ -324,7 +311,7 @@ describe("switching between the demo's people", () => {
     expect((await postDemoPersonaResponse(request({ persona: "emma" }, null))).status).toBe(401);
     expect((await postDemoPersonaResponse(request({ persona: "emma" }, designerActor()))).status).toBe(403);
     expect((await postDemoPersonaResponse(request({ persona: "emma" }, jordan, "https://evil.example"))).status).toBe(403);
-    for (const body of [{ persona: "sofia" }, { persona: "emma", userId: emma.userId }, {}]) expect((await postDemoPersonaResponse(request(body, jordan))).status).toBe(400);
+    for (const body of [{ persona: "ava" }, { persona: "emma", userId: emma.userId }, {}]) expect((await postDemoPersonaResponse(request(body, jordan))).status).toBe(400);
     auth.findDemoPerson.mockResolvedValueOnce(null);
     expect((await postDemoPersonaResponse(request({ persona: "emma" }, jordan))).status).toBe(404);
     expect(auth.signInDemoPerson).not.toHaveBeenCalled();

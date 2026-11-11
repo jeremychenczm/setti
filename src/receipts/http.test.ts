@@ -54,13 +54,13 @@ describe("GET /api/receipts/{project}/{version}", () => {
     expect(signedOut.status).toBe(401);
     expect(await signedOut.json()).toMatchObject({ code: "SIGN_IN_REQUIRED" });
     const emma = clientActor(studio, ["maple"]);
-    const other = await get("willow", "1", emma);
+    const other = await get("fernhill", "1", emma);
     expect(other.status).toBe(403);
     expect(await other.json()).toMatchObject({ code: "FORBIDDEN" });
     expect(mock.readVersionReceipt).not.toHaveBeenCalled();
     expect((await get("maple", "2", emma)).status).toBe(200);
     expect(mock.readVersionReceipt).toHaveBeenLastCalledWith(expect.anything(), studio, "maple", 2);
-    expect((await get("willow", "1", designer)).status).toBe(200);
+    expect((await get("fernhill", "1", designer)).status).toBe(200);
   });
 
   it("reads a client's receipt from the studio that owns the project", async () => {
@@ -75,8 +75,8 @@ describe("GET /api/receipts/{project}/{version}", () => {
     expect(unsigned.status).toBe(409);
     expect(await unsigned.json()).toEqual({ code: "NOT_SIGNED", error: "The client has not decided on version 2 yet." });
     mock.readVersionReceipt.mockRejectedValueOnce(new ReceiptError("NOT_SENT", "Quote V1 has not been sent to the client yet."));
-    expect((await get("willow", "1")).status).toBe(404);
+    expect((await get("fernhill", "1")).status).toBe(404);
     mock.readVersionReceipt.mockRejectedValueOnce(new Error("connection refused"));
-    expect((await get("willow", "1")).status).toBe(503);
+    expect((await get("fernhill", "1")).status).toBe(503);
   });
 });

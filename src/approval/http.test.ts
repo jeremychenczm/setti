@@ -15,7 +15,7 @@ vi.mock("@/db/client", () => ({ createDb: () => ({ db: {}, pool: {} }) }));
 const orderId = randomUUID();
 /** The studio that owns the change order's project. */
 const sessionId = randomUUID();
-const client = clientActor(sessionId, ["willow"]);
+const client = clientActor(sessionId, ["fernhill"], { name: "Ava Chen" });
 const origin = "http://localhost:3002";
 const path = `/api/change-orders/${orderId}/approval`;
 
@@ -52,9 +52,9 @@ function request(options: {
 describe("client approval HTTP boundaries", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mock.ownerOf.mockResolvedValue({ studioId: sessionId, key: "willow" });
+    mock.ownerOf.mockResolvedValue({ studioId: sessionId, key: "fernhill" });
     mock.getWorkspace.mockResolvedValue({
-      view: { order: { id: orderId, version: 3, projectKey: "willow" }, status: "awaiting_client_confirmation" },
+      view: { order: { id: orderId, version: 3, projectKey: "fernhill" }, status: "awaiting_client_confirmation" },
       canDecide: false, clientName: null, reason: "Read-only share link.", fundingPlan: null,
     });
     mock.decide.mockResolvedValue({
@@ -97,7 +97,7 @@ describe("client approval HTTP boundaries", () => {
   });
 
   it("gives someone outside the project only the public read", async () => {
-    for (const actor of [designerActor(), clientActor(randomUUID(), ["willow"]), clientActor(sessionId, ["maple"])]) {
+    for (const actor of [designerActor(), clientActor(randomUUID(), ["fernhill"]), clientActor(sessionId, ["maple"])]) {
       mock.getWorkspace.mockClear();
       expect((await getApprovalResponse(request({ actor }), orderId)).status).toBe(200);
       expect(mock.getWorkspace).toHaveBeenCalledWith(null, orderId);
@@ -129,7 +129,7 @@ describe("client approval HTTP boundaries", () => {
   });
 
   it("refuses a confirmation from someone outside the project", async () => {
-    for (const actor of [designerActor(), clientActor(randomUUID(), ["willow"]), clientActor(sessionId, ["maple"])]) {
+    for (const actor of [designerActor(), clientActor(randomUUID(), ["fernhill"]), clientActor(sessionId, ["maple"])]) {
       const response = await postApprovalResponse(request({ method: "POST", actor, body: input() }), orderId);
       expect(response.status).toBe(403);
       expect(await response.json()).toMatchObject({ code: "FORBIDDEN" });
@@ -215,9 +215,12 @@ describe("client approval HTTP boundaries", () => {
   });
 
   it.each([
-    { who: "the demo designer", actor: designerActor(sessionId, { persona: "jordan" }), says: "Switch to Sofia Martinez" },
-    { who: "a designer of the studio", actor: designerActor(sessionId), says: "Only the project's client confirms" },
-  ])("lets only the project's client confirm, not $who", async ({ actor, says }) => {
+    // The demo's own project names its demo client, the person to switch to; a project without one says "the client".
+    { who: "the demo designer on Maple", actor: designerActor(sessionId, { persona: "jordan" }), key: "maple", says: "Switch to Emma Park" },
+    { who: "the demo designer on another project", actor: designerActor(sessionId, { persona: "jordan" }), key: "fernhill", says: "Switch to the client" },
+    { who: "a designer of the studio", actor: designerActor(sessionId), key: "fernhill", says: "Only the project's client confirms" },
+  ])("lets only the project's client confirm, not $who", async ({ actor, key, says }) => {
+    mock.ownerOf.mockResolvedValue({ studioId: sessionId, key });
     const response = await postApprovalResponse(request({ method: "POST", actor, body: input() }), orderId);
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({ code: "FORBIDDEN", error: expect.stringContaining(says) });
@@ -226,8 +229,8 @@ describe("client approval HTTP boundaries", () => {
 
   it("shows the studio's version as read-only to anyone but the client", async () => {
     mock.getWorkspace.mockResolvedValue({
-      view: { order: { id: orderId, version: 3, projectKey: "willow" }, status: "awaiting_client_confirmation" },
-      canDecide: true, clientName: "Sofia Martinez", reason: null, fundingPlan: null,
+      view: { order: { id: orderId, version: 3, projectKey: "fernhill" }, status: "awaiting_client_confirmation" },
+      canDecide: true, clientName: "Ava Chen", reason: null, fundingPlan: null,
     });
     expect(await (await getApprovalResponse(request(), orderId)).json()).toMatchObject({ canDecide: true, reason: null });
     expect(await (await getApprovalResponse(request({ actor: designerActor(sessionId, { persona: "jordan" }) }), orderId)).json()).toMatchObject({ canDecide: false, reason: expect.stringContaining("Signed in as Jordan Lee") });

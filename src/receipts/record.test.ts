@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createChatStore } from "../chat/store";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import { paymentOperations, paypalAuthorizations, paypalCaptures } from "../db/schema";
 import { signOpeningForTest } from "../opening/testing";
@@ -10,6 +9,7 @@ import { confirmChanges, shown } from "../payments/testing/cases";
 import { FakePayPal } from "../payments/testing/fake-paypal";
 import { links } from "../payments/testing/flows";
 import type { FrozenChangeOrder, PricingItem } from "../pricing/types";
+import { addTestProject, CHAIR, SOFA, TEST_KEY, V1_CENTS } from "../projects/testing";
 import { hashRevision } from "../quotes/hash";
 import { readVersionReceipt, ReceiptError } from "./record";
 import type { VersionReceipt } from "./types";
@@ -37,38 +37,39 @@ describe.skipIf(!testDatabaseUrl)("signed version receipts", () => {
   beforeEach(async () => {
     await truncate(handle.db, "projects", "chat_cases");
     session = randomUUID();
+    await addTestProject(handle.db, session);
   });
   afterAll(() => handle?.pool.end());
 
   describe("a V1 signed line by line in two sittings", () => {
     let receipt: VersionReceipt;
     beforeEach(async () => {
-      await signOpeningForTest(handle.db, session, "willow", [
-        { itemId: "willow-sofa", decision: "approved" },
-        { itemId: "willow-armchair", decision: "declined", note: "Too small for the corner." },
+      await signOpeningForTest(handle.db, session, TEST_KEY, [
+        { itemId: SOFA, decision: "approved" },
+        { itemId: CHAIR, decision: "declined", note: "Too small for the table." },
       ]);
-      await signOpeningForTest(handle.db, session, "willow");
-      receipt = await readVersionReceipt(handle.db, session, "willow", 1);
+      await signOpeningForTest(handle.db, session, TEST_KEY);
+      receipt = await readVersionReceipt(handle.db, session, TEST_KEY, 1);
     });
 
     it("lists each signing with the lines it decided and the fingerprint it was bound to", () => {
       expect(receipt.signatures).toHaveLength(2);
       const [first, second] = receipt.signatures;
-      expect(first).toMatchObject({ method: "signed", name: "Sofia Martinez", decision: "mixed", matches: true, revisionContentHash: receipt.version.revision!.contentHash });
-      expect(new Set(first.itemIds)).toEqual(new Set(["willow-sofa", "willow-armchair"]));
+      expect(first).toMatchObject({ method: "signed", name: "Ava Chen", decision: "mixed", matches: true, revisionContentHash: receipt.version.revision!.contentHash });
+      expect(new Set(first.itemIds)).toEqual(new Set([SOFA, CHAIR]));
       expect(second).toMatchObject({ method: "signed", decision: "approved", matches: true });
-      expect(second.itemIds).toHaveLength(receipt.version.document.lines.length - 2);
+      expect(second.itemIds).toHaveLength(4);
       expect(first.signingId).not.toBe(second.signingId);
     });
 
     it("gives every line its decision, and the version its status and total", () => {
       if (receipt.agreement.kind !== "opening") throw new Error("expected a V1 receipt");
       const byId = new Map(receipt.agreement.lines.map((line) => [line.itemId, line]));
-      expect(byId.get("willow-armchair")).toMatchObject({ decision: "declined", note: "Too small for the corner.", decidedBy: "Sofia Martinez", signingId: receipt.signatures[0].signingId });
-      expect(byId.get("willow-sofa")).toMatchObject({ decision: "approved", signingId: receipt.signatures[0].signingId });
+      expect(byId.get(CHAIR)).toMatchObject({ decision: "declined", note: "Too small for the table.", decidedBy: "Ava Chen", signingId: receipt.signatures[0].signingId });
+      expect(byId.get(SOFA)).toMatchObject({ decision: "approved", signingId: receipt.signatures[0].signingId });
       expect(receipt.version).toMatchObject({ number: 1, basedOn: null, status: "partly_approved", replacedBy: null, sentBy: "Jordan Lee" });
-      expect(receipt.totals).toEqual({ previousCents: null, totalCents: 1_517_489, differenceCents: null });
-      expect(receipt.receiptNo).toBe(`WILLOW-V1-${receipt.version.contentHash!.slice(0, 8).toUpperCase()}`);
+      expect(receipt.totals).toEqual({ previousCents: null, totalCents: V1_CENTS, differenceCents: null });
+      expect(receipt.receiptNo).toBe(`FERNHILL-V1-${receipt.version.contentHash!.slice(0, 8).toUpperCase()}`);
       expect(receipt.pending).toMatchObject({ actions: expect.any(Array), blockers: [] });
     });
 
@@ -80,16 +81,15 @@ describe.skipIf(!testDatabaseUrl)("signed version receipts", () => {
   });
 
   it("refuses a V1 that was not sent or not signed", async () => {
-    await createChatStore(handle.db).getCase(session, "willow");
-    await expect(readVersionReceipt(handle.db, session, "willow", 1)).rejects.toEqual(refused("NOT_SENT"));
-    await signOpeningForTest(handle.db, session, "willow", []);
-    await expect(readVersionReceipt(handle.db, session, "willow", 1)).rejects.toEqual(refused("NOT_SIGNED"));
+    await expect(readVersionReceipt(handle.db, session, TEST_KEY, 1)).rejects.toEqual(refused("NOT_SENT"));
+    await signOpeningForTest(handle.db, session, TEST_KEY, []);
+    await expect(readVersionReceipt(handle.db, session, TEST_KEY, 1)).rejects.toEqual(refused("NOT_SIGNED"));
   });
 
   it("refuses another session's project and a version that does not exist", async () => {
-    await signOpeningForTest(handle.db, session, "willow");
-    await expect(readVersionReceipt(handle.db, randomUUID(), "willow", 1)).rejects.toEqual(refused("NOT_FOUND"));
-    await expect(readVersionReceipt(handle.db, session, "willow", 2)).rejects.toEqual(refused("NOT_FOUND"));
+    await signOpeningForTest(handle.db, session, TEST_KEY);
+    await expect(readVersionReceipt(handle.db, randomUUID(), TEST_KEY, 1)).rejects.toEqual(refused("NOT_FOUND"));
+    await expect(readVersionReceipt(handle.db, session, TEST_KEY, 2)).rejects.toEqual(refused("NOT_FOUND"));
   });
 
   it("refuses a version the client has not decided on", async () => {

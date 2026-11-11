@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { DEMO_ACCOUNTS } from "../accounts/demo";
 import { createChatStore } from "../chat/store";
 import { paymentOperations, paypalAuthorizations, paypalCaptures, paypalRefunds, supplierEvents } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
 import type { FrozenChangeOrder } from "../pricing/types";
+import { addTestProject, TEST_KEY, testDesigner } from "../projects/testing";
 import { startCapture, startRelease } from "./actions";
 import { executeCapture } from "./capture";
 import { requestCapture } from "./testing/requests";
@@ -25,14 +25,15 @@ describe.skipIf(!testDatabaseUrl)("cancelling an uncaptured line releases its ho
     await truncate(handle.db, "projects", "chat_cases");
     session = randomUUID();
     paypal = new FakePayPal();
-    v2 = await confirmChange(handle.db, session, "willow", { action: "replace", itemId: CHAIR, after: bergmund() });
+    await addTestProject(handle.db, session);
+    v2 = await confirmChange(handle.db, session, TEST_KEY, { action: "replace", itemId: CHAIR, after: bergmund() });
     await authorizeLine(handle.db, paypal, session, v2, "proposed");
   });
   afterAll(() => handle?.pool.end());
 
-  const cancelChairs = () => confirmChange(handle.db, session, "willow", { action: "remove", itemId: CHAIR, oldItemHandling: "not_ordered", oldItemCostCents: 0 });
+  const cancelChairs = () => confirmChange(handle.db, session, TEST_KEY, { action: "remove", itemId: CHAIR, oldItemHandling: "not_ordered", oldItemCostCents: 0 });
   const release = (order: FrozenChangeOrder) => startRelease(handle.db, paypal, session, order.id, { itemId: CHAIR, side: "baseline", ...shown(order) });
-  const chairIn = async (order: FrozenChangeOrder, side: "baseline" | "proposed" = "baseline") => (await paymentsWorkspace(handle.db, session, order.id, undefined, DEMO_ACCOUNTS[0]))!.lines.find((line) => line.itemId === CHAIR && line.side === side)!;
+  const chairIn = async (order: FrozenChangeOrder, side: "baseline" | "proposed" = "baseline") => (await paymentsWorkspace(handle.db, session, order.id, undefined, testDesigner))!.lines.find((line) => line.itemId === CHAIR && line.side === side)!;
 
   it("voids the $543.75 hold once the client confirms the cancelling version, refunding nothing", async () => {
     const v3 = await cancelChairs();
@@ -44,7 +45,7 @@ describe.skipIf(!testDatabaseUrl)("cancelling an uncaptured line releases its ho
     const after = await chairIn(v3);
     expect(after).toMatchObject({ heldCents: 0, releasedCents: 54_375, capturedCents: 0, refundedCents: 0, steps: [], holds: [expect.objectContaining({ status: "voided", releasedCents: 54_375 })] });
     expect(await handle.db.select().from(paypalRefunds)).toHaveLength(0);
-    expect((await createChatStore(handle.db).getCase(session, "willow")).messages.at(-1)?.text).toMatch(/released the hold .*not a refund/);
+    expect((await createChatStore(handle.db).getCase(session, TEST_KEY)).messages.at(-1)?.text).toMatch(/released the hold .*not a refund/);
 
     // Releasing again finds the same void; capturing the voided hold is refused.
     expect((await release(v3)).map((operation) => operation.id)).toEqual([voided.id]);
@@ -53,7 +54,7 @@ describe.skipIf(!testDatabaseUrl)("cancelling an uncaptured line releases its ho
   });
 
   it("does not cancel anything when the client only requests changes to the cancelling version", async () => {
-    const proposal = await confirmChange(handle.db, session, "willow", { action: "remove", itemId: CHAIR, oldItemHandling: "not_ordered", oldItemCostCents: 0 }, false);
+    const proposal = await confirmChange(handle.db, session, TEST_KEY, { action: "remove", itemId: CHAIR, oldItemHandling: "not_ordered", oldItemCostCents: 0 }, false);
     const { createApprovalStore } = await import("../approval/store");
     await createApprovalStore(handle.db).decide(session, proposal.id, { decision: "changes_requested", contentHash: proposal.contentHash, revisionContentHash: proposal.revisionContentHash, acknowledged: true, signature: clientSignatureName(proposal), note: "Keep the chairs after all." });
     await expect(release(proposal)).rejects.toMatchObject({ code: "NOT_CONFIRMED" });
@@ -61,7 +62,7 @@ describe.skipIf(!testDatabaseUrl)("cancelling an uncaptured line releases its ho
   });
 
   it("captures only the confirmed $25 cancellation cost and closes the hold to release $518.75, once", async () => {
-    const v3 = await confirmChange(handle.db, session, "willow", { action: "remove", itemId: CHAIR, oldItemHandling: "cancelled", oldItemCostCents: 2_500 });
+    const v3 = await confirmChange(handle.db, session, TEST_KEY, { action: "remove", itemId: CHAIR, oldItemHandling: "cancelled", oldItemCostCents: 2_500 });
     const input = { itemId: CHAIR, side: "baseline" as const, ...shown(v3) };
     expect(await chairIn(v3)).toMatchObject({ targetCents: 2_500, heldCents: 54_375, capturedCents: 0 });
     await expect(startCapture(handle.db, paypal, session, v3.id, input)).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
@@ -85,7 +86,7 @@ describe.skipIf(!testDatabaseUrl)("cancelling an uncaptured line releases its ho
   });
 
   it("refuses cancellation-cost terms that do not match the frozen fee and keeps the whole authorization untouched", async () => {
-    const v3 = await confirmChange(handle.db, session, "willow", { action: "remove", itemId: CHAIR, oldItemHandling: "cancelled", oldItemCostCents: 2_500 });
+    const v3 = await confirmChange(handle.db, session, TEST_KEY, { action: "remove", itemId: CHAIR, oldItemHandling: "cancelled", oldItemCostCents: 2_500 });
     const input = { itemId: CHAIR, side: "baseline" as const, ...shown(v3) };
     const confirmation = { ...input, quantity: 1, unitPriceCents: 2_500, taxCents: 0, freightCents: 0, inStock: true, leadTimeDays: null, reference: "DEMO-CANCELLATION-COST-1", note: "Reviewed cancellation cost." };
     await expect(recordSupplierOrder(handle.db, session, v3.id, { ...confirmation, unitPriceCents: 2_600 })).rejects.toMatchObject({ code: "SUPPLIER_TERMS_CHANGED" });

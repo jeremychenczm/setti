@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { caseDocument } from "../chat/cases";
 import { chatMessages } from "../chat/schema";
 import { demoActivity, itemCancellations, paypalAuthorizations } from "../db/schema";
 import { openTestDb, testDatabaseUrl, truncate } from "../db/testing";
@@ -12,10 +11,12 @@ import { holdApprovedItems } from "../payments/item-holds";
 import { chargeServices, startServicesCheckout } from "../payments/services";
 import { FakePayPal } from "../payments/testing/fake-paypal";
 import { links } from "../payments/testing/flows";
+import { addTestProject, TEST_KEY } from "../projects/testing";
 import { closeIdleDemos, demoEnd, demoEndedNotice, endDemo, noteActivity } from "./activity";
 
 const DAY = 24 * 60 * 60 * 1000;
-const ITEMS = 20;
+/** The test project's four furniture lines, each held on its own. */
+const ITEMS = 4;
 
 describe("the notice when a demo ends", () => {
   it("says why it ended, what was released and that charges stay", () => {
@@ -35,12 +36,13 @@ describe.skipIf(!testDatabaseUrl)("ending a demo", () => {
     await truncate(handle.db, "projects", "chat_cases", "hold_checks", "renewal_notices", "demo_activity");
     session = randomUUID();
     paypal = new FakePayPal();
-    await signOpeningForTest(handle.db, session, "willow", caseDocument("willow").lines.map((line) => ({ itemId: line.itemId, decision: "approved" as const })));
-    const checkout = await startServicesCheckout(handle.db, paypal, session, "willow", links);
+    await addTestProject(handle.db, session);
+    await signOpeningForTest(handle.db, session, TEST_KEY);
+    const checkout = await startServicesCheckout(handle.db, paypal, session, TEST_KEY, links);
     paypal.approve(checkout.paypalOrderId!);
     await completeAuthorization(handle.db, paypal, checkout.id);
-    await chargeServices(handle.db, paypal, session, "willow");
-    await holdApprovedItems(handle.db, paypal, session, "willow");
+    await chargeServices(handle.db, paypal, session, TEST_KEY);
+    await holdApprovedItems(handle.db, paypal, session, TEST_KEY);
   });
   afterAll(() => handle?.pool.end());
 
@@ -80,7 +82,8 @@ describe.skipIf(!testDatabaseUrl)("ending a demo", () => {
     expect(cancellations.every((entry) => entry.reason === "demo_ended" && entry.cancelledBy === "Setti")).toBe(true);
     const posted = await notices();
     expect(posted).toHaveLength(1);
-    expect(posted[0].text).toMatch(new RegExp(`after 7 days without activity\\. Setti cancelled the ${ITEMS} items still on hold and asked PayPal to release \\$`));
+    // Sofa $964.00 + chairs $345.60 + desk $270.00 + tile $243.00.
+    expect(posted[0].text).toContain("after 7 days without activity. Setti cancelled the 4 items still on hold and asked PayPal to release $1,822.60; nothing was charged for them.");
     // Nothing designer-voiced is posted per item.
     expect((await handle.db.select().from(chatMessages).where(eq(chatMessages.actor, "designer"))).filter((message) => /I've cancelled it/.test(message.text))).toHaveLength(0);
 
