@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { accountOrDefault } from "../accounts/demo";
+import { findAccount } from "../accounts/demo";
 import type { AiOutput } from "../ai/output";
 import { createApprovalStore, readLedger } from "../approval/store";
 import { runCaseAi } from "../chat/service";
@@ -79,7 +79,7 @@ describe.skipIf(!testDatabaseUrl)("instant café V1 workspace", () => {
     expect(ready.stages.find((stage) => stage.id === "countertop_capture")?.operationIds).toHaveLength(1);
     expect(ready.stages.find((stage) => stage.id === "wall_tile_capture")?.operationIds).toHaveLength(1);
     // Emma paid the V1 design fee with the Sandbox test card and saved it for the project's later holds.
-    expect(await servicesPaymentView(handle.db, run.session, "maple", accountOrDefault("emma"), "test-client-id")).toMatchObject({
+    expect(await servicesPaymentView(handle.db, run.session, "maple", findAccount("emma")!, "test-client-id")).toMatchObject({
       basis: { version: 1, orderId: null }, dueCents: 0, canPay: false, savedPayPal: true, savedMethod: { kind: "card", label: "Visa •••• 0026" }, canRemoveSaved: true,
     });
     expect(ledger.operations.every((operation) => operation.changeOrderId === null && operation.revisionId === bridge.baselineRevisionId)).toBe(true);
@@ -122,7 +122,7 @@ describe.skipIf(!testDatabaseUrl)("instant café V1 workspace", () => {
     expect((await handle.db.select().from(revisions)).map((revision) => revision.number).sort()).toEqual([1, 2]);
     const providerCalls = paypal.calls.length;
     await createApprovalStore(handle.db).decide(run.session, order.id, { decision: "approved", contentHash: order.contentHash, revisionContentHash: order.revisionContentHash, acknowledged: true, signature: clientSignatureName(order), note: "Checked V2." });
-    const payments = (await paymentsWorkspace(handle.db, run.session, order.id, new Date(), accountOrDefault("jordan")))!;
+    const payments = (await paymentsWorkspace(handle.db, run.session, order.id, new Date(), findAccount("jordan")!))!;
     expect(payments.plan?.blockers).toEqual([]);
     const actions = payments.plan!.actions;
     const has = (itemId: string, side: "baseline" | "proposed", kind: string, amountCents: number, timing: string) =>
@@ -142,7 +142,7 @@ describe.skipIf(!testDatabaseUrl)("instant café V1 workspace", () => {
     expect(paypal.calls).toHaveLength(providerCalls);
     expect(payments.plan?.actions.some((action) => action.itemId === "design")).toBe(false);
     // The two extra site visits are the only service money due; the design fee was paid in V1.
-    expect(await servicesPaymentView(handle.db, run.session, "maple", accountOrDefault("emma"), "test-client-id")).toMatchObject({
+    expect(await servicesPaymentView(handle.db, run.session, "maple", findAccount("emma")!, "test-client-id")).toMatchObject({
       basis: { version: 2, orderId: order.id }, dueCents: 36_000, canPay: true, furnitureToHold: { count: 4, cents: 779_000 },
       services: [expect.objectContaining({ itemId: "design", targetCents: 240_000, capturedCents: 240_000 }), expect.objectContaining({ itemId: "site-visits", targetCents: 108_000, capturedCents: 72_000 })],
     });
@@ -153,7 +153,7 @@ describe.skipIf(!testDatabaseUrl)("instant café V1 workspace", () => {
     const calls = paypal.calls.length;
     expect((await startAuthorization(handle.db, paypal, run.session, order.id, ref, links)).id).toBe(checkout.id);
     expect(paypal.calls).toHaveLength(calls);
-    const after = (await paymentsWorkspace(handle.db, run.session, order.id, new Date(), accountOrDefault("emma")))!;
+    const after = (await paymentsWorkspace(handle.db, run.session, order.id, new Date(), findAccount("emma")!))!;
     const proposed = after.lines.filter((line) => line.side === "proposed");
     expect(proposed.find((line) => line.itemId === "wall-tile")?.heldCents).toBe(152_000);
     expect(proposed.filter((line) => line.itemId.startsWith("new-")).map((line) => line.heldCents)).toEqual([0, 0]);

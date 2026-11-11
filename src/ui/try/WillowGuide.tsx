@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AccountId } from "@/accounts/demo";
 import type { CaseSnapshot } from "@/chat/types";
 import type { ItemHoldsView } from "@/payments/item-holds-view";
 import type { ServicesPaymentView } from "@/payments/services-view";
@@ -25,7 +24,7 @@ async function readJson(path: string, signal: AbortSignal): Promise<unknown> {
  */
 export function WillowGuide({ account, onSwitchAccount, onOpenChat, currentView, currentOrderId }: TrySeedNoticeProps) {
   const [data, setData] = useState<WillowGuideData | null>(null);
-  const [viewerId, setViewerId] = useState<AccountId | null>(null);
+  const [viewerId, setViewerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const request = useRef<AbortController | null>(null);
   const busy = useRef(false);
@@ -83,15 +82,15 @@ function WillowGuideBar({ data, account, onSwitchAccount, onOpenChat, currentVie
   function continueGuide() {
     if (skipping) return;
     if (step.skipTo && !switchNeeded) { void skip(step.skipTo); return; }
-    if (switchNeeded) onSwitchAccount(step.role);
+    const path = step.destination === "chat" ? "/chats/willow" : step.destination === "order" ? `/change-orders/${step.orderId}` : "/quotes/willow";
+    if (switchNeeded) { void onSwitchAccount(step.role, `${path}${step.anchor && step.destination !== "chat" ? `#${step.anchor}` : ""}`); return; }
     if (step.destination === "chat") { onOpenChat(); return; }
     if (sameQuote || sameOrder) {
       if (step.anchor) document.getElementById(step.anchor)?.scrollIntoView({ behavior: "smooth", block: "start" });
       else document.querySelector<HTMLElement>('[aria-label="Search quote items"]')?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
-    const path = step.destination === "order" ? `/change-orders/${step.orderId}` : "/quotes/willow";
-    navigateGuidePage(`${path}${step.anchor ? `#${step.anchor}` : ""}`, switchNeeded);
+    navigateGuidePage(`${path}${step.anchor ? `#${step.anchor}` : ""}`, false);
   }
 
   const days = data.holds?.clock.simulatedDays ?? 0;

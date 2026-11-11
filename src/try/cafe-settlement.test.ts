@@ -4,7 +4,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { accountOrDefault } from "../accounts/demo";
+import { findAccount } from "../accounts/demo";
 import type { AiOutput } from "../ai/output";
 import { createApprovalStore, readLedger } from "../approval/store";
 import { runCaseAi } from "../chat/service";
@@ -73,7 +73,7 @@ describe.skipIf(!testDatabaseUrl)("café walkthrough after one signature", () =>
   it("holds, takes the client's site-visit payment, records each supplier step, captures and refunds until every line is settled", async () => {
     const { session, order } = await signedV2();
     const shown = { contentHash: order.contentHash, revisionContentHash: order.revisionContentHash };
-    const workspace = async () => (await paymentsWorkspace(handle.db, session, order.id, new Date(), accountOrDefault("jordan")))!;
+    const workspace = async () => (await paymentsWorkspace(handle.db, session, order.id, new Date(), findAccount("jordan")!))!;
     const ref = (line: PaymentLineView) => ({ itemId: line.itemId, side: line.side, ...shown });
     const find = (lines: PaymentLineView[], itemId: string, side: "baseline" | "proposed") => lines.find((line) => line.itemId === itemId && line.side === side)!;
 
@@ -88,8 +88,8 @@ describe.skipIf(!testDatabaseUrl)("café walkthrough after one signature", () =>
     const guide = (days: number) => mapleGuideStep({ seedOrderId: null, scenario: HOME_SCENARIO, snapshot: { ...snapshot, aiConfigured: true }, pricing: null, payments: confirmed, simulatedDays: days }, "designer");
     expect(guide(0).detail).toMatch(/^Setti placed 4 new holds on Emma's saved card, but no supplier order is recorded for the 5 held items\. /);
     expect(guide(3).title).toBe("Setti caught it: 5 held items are still not ordered");
-    expect((await inboxView(handle.db, null, session, accountOrDefault("emma"))).project).toEqual({ key: "maple", name: "Maple Ave Café" });
-    const reminders = (await attentionView(handle.db, session, accountOrDefault("jordan"), new Date(Date.now() + 4 * 86_400_000))).items.filter((item) => item.projectKey === "maple");
+    expect((await inboxView(handle.db, null, session, findAccount("emma")!)).project).toEqual({ key: "maple", name: "Maple Ave Café" });
+    const reminders = (await attentionView(handle.db, session, findAccount("jordan")!, new Date(Date.now() + 4 * 86_400_000))).items.filter((item) => item.projectKey === "maple");
     expect(reminders.length).toBeGreaterThan(0);
     expect(new Set(reminders.map((item) => item.projectName))).toEqual(new Set(["Maple Ave Café"]));
     for (const version of [1, 2]) expect((await readVersionReceipt(handle.db, session, "maple", version)).project).toMatchObject({ name: "Maple Ave Café", room: "Front of house" });

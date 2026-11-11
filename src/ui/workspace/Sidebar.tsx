@@ -22,7 +22,7 @@ function itemsFor(account: DemoAccount): NavItem[] {
 }
 
 /** The narrow icon rail at the left edge, as in a messaging app: modules on top, the account at the bottom. */
-export function Sidebar({ view, onView, account, onSwitchAccount, badges = {} }: { view: View; onView: (v: View) => void; account: DemoAccount; onSwitchAccount: (id: AccountId) => void; badges?: Partial<Record<View, number>> }) {
+export function Sidebar({ view, onView, account, demo, onSwitchAccount, badges = {} }: { view: View; onView: (v: View) => void; account: DemoAccount; demo: boolean; onSwitchAccount: (id: AccountId) => void; badges?: Partial<Record<View, number>> }) {
   return (
     <aside aria-label="Workspace sidebar" className="flex w-[64px] shrink-0 flex-col items-center bg-[var(--rail)] py-3">
       <span title="Setti · Lee Studio" className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--primary-fill)] text-[15px] font-bold text-[var(--on-primary)]">S</span>
@@ -43,7 +43,7 @@ export function Sidebar({ view, onView, account, onSwitchAccount, badges = {} }:
         })}
       </nav>
 
-      <AccountMenu account={account} onSwitch={onSwitchAccount} compact placement="above" />
+      <AccountMenu account={account} demo={demo} onSwitch={onSwitchAccount} compact placement="above" />
     </aside>
   );
 }

@@ -1,8 +1,8 @@
 /**
  * Sign-up, sign-in and sessions, through Better Auth: email and password with
  * scrypt hashes, httpOnly cookies, origin checks and rate limits. A studio is
- * Better Auth's organization. Every new account gets a studio of its own, with
- * the account as owner, and each sign-in works in the user's first studio.
+ * Better Auth's organization. A designer's sign-up creates their studio; a
+ * client's account has none. Each sign-in works in the user's first studio.
  */
 import { randomUUID } from "node:crypto";
 import { betterAuth } from "better-auth";
@@ -11,6 +11,7 @@ import { nextCookies } from "better-auth/next-js";
 import { organization } from "better-auth/plugins";
 import { asc, eq } from "drizzle-orm";
 import type { Db } from "@/db/client";
+import { AUTH_COOKIE_PREFIX } from "./cookie-prefix";
 import { authAccounts, authSessions, authVerifications, studioInvitations, studioMembers, studios, users } from "./schema";
 
 export const PASSWORD_MIN_LENGTH = 10;
@@ -21,11 +22,6 @@ export interface AuthOptions {
   secret?: string;
   /** Off in tests, which sign many accounts up in a row. */
   rateLimit?: boolean;
-}
-
-/** The studio a new account starts with; the owner can rename it. */
-export function defaultStudioName(userName: string): string {
-  return `${userName.trim()}'s studio`;
 }
 
 export function createAuth(db: Db, options: AuthOptions = {}) {
@@ -52,15 +48,9 @@ export function createAuth(db: Db, options: AuthOptions = {}) {
       },
     },
     telemetry: { enabled: false },
-    advanced: { cookiePrefix: "setti" },
+    // UUIDs, like every other table, so a studio id can key the data it owns.
+    advanced: { cookiePrefix: AUTH_COOKIE_PREFIX, database: { generateId: () => randomUUID() } },
     databaseHooks: {
-      user: {
-        create: {
-          after: async (user) => {
-            await auth.api.createOrganization({ body: { name: defaultStudioName(user.name), slug: `studio-${randomUUID()}`, userId: user.id } });
-          },
-        },
-      },
       session: {
         create: {
           before: async (session) => {

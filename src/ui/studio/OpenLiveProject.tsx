@@ -2,9 +2,9 @@
 
 import { ArrowUpRight, LoaderCircle } from "lucide-react";
 import { useRef, useState } from "react";
-import { rememberAccount } from "@/accounts/demo";
 import { HOME_SCENARIO } from "@/demo/living-dining";
 import { canOpenPreparedWorkspace, useTryPreparation, type PreparationSeed } from "../try/TryPreparationProvider";
+import { switchPersona } from "../account/switchPersona";
 
 /** Only this explicit action opens/creates the real walkthrough; browsing examples is local. */
 export function OpenLiveProject({ className = "", compact = false }: { className?: string; compact?: boolean }) {
@@ -24,10 +24,9 @@ export function OpenLiveProject({ className = "", compact = false }: { className
         if (!response.ok) throw new Error(result?.error ?? "The live project could not be opened. Your saved records are kept.");
         if (!result?.seed || result.seed.scenario !== HOME_SCENARIO || !canOpenPreparedWorkspace(result.seed)) throw new Error("Your earlier walkthrough still needs preparation. Open Demo home to continue its saved setup.");
       }
-      rememberAccount("jordan");
-      // Read the designer cookie on a fresh document, rather than a prefetched
-      // workspace that may have been rendered for the client's previous role.
-      window.location.assign("/chats/maple");
+      // The project opens fresh as the designer, rather than a prefetched page rendered for the client.
+      const problem = await switchPersona("jordan", "/chats/maple");
+      if (problem) throw new Error(problem);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The live project could not be opened.");
       setPending(false); working.current = false;

@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
-import { accountCookie } from "@/accounts/server";
+import { requireViewer } from "@/auth/viewer";
 import { Workspace } from "@/ui/workspace/Workspace";
 
 export const metadata: Metadata = { title: "Willow Residence · Project chat | Setti" };
 
 export default async function WillowChatPage() {
-  return <Workspace initialView="chats" initialCase="willow" initialAccount={await accountCookie()} />;
+  const { account, demo } = await requireViewer("/chats/willow", "willow");
+  return <Workspace account={account} demo={demo} initialView="chats" initialCase="willow" />;
 }

@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
-import { accountOrDefault, canOpenProject, clientOf, DEMO_ACCOUNTS, rememberAccount, type AccountId, type DemoAccount } from "@/accounts/demo";
+import { canOpenProject, clientOf, DEMO_ACCOUNTS, type AccountId, type DemoAccount } from "@/accounts/demo";
 import type { CaseKey, CaseMessage } from "@/chat/types";
 import { isCaseKey } from "@/chat/cases";
 import { STUDIO_CASES, studioCase } from "@/demo/studio-cases";
@@ -16,6 +16,7 @@ import { Sidebar, type View } from "./Sidebar";
 import { useInboxBadge } from "./useInboxBadge";
 import { TrySeedNotice } from "../try/TrySeedNotice";
 import { DemoEndedNotice } from "../try/DemoEndedNotice";
+import { switchPersona } from "../account/switchPersona";
 
 const CaseChat = dynamic(() => import("../chat/CaseChat").then((m) => m.CaseChat), {
   loading: () => <div role="status" className="flex flex-1 items-center justify-center rounded-xl bg-white text-[13px] text-[var(--muted)]">Loading conversation…</div>,
@@ -55,9 +56,12 @@ function reachable(account: DemoAccount, wanted: CaseKey): CaseKey {
   return canOpenProject(account, wanted) ? wanted : account.projectKey ?? wanted;
 }
 
-export function Workspace({ initialView = "chats", initialQuote = "willow", initialCase, initialAccount, initialPreparedCase = null, initialRecordsTab = "quote" }: { initialView?: View; initialQuote?: CaseKey; initialCase?: CaseKey; initialAccount?: string; initialPreparedCase?: string | null; initialRecordsTab?: "quote" | "payments" }) {
-  const [account, setAccount] = useState<DemoAccount>(() => accountOrDefault(initialAccount));
-  useEffect(() => { rememberAccount(account.id); }, [account.id]);
+/**
+ * The signed-in workspace. `account` is who the server signed in, as the page's
+ * project sees them; `demo` lets a demo visitor switch between the demo's people.
+ */
+export function Workspace({ account, demo = false, initialView = "chats", initialQuote = "willow", initialCase, initialPreparedCase = null, initialRecordsTab = "quote" }: { account: DemoAccount; demo?: boolean; initialView?: View; initialQuote?: CaseKey; initialCase?: CaseKey; initialPreparedCase?: string | null; initialRecordsTab?: "quote" | "payments" }) {
+  const [switchError, setSwitchError] = useState<string | null>(null);
   const [view, setView] = useState<View>(initialView);
   const [quoteId, setQuoteId] = useState<CaseKey>(() => reachable(account, initialQuote));
   const [activeId, setActiveId] = useState<CaseKey>(() => reachable(account, initialCase ?? (initialView === "quotes" ? initialQuote : "willow")));
@@ -159,29 +163,27 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
     window.history.replaceState(window.history.state, "", `/quotes/${preparedProject.id}${tab === "payments" ? "?tab=payments" : ""}`);
   };
 
-  const switchAccount = (id: AccountId) => {
-    const next = accountOrDefault(id);
-    rememberAccount(next.id);
-    setAccount(next);
-    setActiveId((key) => reachable(next, key));
-    setQuoteId((key) => reachable(next, key));
-    if (next.role === "client" && (view === "projects" || view === "money" || preparedCaseId)) {
-      setPreparedCaseId(null);
-      setView("chats");
-      window.history.replaceState(window.history.state, "", `/chats/${reachable(next, activeId)}`);
-    }
+  /** A demo visitor becomes another of the demo's people; a client lands in their own project's chat. */
+  const switchAccount = (id: AccountId, next?: string) => {
+    if (!demo) return;
+    const person = DEMO_ACCOUNTS.find((option) => option.id === id);
+    if (!person) return;
+    const clientOnly = person.role === "client" && (view === "projects" || view === "money" || preparedCaseId || !canOpenProject(person, view === "quotes" ? quoteId : activeId));
+    setSwitchError(null);
+    void switchPersona(id, next ?? (clientOnly ? `/chats/${person.projectKey}` : undefined)).then(setSwitchError);
   };
 
   return (
     <div className="flex h-dvh min-h-0 gap-2 bg-[var(--canvas)] p-2 text-[var(--ink)]">
       {/* The icon rail and the chat list are one panel, as in a messaging app; other modules keep only the rail. */}
       <div className="flex min-h-0 shrink-0 overflow-hidden rounded-xl bg-white shadow-sm">
-        <Sidebar view={view} onView={showView} account={account} onSwitchAccount={switchAccount} badges={{ inbox: inboxCount }} />
+        <Sidebar view={view} onView={showView} account={account} demo={demo} onSwitchAccount={switchAccount} badges={{ inbox: inboxCount }} />
         {view === "chats" && <div className="hidden min-h-0 border-l border-[var(--line)] lg:flex"><ConversationList projects={conversations} activeId={preparedProject?.id ?? activeId} onOpen={open} /></div>}
       </div>
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
         <DemoEndedNotice />
+        {switchError && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-800">{switchError}</p>}
         {view !== "projects" && view !== "money" && !preparedProject && <TrySeedNotice projectKey={view === "chats" ? activeId : quoteId} account={account} onSwitchAccount={switchAccount} onOpenChat={() => { setActiveId(view === "quotes" ? quoteId : activeId); setView("chats"); }} onOpenInbox={() => showView("inbox")} currentView={view} />}
         <div className="flex min-h-0 min-w-0 flex-1 gap-2">
           {view === "projects" && account.role === "designer" && <StudioProjectsModule onOpenProject={openPreparedProject} />}
@@ -189,7 +191,7 @@ export function Workspace({ initialView = "chats", initialQuote = "willow", init
           {view === "money" && account.role === "designer" && <MoneyModule onOpenInbox={() => showView("inbox")} />}
           {view === "chats" && (preparedProject
             ? <StudioProjectChat key={preparedProject.id} project={preparedProject} projects={conversations} onSelectProject={open} onOpenRecords={openPreparedRecords} />
-            : <CaseChat key={`${account.id}:${activeId}`} projectKey={activeId} quote={quotes[activeId]} account={account} onSwitchAccount={switchAccount} onOpenQuote={openCaseQuote} onSelectCase={open} conversationOptions={conversations} onSelectProject={open} onLatest={(message) => showLatest(activeId, message)} />)}
+            : <CaseChat key={`${account.id}:${activeId}`} projectKey={activeId} quote={quotes[activeId]} account={account} demo={demo} onSwitchAccount={switchAccount} onOpenQuote={openCaseQuote} onSelectCase={open} conversationOptions={conversations} onSelectProject={open} onLatest={(message) => showLatest(activeId, message)} />)}
 
           {view === "quotes" && preparedProject && <StudioProjectRecords key={`${preparedProject.id}:${recordsTab}`} project={preparedProject} initialTab={recordsTab} onBack={openQuoteChat} onSelectTab={openPreparedRecords} />}
           {view === "quotes" && !preparedProject && <QuoteBoard key={`${account.id}:${quoteId}:${focusItemId ?? ""}`} projectKey={quoteId} viewer={account} options={visibleProjects.map((project) => project.key)} focusItemId={focusItemId}

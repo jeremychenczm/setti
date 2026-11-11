@@ -1,15 +1,17 @@
-import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
 import { timingSafeEqual } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { paymentPreparationPending, PREPARATION_MESSAGE } from "../try/preparation";
 import { z } from "zod";
-import { ACCOUNT_COOKIE, canOpenProject, findAccount } from "@/accounts/demo";
 import { isCaseKey } from "@/chat/cases";
 import type { CaseKey } from "@/chat/types";
 import { assertSandbox, SandboxGuardError } from "@/config/paypalEnv";
-import { createDb } from "@/db/client";
+import { appDb } from "@/db/shared";
+import { requestActor } from "@/http/actor";
+import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
+import { homeOf } from "@/http/identity";
+import { orderScope } from "@/http/order-scope";
 import { isSameOriginRequest, requestOrigin } from "@/http/origin";
-import { refreshDemoCookies } from "@/http/demo-cookies";
+import { isRefusal, NOT_YOUR_PROJECT, projectScope, refusalResponse, SIGN_IN_REQUIRED, studioScope, type ProjectScope } from "@/http/scope";
+import { paymentPreparationPending, PREPARATION_MESSAGE } from "../try/preparation";
 import { cancelPayment, checkPayment, operationPage, returnFromPayPal, startAuthorization, startCapture, startOpeningCapture, startRefund, startRelease, type LinkBuilder } from "./actions";
 import { cancelCheckout, completeAuthorization } from "./authorize";
 import { PaymentActionError } from "./binding";
@@ -84,17 +86,14 @@ const holdSchema = z.discriminatedUnion("action", [
 ]);
 class HttpError extends Error { constructor(message: string, readonly status: number) { super(message); } }
 
-const database = globalThis as typeof globalThis & { settiChatDatabase?: ReturnType<typeof createDb> };
-function db() {
-  database.settiChatDatabase ??= createDb();
-  return database.settiChatDatabase.db;
-}
+const db = appDb;
 
-function session(req: NextRequest): string | null {
-  const parsed = uuid.safeParse(req.cookies.get("setti-demo-chat")?.value);
-  if (!parsed.success) return null;
-  noteRequest(parsed.data);
-  return parsed.data;
+/** The signed-in actor's scope in project `key`, or the refusal to send. */
+async function scoped(req: NextRequest, key: CaseKey): Promise<ProjectScope | NextResponse> {
+  const scope = await projectScope(req, key);
+  if (isRefusal(scope)) return refusalResponse(scope, headers);
+  noteRequest(scope.sessionId);
+  return scope;
 }
 
 /** PayPal sends the buyer back here; SETTI_PUBLIC_URL overrides the request origin when the app runs behind a proxy. */
@@ -154,29 +153,31 @@ function fail(error: unknown) {
 export async function getPaymentsResponse(req: NextRequest, id: string) {
   if (!uuid.safeParse(id).success) return NextResponse.json({ code: "NOT_FOUND", error: "This change order could not be found." }, { status: 404, headers });
   try {
-    const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
-    const workspace = await paymentsWorkspace(db(), session(req), id, undefined, account, demoCheckout());
-    if (workspace && account && !canOpenProject(account, workspace.projectKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
-    return workspace ? refreshDemoCookies(NextResponse.json(workspace, { headers }), req) : NextResponse.json({ code: "NOT_FOUND", error: "This change order could not be found." }, { status: 404, headers });
+    // Someone outside the project reads the share link like anyone else: no payment steps.
+    const { owner, account } = await orderScope(req, id);
+    if (owner && account) noteRequest(owner.studioId);
+    const workspace = await paymentsWorkspace(db(), owner && account ? owner.studioId : null, id, undefined, account, demoCheckout());
+    return workspace ? NextResponse.json(workspace, { headers }) : NextResponse.json({ code: "NOT_FOUND", error: "This change order could not be found." }, { status: 404, headers });
   } catch (error) { return fail(error); }
 }
 
 export async function postPaymentsResponse(req: NextRequest, id: string) {
   if (!uuid.safeParse(id).success) return NextResponse.json({ code: "NOT_FOUND", error: "This change order could not be found." }, { status: 404, headers });
-  const sessionId = session(req);
-  if (!sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "This share link is read-only. Payment steps run only from the browser that owns the demo case." }, { status: 403, headers });
-  const ended = await refuseIfEnded(sessionId);
-  if (ended) return ended;
   try {
+    const { actor, owner, account } = await orderScope(req, id);
+    if (!actor) return refusalResponse(SIGN_IN_REQUIRED, headers);
     const input = actionSchema.parse(await boundedJson(req));
-    const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
-    if (!account) return NextResponse.json({ code: "FORBIDDEN", error: "Choose an account before starting payment steps." }, { status: 403, headers });
+    if (!owner) return NextResponse.json({ code: "NOT_FOUND", error: "This change order could not be found." }, { status: 404, headers });
+    if (!account) return refusalResponse(NOT_YOUR_PROJECT, headers);
+    const sessionId = owner.studioId;
+    noteRequest(sessionId);
+    const ended = await refuseIfEnded(sessionId);
+    if (ended) return ended;
     const workspace = await paymentsWorkspace(db(), sessionId, id, undefined, account);
     if (!workspace) return NextResponse.json({ code: "NOT_FOUND", error: "This change order could not be found." }, { status: 404, headers });
-    if (!canOpenProject(account, workspace.projectKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
     const preparing = await pendingPreparation(sessionId, workspace.projectKey);
     if (preparing) return preparing;
-    const client = account.role === "client" && account.projectKey === workspace.projectKey;
+    const client = account.role === "client";
     if (["authorize", "hold_saved", "remove_saved"].includes(input.action) && !client) return NextResponse.json({ code: "FORBIDDEN", error: "Only this project's client pays or changes the saved payment method." }, { status: 403, headers });
     if (input.action === "authorize" && input.via === "test_card" && !demoCheckout().testCard) return NextResponse.json({ code: "FORBIDDEN", error: "The Sandbox test card is turned off on this server." }, { status: 403, headers });
     if (["capture", "release", "refund", "supplier_order", "supplier_credit"].includes(input.action) && account.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "Only the designer records supplier confirmations, captures, releases and refunds." }, { status: 403, headers });
@@ -229,7 +230,7 @@ export async function postPaymentsResponse(req: NextRequest, id: string) {
         await refreshRecordedFees(db(), sandboxPayPal(), sessionId, id);
         break;
     }
-    return refreshDemoCookies(NextResponse.json({ workspace: await paymentsWorkspace(db(), sessionId, id, undefined, account, demoCheckout()), operationId, redirectUrl, paypalOrderId }, { headers }), req);
+    return NextResponse.json({ workspace: await paymentsWorkspace(db(), sessionId, id, undefined, account, demoCheckout()), operationId, redirectUrl, paypalOrderId }, { headers });
   } catch (error) { return fail(error); }
 }
 
@@ -254,8 +255,7 @@ export async function paypalRedirectResponse(req: NextRequest, outcome: "return"
     const result = await returnFromPayPal(db(), sandboxPayPal(), operationId.data, req.nextUrl.searchParams.get("token"), outcome);
     if (!result) return page("unmatched");
     // An authorized design-services hold is charged and the furniture held right away; the page can finish it if this stops early.
-    const sessionId = session(req);
-    if (result.servicesHold && result.state === "authorized" && sessionId && target?.projectKey) await afterServicesPaid(db(), sandboxPayPal(), sessionId, target.projectKey, paypalLinks(req)).catch(() => null);
+    if (result.servicesHold && result.state === "authorized" && target?.projectKey) await afterServicesPaid(db(), sandboxPayPal(), target.studioId, target.projectKey, paypalLinks(req)).catch(() => null);
     return page(outcome === "cancel" && result.state === "failed" ? "cancelled" : result.state);
   } catch {
     // The page offers "Check PayPal status", which reads the real outcome again.
@@ -277,17 +277,17 @@ function demoCheckout(): DemoCheckout {
   return { paypalClientId: paypalClientId(), testCard: process.env.SETTI_DEMO_TEST_CARD?.trim().toLowerCase() !== "off", sandboxBuyer: email && password ? { email, password } : null };
 }
 
-function servicesView(req: NextRequest, key: CaseKey, sessionId = session(req)) {
+function servicesView(scope: ProjectScope, key: CaseKey) {
   const { paypalClientId: clientId, ...demo } = demoCheckout();
-  return servicesPaymentView(db(), sessionId, key, findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value), clientId, demo);
+  return servicesPaymentView(db(), scope.sessionId, key, scope.account, clientId, demo);
 }
 
 /** The design-services payment of the project's current agreement. */
 export async function getServicesPaymentResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
-  const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
-  if (account && !canOpenProject(account, rawKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
-  try { return refreshDemoCookies(NextResponse.json(await servicesView(req, rawKey), { headers }), req); }
+  const scope = await scoped(req, rawKey);
+  if (scope instanceof NextResponse) return scope;
+  try { return NextResponse.json(await servicesView(scope, rawKey), { headers }); }
   catch (error) { return fail(error); }
 }
 
@@ -298,15 +298,14 @@ export async function getServicesPaymentResponse(req: NextRequest, rawKey: strin
  */
 export async function postServicesPaymentResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
-  const sessionId = session(req);
-  if (!sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "Payment steps run only from the browser that owns the demo case." }, { status: 403, headers });
+  const scope = await scoped(req, rawKey);
+  if (scope instanceof NextResponse) return scope;
+  const { sessionId, account } = scope;
   const ended = await refuseIfEnded(sessionId);
   if (ended) return ended;
   try {
     const input = servicesSchema.parse(await boundedJson(req));
-    const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
-    const client = account?.role === "client" && canOpenProject(account, rawKey);
-    if (!account || !canOpenProject(account, rawKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
+    const client = account.role === "client";
     const preparing = await pendingPreparation(sessionId, rawKey);
     if (preparing) return preparing;
     if (input.action !== "charge" && input.action !== "check" && !client) return NextResponse.json({ code: "FORBIDDEN", error: "Only the client pays the design services. Switch to the client's account first." }, { status: 403, headers });
@@ -352,20 +351,20 @@ export async function postServicesPaymentResponse(req: NextRequest, rawKey: stri
         await afterServicesPaid(db(), paypal, sessionId, rawKey, paypalLinks(req));
         break;
     }
-    return refreshDemoCookies(NextResponse.json({ view: await servicesView(req, rawKey, sessionId), operationId, paypalOrderId }, { headers }), req);
+    return NextResponse.json({ view: await servicesView(scope, rawKey), operationId, paypalOrderId }, { headers });
   } catch (error) { return fail(error); }
 }
 
-function holdsView(req: NextRequest, key: CaseKey, sessionId = session(req)) {
-  return itemHoldsView(db(), sessionId, key, findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value), demoCheckout());
+function holdsView(scope: ProjectScope, key: CaseKey) {
+  return itemHoldsView(db(), scope.sessionId, key, scope.account, demoCheckout());
 }
 
 /** The approved furniture items of the project's current agreement and their PayPal holds. */
 export async function getItemHoldsResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
-  const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
-  if (account && !canOpenProject(account, rawKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
-  try { return refreshDemoCookies(NextResponse.json(await holdsView(req, rawKey), { headers }), req); }
+  const scope = await scoped(req, rawKey);
+  if (scope instanceof NextResponse) return scope;
+  try { return NextResponse.json(await holdsView(scope, rawKey), { headers }); }
   catch (error) { return fail(error); }
 }
 
@@ -375,19 +374,18 @@ export async function getItemHoldsResponse(req: NextRequest, rawKey: string) {
  */
 export async function postItemHoldsResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
-  const sessionId = session(req);
-  if (!sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "Payment steps run only from the browser that owns the demo case." }, { status: 403, headers });
+  const scope = await scoped(req, rawKey);
+  if (scope instanceof NextResponse) return scope;
+  const { sessionId, account } = scope;
   const ended = await refuseIfEnded(sessionId);
   if (ended) return ended;
   try {
     const input = holdSchema.parse(await boundedJson(req));
-    const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
-    if (!account || !canOpenProject(account, rawKey)) return NextResponse.json({ code: "FORBIDDEN", error: "This account cannot open this project." }, { status: 403, headers });
     const preparing = await pendingPreparation(sessionId, rawKey);
     if (preparing) return preparing;
     if ((input.action === "supplier_order" || input.action === "capture") && account.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "Only the designer records supplier confirmations and captures." }, { status: 403, headers });
     if (input.action === "cancel_item" && account.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "Only the designer cancels an item. The client can ask for it in the chat." }, { status: 403, headers });
-    if ((input.action === "cancel" || input.action === "remove_saved" || input.action === "checkout") && (account.role !== "client" || account.projectKey !== rawKey)) return NextResponse.json({ code: "FORBIDDEN", error: "Only the client pays, leaves a PayPal checkout or removes the saved payment method." }, { status: 403, headers });
+    if ((input.action === "cancel" || input.action === "remove_saved" || input.action === "checkout") && account.role !== "client") return NextResponse.json({ code: "FORBIDDEN", error: "Only the client pays, leaves a PayPal checkout or removes the saved payment method." }, { status: 403, headers });
     if (input.action === "checkout" && input.via === "test_card" && !demoCheckout().testCard) return NextResponse.json({ code: "FORBIDDEN", error: "The Sandbox test card is turned off on this server." }, { status: 403, headers });
     let attempted = 0, operationId: string | null = null, paypalOrderId: string | null = null;
     switch (input.action) {
@@ -420,15 +418,16 @@ export async function postItemHoldsResponse(req: NextRequest, rawKey: string) {
         attempted = (await cancelApprovedItem(db(), sandboxPayPal(), sessionId, rawKey, { ...input, by: account.name })).operations.length;
         break;
     }
-    return refreshDemoCookies(NextResponse.json({ view: await holdsView(req, rawKey, sessionId), attempted, operationId, paypalOrderId }, { headers }), req);
+    return NextResponse.json({ view: await holdsView(scope, rawKey), attempted, operationId, paypalOrderId }, { headers });
   } catch (error) { return fail(error); }
 }
 
-/** The designer's reminders across the projects this browser session owns. Clients have their own steps on each page. */
+/** The designer's reminders across the studio's projects. Clients have their own steps on each page. */
 export async function getAttentionResponse(req: NextRequest) {
-  const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
-  if (account?.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "Only the designer sees the studio's reminders." }, { status: 403, headers });
-  try { return refreshDemoCookies(NextResponse.json(await attentionView(db(), session(req), account), { headers }), req); }
+  const scope = await studioScope(req);
+  if (isRefusal(scope)) return refusalResponse(scope.status === 403 ? { ...scope, error: "Only the designer sees the studio's reminders." } : scope, headers);
+  noteRequest(scope.sessionId);
+  try { return NextResponse.json(await attentionView(db(), scope.sessionId, scope.account), { headers }); }
   catch (error) { return fail(error); }
 }
 
@@ -467,19 +466,28 @@ function readablePayPal() {
   try { return sandboxPayPal(); } catch { return null; }
 }
 
+/** Where the signed-in actor's inbox and demo clock read from, or the refusal to send. */
+async function home(req: NextRequest): Promise<ReturnType<typeof homeOf> | NextResponse> {
+  const actor = await requestActor(req);
+  if (!actor) return refusalResponse(SIGN_IN_REQUIRED, headers);
+  const found = homeOf(actor);
+  noteRequest(found.sessionId);
+  return found;
+}
+
 /** The signed-in account's payment inbox: the designer's reminders, or the client's money with PayPal's latest confirmations. */
 export async function getInboxResponse(req: NextRequest) {
-  const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
-  if (!account) return NextResponse.json({ code: "FORBIDDEN", error: "Choose an account to open its inbox." }, { status: 403, headers });
-  try { return refreshDemoCookies(NextResponse.json(await inboxView(db(), readablePayPal(), session(req), account), { headers }), req); }
+  const scope = await home(req);
+  if (scope instanceof NextResponse) return scope;
+  try { return NextResponse.json(await inboxView(db(), readablePayPal(), scope.sessionId, scope.account), { headers }); }
   catch (error) { return fail(error); }
 }
 
 /** The number on the sidebar's Inbox: the designer's open reminders, or the client's money records not seen yet. */
 export async function getInboxBadgeResponse(req: NextRequest) {
-  const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
-  if (!account) return NextResponse.json({ code: "FORBIDDEN", error: "Choose an account to open its inbox." }, { status: 403, headers });
-  try { return NextResponse.json(await inboxBadge(db(), session(req), account), { headers }); }
+  const scope = await home(req);
+  if (scope instanceof NextResponse) return scope;
+  try { return NextResponse.json(await inboxBadge(db(), scope.sessionId, scope.account), { headers }); }
   catch (error) { return fail(error); }
 }
 
@@ -487,21 +495,22 @@ const seenSchema = z.strictObject({ through: z.iso.datetime() });
 
 /** The reader opened the inbox: what it showed, read at `through`, is no longer new. */
 export async function postInboxSeenResponse(req: NextRequest) {
-  const sessionId = session(req);
-  const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
-  if (!sessionId || !account) return NextResponse.json({ code: "FORBIDDEN", error: "Open the inbox from the browser that owns the demo." }, { status: 403, headers });
+  const scope = await home(req);
+  if (scope instanceof NextResponse) return scope;
   try {
     const input = seenSchema.parse(await boundedJson(req));
-    await markInboxOpened(db(), sessionId, account, new Date(input.through));
+    // A client with no project yet has nothing to mark.
+    if (scope.sessionId) await markInboxOpened(db(), scope.sessionId, scope.account, new Date(input.through));
     return NextResponse.json({ seen: true }, { headers });
   } catch (error) { return fail(error); }
 }
 
 /** The AI summary on top of the inbox, written from the same facts and checked against them; cached per set of facts. */
 export async function getInboxSummaryResponse(req: NextRequest) {
-  const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
-  const sessionId = session(req);
-  if (!account || !sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "Open the inbox from the browser that owns the demo." }, { status: 403, headers });
+  const scope = await home(req);
+  if (scope instanceof NextResponse) return scope;
+  const { sessionId, account } = scope;
+  if (!sessionId) return NextResponse.json({ code: "NOT_FOUND", error: "There is nothing in this inbox yet." }, { status: 404, headers });
   try {
     const view = await inboxView(db(), null, sessionId, account);
     return NextResponse.json(await summarizeInbox(db(), sessionId, { audience: view.role, reader: `${view.reader} (the ${view.role})`, facts: inboxFacts(view) }), { headers });
@@ -510,9 +519,11 @@ export async function getInboxSummaryResponse(req: NextRequest) {
 
 const clockSchema = z.strictObject({ days: z.number().int().min(1).max(MAX_SKIP_DAYS) });
 
-/** How far this demo session has skipped ahead. */
+/** How far the actor's demo studio has skipped ahead. */
 export async function getDemoClockResponse(req: NextRequest) {
-  try { return NextResponse.json({ days: await demoDays(db(), session(req)) }, { headers }); }
+  const scope = await home(req);
+  if (scope instanceof NextResponse) return scope;
+  try { return NextResponse.json({ days: await demoDays(db(), scope.sessionId) }, { headers }); }
   catch (error) { return fail(error); }
 }
 
@@ -522,14 +533,14 @@ export async function getDemoClockResponse(req: NextRequest) {
  * would. PayPal calls are real Sandbox calls; only the day Setti judges by moves.
  */
 export async function postDemoClockResponse(req: NextRequest) {
-  const sessionId = session(req);
-  if (!sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "Skip ahead from the browser that owns the demo." }, { status: 403, headers });
+  const scope = await studioScope(req);
+  if (isRefusal(scope)) return refusalResponse(scope.status === 403 ? { ...scope, error: "The designer skips ahead in the demo." } : scope, headers);
+  const { sessionId } = scope;
+  noteRequest(sessionId);
   const ended = await refuseIfEnded(sessionId);
   if (ended) return ended;
   try {
     const input = clockSchema.parse(await boundedJson(req));
-    const account = findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value);
-    if (account?.role !== "designer") return NextResponse.json({ code: "FORBIDDEN", error: "The designer skips ahead in the demo." }, { status: 403, headers });
     const { days, runs } = await skipAhead(db(), sandboxPayPal(), sessionId, input.days);
     return NextResponse.json({
       days, checks: runs.length,
@@ -543,7 +554,7 @@ export async function postDemoClockResponse(req: NextRequest) {
   }
 }
 
-/** The design-services checkout must belong to this session's project. */
+/** The design-services checkout must belong to this studio's project. */
 async function servicesOperation(sessionId: string, key: CaseKey, operationId: string): Promise<void> {
   const owned = await db().transaction(async (tx) => (await lockPaymentBasis(tx, sessionId, key)).ledger.operations.some((operation) => operation.id === operationId && operation.servicesHold));
   if (!owned) throw new PaymentActionError("NOT_FOUND", "This design-services checkout does not belong to this project.");

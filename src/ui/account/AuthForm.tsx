@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { authClient } from "@/auth/client";
+import { defaultStudioName, newStudioSlug } from "@/auth/names";
 
 const FIELD = "w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[14px] outline-none focus:border-[var(--primary)]";
 const BUTTON = "flex w-full items-center justify-center rounded-lg bg-[var(--primary-fill)] px-4 py-2.5 text-[13px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:text-slate-400";
@@ -49,12 +50,9 @@ export function SignUpForm() {
     void run(async () => {
       const result = await authClient.signUp.email({ name, email: String(form.get("email") ?? "").trim(), password: String(form.get("password") ?? "") });
       if (result.error) return result.error.message ?? "That account could not be created.";
-      // The new studio exists once sign-up returns; work in it, and give it the name typed.
-      const own = (await authClient.organization.list()).data?.[0];
-      if (own) {
-        await authClient.organization.setActive({ organizationId: own.id });
-        if (studio) await authClient.organization.update({ organizationId: own.id, data: { name: studio } });
-      }
+      // A designer's account comes with the studio they run; it becomes the one they work in.
+      const created = await authClient.organization.create({ name: studio || defaultStudioName(name), slug: newStudioSlug() });
+      if (created.error) return "Your account was created, but its studio was not. Sign in to try again.";
       router.push("/account");
       router.refresh();
       return null;
@@ -72,7 +70,8 @@ export function SignUpForm() {
   </Shell>;
 }
 
-export function SignInForm() {
+/** `next` is a path on this site, checked by the page. */
+export function SignInForm({ next = "/account" }: { next?: string }) {
   const router = useRouter();
   const { error, busy, run } = useSubmit();
   const submit = (event: FormEvent<HTMLFormElement>) => {
@@ -81,7 +80,7 @@ export function SignInForm() {
     void run(async () => {
       const result = await authClient.signIn.email({ email: String(form.get("email") ?? "").trim(), password: String(form.get("password") ?? "") });
       if (result.error) return result.error.status === 429 ? "Too many attempts. Wait a minute and try again." : "That email and password do not match an account.";
-      router.push("/account");
+      router.push(next);
       router.refresh();
       return null;
     });

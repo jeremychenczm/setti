@@ -23,7 +23,8 @@ import { INBOX_SEEN } from "../workspace/useInboxBadge";
 export interface TrySeedNoticeProps {
   projectKey: CaseKey;
   account: DemoAccount;
-  onSwitchAccount: (id: AccountId) => void;
+  /** Becomes the demo's other person, then opens `next` (the current page when omitted). Resolves to the reason it failed. */
+  onSwitchAccount: (id: AccountId, next?: string) => void | Promise<string | null>;
   onOpenChat: () => void;
   /** Shows the inbox in the current workspace; without it the guide opens the inbox page. */
   onOpenInbox?: () => void;
@@ -50,7 +51,7 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, onO
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [viewerId, setViewerId] = useState<AccountId | null>(null);
+  const [viewerId, setViewerId] = useState<string | null>(null);
   const detailsId = useId();
   const request = useRef<AbortController | null>(null);
   const busy = useRef(false);
@@ -121,7 +122,19 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, onO
   function continueGuide() {
     if (skipping) return;
     if (step.skipTo && !switchNeeded && skipHere) { void skip(step.skipTo); return; }
-    if (switchNeeded) onSwitchAccount(step.role);
+    if (switchNeeded) {
+      // The switch signs in as the other person, so the step's page opens fresh as them.
+      let next: string;
+      if (step.destination === "inbox") next = "/inbox";
+      else if (step.destination === "chat" && step.chatAction === "ask-payments") {
+        try { next = paymentQuestionHref(projectKey, crypto.randomUUID(), window.sessionStorage); }
+        catch { next = `/chats/${projectKey}`; }
+      } else if (step.destination === "chat") next = `/chats/${projectKey}${step.anchor ? `#${step.anchor}` : ""}`;
+      else if (step.destination === "pricing") next = `/pricing/maple${step.anchor ? `#${step.anchor}` : ""}`;
+      else next = `/change-orders/${step.orderId}${step.anchor ? `#${step.anchor}` : ""}`;
+      void Promise.resolve(onSwitchAccount(step.role, next)).then((problem) => { if (problem) setError(problem); });
+      return;
+    }
     if (step.destination === "inbox") {
       if (currentView === "inbox") document.getElementById("inbox-title")?.scrollIntoView({ behavior: "smooth", block: "start" });
       else if (onOpenInbox && !switchNeeded) onOpenInbox();

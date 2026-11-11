@@ -4,10 +4,11 @@ import { ArrowRight, ArrowUpRight, Check, ChevronDown, CircleAlert, Clock3, Load
 import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { rememberAccount, type AccountId } from "@/accounts/demo";
+import type { AccountId } from "@/accounts/demo";
 import { HOME_SCENARIO } from "@/demo/living-dining";
 import styles from "./TryStart.module.css";
 import { EndDemoButton } from "./EndDemoButton";
+import { switchPersona } from "../account/switchPersona";
 import { announceTryProgress, canOpenPreparedWorkspace } from "./TryPreparationProvider";
 
 type Stage = { id: string; label: string; status: "pending" | "running" | "done" | "failed" };
@@ -98,11 +99,12 @@ export function TryStart() {
     return () => window.removeEventListener("pageshow", shown);
   }, []);
 
-  /** A fresh document reads the role just chosen; a prefetched page may have been rendered for another role. */
+  /** The browser is signed in as the chosen person of the run, then opens `path` fresh, read as them. */
   function enter(path: string, account: AccountId) {
-    rememberAccount(account);
     setOpening(true);
-    window.location.assign(path);
+    void switchPersona(account, path).then((problem) => {
+      if (problem && mounted.current) { setOpening(false); setError(problem); }
+    });
   }
 
   function open(href: string, account: AccountId) {
@@ -182,9 +184,15 @@ export function TryStart() {
       if (!signal.aborted && mounted.current) open(ready.href, account);
     });
   }
+  /** The studio belongs to the demo's designer, so a visitor without a demo starts one first; no money is prepared for it. */
   function openStudio() {
+    if (working.current) return;
     setRole("jordan");
-    enter("/studio", "jordan");
+    if (snapshot?.hasWorkspace) return enter("/studio", "jordan");
+    void perform("maple", async (signal) => {
+      await post({ action: "start", scenario: HOME_SCENARIO }, signal);
+      if (!signal.aborted && mounted.current) enter("/studio", "jordan");
+    });
   }
   function resume(runId: string, account: MapleRole) {
     if (working.current) return;
@@ -198,7 +206,7 @@ export function TryStart() {
   function startWillow() {
     void perform("willow", async (signal) => {
       const ready = await post({ action: "workspace", scenario: "willow-first-payment-v1" }, signal);
-      if (!signal.aborted && mounted.current) open(ready.href, "sofia");
+      if (!signal.aborted && mounted.current) open(ready.href, "jordan");
     });
   }
 

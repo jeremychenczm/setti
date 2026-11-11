@@ -327,8 +327,15 @@
     {
       "idx": 46,
       "version": "7",
-      "when": 1794373088468,
+      "when": 1794374863376,
       "tag": "0046_auth_and_studios",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1794375143304,
+      "tag": "0047_studio_kinds_and_project_clients",
       "breakpoints": true
     }
   ]

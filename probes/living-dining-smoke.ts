@@ -10,7 +10,8 @@ import type { PricingWorkspace } from "../src/pricing/types";
 
 const base = new URL(process.argv[2] || "http://localhost:3002");
 if (!["localhost", "127.0.0.1"].includes(base.hostname) || base.protocol !== "http:") throw new Error("This check only targets a local development server.");
-const cookies = new Map([["setti-demo-account", "jordan"]]);
+// Starting the demo signs this script in as its designer; the cookies it sets are kept here.
+const cookies = new Map<string, string>();
 async function request<T>(route: string, body?: object): Promise<T> {
   const response = await fetch(new URL(route, base), {
     method: body ? "POST" : "GET", headers: { Origin: base.origin, "Content-Type": "application/json", Cookie: [...cookies].map(([key, value]) => `${key}=${value}`).join("; ") },

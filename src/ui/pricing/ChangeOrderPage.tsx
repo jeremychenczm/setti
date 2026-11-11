@@ -4,7 +4,7 @@ import { AllCommunityModule, type ColDef } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { ArrowLeft, ArrowUpRight, FileText, LoaderCircle, LockKeyhole, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { accountOrDefault } from "@/accounts/demo";
+import type { DemoAccount } from "@/accounts/demo";
 import type { ApprovalWorkspace } from "@/approval/types";
 import { notRefundedText } from "@/pricing/fees";
 import type { FinalQuoteLine, OldItemHandling } from "@/pricing/types";
@@ -22,8 +22,9 @@ const modules = [AllCommunityModule];
 const handlingLabels: Record<OldItemHandling, string> = { pending: "Not checked", not_ordered: "Not ordered", cancelled: "Cancelled", modified: "Modified", returned: "Returned / return arranged", retained: "Retained", not_applicable: "Not applicable" };
 type FinalRow = FinalQuoteLine & { totalCents: number };
 
-export function ChangeOrderPage({ orderId, account }: { orderId: string; account?: string }) {
-  const designer = accountOrDefault(account).role === "designer";
+/** `account` is who the signed-in viewer is in the order's project; null for anyone else, who reads the shared link. */
+export function ChangeOrderPage({ orderId, account, demo = false }: { orderId: string; account: DemoAccount | null; demo?: boolean }) {
+  const designer = account?.role === "designer";
   const [workspace, setWorkspace] = useState<ApprovalWorkspace | null>(null);
   const [loading, setLoading] = useState(true);
   const [approvalBusy, setApprovalBusy] = useState(false);
@@ -71,7 +72,7 @@ export function ChangeOrderPage({ orderId, account }: { orderId: string; account
     {error && <div role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-[12px] text-red-800">{error}</div>}
     {order && <>
       {/* The walkthrough guide stays in view while the page scrolls. */}
-      <div className="sticky top-0 z-30 -mx-3 mb-5 bg-[var(--canvas)] px-3 pb-3 pt-3 sm:-mx-6 sm:px-6"><TryPageGuide projectKey={order.projectKey} account={account} currentView="change-order" currentOrderId={order.id} /></div>
+      {demo && account && <div className="sticky top-0 z-30 -mx-3 mb-5 bg-[var(--canvas)] px-3 pb-3 pt-3 sm:-mx-6 sm:px-6"><TryPageGuide projectKey={order.projectKey} account={account} currentView="change-order" currentOrderId={order.id} /></div>}
       <section className="mb-5 rounded-xl bg-white p-5 shadow-sm sm:p-7"><div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]"><span className={`rounded-full px-2.5 py-1 font-semibold ${changeOrderStatusClass(view?.status ?? "")}`}>{changeOrderStatusLabel(view?.status ?? "")}</span><span className="text-slate-400">V{order.version} · based on V{order.basedOnVersion}</span></div><h1 className="text-[26px] font-semibold tracking-tight">{order.title}</h1><p className="mt-2 text-[13px] text-slate-500">{order.projectName} · frozen scope and checked prices</p>{order.source && <div className="mt-3"><ChangeSourceNote source={order.source} detailed /></div>}<div className="mt-5 grid gap-4 border-t border-slate-100 pt-4 text-[12px] sm:grid-cols-3"><div><span className="block text-[10px] uppercase tracking-wider text-slate-400">Prepared for</span><strong className="mt-1 block font-medium">{order.clientName}</strong></div><div><span className="block text-[10px] uppercase tracking-wider text-slate-400">Prepared by</span><strong className="mt-1 block font-medium">{order.designerName}</strong></div><div><span className="block text-[10px] uppercase tracking-wider text-slate-400">Issued</span><span className="mt-1 block">{dateTime(order.issuedAt)} PT</span></div></div><p className="mt-4 flex items-start gap-1.5 text-[11px] leading-relaxed text-slate-500"><LockKeyhole className="mt-0.5 h-3.5 w-3.5 shrink-0" />{view?.decision ? "This snapshot remains frozen. The client decision is recorded separately for this exact version; payment execution is a separate step." : "This snapshot is frozen and awaits a client decision. No payment has been made through this change order."}</p>{workspace?.clientName && view?.decision && <a href={`/receipts/${order.projectKey}/${order.version}`} className="mt-3 inline-flex items-center gap-1 text-[12px] font-medium text-[var(--primary)] hover:underline"><FileText className="h-3.5 w-3.5" />Signed version receipt</a>}</section>
       {view?.status === "superseded" && <div role="status" className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-[12px] leading-relaxed text-amber-900">A newer client version has been issued. This older link remains an unchanged historical record. Ask the designer for the latest version before confirming the scope.</div>}
       <div className="mb-3 grid gap-3 sm:grid-cols-3"><TotalTile label={`Original V${order.basedOnVersion} total · USD`} amount={order.baselineTotals.totalCents} /><TotalTile label={`Proposed V${order.version} total · USD`} amount={order.totals.totalCents} /><TotalTile label="Quote difference · USD" amount={order.deltaTotalCents} signed /></div><p className="mb-5 text-[11px] leading-relaxed text-slate-500">These are quote totals including the recorded tax, delivery and old-item costs. The difference is not a current payment request.</p>

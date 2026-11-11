@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
-import { ACCOUNT_COOKIE } from "@/accounts/demo";
 import { openTestDb, testDatabaseUrl } from "@/db/testing";
+import { clientActor, designerActor } from "@/http/testing";
 import { studioCase } from "@/demo/studio-cases";
 import { studioChatResponse } from "./http";
 import { studioModelContext } from "./model";
@@ -11,13 +11,21 @@ import { CONTEXT_CHAR_LIMIT } from "@/ai/model";
 import { studioThreads } from "./schema";
 import { preparedMessages, studioThreadStore } from "./store";
 
+const mock = vi.hoisted(() => ({ requestActor: vi.fn() }));
+vi.mock("@/http/actor", () => ({ requestActor: mock.requestActor }));
+
 const bistro = studioCase("alder-bistro")!;
 const coffee = studioCase("juniper-coffee")!;
 
 describe("studio chat boundaries", () => {
-  it("rejects unknown projects, client accounts and cross-site writes before touching storage", async () => {
+  it("rejects unknown projects, signed-out visitors, clients and cross-site writes before touching storage", async () => {
+    const studio = randomUUID();
     expect((await studioChatResponse(new NextRequest("http://localhost:3002/api/studio/unknown/chat"), "unknown")).status).toBe(404);
-    expect((await studioChatResponse(new NextRequest("http://localhost:3002/api/studio/alder-bistro/chat", { headers: { cookie: `${ACCOUNT_COOKIE}=emma` } }), bistro.id)).status).toBe(403);
+    mock.requestActor.mockResolvedValue(null);
+    expect((await studioChatResponse(new NextRequest("http://localhost:3002/api/studio/alder-bistro/chat"), bistro.id)).status).toBe(401);
+    mock.requestActor.mockResolvedValue(clientActor(studio, ["maple"]));
+    expect((await studioChatResponse(new NextRequest("http://localhost:3002/api/studio/alder-bistro/chat"), bistro.id)).status).toBe(403);
+    mock.requestActor.mockResolvedValue(designerActor(studio));
     expect((await studioChatResponse(new NextRequest("http://localhost:3002/api/studio/alder-bistro/chat", { method: "POST", headers: { origin: "https://other.example", "content-type": "application/json" }, body: "{}" }), bistro.id)).status).toBe(403);
   });
   it("gives AI the complete selected conversation and separates the prepared ledger from a pending proposal", () => {

@@ -1,10 +1,16 @@
-/** Top-level GET returns from PayPal must retain the demo workspace and role.
- * Mutations independently require a strict same-origin Origin. */
-export const DEMO_COOKIE_SAME_SITE = "lax" as const;
-export const DEMO_SESSION_COOKIE = "setti-demo-chat";
+/**
+ * The demo's own browser cookie: the visitor id that lists the runs a browser
+ * started, so one can be resumed. Who the visitor is comes from the sign-in.
+ * Lax, so it survives the top-level GET back from PayPal; writes still require
+ * a same-origin Origin.
+ */
 export const DEMO_VISITOR_COOKIE = "setti-try-visitor";
-export const DEMO_ACCOUNT_MAX_AGE = 60 * 60 * 24 * 365;
+/** Cookies of the demo before it had accounts. Ending a demo clears them from older browsers. */
+export const RETIRED_DEMO_COOKIES = [
+  { name: "setti-demo-chat", httpOnly: true },
+  { name: "setti-demo-account", httpOnly: false },
+] as const;
 
 export function privateDemoCookieOptions(protocol: string) {
-  return { httpOnly: true, sameSite: DEMO_COOKIE_SAME_SITE, path: "/", maxAge: 60 * 60 * 24 * 30, secure: protocol === "https:" } as const;
+  return { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 30, secure: protocol === "https:" } as const;
 }

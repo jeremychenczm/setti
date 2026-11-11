@@ -1,15 +1,12 @@
 /** The app's one Better Auth instance, on the shared database pool. */
 import { headers } from "next/headers";
-import { createDb } from "@/db/client";
+import { appDb } from "@/db/shared";
 import { createAuth, type Auth } from "./server";
 import { activeStudio, type ActiveStudio } from "./studio";
 
-const shared = globalThis as typeof globalThis & { settiChatDatabase?: ReturnType<typeof createDb>; settiAuth?: Auth };
+const shared = globalThis as typeof globalThis & { settiAuth?: Auth };
 
-function appDb() {
-  shared.settiChatDatabase ??= createDb();
-  return shared.settiChatDatabase.db;
-}
+export { appDb };
 
 export function appAuth(): Auth {
   shared.settiAuth ??= createAuth(appDb());

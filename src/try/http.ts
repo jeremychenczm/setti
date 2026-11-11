@@ -1,17 +1,26 @@
+/**
+ * /api/try starts, resumes, prepares and ends a visitor's demo, and
+ * /api/demo/persona switches the visitor between the demo's people. A demo run
+ * is a demo studio with its own two accounts; the visitor's browser is signed in
+ * as one of them, so every other route reads the demo as it reads a real studio.
+ */
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { DEMO_VISITOR_COOKIE as VISITOR_COOKIE, RETIRED_DEMO_COOKIES, privateDemoCookieOptions } from "@/accounts/cookie-policy";
+import { appAuth } from "@/auth/app";
 import { SandboxGuardError } from "@/config/paypalEnv";
-import { createDb } from "@/db/client";
+import { appDb } from "@/db/shared";
 import { HOME_SCENARIO } from "@/demo/living-dining";
+import { requestActor } from "@/http/actor";
+import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
+import { demoRunOf, type Actor } from "@/http/identity";
+import { safeNextPath } from "@/http/next-path";
 import { isSameOriginRequest } from "@/http/origin";
-import { ACCOUNT_COOKIE } from "@/accounts/demo";
-import { DEMO_SESSION_COOKIE as SESSION_COOKIE, DEMO_VISITOR_COOKIE as VISITOR_COOKIE, privateDemoCookieOptions } from "@/accounts/cookie-policy";
-import { refreshDemoCookies } from "@/http/demo-cookies";
 import { paypalLinks } from "@/payments/http";
 import { sandboxPayPal, sandboxTestCard } from "@/payments/server";
-import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
 import { demoEnd, endDemo, markDemoEnded } from "./activity";
+import { ensureDemoPeople, findDemoPerson, signInDemoPerson } from "./people";
 import { TRY_PROJECT_HREF, openWillowWorkspace, prepareTry, readTryRuns, readTrySeed, resumeTry, startTry } from "./service";
 
 const uuid = z.uuid();
@@ -24,13 +33,12 @@ const startSchema = z.union([
   z.strictObject({ action: z.literal("workspace"), scenario: z.literal("willow-first-payment-v1") }),
   z.strictObject({ action: z.literal("end") }),
 ]);
-const database = globalThis as typeof globalThis & { settiChatDatabase?: ReturnType<typeof createDb> };
-function db() {
-  database.settiChatDatabase ??= createDb();
-  return database.settiChatDatabase.db;
-}
-function identity(req: NextRequest, name: string): string | null {
-  const parsed = uuid.safeParse(req.cookies.get(name)?.value);
+const personaSchema = z.strictObject({ persona: z.enum(["jordan", "emma"]), next: z.string().max(2_000).optional() });
+const db = appDb;
+
+/** The browser's saved visitor id: it lists the runs this browser started, so one can be resumed. It grants nothing else. */
+function visitorOf(req: NextRequest): string | null {
+  const parsed = uuid.safeParse(req.cookies.get(VISITOR_COOKIE)?.value);
   return parsed.success ? parsed.data : null;
 }
 function perHour(): number {
@@ -38,12 +46,29 @@ function perHour(): number {
   return Number.isInteger(value) && value >= 0 ? value : 30;
 }
 const failure = (code: string, error: string, status: number) => NextResponse.json({ code, error }, { status, headers });
-function retainIdentity(response: NextResponse, req: NextRequest, session: string, visitorId: string) {
-  const options = privateDemoCookieOptions(req.nextUrl.protocol);
-  response.cookies.set(SESSION_COOKIE, session, options);
-  response.cookies.set(VISITOR_COOKIE, visitorId, options);
-  return refreshDemoCookies(response, req);
+
+/**
+ * Passes the sign-in's session cookie on to the browser. The cookies go through
+ * `response.cookies`, which rewrites the whole Set-Cookie header on each change,
+ * so a raw header appended beside it could be dropped. Parsing loses an empty
+ * value and `Max-Age=0`, so a cookie emptied by sign-out is set to expire now.
+ */
+function withCookies(response: NextResponse, from: Response): NextResponse {
+  for (const cookie of new NextResponse(null, { headers: from.headers }).cookies.getAll()) {
+    response.cookies.set(cookie.value ? cookie : { ...cookie, value: "", maxAge: 0, expires: new Date(0) });
+  }
+  return response;
 }
+
+/** Signs the browser in as the run's designer, unless it already is one of the run's people. */
+async function enterRun(response: NextResponse, req: NextRequest, actor: Actor | null, runId: string, visitorId: string): Promise<NextResponse> {
+  response.cookies.set(VISITOR_COOKIE, visitorId, privateDemoCookieOptions(req.nextUrl.protocol));
+  const auth = appAuth();
+  const people = await ensureDemoPeople(db(), auth, runId);
+  if (actor && demoRunOf(actor) === runId) return response;
+  return withCookies(response, await signInDemoPerson(db(), auth, people.jordan, actor?.authSessionId));
+}
+
 async function state(session: string | null, visitorId: string | null, href = TRY_PROJECT_HREF) {
   const [seed, previousRuns, demoEnded] = await Promise.all([readTrySeed(db(), session), readTryRuns(db(), visitorId, session), session ? demoEnd(db(), session).catch(() => null) : null]);
   return { seed, href, previousRuns, hasWorkspace: !!session, scenario: seed?.scenario ?? HOME_SCENARIO, demoEnded };
@@ -59,12 +84,16 @@ async function endOnReset(session: string) {
   try { paypal = sandboxPayPal(); } catch { return; }
   void endDemo(db(), paypal, session, "visitor").catch(() => undefined);
 }
+
 export async function getTryResponse(req: NextRequest) {
-  const session = identity(req, SESSION_COOKIE);
-  noteRequest(session);
-  try { return refreshDemoCookies(NextResponse.json(await state(session, identity(req, VISITOR_COOKIE)), { headers }), req); }
-  catch { return failure("STORAGE_UNAVAILABLE", "Demo storage is unavailable. Make sure the database is running and migrated.", 503); }
+  try {
+    const actor = await requestActor(req);
+    const current = actor ? demoRunOf(actor) : null;
+    noteRequest(current);
+    return NextResponse.json(await state(current, visitorOf(req)), { headers });
+  } catch { return failure("STORAGE_UNAVAILABLE", "Demo storage is unavailable. Make sure the database is running and migrated.", 503); }
 }
+
 export async function postTryResponse(req: NextRequest) {
   if (!isSameOriginRequest(req)) return failure("FORBIDDEN", "Start the demo from this app's /try page.", 403);
   const text = await req.text();
@@ -72,27 +101,30 @@ export async function postTryResponse(req: NextRequest) {
   let body: z.infer<typeof startSchema>;
   try { body = startSchema.parse(text ? JSON.parse(text) : {}); }
   catch { return failure("INVALID_REQUEST", "Choose a supported demo action and scenario.", 400); }
-  if (body.action === "end") {
-    const ending = identity(req, SESSION_COOKIE);
-    if (ending) await endOnReset(ending);
-    const response = NextResponse.json({ reset: true, href: "/try" }, { headers });
-    const options = { ...privateDemoCookieOptions(req.nextUrl.protocol), maxAge: 0, expires: new Date(0) };
-    response.cookies.set(SESSION_COOKIE, "", options);
-    response.cookies.set(VISITOR_COOKIE, "", options);
-    response.cookies.set(ACCOUNT_COOKIE, "", { ...options, httpOnly: false });
-    return response;
-  }
-  const current = identity(req, SESSION_COOKIE), visitorId = identity(req, VISITOR_COOKIE);
-  noteRequest(current);
   try {
+    // Ending must work even when sign-ins cannot be read: it still clears this browser's cookies.
+    const actor = body.action === "end" ? await requestActor(req).catch(() => null) : await requestActor(req);
+    const current = actor ? demoRunOf(actor) : null, visitorId = visitorOf(req);
+    noteRequest(current);
+    if (body.action === "end") {
+      if (current) await endOnReset(current);
+      const response = NextResponse.json({ reset: true, href: "/try" }, { headers });
+      // Signing out ends the demo person's session; a real account's session is left alone.
+      if (current) withCookies(response, await appAuth().api.signOut({ headers: req.headers, asResponse: true }));
+      const options = { ...privateDemoCookieOptions(req.nextUrl.protocol), maxAge: 0, expires: new Date(0) };
+      response.cookies.set(VISITOR_COOKIE, "", options);
+      for (const { name, httpOnly } of RETIRED_DEMO_COOKIES) if (req.cookies.has(name)) response.cookies.set(name, "", { ...options, httpOnly });
+      return response;
+    }
     if (body.action === "workspace") {
-      const session = await openWillowWorkspace(db(), current), visitor = visitorId ?? randomUUID();
-      return retainIdentity(NextResponse.json({ ...await state(session, visitor, "/quotes/willow"), reused: !!current }, { headers }), req, session, visitor);
+      if (!current) return failure("FORBIDDEN", "Start the demo from /try first.", 403);
+      await openWillowWorkspace(db(), current);
+      return NextResponse.json({ ...await state(current, visitorId, "/quotes/willow"), reused: true }, { headers });
     }
     if (body.action === "resume") {
       const seed = await resumeTry(db(), visitorId, body.runId);
       if (!seed || !visitorId) return failure("NOT_FOUND", "This run does not belong to this browser's saved visitor.", 404);
-      return retainIdentity(NextResponse.json({ ...await state(seed.runId, visitorId), reused: true }, { headers }), req, seed.runId, visitorId);
+      return await enterRun(NextResponse.json({ ...await state(seed.runId, visitorId), reused: true }, { headers }), req, actor, seed.runId, visitorId);
     }
     if (body.action === "prepare") {
       if (!current || current !== body.runId) return failure("FORBIDDEN", "Resume this private run before preparing it.", 403);
@@ -107,9 +139,34 @@ export async function postTryResponse(req: NextRequest) {
     }
     const result = await startTry({ db: db(), perHour: perHour() }, current, { restart: body.restart, visitorId: visitorId ?? randomUUID(), scenario: HOME_SCENARIO });
     if (result.kind === "limited") return failure("LIMITED", "The demo has prepared many projects in the last hour. Try again in a few minutes.", 429);
-    return retainIdentity(NextResponse.json({ ...await state(result.session, result.visitorId), reused: result.reused }, { status: result.kind === "ready" ? 200 : 202, headers }), req, result.session, result.visitorId);
+    const response = NextResponse.json({ ...await state(result.session, result.visitorId), reused: result.reused }, { status: result.kind === "ready" ? 200 : 202, headers });
+    return await enterRun(response, req, actor, result.session, result.visitorId);
   } catch (error) {
     if (error instanceof SandboxGuardError) return failure("PAYPAL_NOT_CONFIGURED", "PayPal Sandbox is not configured on this server.", 503);
     return failure("STORAGE_UNAVAILABLE", "The saved run could not be read or advanced. Reload to check the same run before retrying.", 503);
+  }
+}
+
+/** A demo visitor becomes the demo's other person: the browser is signed in as them. */
+export async function postDemoPersonaResponse(req: NextRequest) {
+  if (!isSameOriginRequest(req)) return failure("FORBIDDEN", "Switch people from this app's pages.", 403);
+  const text = await req.text();
+  if (text.length > 4_096) return failure("INVALID_REQUEST", "The request is too large.", 413);
+  let body: z.infer<typeof personaSchema>;
+  try { body = personaSchema.parse(JSON.parse(text)); }
+  catch { return failure("INVALID_REQUEST", "Choose Jordan or Emma.", 400); }
+  try {
+    const actor = await requestActor(req);
+    if (!actor) return failure("SIGN_IN_REQUIRED", "Start the demo from /try first.", 401);
+    const run = demoRunOf(actor);
+    if (!run) return failure("FORBIDDEN", "Only a demo visitor switches between the demo's people.", 403);
+    noteRequest(run);
+    const next = safeNextPath(body.next) ?? TRY_PROJECT_HREF;
+    if (actor.demoPersona === body.persona) return NextResponse.json({ next }, { headers });
+    const person = await findDemoPerson(db(), run, body.persona);
+    if (!person) return failure("NOT_FOUND", "This demo has no such person. Start a new demo from /try.", 404);
+    return withCookies(NextResponse.json({ next }, { headers }), await signInDemoPerson(db(), appAuth(), person, actor.authSessionId));
+  } catch {
+    return failure("STORAGE_UNAVAILABLE", "The demo could not switch people right now. Try again shortly.", 503);
   }
 }

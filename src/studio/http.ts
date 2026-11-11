@@ -1,34 +1,27 @@
-import { noteRequest } from "@/http/demo-activity";
-import { takeAiBudget } from "@/http/ai-budget";
-import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ACCOUNT_COOKIE, accountOrDefault } from "@/accounts/demo";
-import { DEMO_SESSION_COOKIE, privateDemoCookieOptions } from "@/accounts/cookie-policy";
 import { aiConfigured } from "@/ai/model";
-import { createDb } from "@/db/client";
+import { appDb } from "@/db/shared";
 import { studioCase } from "@/demo/studio-cases";
+import { takeAiBudget } from "@/http/ai-budget";
+import { noteRequest } from "@/http/demo-activity";
 import { isSameOriginRequest } from "@/http/origin";
+import { isRefusal, studioScope } from "@/http/scope";
 import { callStudioModel } from "./model";
 import { StudioChatError, studioThreadStore } from "./store";
 import type { StudioThreadSnapshot } from "./types";
 
 const inputSchema = z.strictObject({ id: z.uuid(), text: z.string().trim().min(1).max(8000) });
-const database = globalThis as typeof globalThis & { settiChatDatabase?: ReturnType<typeof createDb> };
-function store() { database.settiChatDatabase ??= createDb(); return studioThreadStore(database.settiChatDatabase.db); }
+function store() { return studioThreadStore(appDb()); }
 
 export async function studioChatResponse(req: NextRequest, id: string) {
   const project = studioCase(id);
   if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
-  if (accountOrDefault(req.cookies.get(ACCOUNT_COOKIE)?.value).role !== "designer") return NextResponse.json({ error: "This project belongs to the designer's studio." }, { status: 403 });
-  const cookie = z.uuid().safeParse(req.cookies.get(DEMO_SESSION_COOKIE)?.value);
-  if (cookie.success) noteRequest(cookie.data);
-  const session = cookie.success ? cookie.data : randomUUID();
-  const response = (body: unknown, status = 200) => {
-    const res = NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
-    res.cookies.set(DEMO_SESSION_COOKIE, session, privateDemoCookieOptions(req.nextUrl.protocol));
-    return res;
-  };
+  const scope = await studioScope(req);
+  if (isRefusal(scope)) return NextResponse.json({ code: scope.code, error: scope.status === 403 ? "This project belongs to the designer's studio." : scope.error }, { status: scope.status });
+  const session = scope.sessionId;
+  noteRequest(session);
+  const response = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });
   const snapshot = (messages: StudioThreadSnapshot["messages"]): StudioThreadSnapshot => ({ projectId: project.id, messages, readOnly: project.stage === "settled", aiConfigured: aiConfigured() });
   try {
     if (req.method === "GET") return response(snapshot(await store().read(session, project)));

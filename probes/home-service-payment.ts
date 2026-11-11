@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { inArray } from "drizzle-orm";
-import { accountOrDefault } from "../src/accounts/demo";
+import { findAccount } from "../src/accounts/demo";
 import { createDb } from "../src/db/client";
 import { paypalCalls } from "../src/db/schema";
 import { sandboxPayPal, sandboxTestCard } from "../src/payments/server";
@@ -25,7 +25,7 @@ async function main() {
     await ensureHomeWorkspace(db, session);
     const deps = { db, perHour: 1, paypal: sandboxPayPal(), testCard: sandboxTestCard(), links: (id: string) => ({ returnUrl: `http://localhost:3002/api/payments/paypal/return?op=${id}`, cancelUrl: `http://localhost:3002/api/payments/paypal/cancel?op=${id}` }) };
     const ids = await prepareHomeServices(deps, session);
-    const view = await servicesPaymentView(db, session, "maple", accountOrDefault("emma"), null);
+    const view = await servicesPaymentView(db, session, "maple", findAccount("emma")!, null);
     assert.equal(view.basis?.version, 1);
     assert.equal(view.dueCents, 0);
     assert.equal(view.services[0]?.capturedCents, 100_000);

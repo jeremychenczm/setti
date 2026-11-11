@@ -179,7 +179,7 @@ export function createApprovalStore(db: Db) {
     return {
       view: changeOrderView(found.document, found.status, decision), canDecide,
       clientName: owner ? clientSignatureName(found.document) : null,
-      reason: !owner ? "This share link is read-only. Open it from the browser that owns the demo case to act as its demo client."
+      reason: !owner ? "This share link is read-only. Sign in as the project's client to confirm it."
         : decision ? "The client's decision has been recorded for this exact version."
           : found.status === "superseded" ? "A newer client version has replaced this document."
             : found.activeRunId ? "Wait for the current AI reply before confirming this version." : null,

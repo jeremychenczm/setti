@@ -1,9 +1,14 @@
-import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
+/**
+ * GET and POST /api/change-orders/{id}/approval. Anyone with the link reads the
+ * frozen version; only the project's client, signed in, confirms it.
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ACCOUNT_COOKIE, accountOrDefault, clientOf } from "@/accounts/demo";
-import type { CaseKey } from "@/chat/types";
+import { clientOf } from "@/accounts/demo";
+import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
+import { orderScope, type OrderScope } from "@/http/order-scope";
 import { isSameOriginRequest } from "@/http/origin";
+import { NOT_YOUR_PROJECT, SIGN_IN_REQUIRED } from "@/http/scope";
 import { afterClientConfirmed } from "@/payments/http";
 import { approvalStore } from "./server";
 import { ApprovalStoreError } from "./store";
@@ -18,22 +23,21 @@ const schema = z.strictObject({
 });
 class HttpError extends Error { constructor(message: string, readonly status: number) { super(message); } }
 
-function session(req: NextRequest): string | null {
-  const parsed = uuid.safeParse(req.cookies.get("setti-demo-chat")?.value);
-  if (!parsed.success) return null;
-  noteRequest(parsed.data);
-  return parsed.data;
+/** A signed-in actor's standing on one change order: the studio its data lives in, and why they may not confirm it. */
+interface Standing { studioId: string; refusal: string | null }
+
+function standing({ actor, owner, account }: OrderScope): Standing | null {
+  if (!actor || !owner || !account) return null;
+  noteRequest(owner.studioId);
+  // A demo visitor plays both sides, so the refusal names the demo person to switch to.
+  const refusal = account.role === "client" ? null : actor.demoPersona
+    ? `Signed in as ${account.name}. Switch to ${clientOf(owner.key).name} from the avatar at the bottom left of the chat to confirm this version.`
+    : `Signed in as ${account.name}, a designer. Only the project's client confirms this version.`;
+  return { studioId: owner.studioId, refusal };
 }
 
-/** Only the project's client account confirms a version; anyone else in the session reads it. */
-function notTheClient(req: NextRequest, key: CaseKey): string | null {
-  const account = accountOrDefault(req.cookies.get(ACCOUNT_COOKIE)?.value);
-  const client = clientOf(key);
-  return account.id === client.id ? null : `Signed in as ${account.name}. Switch to ${client.name} from the avatar at the bottom left of the chat to confirm this version.`;
-}
-
-function asViewer(req: NextRequest, workspace: ApprovalWorkspace): ApprovalWorkspace {
-  const refusal = workspace.canDecide ? notTheClient(req, workspace.view.order.projectKey) : null;
+function asViewer(workspace: ApprovalWorkspace, viewer: Standing | null): ApprovalWorkspace {
+  const refusal = workspace.canDecide ? viewer?.refusal : null;
   return refusal ? { ...workspace, canDecide: false, reason: refusal } : workspace;
 }
 
@@ -67,26 +71,28 @@ function fail(error: unknown) {
 export async function getApprovalResponse(req: NextRequest, id: string) {
   if (!uuid.safeParse(id).success) return NextResponse.json({ code: "NOT_FOUND", error: "Change order not found." }, { status: 404, headers });
   try {
-    const workspace = await approvalStore().getWorkspace(session(req), id);
-    return workspace ? NextResponse.json(asViewer(req, workspace), { headers }) : NextResponse.json({ code: "NOT_FOUND", error: "Change order not found." }, { status: 404, headers });
+    const viewer = standing(await orderScope(req, id));
+    const workspace = await approvalStore().getWorkspace(viewer?.studioId ?? null, id);
+    return workspace ? NextResponse.json(asViewer(workspace, viewer), { headers }) : NextResponse.json({ code: "NOT_FOUND", error: "Change order not found." }, { status: 404, headers });
   } catch (error) { return fail(error); }
 }
 
 export async function postApprovalResponse(req: NextRequest, id: string) {
   if (!uuid.safeParse(id).success) return NextResponse.json({ code: "NOT_FOUND", error: "Change order not found." }, { status: 404, headers });
-  const sessionId = session(req);
-  if (!sessionId) return NextResponse.json({ code: "FORBIDDEN", error: "This shared link is view-only. Confirm from the demo session that owns the project." }, { status: 403, headers });
-  const ended = await refuseIfEnded(sessionId);
-  if (ended) return ended;
   try {
+    const scope = await orderScope(req, id);
+    if (!scope.actor) return NextResponse.json({ code: SIGN_IN_REQUIRED.code, error: SIGN_IN_REQUIRED.error }, { status: SIGN_IN_REQUIRED.status, headers });
     const input = schema.parse(await boundedJson(req));
-    const current = await approvalStore().getWorkspace(sessionId, id);
+    const viewer = standing(scope);
+    if (!viewer) return NextResponse.json({ code: NOT_YOUR_PROJECT.code, error: NOT_YOUR_PROJECT.error }, { status: NOT_YOUR_PROJECT.status, headers });
+    const ended = await refuseIfEnded(viewer.studioId);
+    if (ended) return ended;
+    if (viewer.refusal) return NextResponse.json({ code: "FORBIDDEN", error: viewer.refusal }, { status: 403, headers });
+    const current = await approvalStore().getWorkspace(viewer.studioId, id);
     if (!current) return NextResponse.json({ code: "NOT_FOUND", error: "Change order not found." }, { status: 404, headers });
-    const refusal = notTheClient(req, current.view.order.projectKey);
-    if (refusal) return NextResponse.json({ code: "FORBIDDEN", error: refusal }, { status: 403, headers });
-    const decided = await approvalStore().decide(sessionId, id, input);
+    const decided = await approvalStore().decide(viewer.studioId, id, input);
     // The confirmation is saved first; a failed hold or hand-off after it does not undo it, and the payments panel offers the holds by hand.
-    if (decided.view.decision?.decision === "approved") await afterClientConfirmed(req, sessionId, current.view.order.projectKey, id).catch(() => undefined);
-    return NextResponse.json(asViewer(req, decided), { headers });
+    if (decided.view.decision?.decision === "approved") await afterClientConfirmed(req, viewer.studioId, current.view.order.projectKey, id).catch(() => undefined);
+    return NextResponse.json(asViewer(decided, viewer), { headers });
   } catch (error) { return fail(error); }
 }

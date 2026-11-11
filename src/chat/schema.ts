@@ -3,6 +3,7 @@ import { check, integer, jsonb, pgTable, primaryKey, serial, text, timestamp, un
 import type { AiStage, AiState, CaseKey, ChangeDraft, HumanActor } from "./types";
 import type { MoneyAnswer } from "../ai/money-types";
 import type { QuoteAnswer } from "../ai/quote-query";
+import { users } from "../auth/schema";
 
 /** Demo conversations are independent of real projects, quotes and payments. */
 export const chatCases = pgTable("chat_cases", {
@@ -23,6 +24,14 @@ export const chatCases = pgTable("chat_cases", {
   check("chat_cases_project_key_valid", sql`${t.projectKey} IN ('willow', 'maple')`),
   check("chat_cases_active_run_complete", sql`(${t.activeMessageId} IS NULL AND ${t.activeRunId} IS NULL AND ${t.activeRunStartedAt} IS NULL) OR (${t.activeMessageId} IS NOT NULL AND ${t.activeRunId} IS NOT NULL AND ${t.activeRunStartedAt} IS NOT NULL)`),
 ]);
+
+/** The people who open a project as its client. Studio members see every project of their studio; a client sees only these. */
+export const projectClients = pgTable("project_clients", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  caseId: uuid("case_id").notNull().references(() => chatCases.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [unique("project_clients_one_per_user").on(t.caseId, t.userId)]);
 
 export const chatMessages = pgTable("chat_messages", {
   caseId: uuid("case_id").notNull().references(() => chatCases.id, { onDelete: "cascade" }),

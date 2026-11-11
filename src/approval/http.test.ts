@@ -1,14 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Actor } from "@/http/identity";
+import { clientActor, designerActor } from "@/http/testing";
 import { ApprovalStoreError } from "./store";
 import { getApprovalResponse, postApprovalResponse } from "./http";
 
-const mock = vi.hoisted(() => ({ getWorkspace: vi.fn(), decide: vi.fn() }));
+const mock = vi.hoisted(() => ({ getWorkspace: vi.fn(), decide: vi.fn(), ownerOf: vi.fn(), requestActor: vi.fn() }));
 vi.mock("./server", () => ({ approvalStore: () => mock }));
+vi.mock("@/http/actor", () => ({ requestActor: mock.requestActor }));
+vi.mock("@/pricing/owner", () => ({ changeOrderOwner: (_db: unknown, id: string) => mock.ownerOf(id) }));
+vi.mock("@/db/client", () => ({ createDb: () => ({ db: {}, pool: {} }) }));
 
 const orderId = randomUUID();
+/** The studio that owns the change order's project. */
 const sessionId = randomUUID();
+const client = clientActor(sessionId, ["willow"]);
 const origin = "http://localhost:3002";
 const path = `/api/change-orders/${orderId}/approval`;
 
@@ -21,9 +28,8 @@ function input() {
 
 function request(options: {
   method?: "GET" | "POST";
-  cookie?: string;
-  /** The demo account; the project's client unless a test says otherwise. */
-  account?: string | null;
+  /** Who is signed in; the project's client unless a test says otherwise. */
+  actor?: Actor | null;
   body?: unknown;
   rawBody?: string;
   headers?: Record<string, string>;
@@ -31,14 +37,12 @@ function request(options: {
   omitContentType?: boolean;
 } = {}) {
   const method = options.method ?? "GET";
-  const account = options.account === undefined ? "sofia" : options.account;
-  const cookies = [options.cookie && `setti-demo-chat=${options.cookie}`, account && `setti-demo-account=${account}`].filter(Boolean).join("; ");
+  mock.requestActor.mockResolvedValue(options.actor === undefined ? client : options.actor);
   return new NextRequest(`${origin}${path}`, {
     method,
     headers: {
       ...(method === "POST" && !options.omitOrigin ? { Origin: origin } : {}),
       ...(method === "POST" && !options.omitContentType ? { "Content-Type": "application/json" } : {}),
-      ...(cookies ? { Cookie: cookies } : {}),
       ...options.headers,
     },
     ...(options.rawBody !== undefined ? { body: options.rawBody } : options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
@@ -48,6 +52,7 @@ function request(options: {
 describe("client approval HTTP boundaries", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mock.ownerOf.mockResolvedValue({ studioId: sessionId, key: "willow" });
     mock.getWorkspace.mockResolvedValue({
       view: { order: { id: orderId, version: 3, projectKey: "willow" }, status: "awaiting_client_confirmation" },
       canDecide: false, clientName: null, reason: "Read-only share link.", fundingPlan: null,
@@ -59,20 +64,20 @@ describe("client approval HTTP boundaries", () => {
   });
 
   it.each(["127.0.0.1:3002", "localhost:3002"])("accepts a client decision from the actual %s browser origin", async (host) => {
-    const req = request({ method: "POST", cookie: sessionId, body: input(), headers: { Host: host, Origin: "http://" + host } });
+    const req = request({ method: "POST", body: input(), headers: { Host: host, Origin: "http://" + host } });
     expect((await postApprovalResponse(req, orderId)).status).toBe(200);
     expect(mock.decide).toHaveBeenCalledTimes(1);
   });
   it("rejects opaque and alias-forged client decision origins", async () => {
     for (const origin of ["null", "http://localhost:3002", "https://attacker.example"]) {
-      const req = request({ method: "POST", cookie: sessionId, body: input(), headers: { Host: "127.0.0.1:3002", Origin: origin } });
+      const req = request({ method: "POST", body: input(), headers: { Host: "127.0.0.1:3002", Origin: origin } });
       expect((await postApprovalResponse(req, orderId)).status).toBe(403);
     }
     expect(mock.decide).not.toHaveBeenCalled();
   });
 
-  it("allows public reads without creating a session or granting a confirmation cookie", async () => {
-    const response = await getApprovalResponse(request(), orderId);
+  it("allows public reads when signed out, without setting a cookie", async () => {
+    const response = await getApprovalResponse(request({ actor: null }), orderId);
     expect(response.status).toBe(200);
     expect(mock.getWorkspace).toHaveBeenCalledWith(null, orderId);
     expect(response.headers.get("set-cookie")).toBeNull();
@@ -81,23 +86,28 @@ describe("client approval HTTP boundaries", () => {
     expect(await response.json()).toMatchObject({ canDecide: false, clientName: null, fundingPlan: null });
   });
 
-  it("passes the existing owner cookie through without replacing it", async () => {
-    const response = await getApprovalResponse(request({ cookie: sessionId }), orderId);
-    expect(response.status).toBe(200);
-    expect(mock.getWorkspace).toHaveBeenCalledWith(sessionId, orderId);
-    expect(response.headers.get("set-cookie")).toBeNull();
+  it("reads as the owning studio for someone in the project", async () => {
+    for (const actor of [client, designerActor(sessionId)]) {
+      mock.getWorkspace.mockClear();
+      const response = await getApprovalResponse(request({ actor }), orderId);
+      expect(response.status).toBe(200);
+      expect(mock.getWorkspace).toHaveBeenCalledWith(sessionId, orderId);
+      expect(response.headers.get("set-cookie")).toBeNull();
+    }
   });
 
-  it("treats malformed cookies as anonymous public reads", async () => {
-    const response = await getApprovalResponse(request({ cookie: "not-a-session" }), orderId);
-    expect(response.status).toBe(200);
-    expect(mock.getWorkspace).toHaveBeenCalledWith(null, orderId);
-    expect(response.headers.get("set-cookie")).toBeNull();
+  it("gives someone outside the project only the public read", async () => {
+    for (const actor of [designerActor(), clientActor(randomUUID(), ["willow"]), clientActor(sessionId, ["maple"])]) {
+      mock.getWorkspace.mockClear();
+      expect((await getApprovalResponse(request({ actor }), orderId)).status).toBe(200);
+      expect(mock.getWorkspace).toHaveBeenCalledWith(null, orderId);
+    }
   });
 
   it("rejects invalid order IDs before reading or writing storage", async () => {
     expect((await getApprovalResponse(request(), "not-an-id")).status).toBe(404);
-    expect((await postApprovalResponse(request({ method: "POST", cookie: sessionId, body: input() }), "not-an-id")).status).toBe(404);
+    expect((await postApprovalResponse(request({ method: "POST", body: input() }), "not-an-id")).status).toBe(404);
+    expect(mock.ownerOf).not.toHaveBeenCalled();
     expect(mock.getWorkspace).not.toHaveBeenCalled();
     expect(mock.decide).not.toHaveBeenCalled();
   });
@@ -110,19 +120,30 @@ describe("client approval HTTP boundaries", () => {
     expect(response.headers.get("set-cookie")).toBeNull();
   });
 
-  it.each([undefined, "not-a-session"])("rejects confirmation without an existing valid session: %s", async (cookie) => {
-    const response = await postApprovalResponse(request({ method: "POST", cookie, body: input() }), orderId);
-    expect(response.status).toBe(403);
-    expect(await response.json()).toMatchObject({ code: "FORBIDDEN" });
+  it("asks a signed-out visitor to sign in before confirming", async () => {
+    const response = await postApprovalResponse(request({ method: "POST", actor: null, body: input() }), orderId);
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ code: "SIGN_IN_REQUIRED" });
     expect(response.headers.get("set-cookie")).toBeNull();
+    expect(mock.decide).not.toHaveBeenCalled();
+  });
+
+  it("refuses a confirmation from someone outside the project", async () => {
+    for (const actor of [designerActor(), clientActor(randomUUID(), ["willow"]), clientActor(sessionId, ["maple"])]) {
+      const response = await postApprovalResponse(request({ method: "POST", actor, body: input() }), orderId);
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ code: "FORBIDDEN" });
+    }
+    mock.ownerOf.mockResolvedValueOnce(null);
+    expect((await postApprovalResponse(request({ method: "POST", body: input() }), orderId)).status).toBe(403);
     expect(mock.decide).not.toHaveBeenCalled();
   });
 
   it("requires the exact same origin for writes, including an Origin header", async () => {
     const requests = [
-      request({ method: "POST", cookie: sessionId, body: input(), headers: { Origin: "https://other.example" } }),
-      request({ method: "POST", cookie: sessionId, body: input(), headers: { Origin: "https://localhost:3002" } }),
-      request({ method: "POST", cookie: sessionId, body: input(), omitOrigin: true }),
+      request({ method: "POST", body: input(), headers: { Origin: "https://other.example" } }),
+      request({ method: "POST", body: input(), headers: { Origin: "https://localhost:3002" } }),
+      request({ method: "POST", body: input(), omitOrigin: true }),
     ];
     for (const req of requests) {
       const response = await postApprovalResponse(req, orderId);
@@ -134,15 +155,15 @@ describe("client approval HTTP boundaries", () => {
 
   it("requires JSON content type before storage is touched", async () => {
     const requests = [
-      request({ method: "POST", cookie: sessionId, body: input(), headers: { "Content-Type": "text/plain" } }),
-      request({ method: "POST", cookie: sessionId, body: input(), omitContentType: true }),
+      request({ method: "POST", body: input(), headers: { "Content-Type": "text/plain" } }),
+      request({ method: "POST", body: input(), omitContentType: true }),
     ];
     for (const req of requests) expect((await postApprovalResponse(req, orderId)).status).toBe(415);
     expect(mock.decide).not.toHaveBeenCalled();
   });
 
   it("bounds streamed UTF-8 bytes even without a content-length header", async () => {
-    const req = request({ method: "POST", cookie: sessionId, body: { ...input(), note: "€".repeat(6000) } });
+    const req = request({ method: "POST", body: { ...input(), note: "€".repeat(6000) } });
     expect(req.headers.get("content-length")).toBeNull();
     const response = await postApprovalResponse(req, orderId);
     expect(response.status).toBe(413);
@@ -152,8 +173,8 @@ describe("client approval HTTP boundaries", () => {
 
   it("rejects absent bodies and malformed JSON without leaking parser details", async () => {
     for (const req of [
-      request({ method: "POST", cookie: sessionId }),
-      request({ method: "POST", cookie: sessionId, rawBody: "{broken-json" }),
+      request({ method: "POST" }),
+      request({ method: "POST", rawBody: "{broken-json" }),
     ]) {
       const response = await postApprovalResponse(req, orderId);
       expect(response.status).toBe(400);
@@ -176,7 +197,7 @@ describe("client approval HTTP boundaries", () => {
     { actor: "client" },
     { approved: true },
   ])("rejects invalid acknowledgment, identity, hashes and injected fields: %j", async (patch) => {
-    const response = await postApprovalResponse(request({ method: "POST", cookie: sessionId, body: { ...input(), ...patch } }), orderId);
+    const response = await postApprovalResponse(request({ method: "POST", body: { ...input(), ...patch } }), orderId);
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ code: "INVALID_REQUEST" });
     expect(mock.decide).not.toHaveBeenCalled();
@@ -184,7 +205,7 @@ describe("client approval HTTP boundaries", () => {
 
   it("passes validated decisions and trimmed names through with the owner session and frozen hashes", async () => {
     const body = { ...input(), signature: "  Avery Chen  ", note: "  Please proceed.  " };
-    const response = await postApprovalResponse(request({ method: "POST", cookie: sessionId, body }), orderId);
+    const response = await postApprovalResponse(request({ method: "POST", body }), orderId);
     expect(response.status).toBe(200);
     expect(mock.decide).toHaveBeenCalledWith(sessionId, orderId, { ...input(), signature: "Avery Chen", note: "Please proceed." });
     expect(response.headers.get("set-cookie")).toBeNull();
@@ -193,39 +214,42 @@ describe("client approval HTTP boundaries", () => {
     expect(await response.json()).toMatchObject({ view: { status: "approved" }, fundingPlan: { executable: false } });
   });
 
-  it.each(["jordan", null])("lets only the project's client account confirm, not %s", async (account) => {
-    const response = await postApprovalResponse(request({ method: "POST", cookie: sessionId, account, body: input() }), orderId);
+  it.each([
+    { who: "the demo designer", actor: designerActor(sessionId, { persona: "jordan" }), says: "Switch to Sofia Martinez" },
+    { who: "a designer of the studio", actor: designerActor(sessionId), says: "Only the project's client confirms" },
+  ])("lets only the project's client confirm, not $who", async ({ actor, says }) => {
+    const response = await postApprovalResponse(request({ method: "POST", actor, body: input() }), orderId);
     expect(response.status).toBe(403);
-    expect(await response.json()).toMatchObject({ code: "FORBIDDEN", error: expect.stringContaining("Switch to Sofia Martinez") });
+    expect(await response.json()).toMatchObject({ code: "FORBIDDEN", error: expect.stringContaining(says) });
     expect(mock.decide).not.toHaveBeenCalled();
   });
 
-  it("shows the owner session's version as read-only to anyone but the client", async () => {
+  it("shows the studio's version as read-only to anyone but the client", async () => {
     mock.getWorkspace.mockResolvedValue({
       view: { order: { id: orderId, version: 3, projectKey: "willow" }, status: "awaiting_client_confirmation" },
       canDecide: true, clientName: "Sofia Martinez", reason: null, fundingPlan: null,
     });
-    expect(await (await getApprovalResponse(request({ cookie: sessionId }), orderId)).json()).toMatchObject({ canDecide: true, reason: null });
-    expect(await (await getApprovalResponse(request({ cookie: sessionId, account: "jordan" }), orderId)).json()).toMatchObject({ canDecide: false, reason: expect.stringContaining("Signed in as Jordan Lee") });
+    expect(await (await getApprovalResponse(request(), orderId)).json()).toMatchObject({ canDecide: true, reason: null });
+    expect(await (await getApprovalResponse(request({ actor: designerActor(sessionId, { persona: "jordan" }) }), orderId)).json()).toMatchObject({ canDecide: false, reason: expect.stringContaining("Signed in as Jordan Lee") });
   });
 
   it("passes a request for changes to storage instead of treating it as approval", async () => {
     const body = { ...input(), decision: "changes_requested", note: "Please check the finish." };
-    const response = await postApprovalResponse(request({ method: "POST", cookie: sessionId, body }), orderId);
+    const response = await postApprovalResponse(request({ method: "POST", body }), orderId);
     expect(response.status).toBe(200);
     expect(mock.decide).toHaveBeenCalledWith(sessionId, orderId, body);
   });
 
   it("returns a store-rejected signed name as a client error", async () => {
     mock.decide.mockRejectedValueOnce(new ApprovalStoreError("INVALID_INPUT", "Type the exact demo client name."));
-    const response = await postApprovalResponse(request({ method: "POST", cookie: sessionId, body: { ...input(), signature: "Another person" } }), orderId);
+    const response = await postApprovalResponse(request({ method: "POST", body: { ...input(), signature: "Another person" } }), orderId);
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ code: "INVALID_INPUT", error: "Type the exact demo client name." });
   });
 
   it.each(["CONTENT_CHANGED", "DECISION_CONFLICT", "CASE_BUSY", "STALE_VERSION"])("returns actionable version conflicts: %s", async (code) => {
     mock.decide.mockRejectedValueOnce(new ApprovalStoreError(code, "Reload the current saved version."));
-    const response = await postApprovalResponse(request({ method: "POST", cookie: sessionId, body: input() }), orderId);
+    const response = await postApprovalResponse(request({ method: "POST", body: input() }), orderId);
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ code, error: "Reload the current saved version." });
   });
@@ -235,7 +259,7 @@ describe("client approval HTTP boundaries", () => {
     { code: "NOT_FOUND", status: 404 },
   ])("preserves managed store errors: $code", async ({ code, status }) => {
     mock.decide.mockRejectedValueOnce(new ApprovalStoreError(code, "The document is unavailable to this session."));
-    const response = await postApprovalResponse(request({ method: "POST", cookie: sessionId, body: input() }), orderId);
+    const response = await postApprovalResponse(request({ method: "POST", body: input() }), orderId);
     expect(response.status).toBe(status);
     expect(await response.json()).toMatchObject({ code });
   });
@@ -246,7 +270,7 @@ describe("client approval HTTP boundaries", () => {
     mock.decide.mockRejectedValueOnce(secretError);
     for (const response of [
       await getApprovalResponse(request(), orderId),
-      await postApprovalResponse(request({ method: "POST", cookie: sessionId, body: input() }), orderId),
+      await postApprovalResponse(request({ method: "POST", body: input() }), orderId),
     ]) {
       expect(response.status).toBe(503);
       const body = await response.json();

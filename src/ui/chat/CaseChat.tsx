@@ -32,6 +32,8 @@ interface CaseChatProps {
   quote: QuoteDocument;
   /** The signed-in demo account; it is the only sender of new messages. */
   account: DemoAccount;
+  /** A demo visitor, who can continue as the demo's other person. */
+  demo?: boolean;
   onSwitchAccount: (id: AccountId) => void;
   /** Opens the quote report, at one line when a message is about it. */
   onOpenQuote: (itemId?: string) => void;
@@ -65,7 +67,7 @@ function ReplySteps({ stage, rewrote }: { stage: AiStage | null; rewrote: boolea
   </ol>;
 }
 
-export function CaseChat({ projectKey, quote, account, onSwitchAccount, onOpenQuote, onSelectCase, conversationOptions, onSelectProject, onLatest }: CaseChatProps) {
+export function CaseChat({ projectKey, quote, account, demo = false, onSwitchAccount, onOpenQuote, onSelectCase, conversationOptions, onSelectProject, onLatest }: CaseChatProps) {
   const { snapshot, messages, loading, running, stage, rewrote, aiReplying, error, canRetry, unsavedMessageId, hasUnsent, send, sendQuote, retry, editUnsent, reload } = useCaseChat(projectKey);
   const latest = latestChatMessage(messages);
   const reportLatest = useRef(onLatest);
@@ -251,7 +253,7 @@ export function CaseChat({ projectKey, quote, account, onSwitchAccount, onOpenQu
           </div>
 
           <div className="border-t border-[var(--line)] bg-white px-4 py-3 sm:px-5">
-            {homeExampleAvailable && !text.trim() && <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-stone-50 px-3 py-2 text-[11px] leading-relaxed text-slate-600"><span className="min-w-40 flex-1">{account.role === "designer" ? "Ready to put the discussion into figures? AI will read the conversation and sample supplier documents." : "The design direction is agreed. Jordan prepares the revised quote for your review."}</span><button type="button" onClick={() => document.getElementById("home-discussion-start")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="font-medium text-slate-700 underline underline-offset-2">Read from the start</button>{account.role === "designer" ? <button type="button" disabled={sendDisabled} onClick={prepareHomeQuote} className="rounded-md bg-[var(--primary-fill)] px-2.5 py-1.5 font-semibold text-[var(--on-primary)] disabled:opacity-50">Prepare the revised quote</button> : <button type="button" disabled={sendDisabled} onClick={() => onSwitchAccount("jordan")} className="font-medium text-[var(--primary)] hover:underline disabled:opacity-50">Continue as Jordan</button>}<span className="w-full text-[10px] text-slate-500">{account.role === "designer" ? "The button fills a request. Edit it and send when ready; the resulting proposal still needs your review." : "You can add a message below. A quote becomes agreed only when you review and formally confirm it."}</span></div>}
+            {homeExampleAvailable && !text.trim() && <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-stone-50 px-3 py-2 text-[11px] leading-relaxed text-slate-600"><span className="min-w-40 flex-1">{account.role === "designer" ? "Ready to put the discussion into figures? AI will read the conversation and sample supplier documents." : "The design direction is agreed. Jordan prepares the revised quote for your review."}</span><button type="button" onClick={() => document.getElementById("home-discussion-start")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="font-medium text-slate-700 underline underline-offset-2">Read from the start</button>{account.role === "designer" ? <button type="button" disabled={sendDisabled} onClick={prepareHomeQuote} className="rounded-md bg-[var(--primary-fill)] px-2.5 py-1.5 font-semibold text-[var(--on-primary)] disabled:opacity-50">Prepare the revised quote</button> : demo ? <button type="button" disabled={sendDisabled} onClick={() => onSwitchAccount("jordan")} className="font-medium text-[var(--primary)] hover:underline disabled:opacity-50">Continue as Jordan</button> : null}<span className="w-full text-[10px] text-slate-500">{account.role === "designer" ? "The button fills a request. Edit it and send when ready; the resulting proposal still needs your review." : "You can add a message below. A quote becomes agreed only when you review and formally confirm it."}</span></div>}
             {mixedExampleAvailable && !text.trim() && <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-brand-50/60 px-3 py-2 text-[11px] leading-relaxed text-slate-600"><span className="flex-1">Replace the chair and return the rug in one request. Sample supplier details are available on Review pricing.</span><button disabled={sendDisabled} onClick={tryMixedChange} className="font-medium text-[var(--primary)] hover:underline disabled:opacity-50">Use chair + rug message</button><span className="w-full text-[10px] text-slate-500">Edit the message, then send it to ask AI for a review draft.</span></div>}
             <ChatComposer inputRef={input} text={text} onTextChange={setText} disabled={sendDisabled} onSubmit={submit} onMentionAi={mentionAi}
               onAskAboutPayments={!openingPending ? askAboutFunds : undefined}

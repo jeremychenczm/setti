@@ -297,15 +297,16 @@ export async function cancelPayment(db: Db, paypal: PayPalPayments, sessionId: s
 }
 
 /** The page an operation belongs to, so a returning buyer lands on it: the change order, or the quote for V1. */
-export async function operationPage(db: Pick<Db, "select">, operationId: string): Promise<{ path: string; anchor: string; projectKey: CaseKey | null } | null> {
+export async function operationPage(db: Pick<Db, "select">, operationId: string): Promise<{ path: string; anchor: string; projectKey: CaseKey | null; studioId: string } | null> {
   const [operation] = await db.select().from(paymentOperations).where(eq(paymentOperations.id, operationId));
   if (!operation?.revisionId) return null;
   const [found] = operation.changeOrderId
-    ? await db.select({ projectKey: chatCases.projectKey }).from(changeOrders).innerJoin(chatCases, eq(chatCases.id, changeOrders.caseId)).where(eq(changeOrders.id, operation.changeOrderId))
-    : await db.select({ projectKey: chatCases.projectKey }).from(pricingCases).innerJoin(chatCases, eq(chatCases.id, pricingCases.caseId)).where(eq(pricingCases.baselineRevisionId, operation.revisionId));
+    ? await db.select({ projectKey: chatCases.projectKey, studioId: chatCases.sessionId }).from(changeOrders).innerJoin(chatCases, eq(chatCases.id, changeOrders.caseId)).where(eq(changeOrders.id, operation.changeOrderId))
+    : await db.select({ projectKey: chatCases.projectKey, studioId: chatCases.sessionId }).from(pricingCases).innerJoin(chatCases, eq(chatCases.id, pricingCases.caseId)).where(eq(pricingCases.baselineRevisionId, operation.revisionId));
   if (!found) return null;
   const anchor = operation.servicesHold ? "design-services" : operation.changeOrderId ? "payments" : "item-holds";
-  return operation.changeOrderId ? { path: `/change-orders/${operation.changeOrderId}`, anchor, projectKey: found.projectKey } : { path: `/quotes/${found.projectKey}`, anchor, projectKey: found.projectKey };
+  const page = operation.changeOrderId ? `/change-orders/${operation.changeOrderId}` : `/quotes/${found.projectKey}`;
+  return { path: page, anchor, projectKey: found.projectKey, studioId: found.studioId };
 }
 
 /**

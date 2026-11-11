@@ -1,11 +1,9 @@
-import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
-import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { ACCOUNT_COOKIE, findAccount } from "@/accounts/demo";
 import { isCaseKey } from "@/chat/cases";
+import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
 import { isSameOriginRequest } from "@/http/origin";
-import { privateDemoCookieOptions } from "@/accounts/cookie-policy";
+import { isRefusal, studioScope } from "@/http/scope";
 import { pricingInputSchema, PricingValidationError } from "./calculation";
 import { pricingDb, pricingStore } from "./server";
 import { startLineChange } from "./line-change";
@@ -30,23 +28,19 @@ const lineSchema = z.strictObject({
 });
 const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
 
-/** Pricing is the designer's work in progress; a client account sees the change order once it is issued. */
-function clientRefusal(req: NextRequest, session: string) {
-  return findAccount(req.cookies.get(ACCOUNT_COOKIE)?.value)?.role === "client"
-    ? respond(req, session, { code: "FORBIDDEN", error: "Only the designer can open the pricing review." }, 403) : null;
+/** Pricing is the studio's work in progress; the client sees the change order once it is issued. The studio's id, or the refusal. */
+async function designerStudio(req: NextRequest): Promise<string | NextResponse> {
+  const scope = await studioScope(req);
+  if (isRefusal(scope)) {
+    const error = scope.status === 403 ? "Only the designer can open the pricing review." : scope.error;
+    return NextResponse.json({ code: scope.code, error }, { status: scope.status, headers });
+  }
+  noteRequest(scope.sessionId);
+  return scope.sessionId;
 }
 
-function sessionId(req: NextRequest): string {
-  const parsed = uuid.safeParse(req.cookies.get("setti-demo-chat")?.value);
-  if (!parsed.success) return randomUUID();
-  noteRequest(parsed.data);
-  return parsed.data;
-}
-
-function respond(req: NextRequest, session: string, body: unknown, status = 200) {
-  const response = NextResponse.json(body, { status, headers });
-  response.cookies.set("setti-demo-chat", session, privateDemoCookieOptions(req.nextUrl.protocol));
-  return response;
+function respond(body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers });
 }
 
 class RequestError extends Error {
@@ -71,64 +65,60 @@ async function boundedJson(req: NextRequest): Promise<unknown> {
   catch { throw new RequestError("The pricing request is not valid JSON.", 400); }
 }
 
-function failure(req: NextRequest, session: string, error: unknown) {
-  if (error instanceof RequestError) return respond(req, session, { code: "INVALID_REQUEST", error: error.message }, error.status);
-  if (error instanceof z.ZodError) return respond(req, session, { code: "INVALID_REQUEST", error: "Some pricing fields are invalid. Check the amounts, quantities and version." }, 400);
-  if (error instanceof PricingValidationError) return respond(req, session, { code: "PRICING_NOT_READY", error: error.message, problems: error.problems }, 422);
+function failure(error: unknown) {
+  if (error instanceof RequestError) return respond({ code: "INVALID_REQUEST", error: error.message }, error.status);
+  if (error instanceof z.ZodError) return respond({ code: "INVALID_REQUEST", error: "Some pricing fields are invalid. Check the amounts, quantities and version." }, 400);
+  if (error instanceof PricingValidationError) return respond({ code: "PRICING_NOT_READY", error: error.message, problems: error.problems }, 422);
   if (error instanceof PricingStoreError) {
     const statuses: Record<string, number> = { PREPARATION_PENDING: 409, PRICING_CONFLICT: 409, PRICING_STALE_SOURCE: 409, PRICING_BUSY: 409, PRICING_NOT_FOUND: 404, PRICING_NOT_READY: 422, INVALID_INPUT: 400 };
-    return respond(req, session, { code: error.code, error: error.message, problems: error.problems }, statuses[error.code] ?? 400);
+    return respond({ code: error.code, error: error.message, problems: error.problems }, statuses[error.code] ?? 400);
   }
-  return respond(req, session, { code: "STORAGE_UNAVAILABLE", error: "Pricing storage is unavailable. Check the database and migrations." }, 503);
+  return respond({ code: "STORAGE_UNAVAILABLE", error: "Pricing storage is unavailable. Check the database and migrations." }, 503);
 }
 
 export async function getPricingResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
-  const session = sessionId(req);
-  const refusal = clientRefusal(req, session);
-  if (refusal) return refusal;
-  try { return respond(req, session, await pricingStore().getWorkspace(session, rawKey)); }
-  catch (error) { return failure(req, session, error); }
+  const session = await designerStudio(req);
+  if (session instanceof NextResponse) return session;
+  try { return respond(await pricingStore().getWorkspace(session, rawKey)); }
+  catch (error) { return failure(error); }
 }
 
 export async function savePricingResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
-  const session = sessionId(req);
-  const refusal = clientRefusal(req, session);
-  if (refusal) return refusal;
+  const session = await designerStudio(req);
+  if (session instanceof NextResponse) return session;
   const ended = await refuseIfEnded(session);
   if (ended) return ended;
   try {
     const input = saveSchema.parse(await boundedJson(req));
-    return respond(req, session, await pricingStore().saveReview(session, rawKey, input));
-  } catch (error) { return failure(req, session, error); }
+    return respond(await pricingStore().saveReview(session, rawKey, input));
+  } catch (error) { return failure(error); }
 }
 
 export async function issuePricingResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
-  const session = sessionId(req);
-  const refusal = clientRefusal(req, session);
-  if (refusal) return refusal;
+  const session = await designerStudio(req);
+  if (session instanceof NextResponse) return session;
   const ended = await refuseIfEnded(session);
   if (ended) return ended;
   try {
     const input = issueSchema.parse(await boundedJson(req));
-    return respond(req, session, await pricingStore().issueReview(session, rawKey, input));
-  } catch (error) { return failure(req, session, error); }
+    return respond(await pricingStore().issueReview(session, rawKey, input));
+  } catch (error) { return failure(error); }
 }
 
 /** The designer changes a line of the current agreement; the pricing page opens on the draft that now carries it. */
 export async function postLineChangeResponse(req: NextRequest, rawKey: string) {
   if (!isCaseKey(rawKey)) return NextResponse.json({ code: "NOT_FOUND", error: "Project not found." }, { status: 404, headers });
-  const session = sessionId(req);
-  const refusal = clientRefusal(req, session);
-  if (refusal) return refusal;
+  const session = await designerStudio(req);
+  if (session instanceof NextResponse) return session;
   const ended = await refuseIfEnded(session);
   if (ended) return ended;
   try {
     const { draft } = await startLineChange(pricingDb(), session, rawKey, lineSchema.parse(await boundedJson(req)));
-    return respond(req, session, { href: `/pricing/${rawKey}`, draftId: draft.id, revision: draft.revision });
-  } catch (error) { return failure(req, session, error); }
+    return respond({ href: `/pricing/${rawKey}`, draftId: draft.id, revision: draft.revision });
+  } catch (error) { return failure(error); }
 }
 
 /** A random document id is a read-only share link; no write endpoint uses it. */
