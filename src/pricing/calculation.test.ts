@@ -69,6 +69,16 @@ describe("pricing review calculation", () => {
     expect(input.changes[0].priceEvidence).toContain("original-reference");
   });
 
+  it("does not ask again for the V1 product details a quantity change keeps, even ones V1 left blank", () => {
+    const q = quote(); q.lines[0].specification = "";
+    const quantity = change("quantity"); quantity.before!.specification = ""; quantity.after!.specification = "";
+    const d = { ...draft([quantity]), basedOnQuoteFingerprint: quoteFingerprint(q) }; const input = ready(q, d);
+    const problems = previewPricing(q, d, input).problems.join();
+    expect(problems).not.toContain("Specification needs confirmation");
+    input.changes[0].after!.returnPolicy = "";
+    expect(previewPricing(q, d, input).problems.join()).toContain("Return or cancellation terms needs confirmation");
+  });
+
   it("requires fresh USD evidence rather than only relabeling a foreign amount", () => {
     const q = quote(); const d = draft(); d.changes[0].after!.currency = "EUR";
     d.sources[0].products[0].currency = "EUR";

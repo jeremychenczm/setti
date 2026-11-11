@@ -327,7 +327,9 @@ export function previewPricing(quote: ApprovedQuoteReport, draft: ChangeDraft, v
     if (change.after) {
       const item = change.after;
       const required: [keyof PricingItem, string][] = [["name", "Name"], ["vendor", "Vendor"], ["sku", "SKU"], ["specification", "Specification"], ["room", "Room"], ["unitLabel", "Pricing unit"], ["returnPolicy", "Return or cancellation terms"]];
-      for (const [key, name] of required) if (typeof item[key] !== "string" || !(item[key] as string).trim()) problems.push(`${label}: ${name} needs confirmation.`);
+      // A quantity change keeps the product the client approved in V1: those details are read-only here, so they are not asked again.
+      const approved = change.action === "quantity" ? new Set<keyof PricingItem>(["name", "vendor", "sku", "specification", "unitLabel"]) : null;
+      for (const [key, name] of required) if (!approved?.has(key) && (typeof item[key] !== "string" || !(item[key] as string).trim())) problems.push(`${label}: ${name} needs confirmation.`);
       if (item.currency !== "USD") problems.push(`${label}: confirm a USD price. Unknown or foreign-currency prices are not converted automatically.`);
       if (item.unitPriceCents === null) problems.push(`${label}: unit price needs confirmation.`);
       if (item.taxCents === null) problems.push(`${label}: tax for this line needs confirmation.`);
