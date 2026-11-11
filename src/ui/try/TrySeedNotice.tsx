@@ -13,7 +13,6 @@ import { OPEN_FIRST_CHANGE_EVENT } from "../pricing/ChangeDrawer";
 import { lineProgress } from "../payments/progress";
 import { HOME_GUIDE_STEPS, MAPLE_EXAMPLE_REQUEST, MAPLE_GUIDE_STEPS, mapleChangeLines, mapleGuideStep, type MapleGuideData } from "./maple-guide";
 import { navigateGuidePage, useGuideAnchor } from "./useGuideAnchor";
-import { WillowGuide } from "./WillowGuide";
 import { GUIDE_TOOL, GuideBar } from "./GuideBar";
 import { useDemoSkip } from "./useDemoSkip";
 import { canOpenPreparedWorkspace, useTryPreparation } from "./TryPreparationProvider";
@@ -39,9 +38,9 @@ async function readJson(path: string, signal: AbortSignal): Promise<unknown> {
   return body;
 }
 
-/** A read-only guide; switching roles and following links never signs or moves money. */
+/** A read-only guide to the demo's Maple project; switching roles and following links never signs or moves money. */
 export function TrySeedNotice(props: TrySeedNoticeProps) {
-  return props.projectKey === "willow" ? <WillowGuide {...props} /> : <MapleSeedNotice {...props} />;
+  return props.projectKey === "maple" ? <MapleSeedNotice {...props} /> : null;
 }
 
 function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, onOpenInbox, currentView, currentOrderId }: TrySeedNoticeProps) {

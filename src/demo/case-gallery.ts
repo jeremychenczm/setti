@@ -1,11 +1,11 @@
 /** Read-only examples. No record here is an executable project or PayPal identifier. */
 export const DEMO_CASES = [
   {
-    id: "approval", title: "Before the client says yes", project: "Willow Residence", status: "Awaiting client", amount: "Nothing held",
+    id: "approval", title: "Before the client says yes", project: "Birch Lane Residence", status: "Awaiting client", amount: "Nothing held",
     question: "Can the studio charge just because it sent a quote?",
     answer: "A sent quote is a proposal. The client selects the lines they approve and signs the exact version. Payment approval is a separate step.",
-    events: [{ actor: "Jordan · designer", text: "Sends an itemised quote with service rates and supplier terms." }, { actor: "Sofia · client", text: "Approves the consultation, leaves a light undecided and asks about delivery." }, { actor: "Setti", text: "Keeps each decision against the frozen quote. Signing creates no payment." }],
-    next: "Sofia signs her chosen lines, then separately approves a PayPal Sandbox payment.",
+    events: [{ actor: "Jordan · designer", text: "Sends an itemised quote with service rates and supplier terms." }, { actor: "Nora · client", text: "Approves the consultation, leaves a light undecided and asks about delivery." }, { actor: "Setti", text: "Keeps each decision against the frozen quote. Signing creates no payment." }],
+    next: "Nora signs her chosen lines, then separately approves a PayPal Sandbox payment.",
     inspect: "The quote version, signed line decisions and separate payment status.",
   },
   {
@@ -33,7 +33,7 @@ export const DEMO_CASES = [
     inspect: "The service's own capture and refundable balance, even when several services shared the initial authorisation.",
   },
   {
-    id: "payer-action", title: "A saved method needs the client", project: "Willow Residence · example", status: "Approval needed", amount: "Same order",
+    id: "payer-action", title: "A saved method needs the client", project: "Birch Lane Residence · example", status: "Approval needed", amount: "Same order",
     question: "What if a saved PayPal method needs another approval?",
     answer: "The unresolved order remains the same. The client continues on PayPal for that order. No replacement hold starts while its outcome is uncertain.",
     events: [{ actor: "Setti", text: "Starts an approved-item hold using the saved Sandbox method." }, { actor: "PayPal", text: "Asks the buyer to approve this order again." }, { actor: "Client", text: "Can continue on PayPal or check the same operation after returning." }],

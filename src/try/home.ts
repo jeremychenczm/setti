@@ -42,7 +42,7 @@ async function ensureBaseline(db: Db, session: string): Promise<ApprovedQuoteRep
         signingId,
       });
     }
-    // A signed opening remains 'sent' until a later version supersedes it, as for Willow.
+    // A signed opening remains 'sent' until a later version supersedes it.
     return quote;
   });
 }

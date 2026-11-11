@@ -2,7 +2,6 @@
 import { randomUUID } from "node:crypto";
 import { and, count, desc, eq, gt, sql } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { createChatStore } from "../chat/store";
 import { HOME_ITEM_IDS, HOME_SCENARIO, HOME_SCENARIO_VERSION, isHomeScenario } from "../demo/living-dining";
 import type { LinkBuilder } from "../payments/actions";
 import { refreshRecordedFees } from "../payments/fee-refresh";
@@ -121,15 +120,6 @@ export async function resumeTry(db: Db, visitorId: string | null, runId: string)
   if (!visitorId) return null;
   const [row] = await db.select().from(trySeeds).where(and(eq(trySeeds.sessionId, runId), eq(trySeeds.visitorId, visitorId)));
   return row ? snapshot(row) : null;
-}
-/** Send the designer's V1 once. The client still makes every line decision. */
-export async function openWillowWorkspace(db: Db, current: string | null): Promise<string> {
-  const session = current ?? randomUUID(), chat = createChatStore(db);
-  const state = await chat.getCase(session, "willow");
-  if (state.opening?.status === "draft") await chat.sendQuote(session, "willow", {
-    id: randomUUID(), text: "Here is quote V1 for your review. Choose the lines you approve before any payment.", sentBy: "Jordan Lee",
-  });
-  return session;
 }
 /** An expired lease resumes the same run and original provider operations. */
 export async function prepareTry(deps: TryDeps, session: string, runId: string): Promise<TryPreparation> {

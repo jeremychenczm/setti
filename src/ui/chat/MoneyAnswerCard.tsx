@@ -5,7 +5,7 @@ import { MONEY_STATUS_LABEL, type MoneyAnswer, type MoneyFact, type MoneyTableRo
 import { notRefundedText } from "@/pricing/fees";
 
 function evidenceHref(value: string): string | null {
-  return /^\/quotes\/(?:maple|willow)(?:#[\w.%:~-]+)?$/.test(value)
+  return /^\/quotes\/[a-z0-9]+(?:-[a-z0-9]+)*(?:#[\w.%:~-]+)?$/.test(value)
     || /^\/change-orders\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:#[\w.%:~-]+)?$/i.test(value)
     ? value : null;
 }

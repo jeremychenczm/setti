@@ -43,8 +43,6 @@ Starting the recommended **Maple Ave · living & dining** walkthrough prepares t
 
 These starting payments are real PayPal Sandbox transactions. Setti approves them on the server with PayPal's documented Sandbox test card (`4012 0000 3333 0026`). A private run identity is saved before money is prepared. Each preparation stage is saved; after an interruption, continue the same run to check its original operations. **Start a separate Maple run** creates a new project without undoing the old transactions. **Previous Maple runs** lets the same visitor return to earlier records. The server allocates at most `SETTI_TRY_PER_HOUR` new Maple runs per hour (default 30).
 
-**Start with first quote** opens Willow's sent V1 as Sofia without making a payment call. Choose the lines to approve, sign them, then pay for the approved design services. Choose a method from the list: **PayPal** or **Pay Later** opens in a window over the page (the Sandbox buyer login is shown below it, with copy buttons), or **Card** → **Pay with the test card** pays in one click with nothing to type. Leave **Save this payment method for the project** ticked: the same payment then holds each approved furniture item on it, one PayPal authorization per item, and the project chat opens with Sofia's message handing over to Jordan. Nothing is charged for an item until its supplier confirms it. The client can remove the saved method; PayPal deletes it first.
-
 **Browse read-only examples** opens `/try/cases`, which needs no database or PayPal connection. Six fictional cases explain approval, holds, returns, service reductions, saved-method approval and recovery. A separate dated recording shows the real Sandbox proof from 22 October. Example records never become executable projects or payment IDs.
 
 ## Testing instructions
@@ -133,7 +131,7 @@ Setti keeps watching the holds after everyone has signed.
 | AI change drafts and money answers | New `@Setti` requests use the configured model (needs `ANTHROPIC_API_KEY`), and every reply is the model's own. The server verifies amounts and payment statuses against the project's records before saving; a reply that still fails after one correction is replaced by the recorded facts, labelled as a system notice. The initial V1 and human discussion are prepared examples; the living-and-dining revision starts only when Jordan requests it. Source prices and integer-cent calculations are server owned. Recorded V1 payment evidence is available before the first change order. |
 | Designer pricing review, client change orders and confirmation | Real, saved in Postgres and frozen by content hash; the client signs as a demo identity without a login |
 | Supplier order confirmations and credits | Demo records entered by the designer |
-| Quote reports | Real AG Grid reports; the Maple and Willow quote contents are demo data |
+| Quote reports | Real AG Grid reports; the Maple quote contents are demo data |
 | PayPal webhooks | Each event is verified with PayPal's verify-webhook-signature, stored once and matched to its payment step. Webhooks confirm what Setti recorded; they never move money |
 | Not in this build | Procurement timeline, supplier integration and real user authentication |
 
@@ -161,15 +159,13 @@ Earlier rounds found two prompt problems and a server check that read "settled" 
 
 ## Quote reports
 
-Open **Quotes** in the sidebar, or `/quotes/maple` and `/quotes/willow`. The report uses **AG Grid Community** for sorting, category and room filtering, search, pagination and a full-quote CSV export. Select an item's **Details** to inspect specifications, price sources and return terms. Totals are calculated from integer-cent line items and stay unchanged when filtering. Approved versions are read-only.
+Open **Quotes** in the sidebar, or `/quotes/maple`. The report uses **AG Grid Community** for sorting, category and room filtering, search, pagination and a full-quote CSV export. Select an item's **Details** to inspect specifications, price sources and return terms. Totals are calculated from integer-cent line items and stay unchanged when filtering. Approved versions are read-only.
 
-Willow's V1 starts as the designer's draft. Signed in as Jordan Lee, open the Willow chat and select **+** → **Send quote V1**: the server freezes its own copy with a SHA-256 hash and posts it as a quote card. Clients see quotes under **Proposals** only after they are sent. Switch accounts from the avatar at the bottom left of the sidebar.
+A new project's V1 starts as the designer's draft. As the designer, open the project's chat and select **+** → **Send quote V1**: the server freezes its own copy with a SHA-256 hash and posts it as a quote card. Clients see quotes under **Proposals** only after they are sent. The client joins from the link the designer copies with **Invite client** in the chat.
 
-Signed in as Sofia Martinez, select **Review quote**. Select a line to approve or decline it (a decline needs a reason) or to ask about it; a question goes to the chat right away, tagged with the line. Every undecided line starts ticked: **Approve ticked** approves them together, and **Review & sign** records one typed signature for every chosen line against the locked V1. Lines left undecided can be signed later; signed decisions cannot be changed. Only the approved lines become the baseline: AI drafts and new versions start from them, and nothing is charged by signing.
+Signed in as the client, select **Review quote**. Select a line to approve or decline it (a decline needs a reason) or to ask about it; a question goes to the chat right away, tagged with the line. Every undecided line starts ticked: **Approve ticked** approves them together, and **Review & sign** records one typed signature for every chosen line against the locked V1. Lines left undecided can be signed later; signed decisions cannot be changed. Only the approved lines become the baseline: AI drafts and new versions start from them, and nothing is charged by signing.
 
-Back as Jordan Lee, **To resolve** on the quote lists declined lines with the client's reason and undecided lines with their questions. **Revise** puts a declined line on a designer draft, filled in from V1, and opens the pricing page to edit it by hand; AI drafts come from discussing the change with the client in the chat. **Drop** (or **Withdraw** for an undecided line) removes the line without a client signature, since it was never agreed. Undecided lines come along into the next version for the client's decision, so issuing it closes V1 without leaving anything behind. If the draft changes after you save a pricing review, the review is carried onto the new draft field by field: values only the draft changed are updated, values you edited stay, and where both changed the same value the pricing page asks which to keep. **Send to Sofia as V2** freezes the next version and posts it to the chat as a quote card, which marks V1 as replaced; the client confirms it from that card.
-
-Willow has **26 lines: 20 products (furniture, lighting and supply-only finish materials: flooring, tile, paint, downlights and built-in shelving) from seven fictional supplier quotes, and six simulated design services**. Installation is by the client's contractor and is not in the quote. Each product's details name its supplier quote, price note and return terms. Suppliers, products and prices are invented; service rates, an 8.75% goods-only tax assumption and a single $99 delivery budget are test inputs, not supplier commitments or a location-specific tax calculation.
+Back as the designer, **To resolve** on the quote lists declined lines with the client's reason and undecided lines with their questions. **Revise** puts a declined line on a designer draft, filled in from V1, and opens the pricing page to edit it by hand; AI drafts come from discussing the change with the client in the chat. **Drop** (or **Withdraw** for an undecided line) removes the line without a client signature, since it was never agreed. Undecided lines come along into the next version for the client's decision, so issuing it closes V1 without leaving anything behind. If the draft changes after you save a pricing review, the review is carried onto the new draft field by field: values only the draft changed are updated, values you edited stay, and where both changed the same value the pricing page asks which to keep. **Send to (client) as V2** freezes the next version and posts it to the chat as a quote card, which marks V1 as replaced; the client confirms it from that card.
 
 All project scopes, approvals and signatures are **demo data**. Maple's prices, return fees, $0 tax and delivery remain illustrative. Opening a quote report makes no payment calls.
 
@@ -177,7 +173,7 @@ All project scopes, approvals and signatures are **demo data**. Maple's prices, 
 
 | Path | What it is |
 |---|---|
-| `src/try/` | Private visitors and saved runs; explicit, resumable Maple preparation through the normal business services; a payment-free Willow quote entry. |
+| `src/try/` | Private visitors and saved runs; explicit, resumable Maple preparation through the normal business services. |
 | `src/demo/`, `src/ui/try/` | Labelled sample supplier materials, read-only cases, the entry page and role-aware guides derived from saved project state. |
 | `src/chat/`, `src/ai/` | Project chat, AI change drafts and money answers grounded in the PayPal ledger. |
 | `evals/` | AI evals for change drafts, money answers and inbox summaries, run through the app's own entry points. See [evals/README.md](evals/README.md). |
@@ -186,7 +182,7 @@ All project scopes, approvals and signatures are **demo data**. Maple's prices, 
 | `src/money/` | Pure money rules: what each change does to held or captured money, the over-capture allowance, the reauthorization window, refund promises, and a ledger snapshot. Amounts are integer cents. |
 | `src/proof/` | The Sandbox proof runner behind `npm run sandbox:proof` and the evidence it writes. |
 | `src/ui/` | The workspace, chat, pricing, change order, payments and quote report screens. |
-| `src/quotes/` | Typed Maple and Willow V1 examples and integer-cent quote totals, with validation and tests. |
+| `src/quotes/` | The typed Maple V1 example and integer-cent quote totals, with validation and tests. |
 | `src/db/`, `drizzle/` | Postgres schema, migrations and database triggers that freeze sent versions and guard payment records. |
 | `src/config/paypalEnv.ts` | Sandbox-only guard. Every PayPal client goes through it. |
 | `probes/` | Scripts that record how the PayPal Sandbox really behaves (partial captures, over-capture, reauthorization, vault, Pay Later, void, test-card approval). See [probes/README.md](probes/README.md). |

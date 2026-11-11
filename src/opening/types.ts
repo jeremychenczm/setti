@@ -1,7 +1,7 @@
 /**
- * A project's first quote (V1) and how it reaches the client. Willow's V1 is a
- * draft the designer sends from the project chat, and the client decides on it
- * line by line; Maple's demo starts from a V1 the client already approved.
+ * A project's first quote (V1) and how it reaches the client: a draft the
+ * designer sends from the project chat, which the client decides on line by
+ * line, or a V1 the client approved before the project came to Setti.
  */
 import type { CaseKey } from "@/chat/types";
 import type { QuoteDocument } from "@/quotes/types";

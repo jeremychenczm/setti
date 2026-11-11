@@ -15,7 +15,7 @@ type Stage = { id: string; label: string; status: "pending" | "running" | "done"
 type Seed = { runId: string; scenario: string; status: "seeding" | "ready" | "failed"; workspaceReady?: boolean; baselineQuoteVersion?: number; busy: boolean; changeOrderId: string | null; stages: Stage[]; canResume: boolean; error: string | null };
 type PreviousRun = { runId: string; status: Seed["status"]; createdAt: string };
 type Snapshot = { seed: Seed | null; href: string; previousRuns: PreviousRun[]; hasWorkspace: boolean };
-type Busy = "maple" | "willow" | "resume" | "reload" | null;
+type Busy = "maple" | "resume" | "reload" | null;
 type MapleRole = Extract<AccountId, "jordan" | "emma">;
 const runStatus = { seeding: "Preparation in progress", ready: "Ready to open", failed: "Needs attention" };
 const stageStatus = { pending: "Waiting", running: "In progress", done: "Saved", failed: "Needs attention" };
@@ -107,8 +107,8 @@ export function TryStart() {
     });
   }
 
-  function open(href: string, account: AccountId) {
-    enter(href === "/quotes/willow" ? href : "/chats/maple", account);
+  function open(account: AccountId) {
+    enter("/chats/maple", account);
   }
 
   async function post(body: object, signal: AbortSignal): Promise<Snapshot> {
@@ -175,13 +175,13 @@ export function TryStart() {
   function startMaple(account: MapleRole, restart = false) {
     if (working.current) return;
     setRole(account);
-    if (!restart && seed?.scenario === HOME_SCENARIO && canOpenPreparedWorkspace(seed)) return open(snapshot!.href, account);
+    if (!restart && seed?.scenario === HOME_SCENARIO && canOpenPreparedWorkspace(seed)) return open(account);
     void perform("maple", async (signal) => {
       const initial = !restart && seed?.scenario === HOME_SCENARIO ? snapshot! : await post({ action: "start", scenario: HOME_SCENARIO, ...(restart ? { restart: true } : {}) }, signal);
       if (restart && seed && initial.seed?.runId === seed.runId) throw new Error("This run is still being prepared. Continue its saved preparation before creating a separate run.");
       if (initial.seed?.scenario !== HOME_SCENARIO) throw new Error("Your earlier project is still being prepared. Continue its saved preparation below before opening the new café example.");
       const ready = initial.seed && canOpenPreparedWorkspace(initial.seed) ? initial : await prepare(initial, signal);
-      if (!signal.aborted && mounted.current) open(ready.href, account);
+      if (!signal.aborted && mounted.current && ready) open(account);
     });
   }
   /** The studio belongs to the demo's designer, so a visitor without a demo starts one first; no money is prepared for it. */
@@ -200,13 +200,7 @@ export function TryStart() {
     void perform("resume", async (signal) => {
       const selected = await post({ action: "resume", runId }, signal);
       const ready = selected.seed && canOpenPreparedWorkspace(selected.seed) ? selected : await prepare(selected, signal);
-      if (!signal.aborted && mounted.current) open(ready.href, account);
-    });
-  }
-  function startWillow() {
-    void perform("willow", async (signal) => {
-      const ready = await post({ action: "workspace", scenario: "willow-first-payment-v1" }, signal);
-      if (!signal.aborted && mounted.current) open(ready.href, "jordan");
+      if (!signal.aborted && mounted.current && ready) open(account);
     });
   }
 
@@ -273,7 +267,7 @@ export function TryStart() {
           </li>)}</ol>
           <p className={styles.note}>You can leave and return to the same saved project and payment records.</p>
           {seed.error && <p className={styles.preparationError}>{seed.error}</p>}
-          {seed.changeOrderId && seed.status !== "ready" && <button type="button" disabled={disabled} onClick={() => open(snapshot!.href, role)} className={styles.textButton}>View this run&rsquo;s saved project records<ArrowRight aria-hidden="true" /></button>}
+          {seed.changeOrderId && seed.status !== "ready" && <button type="button" disabled={disabled} onClick={() => open(role)} className={styles.textButton}>View this run&rsquo;s saved project records<ArrowRight aria-hidden="true" /></button>}
           {!confirmNew ? <button type="button" disabled={disabled} onClick={() => setConfirmNew(true)} className={styles.newRun}>Start a separate Maple run</button> : <div className={styles.confirmNew}>
             <p>A separate run keeps this project in your history. It does not cancel its holds, refund payments or clear unknown outcomes.</p>
             <div className={styles.confirmActions}>
@@ -297,7 +291,6 @@ export function TryStart() {
       </details>}
 
       <nav className={styles.more} aria-label="More ways to try Setti">
-        <div><p>See where it begins</p><button type="button" disabled={disabled} onClick={startWillow}>Start with first quote{busy === "willow" ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}</button></div>
         <div><p>Just looking around?</p><Link href="/try/cases">Browse read-only examples<ArrowUpRight aria-hidden="true" /></Link></div>
       </nav>
       <footer className={styles.footer}>

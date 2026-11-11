@@ -27,7 +27,7 @@ export interface CheckoutLinks {
 }
 
 export interface CheckoutDetails {
-  /** What the buyer sees on PayPal, for example "Willow Residence · BERGMUND Chair · V3". */
+  /** What the buyer sees on PayPal: "{project} · {item} · V{version}". */
   description: string;
   /** What the buyer agrees to when the checkout also saves PayPal for the project. */
   savePayPalDescription?: string;

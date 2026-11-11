@@ -34,8 +34,8 @@ export interface Baseline {
 
 /**
  * Creates the case's business project with the quote as its sent baseline
- * revision. Approving it is the caller's decision: Maple imports its demo
- * approval, Willow waits for the client's signed line decisions.
+ * revision. Approving it is the caller's decision: a V1 approved before Setti
+ * brings its approval; a V1 sent from the chat waits for the client's signed line decisions.
  */
 export async function insertBaseline(tx: Transaction, caseId: string, quote: QuoteDocument, baselineQuote: ApprovedQuoteReport | null = null): Promise<Baseline> {
   const [project] = await tx.insert(projects).values({ name: `${quote.projectName} (demo pricing)`, space: quote.room, clientName: quote.clientName, currency: "USD" }).returning();

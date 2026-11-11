@@ -21,7 +21,7 @@ import { paypalLinks } from "@/payments/http";
 import { sandboxPayPal, sandboxTestCard } from "@/payments/server";
 import { demoEnd, endDemo, markDemoEnded } from "./activity";
 import { ensureDemoPeople, findDemoPerson, signInDemoPerson } from "./people";
-import { TRY_PROJECT_HREF, openWillowWorkspace, prepareTry, readTryRuns, readTrySeed, resumeTry, startTry } from "./service";
+import { TRY_PROJECT_HREF, prepareTry, readTryRuns, readTrySeed, resumeTry, startTry } from "./service";
 
 const uuid = z.uuid();
 const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
@@ -30,7 +30,6 @@ const startSchema = z.union([
   z.strictObject({ action: z.literal("start").optional(), scenario: z.literal(HOME_SCENARIO).optional(), restart: z.boolean().optional() }),
   z.strictObject({ action: z.literal("prepare"), runId: uuid }),
   z.strictObject({ action: z.literal("resume"), runId: uuid }),
-  z.strictObject({ action: z.literal("workspace"), scenario: z.literal("willow-first-payment-v1") }),
   z.strictObject({ action: z.literal("end") }),
 ]);
 const personaSchema = z.strictObject({ persona: z.enum(["jordan", "emma"]), next: z.string().max(2_000).optional() });
@@ -115,11 +114,6 @@ export async function postTryResponse(req: NextRequest) {
       response.cookies.set(VISITOR_COOKIE, "", options);
       for (const { name, httpOnly } of RETIRED_DEMO_COOKIES) if (req.cookies.has(name)) response.cookies.set(name, "", { ...options, httpOnly });
       return response;
-    }
-    if (body.action === "workspace") {
-      if (!current) return failure("FORBIDDEN", "Start the demo from /try first.", 403);
-      await openWillowWorkspace(db(), current);
-      return NextResponse.json({ ...await state(current, visitorId, "/quotes/willow"), reused: true }, { headers });
     }
     if (body.action === "resume") {
       const seed = await resumeTry(db(), visitorId, body.runId);

@@ -5,7 +5,7 @@
  */
 import type { CaseKey } from "@/chat/types";
 
-export type AccountId = "jordan" | "sofia" | "emma";
+export type AccountId = "jordan" | "emma";
 export type AccountRole = "designer" | "client";
 
 export interface DemoAccount {
@@ -23,7 +23,6 @@ export interface DemoAccount {
 
 export const DEMO_ACCOUNTS: readonly (DemoAccount & { id: AccountId })[] = [
   { id: "jordan", name: "Jordan Lee", role: "designer", title: "Designer · Lee Studio", projectKey: null, avatar: "/avatars/designer.webp" },
-  { id: "sofia", name: "Sofia Martinez", role: "client", title: "Client · Willow Residence", projectKey: "willow", avatar: "/avatars/client.webp" },
   { id: "emma", name: "Emma Park", role: "client", title: "Client · Maple Ave Café", projectKey: "maple", avatar: "/avatars/budget-manager.webp" },
 ];
 
@@ -36,7 +35,7 @@ export function canOpenProject(account: DemoAccount, key: CaseKey): boolean {
   return account.role === "designer" || account.projectKey === key;
 }
 
-/** The client account of a project. */
-export function clientOf(key: CaseKey): DemoAccount {
-  return DEMO_ACCOUNTS.find((account) => account.projectKey === key)!;
+/** The demo client of a project, or null when the demo has none for it. */
+export function clientOf(key: CaseKey): DemoAccount | null {
+  return DEMO_ACCOUNTS.find((account) => account.projectKey === key) ?? null;
 }

@@ -31,7 +31,7 @@ function standing({ actor, owner, account }: OrderScope): Standing | null {
   noteRequest(owner.studioId);
   // A demo visitor plays both sides, so the refusal names the demo person to switch to.
   const refusal = account.role === "client" ? null : actor.demoPersona
-    ? `Signed in as ${account.name}. Switch to ${clientOf(owner.key).name} from the avatar at the bottom left of the chat to confirm this version.`
+    ? `Signed in as ${account.name}. Switch to ${clientOf(owner.key)?.name ?? "the client"} from the avatar at the bottom left of the chat to confirm this version.`
     : `Signed in as ${account.name}, a designer. Only the project's client confirms this version.`;
   return { studioId: owner.studioId, refusal };
 }
