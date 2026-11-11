@@ -15,7 +15,9 @@ export function appAuth(): Auth {
 
 /** The signed-in user and session for the current request, or null. */
 export async function currentSession() {
-  return appAuth().api.getSession({ headers: await headers() });
+  // The request's headers first: they make the page dynamic, so a build never opens the database for it.
+  const requestHeaders = await headers();
+  return appAuth().api.getSession({ headers: requestHeaders });
 }
 
 /** The signed-in user with the studio this request works in, or null when signed out. */

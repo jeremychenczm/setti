@@ -23,7 +23,9 @@ export interface Viewer {
 }
 
 export async function currentActor(): Promise<Actor | null> {
-  return actorFrom(appAuth(), appDb(), await headers());
+  // The request's headers first: they make the page dynamic, so a build never opens the database for it.
+  const requestHeaders = await headers();
+  return actorFrom(appAuth(), appDb(), requestHeaders);
 }
 
 export function signInPath(next: string): string {
