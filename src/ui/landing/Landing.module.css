@@ -11,8 +11,9 @@
 
 /* ---------- navigation ---------- */
 .nav { display: flex; align-items: center; gap: 24px; max-width: 1180px; margin: 0 auto; padding-block: 16px; font-size: 14px; }
-.wordmark { font-size: 28px; font-weight: 650; line-height: 1; letter-spacing: -1.5px; text-decoration: none; }
-.wordmark span { color: #e3a23a; }
+.wordmark { display: inline-flex; align-items: center; gap: 10px; font-size: 28px; font-weight: 650; line-height: 1; letter-spacing: -1.5px; text-decoration: none; }
+.mark { width: 34px; height: 34px; flex-shrink: 0; }
+.wordmark span { color: #e3a23a; margin-left: -10px; }
 .links { display: flex; gap: 22px; color: var(--muted); }
 .links a { text-decoration: none; }
 .links a:hover { color: var(--ink); }

@@ -3,6 +3,7 @@ import { DraftMock, MoneyMock, SignMock, ThreadMock, WindowMock } from "./AppMoc
 import { CardIcon, ChatIcon, DesignerDoodle, LampDoodle, PlantDoodle, ReceiptDoodle, SignIcon, SofaDoodle, SparkIcon } from "./Doodles";
 import { DEMO_VIDEO_ID, DISCUSSION_LENGTH, EVAL_RESULTS, GITHUB_URL, SECURITY_URL } from "./content";
 import styles from "./Landing.module.css";
+import { BrandMark } from "../BrandMark";
 
 const PITCH = "Design evolves through conversation. Setti's AI spots changes, drafts revised quotes, and links each approval to PayPal holds, charges and refunds, so designers can spend their time on design.";
 const score = ([passed, runs]: readonly [number, number]) => `${passed}/${runs}`;
@@ -12,7 +13,7 @@ export function Landing() {
   return (
     <div className={styles.page}>
       <header className={styles.nav}>
-        <Link href="/" className={styles.wordmark} aria-label="Setti home">setti<span aria-hidden="true">.</span></Link>
+        <Link href="/" className={styles.wordmark} aria-label="Setti home"><BrandMark className={styles.mark} />setti<span aria-hidden="true">.</span></Link>
         <nav className={styles.links} aria-label="Sections">
           <a href="#how">How it works</a><a href="#paypal">PayPal</a><a href="#ai">AI</a><a href={GITHUB_URL}>GitHub</a>
         </nav>

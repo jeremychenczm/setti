@@ -6,6 +6,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { authClient } from "@/auth/client";
 import { defaultStudioName, newStudioSlug } from "@/auth/names";
 import { emailInDomains, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, SIGN_UP_EMAIL_RULE } from "@/auth/rules";
+import { BrandMark } from "../BrandMark";
 
 const FIELD = "w-full rounded-lg border border-[var(--line)] bg-white px-3 py-2 text-[14px] outline-none focus:border-[var(--primary)]";
 export const BUTTON = "flex w-full items-center justify-center rounded-lg bg-[var(--primary-fill)] px-4 py-2.5 text-[13px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:text-slate-400";
@@ -30,7 +31,7 @@ export function signUpProblem(name: string, email: string, password: string): st
 export function Shell({ title, children, footer }: { title: string; children: ReactNode; footer: ReactNode }) {
   return <main className="flex min-h-screen items-center justify-center px-4 py-10">
     <section className="w-full max-w-sm rounded-2xl border border-[var(--line)] bg-white p-6 shadow-sm">
-      <p className="text-[13px] font-semibold tracking-tight text-[var(--primary)]">setti.</p>
+      <p className="flex items-center gap-2 text-[14px] font-semibold tracking-tight text-[var(--ink)]"><BrandMark className="h-6 w-6" />Setti</p>
       <h1 className="mt-2 text-[22px] font-semibold tracking-tight">{title}</h1>
       <div className="mt-5">{children}</div>
       <p className="mt-5 text-[13px] text-[var(--muted)]">{footer}</p>
