@@ -89,7 +89,9 @@ export async function getTryResponse(req: NextRequest) {
     const actor = await requestActor(req);
     const current = actor ? demoRunOf(actor) : null;
     noteRequest(current);
-    return NextResponse.json(await state(current, visitorOf(req)), { headers });
+    // A real account would be signed out by starting the demo, so /try asks first.
+    const signedInAs = actor && !actor.demoPersona ? actor.name : null;
+    return NextResponse.json({ ...await state(current, visitorOf(req)), signedInAs }, { headers });
   } catch { return failure("STORAGE_UNAVAILABLE", "Demo storage is unavailable. Make sure the database is running and migrated.", 503); }
 }
 
@@ -107,7 +109,7 @@ export async function postTryResponse(req: NextRequest) {
     noteRequest(current);
     if (body.action === "end") {
       if (current) await endOnReset(current);
-      const response = NextResponse.json({ reset: true, href: "/try" }, { headers });
+      const response = NextResponse.json({ reset: true, href: "/" }, { headers });
       // Signing out ends the demo person's session; a real account's session is left alone.
       if (current) withCookies(response, await appAuth().api.signOut({ headers: req.headers, asResponse: true }));
       const options = { ...privateDemoCookieOptions(req.nextUrl.protocol), maxAge: 0, expires: new Date(0) };

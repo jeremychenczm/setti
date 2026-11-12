@@ -32,7 +32,7 @@ export function Landing() {
               ? <a href="#video" className={`${styles.btn} ${styles.btnSoft}`}>Watch the 2-minute video</a>
               : <Link href="/ai-quality" className={`${styles.btn} ${styles.btnSoft}`}>See every AI eval</Link>}
           </div>
-          <p className={styles.small}>Built for Build What&apos;s Next with PayPal and AI · PayPal Sandbox, no account needed</p>
+          <p className={styles.small}>Built for Build What&apos;s Next with PayPal and AI · PayPal Sandbox, no account needed · <Link href="/try/cases">Browse read-only examples</Link></p>
           <div className={styles.stage}>
             <span className={`${styles.doodle} ${styles.dSofa}`}><SofaDoodle /></span>
             <WindowMock />

@@ -231,7 +231,3 @@ Next.js (App Router) and TypeScript, Postgres with Drizzle, the PayPal Server SD
 ## License
 
 [MIT](LICENSE)
-
-## Photo credits
-
-The `/try` hero photo (`public/images/try-living-room.webp`) is by Collov Home Design on [Unsplash](https://unsplash.com/photos/living-room-with-brown-sofa-and-glass-window-4_jQL4JCS98), used under the [Unsplash License](https://unsplash.com/license).

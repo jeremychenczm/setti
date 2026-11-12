@@ -72,7 +72,7 @@ export function AccountMenu({ account, demo = false, onSwitch, compact = false, 
             ))}
             <p className="px-2 pb-1 pt-1.5 text-[10px] leading-relaxed text-[var(--muted)]">This demo signs you in as each person in turn. Who you are decides who sends messages and what you can see.</p>
             <div className="mt-1 border-t border-[var(--line)] pt-1">
-              <Link href="/try" role="menuitem" className={ITEM}>Demo home</Link>
+              <Link href="/" role="menuitem" className={ITEM}>Setti home</Link>
               <EndDemoButton menuItem className={ITEM} />
             </div>
           </> : <>

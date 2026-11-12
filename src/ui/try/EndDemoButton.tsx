@@ -21,11 +21,11 @@ export function EndDemoButton({ className = "", menuItem = false, large = false 
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "end" }),
       });
       const body = await response.json().catch(() => null) as { reset?: boolean; href?: string; error?: unknown } | null;
-      if (!response.ok || body?.reset !== true || body.href !== "/try") {
+      if (!response.ok || body?.reset !== true || body.href !== "/") {
         throw new Error(typeof body?.error === "string" ? body.error : "The demo could not end. Try again; your progress is still saved.");
       }
-      // A document navigation discards the previous workspace's local state.
-      window.location.assign("/try");
+      // A document navigation discards the previous workspace's local state; /try would start a new demo.
+      window.location.assign("/");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The demo could not end. Try again.");
       setPending(false);

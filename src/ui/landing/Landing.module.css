@@ -34,6 +34,8 @@
 .sub { max-width: 620px; margin: 20px auto 0; color: var(--muted); font-size: 18px; text-wrap: balance; }
 .ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 26px; }
 .small { margin: 12px 0 0; color: var(--muted); font-size: 13px; }
+.small a { color: var(--hi-text); font-weight: 600; text-decoration: none; }
+.small a:hover { text-decoration: underline; }
 .stage { position: relative; max-width: 1080px; margin: 48px auto 0; }
 .doodle { position: absolute; color: var(--ink); pointer-events: none; }
 .doodle svg { display: block; width: 100%; height: auto; }

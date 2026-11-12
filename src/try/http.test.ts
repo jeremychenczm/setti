@@ -76,7 +76,7 @@ describe("/try HTTP boundaries", () => {
     });
     const response = await postTryResponse(req);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ reset: true, href: "/try" });
+    expect(await response.json()).toEqual({ reset: true, href: "/" });
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(auth.signOut).toHaveBeenCalledTimes(1);
     expect(response.cookies.get(SESSION_COOKIE)).toMatchObject({ value: "", maxAge: 0 });
@@ -103,7 +103,7 @@ describe("/try HTTP boundaries", () => {
     const req = new NextRequest(origin + "/api/try", { method: "POST", body: JSON.stringify({ action: "end" }), headers: { Origin: origin, "Content-Type": "application/json" } });
     const response = await postTryResponse(req);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ reset: true, href: "/try" });
+    expect(await response.json()).toEqual({ reset: true, href: "/" });
     expect(response.cookies.getAll().map((cookie) => cookie.name)).toEqual(["setti-try-visitor"]);
     for (const fn of Object.values(mock)) expect(fn).not.toHaveBeenCalled();
   });
