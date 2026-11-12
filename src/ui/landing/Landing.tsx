@@ -43,7 +43,7 @@ export function Landing() {
           </div>
         </section>
 
-        <div className={styles.builtRow}><small>Built with</small><span>PayPal</span><span>AG Grid</span><span>Render</span><span>Claude</span></div>
+        <div className={styles.builtRow}><small>Built with</small><span>PayPal</span><span>Render</span><span>Claude</span></div>
 
         <section id="how" className={styles.section}>
           <h2>One change, settled in four steps.</h2>
@@ -114,7 +114,6 @@ export function Landing() {
           <h2>Built with</h2>
           <div className={styles.built}>
             <div><b>PayPal</b><p>Holds, captures, voids, refunds, Vault and Pay Later, confirmed by webhooks.</p></div>
-            <div><b>AG Grid</b><p>The pricing review and every quote report.</p></div>
             <div><b>Render</b><p>The app, its Postgres database and a daily hold check.</p></div>
             <div><b>Claude</b><p>Setti&apos;s AI agent, on Claude Sonnet 5.5.</p></div>
           </div>

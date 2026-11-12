@@ -126,7 +126,7 @@ Setti keeps watching the holds after everyone has signed.
 | AI change drafts and money answers | New `@Setti` requests use the configured model (needs `ANTHROPIC_API_KEY`), and every reply is the model's own. The server verifies amounts and payment statuses against the project's records before saving; a reply that still fails after one correction is replaced by the recorded facts, labelled as a system notice. The initial V1 and human discussion are prepared examples; the living-and-dining revision starts only when Jordan requests it. Source prices and integer-cent calculations are server owned. Recorded V1 payment evidence is available before the first change order. |
 | Designer pricing review, client change orders and confirmation | Real, saved in Postgres and frozen by content hash; the client signs as a demo identity without a login |
 | Supplier order confirmations and credits | Demo records entered by the designer |
-| Quote reports | Real AG Grid reports; the Maple quote contents are demo data |
+| Quote editor and formal quote | Real; the Maple quote contents are demo data |
 | PayPal webhooks | Each event is verified with PayPal's verify-webhook-signature, stored once and matched to its payment step. Webhooks confirm what Setti recorded; they never move money |
 | Not in this build | Procurement timeline, supplier integration and real user authentication |
 
@@ -152,9 +152,9 @@ Earlier rounds found two prompt problems and a server check that read "settled" 
 
 - [2026-10-22 · one change, three money actions](evidence/2026-10-22-mixed-change-lost-refund-answer/README.md): releases an $800 hold, authorizes and captures a $1,100 desk, and refunds a rug minus a $60 restocking fee. The first refund answer was deliberately discarded and recovered without a second refund. All 14 checks passed.
 
-## Quote reports
+## Quotes
 
-Open **Quotes** in the sidebar, or `/quotes/maple`. The report uses **AG Grid Community** for sorting, category and room filtering, search, pagination and a full-quote CSV export. Select an item's **Details** to inspect specifications, price sources and return terms. Totals are calculated from integer-cent line items and stay unchanged when filtering. Approved versions are read-only.
+Open **Quotes** in the sidebar, or `/quotes/maple`. It opens the editor while a draft is open, otherwise the newest version as its formal quote on A4 pages; `?v=1` opens V1. The editor's table edits quantities and prices in place, reorders lines and saves the order into the version. Totals are calculated from integer-cent line items. Sent versions are read-only.
 
 A new project's V1 starts as the designer's draft. As the designer, open the project's chat and select **+** → **Send quote V1**: the server freezes its own copy with a SHA-256 hash and posts it as a quote card. Clients see quotes under **Proposals** only after they are sent. The client joins from the link the designer copies with **Invite client** in the chat.
 
