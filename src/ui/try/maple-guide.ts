@@ -131,8 +131,15 @@ export function mapleGuideStep(data: MapleGuideData, currentRole: "designer" | "
     const progress = waiting ? lineProgress(waiting, payments.operations) : null;
     const clientNeeded = !!waiting && needsClient(waiting);
     const actor = available ? available.step.actor === "client" ? "emma" : "jordan" : clientNeeded ? "emma" : "jordan";
-    return { index: actor === "emma" ? STEP.pay : STEP.record, role: actor, destination: "order", orderId: latest.id, version: latest.version, anchor: "payments", action: `Continue V${latest.version} payments`,
-      title: "Each item keeps its own payment progress", detail: (payments.plan?.status === "blocked" ? "Check unresolved existing operations before starting another payment. Pending and unknown results are not counted as completed." : available ? `${available.line.label}: ${available.step.note}` : progress?.next ?? payments.reason ?? "Open the recorded payment steps to see what is still needed."),
+    const blocked = payments.plan?.status === "blocked" ? "Check unresolved existing operations before starting another payment. Pending and unknown results are not counted as completed." : null;
+    // The client pays what the version adds in the payment card beside the quote; the studio records orders and credits in one run.
+    if (actor === "emma") return { index: STEP.pay, role: actor, destination: "order", orderId: latest.id, version: latest.version, anchor: "design-services", action: "Pay the difference",
+      title: "Emma pays the difference",
+      detail: blocked ?? (clientNeeded && progress?.label === "Payment required" ? `V${latest.version} adds to ${waiting!.label.toLowerCase()}. Emma pays the rest in the payment card beside the quote; the card saved for this project pays it in one click.` : available ? `${available.line.label}: ${available.step.note}` : progress?.next ?? "Open the payment card to see what is still due."),
+    };
+    return { index: STEP.record, role: actor, destination: "order", orderId: latest.id, version: latest.version, anchor: "payments", action: "Record orders and credits",
+      title: "Jordan records the supplier orders and credits",
+      detail: blocked ?? `${waiting && progress ? `${waiting.label}: ${progress.next} ` : "Each held item is charged when its supplier confirms it, and each supplier credit is refunded to Emma. "}Record every supplier order and credit in one run on the Orders and payments card.`,
     };
   }
   const failed = [...snapshot.messages].reverse().find((message) => message.actor !== "assistant")?.aiState === "failed";

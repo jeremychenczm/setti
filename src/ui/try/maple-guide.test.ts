@@ -181,8 +181,8 @@ describe("living-and-dining demo guide", () => {
       line({ itemId: "site-visits", businessItemId: "site-visits", label: "Site visits during installation", category: "service", change: "quantity", targetCents: 108_000, heldCents: 0, capturedCents: 72_000, steps: [] }),
     ];
     const client = mapleGuideStep(data, "client");
-    expect(client).toMatchObject({ index: 6, role: "emma", destination: "order", orderId: "visitor-v3", anchor: "payments" });
-    expect(client.detail).toContain("under Design services");
+    expect(client).toMatchObject({ index: 6, role: "emma", destination: "order", orderId: "visitor-v3", anchor: "design-services", action: "Pay the difference" });
+    expect(client.detail).toContain("payment card");
     // Jordan, looking at the same records, is shown the pendants waiting on his supplier step first.
     expect(mapleGuideStep(data, "designer")).toMatchObject({ role: "jordan", detail: expect.stringContaining("confirms this item's supplier terms") });
   });

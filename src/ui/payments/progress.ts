@@ -36,7 +36,7 @@ export function lineProgress(line: PaymentLineView, operations: readonly Operati
   if (net + line.heldCents < line.targetCents) {
     return line.category === "furniture"
       ? result(line.heldCents > 0 || net > 0 ? "Additional authorization needed" : "Authorization needed", "waiting", "The client authorizes this item's uncovered amount on PayPal.")
-      : result("Payment required", "waiting", "The client pays this service's remaining amount on PayPal, under Design services on this page.");
+      : result("Payment required", "waiting", "The client pays this service's remaining amount in the payment card on this page.");
   }
   if (line.heldCents > 0) {
     return !line.supplierEvents.some((event) => event.kind === "order_confirmed")
