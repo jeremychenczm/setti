@@ -47,7 +47,7 @@ describe.skipIf(!testDatabaseUrl)("the designer's reminders from recorded holds"
     const tomorrow = await reminders(3.5);
     expect(tomorrow.map((entry) => entry.itemId).sort()).toEqual([CHAIR, DESK, TILE].sort());
     expect(tomorrow.every((entry) => entry.kind === "not_ordered" && entry.projectName === "Fernhill Apartment")).toBe(true);
-    expect(tomorrow.find((entry) => entry.itemId === DESK)).toMatchObject({ href: "/quotes/fernhill?hold=fernhill-desk#item-holds", detail: expect.stringMatching(/^Approved and held for 3 days/) });
+    expect(tomorrow.find((entry) => entry.itemId === DESK)).toMatchObject({ href: "/quotes/fernhill?v=1&hold=fernhill-desk#item-holds", detail: expect.stringMatching(/^Approved and held for 3 days/) });
 
     const { contentHash } = await handle.db.transaction((tx) => lockOpeningVersion(tx, session, TEST_KEY, null));
     await recordOpeningSupplierOrder(handle.db, session, TEST_KEY, {

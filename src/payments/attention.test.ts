@@ -28,7 +28,7 @@ describe("what needs the designer today", () => {
     expect(one(item(), at(3))).toEqual([expect.objectContaining({
       kind: "not_ordered", urgency: "now", projectName: "Fernhill Apartment", title: "Dining chair · not ordered yet",
       detail: "Approved and held for 3 days, but no order with Northwood Furniture is recorded. After PayPal's 3-day honor period, capture is no longer assured: place the order and record the supplier's confirmation.",
-      href: "/quotes/fernhill?hold=fernhill-chair#item-holds",
+      href: "/quotes/fernhill?v=1&hold=fernhill-chair#item-holds",
     })]);
     expect(one(item(), at(5))[0]).toMatchObject({ kind: "not_ordered", detail: expect.stringMatching(/^Approved and held for 5 days/) });
   });

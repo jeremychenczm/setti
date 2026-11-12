@@ -51,7 +51,7 @@ const day = (value: Date) => value.toLocaleDateString("en-US", { month: "short",
 function itemHref(view: ItemHoldsView, line: ItemHoldView): string {
   return view.basis?.orderId
     ? quoteHref(view.projectKey, view.basis.version, `payment-line-${line.side}-${line.itemId}`)
-    : `/quotes/${view.projectKey}?hold=${encodeURIComponent(line.itemId)}#item-holds`;
+    : `${quoteHref(view.projectKey, 1)}&hold=${encodeURIComponent(line.itemId)}#item-holds`;
 }
 
 /** The one reminder an item needs at `now`, if any. */

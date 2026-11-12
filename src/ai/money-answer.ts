@@ -180,7 +180,8 @@ export function buildMoneyAnswer(context: MoneyContext, selected: readonly strin
     return structuredClone(fact);
   });
   const sources = context.sources.filter((source) => facts.some((fact) => fact.sourceIds.includes(source.id)));
-  if (sources.some((source) => !/^\/(?:quotes\/[a-z0-9]+(?:-[a-z0-9]+)*|change-orders\/[0-9a-f-]{36})(?:#[a-zA-Z0-9_%.-]+)?$/.test(source.href))) throw new Error("Invalid money source");
+  // A project's quote, optionally one version of it; answers saved before versions moved there link to /change-orders.
+  if (sources.some((source) => !/^\/(?:quotes\/[a-z0-9]+(?:-[a-z0-9]+)*(?:\?v=[1-9]\d{0,3})?|change-orders\/[0-9a-f-]{36})(?:#[a-zA-Z0-9_%.-]+)?$/.test(source.href))) throw new Error("Invalid money source");
   return {
     text: draft ? answerText(draft, table) : table.length ? UNVERIFIED_MONEY_TABLE_TEXT : UNVERIFIED_MONEY_TEXT,
     moneyAnswer: {

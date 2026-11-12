@@ -98,7 +98,8 @@ interface OpeningMoneyInput {
 
 /** A real signed V1 has payment evidence without being a synthetic change order. */
 export function openingMoneyContext({ key, quote, ledger, itemMapping, now, providerRecordedAt, preparationStatus }: OpeningMoneyInput): MoneyContext {
-  const href = `/quotes/${key}`, paymentHref = `${href}#item-holds`;
+  // A project still on V1 has no later version, so its page opens on V1.
+  const href = quoteHref(key), paymentHref = quoteHref(key, null, "item-holds");
   const sources: MoneySource[] = [
     { id: "quote", kind: "quote", label: `${quote.projectName} · approved V1 quote`, href, recordedAt: quote.approvedAt },
     { id: "approval", kind: "approval", label: "Client's recorded demo V1 confirmation", href, recordedAt: quote.approvedAt },

@@ -306,7 +306,7 @@ export async function operationPage(db: Pick<Db, "select">, operationId: string)
     : await db.select({ projectKey: chatCases.projectKey, studioId: chatCases.sessionId }).from(pricingCases).innerJoin(chatCases, eq(chatCases.id, pricingCases.caseId)).where(eq(pricingCases.baselineRevisionId, operation.revisionId));
   if (!found) return null;
   const anchor = operation.servicesHold ? "design-services" : operation.changeOrderId ? "payments" : "item-holds";
-  const page = operation.changeOrderId && "version" in found ? quoteHref(found.projectKey, Number(found.version)) : quoteHref(found.projectKey);
+  const page = operation.changeOrderId && "version" in found ? quoteHref(found.projectKey, Number(found.version)) : quoteHref(found.projectKey, 1);
   return { path: page, anchor, projectKey: found.projectKey, studioId: found.studioId };
 }
 
