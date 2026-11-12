@@ -1,5 +1,6 @@
 "use client";
 
+import { Check, LoaderCircle, X } from "lucide-react";
 import { useId, useMemo, useState, type ReactNode } from "react";
 import { notRefundedText } from "@/pricing/fees";
 import { BrandMark } from "../BrandMark";
@@ -64,6 +65,15 @@ function SealMark({ seal }: { seal: Seal }) {
   </div>;
 }
 
+/** Approve or decline one line, on the document. Choosing the same again clears it. */
+function DecideButtons({ name, choice, onChoose }: { name: string; choice: "approved" | "declined" | undefined; onChoose: (decision: "approved" | "declined" | null) => void }) {
+  const base = "inline-flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[10.5px] font-semibold";
+  return <span className="inline-flex gap-1" role="group" aria-label={`Your decision on ${name}`}>
+    <button type="button" aria-pressed={choice === "approved"} onClick={() => onChoose(choice === "approved" ? null : "approved")} className={`${base} ${choice === "approved" ? "border-emerald-700 bg-emerald-700 text-white" : "border-[var(--line)] bg-white text-slate-600 hover:border-emerald-700"}`}><Check className="h-3 w-3" strokeWidth={3} />Approve</button>
+    <button type="button" aria-pressed={choice === "declined"} onClick={() => onChoose(choice === "declined" ? null : "declined")} className={`${base} ${choice === "declined" ? "border-[#9c3d34] bg-[#9c3d34] text-white" : "border-[var(--line)] bg-white text-slate-600 hover:border-[#9c3d34]"}`}><X className="h-3 w-3" strokeWidth={3} />Decline</button>
+  </span>;
+}
+
 function CopyHash({ hash }: { hash: string }) {
   const [copied, setCopied] = useState(false);
   return <button type="button" className="rounded border border-[var(--line)] bg-white px-2 py-0.5 text-[10.5px] hover:bg-[var(--canvas)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--primary-fill)] print:hidden"
@@ -86,7 +96,7 @@ function HashRow({ label, hash }: { label: string; hash: string }) {
 
 const TABLES: Record<string, SheetTable> = {
   changes: { columns: ["28px", "auto", "84px", "84px", "146px", "84px"], head: null },
-  lines: { columns: ["28px", "auto", "92px", "124px", "92px"], head: null },
+  lines: { columns: ["28px", "auto", "88px", "148px", "84px"], head: null },
   payments: { columns: ["56px", "auto", "84px", "88px", "158px", "116px"], head: null },
   certificate: { columns: ["150px", "142px", "172px", "auto"], head: null },
 };
@@ -97,7 +107,14 @@ const TABLES: Record<string, SheetTable> = {
  * signature and the notes. Before the client signs it reads as the formal
  * quote of the version as sent; after, it is the signed version receipt.
  */
-function receiptBlocks(receipt: VersionReceipt, studioName: string, demo: boolean, embedded: boolean) {
+/** The client deciding an open V1 on the document itself: a choice per undecided line, and a reason for each decline. */
+export interface OpeningDecide {
+  choices: Readonly<Record<string, { decision: "approved" | "declined"; note: string }>>;
+  onChoose: (itemId: string, decision: "approved" | "declined" | null) => void;
+  onReason: (itemId: string, note: string) => void;
+}
+
+function receiptBlocks(receipt: VersionReceipt, studioName: string, demo: boolean, embedded: boolean, decide?: OpeningDecide) {
   const { project, version, agreement, totals, pending } = receipt;
   const signed = isSigned(receipt);
   const draft = version.status === "draft";
@@ -220,9 +237,17 @@ function receiptBlocks(receipt: VersionReceipt, studioName: string, demo: boolea
         <td className={`${cell} tabular-nums`}>{index + 1}</td>
         <td className={cell}>{line.name}<Sub>{itemDetail(line)}</Sub></td>
         <td className={`${cell} ${amount}`}>{usd(line.totalCents)}</td>
-        <td className={cell}>{DECISION_LABELS[line.decision]}{line.note && <Sub>Reason: {line.note}</Sub>}</td>
+        <td className={cell}>{decide && line.decision === "pending" ? <DecideButtons name={line.name} choice={decide.choices[line.itemId]?.decision} onChoose={(decision) => decide.onChoose(line.itemId, decision)} /> : <>{DECISION_LABELS[line.decision]}{line.note && <Sub>Reason: {line.note}</Sub>}</>}</td>
         <td className={cell}>{sample ? "Sample approval" : signing >= 0 ? `Signing ${signing + 1}` : "—"}</td>
-      </>, { keepWithNext: index === agreement.lines.length - 1 });
+      </>, { keepWithNext: index === agreement.lines.length - 1 && decide?.choices[line.itemId]?.decision !== "declined" });
+      // A decline carries the client's reason, written on the line it is about.
+      const declined = decide && line.decision === "pending" && decide.choices[line.itemId]?.decision === "declined" ? decide.choices[line.itemId] : null;
+      if (declined) row("lines", `${line.itemId}-reason`, <td colSpan={5} className={`${cell} bg-[#fdf6f5]`}>
+        <label className="flex items-center gap-2 text-[11px] text-[#9c3d34]"><span className="shrink-0 font-semibold">Reason</span>
+          <input value={declined.note} onChange={(event) => decide!.onReason(line.itemId, event.target.value)} maxLength={1000} placeholder="Why are you declining this line? Your designer reads it." aria-label={`Reason for declining ${line.name}`}
+            className="min-w-0 flex-1 rounded-md border border-[#f3c7c3] bg-white px-2 py-1 text-[12px] text-[var(--ink)] outline-none focus:border-[#9c3d34]" />
+          {!declined.note.trim() && <span className="shrink-0">Needed</span>}</label>
+      </td>);
     });
     row("lines", "total", <>
       <td className={total} /><td className={total}>Total</td>
@@ -314,15 +339,22 @@ function receiptBlocks(receipt: VersionReceipt, studioName: string, demo: boolea
 /**
  * A version's formal document on A4 sheets: its quote while the client has
  * not signed it, its signed version receipt after. `embedded` when it sits
- * beside other content, whose heading is the page's.
+ * beside other content, whose heading is the page's. `updating` while a
+ * newer state of it is loading, so a signature just made never sits beside an
+ * old "awaiting signature".
  */
-export function ReceiptDocument({ receipt, studioName = "", embedded = false }: { receipt: VersionReceipt; studioName?: string; embedded?: boolean }) {
+export function ReceiptDocument({ receipt, studioName = "", embedded = false, decide, updating = false }: { receipt: VersionReceipt; studioName?: string; embedded?: boolean; decide?: OpeningDecide; updating?: boolean }) {
   const demo = useDemoMode();
-  const { blocks, tables } = useMemo(() => receiptBlocks(receipt, studioName, demo, embedded), [receipt, studioName, demo, embedded]);
+  const { blocks, tables } = useMemo(() => receiptBlocks(receipt, studioName, demo, embedded, decide), [receipt, studioName, demo, embedded, decide]);
   const name = documentName(receipt);
-  return <A4Sheets blocks={blocks} tables={tables} label={`${name}, No. ${receipt.receiptNo}`}
+  const sheets = <A4Sheets blocks={blocks} tables={tables} label={`${name}, No. ${receipt.receiptNo}`}
     footer={(page, pages) => <footer className="mt-4 flex justify-between gap-4 border-t border-[var(--line)] pt-2 text-[10px] leading-normal text-[var(--muted)]">
       <span>Setti · {name} · No. {receipt.receiptNo}</span>
       <span className="tabular-nums">Page {page} of {pages}</span>
     </footer>} />;
+  return <div className="relative" aria-busy={updating || undefined}>
+    {updating && <p role="status" className="absolute left-1/2 top-3 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full bg-[var(--ink)] px-3.5 py-1.5 text-[12px] font-medium text-white shadow-lg">
+      <LoaderCircle className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" />Updating the document…</p>}
+    <div className={updating ? "opacity-50 transition-opacity" : "transition-opacity"}>{sheets}</div>
+  </div>;
 }

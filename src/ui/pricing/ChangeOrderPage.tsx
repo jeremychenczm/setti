@@ -170,7 +170,7 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
           <div className="min-w-0 rounded-xl bg-[#8e8c85] p-3 sm:p-[18px] lg:col-start-1 lg:row-start-1">
             {!formal && <p role="status" className="flex items-center gap-2 rounded-lg bg-white/90 p-6 text-[13px] text-slate-600"><LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" />Loading the formal quote…</p>}
             {formal && "error" in formal && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-[12px] text-red-800">{formal.error}</p>}
-            {formal && "receipt" in formal && <ReceiptDocument receipt={formal.receipt} studioName={studioName} embedded />}
+            {formal && "receipt" in formal && <ReceiptDocument receipt={formal.receipt} studioName={studioName} embedded updating={formal.stale} />}
           </div>
         </div>
         {!designer && view?.decision?.decision === "approved" && <>

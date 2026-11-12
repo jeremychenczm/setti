@@ -32,7 +32,9 @@ export type SheetBlock = (Kept & { node: ReactNode; table?: undefined }) | Row;
 const isRow = (block: SheetBlock): block is Row => block.table !== undefined;
 
 /** The blocks at `indexes`, in order, with each run of one table's rows in a table of its own. */
-function Blocks({ blocks, indexes, tables }: { blocks: readonly SheetBlock[]; indexes: readonly number[]; tables: Readonly<Record<string, SheetTable>> }) {
+function Blocks({ blocks, indexes: given, tables }: { blocks: readonly SheetBlock[]; indexes: readonly number[]; tables: Readonly<Record<string, SheetTable>> }) {
+  // A layout made for a longer document is shown for one render after blocks are removed, until it is measured again.
+  const indexes = given.filter((index) => index < blocks.length);
   const parts: ReactNode[] = [];
   for (let at = 0; at < indexes.length;) {
     const first = blocks[indexes[at]];

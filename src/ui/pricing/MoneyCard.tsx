@@ -7,7 +7,7 @@ import { shortMoney } from "./common";
 import { bucketOf, FundingImpactPreview, type BucketKey } from "./FundingImpactPreview";
 
 /** A figure that counts from what it showed before to its new value. */
-function useCounted(value: number): number {
+export function useCounted(value: number): number {
   const [shown, setShown] = useState(value);
   const from = useRef(value);
   useEffect(() => {
