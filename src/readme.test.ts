@@ -104,14 +104,9 @@ describe("README payment statuses", () => {
 describe("README labels", () => {
   /** Buttons and labels the README quotes, with how each appears in the code. */
   const LABELS: [quoted: string, inCode: string | RegExp][] = [
-    ["I'm a designer", "I'm a designer"],
-    ["I'm a client", "I'm a client"],
     ["End demo & reset", "End demo & reset"],
-    ["Start a separate Maple run", "Start a separate Maple run"],
-    ["Previous Maple runs", "Previous Maple runs"],
     ["Browse read-only examples", "Browse read-only examples"],
     ["Pay with the test card", "Pay with the test card"],
-    ["Start the live walkthrough", "Start the live walkthrough"],
     ["Sample supplier documents", "Sample supplier documents"],
     ["Prepare the revised quote", "Prepare the revised quote"],
     ["Review pricing", "Review pricing"],

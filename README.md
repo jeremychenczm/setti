@@ -10,19 +10,14 @@ Independent interior designers settle the design with their clients in one proje
 
 ## Try it
 
-Open **<https://setti.onrender.com/try>** in any browser; there is no account to create. Pick a side of the same private project and switch whenever you like:
-
-- **I'm a designer** opens Jordan's studio. The Maple Ave living-and-dining project has an agreed V1, real Sandbox holds on its furniture and a 19-message discussion waiting for an AI revision.
-- **I'm a client** opens the project as Emma, who reviews the revised quote, signs it and pays.
-
-New preparation starts only after choosing a role; an already started setup continues in the background while the app is open.
+Open **<https://setti.onrender.com/try>** in any browser; there is no account to create. It opens a private copy of the Maple Ave Café project as Jordan, the designer. The account menu switches to Emma, the client, who reviews the revised quote, signs it and pays. Test-payment setup continues in the background while the app is open.
 
 **Sandbox test accounts.** These are PayPal Sandbox test values and move no real money. The payment page shows them too, with copy buttons.
 
 - **PayPal** or **Pay Later**: log in to the PayPal window as `sb-jhaqe53477496@personal.example.com` with the password `W=3qAuJc`.
 - **Card**: choose **Pay with the test card**. Setti approves PayPal's Sandbox Visa `4012 0000 3333 0026` on the server, so there is nothing to type.
 
-When finished, select **End demo & reset** to clear this browser's demo identity and return to `/try`. Your next start gets a fresh private workspace with Maple's agreed V1 and sample discussion, without the previous run's revisions. Ending a demo releases its open holds on PayPal and keeps its project and PayPal Sandbox records as a read-only record; charged payments are not undone. Refreshing, switching roles, returning from PayPal or selecting **Demo home** keeps the current run available to continue.
+When finished, select **End demo & reset** to clear this browser's demo identity and return to the landing page. Your next start gets a fresh private workspace with Maple's agreed V1 and sample discussion, without the previous run's revisions. Ending a demo releases its open holds on PayPal and keeps its project and PayPal Sandbox records as a read-only record; charged payments are not undone. Refreshing, switching roles or returning from PayPal keeps the current run, and opening `/try` again continues it.
 
 To run it yourself (Node.js 22 or later, Docker):
 
@@ -41,7 +36,7 @@ Starting the recommended **Maple Ave · living & dining** walkthrough prepares t
 - When setup completes, the sofa ($2,400), coffee table ($650), dining table ($1,400) and six dining chairs ($1,080) each have their own PayPal Sandbox hold. These goods have not been ordered. The sideboard's $1,200 Sandbox payment and the $1,000 V1 design-service fee are captured. V2 carries the paid service forward without charging it again. When Emma paid that fee she agreed to save the card for the project, so it appears as **Visa •••• 0026** and later holds need no PayPal window. It is PayPal's Sandbox test card, never the visitor's own PayPal wallet.
 - Nineteen prepared human messages develop a more open living-and-dining layout: a compact sofa, two movable side tables, a fixed 110 cm round dining table, four chairs instead of six, and no sideboard. Fictional local supplier documents provide the prices and return terms. No new AI revision has been requested yet.
 
-These starting payments are real PayPal Sandbox transactions. Setti approves them on the server with PayPal's documented Sandbox test card (`4012 0000 3333 0026`). A private run identity is saved before money is prepared. Each preparation stage is saved; after an interruption, continue the same run to check its original operations. **Start a separate Maple run** creates a new project without undoing the old transactions. **Previous Maple runs** lets the same visitor return to earlier records. The server allocates at most `SETTI_TRY_PER_HOUR` new Maple runs per hour (default 30).
+These starting payments are real PayPal Sandbox transactions. Setti approves them on the server with PayPal's documented Sandbox test card (`4012 0000 3333 0026`). A private run identity is saved before money is prepared. Each preparation stage is saved; after an interruption, continue the same run to check its original operations. The server allocates at most `SETTI_TRY_PER_HOUR` new Maple runs per hour (default 30).
 
 **Browse read-only examples** opens `/try/cases`, which needs no database or PayPal connection. Six fictional cases explain approval, holds, returns, service reductions, saved-method approval and recovery. A separate dated recording shows the real Sandbox proof from 22 October. Example records never become executable projects or payment IDs.
 
@@ -49,7 +44,7 @@ These starting payments are real PayPal Sandbox transactions. Setti approves the
 
 A discussion becomes one reviewed proposal, then item-specific payment steps. Every PayPal step runs against the Sandbox.
 
-1. Open `/try` and select **I'm a designer**. The studio project collection opens immediately, without creating payments. Select **Start the live walkthrough** (or **Continue your live project**) on Maple Ave for real AI and Sandbox actions. The living-and-dining V1 and discussion open as Jordan; test-payment setup continues in the background.
+1. Open `/try`. Maple Ave opens as Jordan, the designer, for real AI and Sandbox actions; test-payment setup continues in the background.
 2. Read the conversation and expand **Sample supplier documents**. You may continue the discussion before drafting. The designer discusses dimensions, use and preferences without supplying a precomputed answer to the AI.
 3. Select **Prepare the revised quote**, edit the filled request if desired, then send. The configured model reads the whole conversation and supplied documents, identifies the five changes and selects the quoted products. Selecting the button alone sends nothing.
 4. Inspect the draft and source links. For the supplied direction, source prices produce a $5,670 proposed total: $4,430 of revised goods, $1,000 of unchanged design services and $240 of retained sideboard cost. The $2,060 reduction is an agreement difference, not an amount to pay or refund now.
