@@ -23,6 +23,8 @@ export interface ReviewLine {
   /** For a revised, carried or changed line: only the fields that differ. For an added line: its main values. */
   changes: FieldChange[];
   confirmed: boolean;
+  /** What the line adds to (or takes off) the quote total against where it started; null while a price is not set. */
+  deltaCents: number | null;
   /** Carried onto a newer draft that changed the same fields: the designer has to choose. */
   needsChoice?: boolean;
 }
@@ -55,6 +57,11 @@ const money = (cents: number | null | undefined) => cents === null || cents === 
 const text = (value: string | null | undefined) => value?.trim() ? value.trim() : "not set";
 const returnability = (returnable: boolean | null) => returnable === null ? "to be confirmed" : returnable ? "returnable" : "not returnable";
 
+type Priced = { quantity: number; unitPriceCents: number | null; taxCents: number | null; freightCents: number | null };
+/** A line's total with tax and delivery, or null while any of its amounts is not set. */
+const lineTotal = (line: Priced) => line.unitPriceCents === null || line.taxCents === null || line.freightCents === null ? null : line.quantity * line.unitPriceCents + line.taxCents + line.freightCents;
+const minus = (after: number | null, before: number | null) => after === null || before === null ? null : after - before;
+
 /** The comparable fields of a line, in reading order. */
 function fieldsOfLine(line: QuoteLine): [string, string][] {
   return [
@@ -84,12 +91,13 @@ function lineOf(workspace: PricingWorkspace, change: PricingChangeInput, index: 
   const baseline = change.itemId ? workspace.quote.lines.find((line) => line.itemId === change.itemId) : undefined;
   const name = change.after?.name || baseline?.name || v1Line?.name || "Line";
   const common = { key: change.key, name, confirmed: change.confirmed, ...(change.fromV1 ? { fromV1: change.fromV1 } : {}) };
-  if (!change.after) return { ...common, kind: "removed", changes: baseline ? [{ label: "Line", before: `${baseline.quantity} × ${money(baseline.unitPriceCents)}`, after: "removed" }] : [] };
+  if (!change.after) return { ...common, kind: "removed", deltaCents: baseline ? -(lineTotal(baseline) ?? 0) : null, changes: baseline ? [{ label: "Line", before: `${baseline.quantity} × ${money(baseline.unitPriceCents)}`, after: "removed" }] : [] };
   const before = v1Line ?? baseline;
   if (!before) {
-    return { ...common, kind: "added", changes: fieldsOfItem(change.after).filter(([label]) => ["Supplier", "Quantity", "Unit price", "Tax", "Delivery"].includes(label)).map(([label, value]) => ({ label, before: "—", after: value })) };
+    return { ...common, kind: "added", deltaCents: lineTotal(change.after), changes: fieldsOfItem(change.after).filter(([label]) => ["Supplier", "Quantity", "Unit price", "Tax", "Delivery"].includes(label)).map(([label, value]) => ({ label, before: "—", after: value })) };
   }
-  return { ...common, kind: change.fromV1?.kind ?? "changed", changes: differences(before, change.after) };
+  // A line back from V1 was not in the approved quote, so all of it is new to the total.
+  return { ...common, kind: change.fromV1?.kind ?? "changed", deltaCents: minus(lineTotal(change.after), baseline ? lineTotal(baseline) : 0), changes: differences(before, change.after) };
 }
 
 /** Null until a review is saved: the panel then shows the draft as proposed. */

@@ -172,9 +172,15 @@ export function CaseChat({ projectKey, quote, account, designer, client, demo = 
     initiallyPositioned.current = true;
   }, [lastConversationMessageId, running, loading, home, discussionStart, homeRequestStarted]);
 
+  // The dialog opens by itself only for a draft that arrives while the chat is open, so a later
+  // visit is not covered by it (the guide sits above the chat); the card in the chat opens it then.
+  const seenDraft = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    if (draft?.id && account.role === "designer") setDraftOpen(true);
-  }, [draft?.id, draft?.revision, account.role]);
+    if (loading) return;
+    const key = draft?.id ? `${draft.id}:${draft.revision}` : null;
+    if (seenDraft.current !== undefined && key && key !== seenDraft.current && account.role === "designer") setDraftOpen(true);
+    seenDraft.current = key;
+  }, [loading, draft?.id, draft?.revision, account.role]);
 
   // The draft is a dialog over the chat: Escape closes it, like a click outside it.
   useEffect(() => {
@@ -269,7 +275,7 @@ export function CaseChat({ projectKey, quote, account, designer, client, demo = 
 
               {error && <div role="alert" className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] leading-relaxed text-red-800"><p>{error}</p><div className="mt-2 flex flex-wrap gap-3">{canRetry && <button disabled={running} onClick={() => retry()} className="flex items-center gap-1.5 font-medium hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Retry this message</button>}{hasUnsent && !running && <button onClick={() => { const unsent = editUnsent(); if (unsent) { setText(unsent.text); input.current?.focus(); } }} className="font-medium hover:underline">Edit unsent message</button>}{!running && !hasUnsent && <button onClick={() => void reload()} className="font-medium hover:underline">Reload saved chat</button>}</div></div>}
 
-              {draft && account.role === "designer" && <div className="flex flex-wrap items-center gap-3 rounded-xl border border-brand-100 bg-brand-50/50 p-3.5"><FileText className="h-4 w-4 shrink-0 text-[var(--primary)]" /><span className="min-w-40 flex-1"><span className="block text-[12px] font-semibold">Current draft · {draft.title}</span><span className="mt-1 block text-[11px] text-slate-500">Awaiting designer pricing · based on V{draft.basedOnVersion}</span></span><button onClick={() => setDraftOpen(true)} className="shrink-0 rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">Open the draft</button></div>}
+              {draft && account.role === "designer" && <div className="flex flex-wrap items-center gap-3 rounded-xl border border-brand-100 bg-brand-50/50 p-3.5"><FileText className="h-4 w-4 shrink-0 text-[var(--primary)]" /><span className="min-w-40 flex-1"><span className="block text-[12px] font-semibold">Current draft · {draft.changes.length} {draft.changes.length === 1 ? "change" : "changes"} to V{draft.basedOnVersion}</span><span className="mt-1 block text-[11px] text-slate-500">Awaiting designer pricing</span></span><button onClick={() => setDraftOpen(true)} className="shrink-0 rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">Open the draft</button></div>}
               {snapshot?.draftPreparing && <div role="status" className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3.5 text-[12px] text-slate-600"><FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" /><span>The studio is preparing a revised version of the quote. You will see it here once it is sent.</span></div>}
               <div ref={bottom} />
             </div>
@@ -289,7 +295,7 @@ export function CaseChat({ projectKey, quote, account, designer, client, demo = 
           <section role="dialog" aria-modal="true" aria-labelledby="draft-dialog-title" className="flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
             <header className="flex items-center gap-3 border-b border-[var(--line)] px-5 py-3.5">
               <FileText className="h-4 w-4 shrink-0 text-[var(--primary)]" />
-              <div className="min-w-0 flex-1"><h2 id="draft-dialog-title" className="text-[14px] font-semibold">Current draft</h2>{draft && <p className="truncate text-[12px] text-[var(--muted)]">{draft.title}</p>}</div>
+              <div className="min-w-0 flex-1"><h2 id="draft-dialog-title" className="text-[14px] font-semibold">Current draft</h2>{draft && <p className="truncate text-[12px] text-[var(--muted)]">{currentQuote.projectName} · based on approved V{draft.basedOnVersion}</p>}</div>
               {draft && (actor === "designer" && !running
                 ? <a href={`/pricing/${projectKey}`} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[var(--primary-fill)] px-4 py-2 text-[13px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]"><ClipboardCheck className="h-4 w-4" />Review pricing</a>
                 : <span className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-[13px] font-semibold text-slate-400" title="Available to the designer while the AI is not running"><ClipboardCheck className="h-4 w-4" />Review pricing</span>)}
