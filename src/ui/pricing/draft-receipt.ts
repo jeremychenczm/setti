@@ -1,4 +1,4 @@
-import { requiresOldItemHandling } from "@/pricing/calculation";
+import { orderedUnits, requiresOldItemHandling } from "@/pricing/calculation";
 import type { PricingInput, PricingPreview, PricingWorkspace } from "@/pricing/types";
 import { RECEIPT_FORMAT, RECEIPT_NOT_INCLUDED, type ChangeReceiptLine, type ReceiptItem, type VersionReceipt } from "@/receipts/types";
 import { calculateLineTotals, calculateQuoteTotals } from "@/quotes/totals";
@@ -24,7 +24,8 @@ export function draftReceipt({ workspace, input, preview, nextVersion, clientNam
 }): VersionReceipt {
   const { quote } = workspace;
   const touched = new Set(input.changes.map((change) => change.itemId).filter(Boolean));
-  const changes: ChangeReceiptLine[] = input.changes.map((change) => {
+  const sorted = orderedUnits(input.changes.map((change) => ({ token: change.itemId ?? change.key, change })), input.lineOrder).map((unit) => unit.change);
+  const changes: ChangeReceiptLine[] = sorted.map((change) => {
     const before = change.itemId ? quote.lines.find((line) => line.itemId === change.itemId) : undefined;
     return {
       itemId: change.itemId, action: change.action,
@@ -52,7 +53,7 @@ export function draftReceipt({ workspace, input, preview, nextVersion, clientNam
     signatures: [],
     agreement: {
       kind: "change", changes,
-      unchanged: quote.lines.filter((line) => !touched.has(line.itemId)).map((line) => item(line.itemId, line)),
+      unchanged: orderedUnits(quote.lines.filter((line) => !touched.has(line.itemId)).map((line) => ({ token: line.itemId, line })), input.lineOrder).map(({ line }) => item(line.itemId, line)),
       source: { kind: input.source?.kind ?? null, vendor: input.source?.kind === "vendor" ? input.source.vendor : "", notice: input.source?.kind === "vendor" ? input.source.notice : "", messages: [] },
       terms: input.terms,
     },

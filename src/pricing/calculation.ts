@@ -45,6 +45,7 @@ export const pricingInputSchema = z.strictObject({
   issues: z.array(z.strictObject({ id: z.string().min(1).max(100), label: text(10_000), resolved: z.boolean(), note: text(10_000) })).max(300),
   terms: text(30_000), reviewNotes: text(20_000),
   source: z.strictObject({ kind: z.enum(["client", "designer", "vendor"]), vendor: text(300), notice: text(10_000) }).optional(),
+  lineOrder: z.array(z.string().min(1).max(300)).max(400).optional(),
 });
 
 /** A draft follows a supplier's notice, or otherwise the conversation with the client, whoever wrote it. */
@@ -265,26 +266,36 @@ function feeLine(draft: ChangeDraft, change: PricingChangeInput, before: Approve
 
 function assembledLines(quote: ApprovedQuoteReport, draft: ChangeDraft, input: PricingInput): FinalQuoteLine[] | null {
   const byItem = new Map(input.changes.filter((change) => change.itemId).map((change) => [change.itemId, change]));
-  const lines: FinalQuoteLine[] = [];
+  // Each signed line, with its replacement and its kept fee, moves as one; so does each new line.
+  const units: { token: string; lines: FinalQuoteLine[] }[] = [];
   for (const before of quote.lines) {
     const change = byItem.get(before.itemId);
-    if (!change) { lines.push(unchanged(before)); continue; }
+    const unit: FinalQuoteLine[] = [];
+    units.push({ token: before.itemId, lines: unit });
+    if (!change) { unit.push(unchanged(before)); continue; }
     if (change.after) {
       const after = finalAfter(draft, change);
       if (!after) return null;
-      lines.push(after);
+      unit.push(after);
     }
     if (requiresOldItemHandling(change, before)) {
       if (change.oldItemCostCents === null) return null;
-      if (change.oldItemCostCents > 0) lines.push(feeLine(draft, change, before));
+      if (change.oldItemCostCents > 0) unit.push(feeLine(draft, change, before));
     }
   }
   for (const change of input.changes.filter((entry) => entry.action === "add")) {
     const after = finalAfter(draft, change);
     if (!after) return null;
-    lines.push(after);
+    units.push({ token: change.key, lines: [after] });
   }
-  return lines;
+  return orderedUnits(units, input.lineOrder).flatMap((unit) => unit.lines);
+}
+
+/** The units in the designer's order; any it does not name keep their place after the named ones. */
+export function orderedUnits<T extends { token: string }>(units: readonly T[], order: readonly string[] | undefined): T[] {
+  if (!order?.length) return [...units];
+  const rank = new Map(order.map((token, index) => [token, index]));
+  return units.map((unit, index) => ({ unit, index })).sort((a, b) => (rank.get(a.unit.token) ?? order.length + a.index) - (rank.get(b.unit.token) ?? order.length + b.index)).map(({ unit }) => unit);
 }
 
 function boundedTotals(lines: readonly { quantity: number; unitPriceCents: number; taxCents: number; freightCents: number }[]) {

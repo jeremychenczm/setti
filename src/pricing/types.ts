@@ -86,6 +86,12 @@ export interface PricingInput {
   reviewNotes: string;
   /** Saved reviews from before sources were recorded have none; the draft's author decides then. */
   source?: ChangeSource;
+  /**
+   * The order the designer put the lines in: a signed line by its item id, a new
+   * line by its change key. Absent, the version keeps the signed order with new
+   * lines at the end.
+   */
+  lineOrder?: string[];
 }
 
 export interface PricingPreview {

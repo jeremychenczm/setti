@@ -91,6 +91,14 @@ describe("pricing review calculation", () => {
     expect(previewPricing(q, d, input).ready).toBe(true);
   });
 
+  it("freezes the designer's line order into V2, a line moving with its kept fee", () => {
+    const q = quote(); const d = draft(); const input = { ...ready(q, d), lineOrder: ["rug"] };
+    const body = prepareChangeOrder(q, d, input, messages());
+    expect(body.lines.map((line) => line.origin)).toEqual(["unchanged", "changed", "old_item_cost"]);
+    expect(body.lines[0].itemId).toBe("rug");
+    expect(prepareChangeOrder(q, d, ready(q, d), messages()).lines.map((line) => line.origin)).toEqual(["changed", "old_item_cost", "unchanged"]);
+  });
+
   it("creates a complete V2, keeps the untouched rug and adds one inclusive old-cost fee", () => {
     const q = quote(); const d = draft(); const input = ready(q, d);
     const preview = previewPricing(q, d, input);

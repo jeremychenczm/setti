@@ -205,7 +205,10 @@ async function changeReceipt(db: Reader, caseRow: CaseRow, bridge: Bridge | null
       && decision.revisionContentHash === order.revisionContentHash && revision?.contentHash === order.revisionContentHash,
   } : null;
 
-  const changes: ChangeReceiptLine[] = order.changes.map((change) => ({
+  // Changes read in the order of the version's lines, as the designer arranged them; a removed line comes last.
+  const position = new Map(order.lines.map((line, index) => [line.itemId, index]));
+  const at = (change: (typeof order.changes)[number]) => position.get(change.after?.itemId ?? "") ?? position.get(change.itemId ?? "") ?? order.lines.length;
+  const changes: ChangeReceiptLine[] = [...order.changes].sort((a, b) => at(a) - at(b)).map((change) => ({
     itemId: change.itemId, action: change.action,
     before: change.before ? receiptItem(change.before) : null,
     after: change.after ? receiptItem(change.after) : null,
