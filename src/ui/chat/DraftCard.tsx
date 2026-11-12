@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUpRight, ClipboardCheck, Link2, MessageSquare, ShieldCheck } from "lucide-react";
+import { ArrowDown, ArrowUpRight, Link2, MessageSquare, ShieldCheck } from "lucide-react";
 import type { CaseMessage, ChangeDraft, DraftChange, DraftItem } from "@/chat/types";
 import { FromV1Note } from "../pricing/common";
 
@@ -25,7 +25,7 @@ function safeUrl(value: string): string | null {
 
 const actionLabel: Record<DraftChange["action"], string> = { quantity: "Quantity change", remove: "Remove", replace: "Replace", add: "Add" };
 
-export function DraftCard({ draft, messages, onSourceMessage, pricingHref, canPrice = false }: { draft: ChangeDraft; messages: CaseMessage[]; onSourceMessage: (id: string) => void; pricingHref?: string; canPrice?: boolean }) {
+export function DraftCard({ draft, messages, onSourceMessage }: { draft: ChangeDraft; messages: CaseMessage[]; onSourceMessage: (id: string) => void }) {
   const sourceIds = [...new Set([...draft.sourceMessageIds, ...draft.changes.flatMap((change) => change.sourceMessageIds)])];
   return (
     <article className="space-y-5 p-4">
@@ -78,7 +78,6 @@ export function DraftCard({ draft, messages, onSourceMessage, pricingHref, canPr
       })}</div></div>}
 
       <div className="flex items-start gap-2 rounded-xl bg-brand-50 p-3 text-[11px] leading-relaxed text-brand-800"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" /><span>Draft only. A designer must verify the prices and terms of every change before issuing one client version. Approved V{draft.basedOnVersion} stays unchanged.</span></div>
-      {pricingHref && <div>{canPrice ? <a href={pricingHref} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-lg bg-[var(--primary-fill)] px-4 py-2.5 text-[12px] font-medium text-[var(--on-primary)] hover:bg-[var(--primary-hover)]"><ClipboardCheck className="h-4 w-4" />Review pricing</a> : <button disabled className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-100 px-4 py-2.5 text-[12px] font-medium text-slate-400"><ClipboardCheck className="h-4 w-4" />Review pricing</button>}<p className="mt-2 text-[10px] leading-relaxed text-slate-400">{canPrice ? "Opens the demo designer’s pricing workspace. Saving the review and sending it to the client are separate steps." : "Available to the designer account while the AI is not running."}</p></div>}
     </article>
   );
 }

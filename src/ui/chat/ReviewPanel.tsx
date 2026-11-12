@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ClipboardCheck, LoaderCircle, RefreshCw } from "lucide-react";
+import { Check, LoaderCircle, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CaseKey, CaseMessage, ChangeDraft } from "@/chat/types";
 import { reviewSummary, type CarriedSummary, type ReviewLine, type ReviewSummary } from "@/pricing/review-diff";
@@ -42,12 +42,12 @@ const usd = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency
  * The designer's view of the current draft: once a pricing review is saved, what
  * it changes line by line against the quote; before that, the draft as proposed.
  */
-export function ReviewPanel({ projectKey, draft, messages, onSourceMessage, canPrice }: { projectKey: CaseKey; draft: ChangeDraft; messages: CaseMessage[]; onSourceMessage: (id: string) => void; canPrice: boolean }) {
+/** Review pricing sits in the dialog's header, so it is in view without scrolling. */
+export function ReviewPanel({ projectKey, draft, messages, onSourceMessage }: { projectKey: CaseKey; draft: ChangeDraft; messages: CaseMessage[]; onSourceMessage: (id: string) => void }) {
   const [summary, setSummary] = useState<ReviewSummary | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [estimate, setEstimate] = useState<{ baseline: number; total: number; difference: number; retained: number } | null>(null);
   const requestSequence = useRef(0);
-  const pricingHref = `/pricing/${projectKey}`;
 
   const load = useCallback(async () => {
     const requestId = ++requestSequence.current;
@@ -76,7 +76,7 @@ export function ReviewPanel({ projectKey, draft, messages, onSourceMessage, canP
   useEffect(() => { const sequence = requestSequence; void load(); return () => { sequence.current++; }; }, [load]);
 
   if (summary === undefined) return <div role="status" className="flex items-center gap-2 p-4 text-[12px] text-[var(--muted)]"><LoaderCircle className="h-4 w-4 animate-spin" />Loading the pricing review…</div>;
-  const draftCard = <DraftCard draft={draft} messages={messages} onSourceMessage={onSourceMessage} pricingHref={pricingHref} canPrice={canPrice} />;
+  const draftCard = <DraftCard draft={draft} messages={messages} onSourceMessage={onSourceMessage} />;
   if (!summary || summary.stale) {
     return <>
       {estimate ? <div className="mx-4 mt-4 rounded-xl border border-stone-200 bg-stone-50 p-3.5"><p className="text-[11px] font-semibold text-stone-700">Proposed estimate · needs your review</p><p className="mt-1.5 text-[15px] font-semibold text-stone-900">{usd(estimate.baseline)} → {usd(estimate.total)} <span className="text-[12px] font-medium text-stone-600">({signed(estimate.difference)})</span></p><p className="mt-2 text-[11px] leading-relaxed text-stone-600">Calculated from the AI-selected source products and sample terms, including {usd(estimate.retained)} in non-refundable fees. This is the proposed agreement total; payment actions are planned separately.</p><p className="mt-2 text-[11px] text-stone-600">Open Review pricing, adopt this draft if prompted, and review the preselected demo checks before sending it to Emma.</p></div> : <p className="mx-4 mt-4 rounded-lg bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-600">{summary?.stale ? "The draft changed after your last saved pricing review. Re-price it from the latest draft on the pricing page." : "Not priced yet. Once you save a pricing review, this panel shows what you changed, line by line."}</p>}
@@ -118,8 +118,7 @@ export function ReviewPanel({ projectKey, draft, messages, onSourceMessage, canP
         ))}
       </ol>
 
-      {canPrice && <a href={pricingHref} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-2 rounded-lg bg-[var(--primary-fill)] px-4 py-2.5 text-[12px] font-medium text-[var(--on-primary)] hover:bg-[var(--primary-hover)]"><ClipboardCheck className="h-4 w-4" />Continue pricing</a>}
-      <p className="text-[10px] leading-relaxed text-[var(--muted)]">{summary.carried ? "Nothing here is saved on the updated draft yet. Open the pricing page to check it and save." : "Only saved changes appear here. Reload after saving on the pricing page."}</p>
+      <p className="text-[10px] leading-relaxed text-[var(--muted)]">{summary.carried ? "Nothing here is saved on the updated draft yet. Open Review pricing to check it and save." : "Only saved changes appear here. Reload after saving on the pricing page."}</p>
       <details className="rounded-xl border border-dashed border-[var(--line)]"><summary className="cursor-pointer px-3 py-2 text-[11px] font-medium text-slate-600">The draft as first proposed</summary>{draftCard}</details>
     </article>
   );

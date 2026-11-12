@@ -1,8 +1,8 @@
 "use client";
 
-import { Bot, Check, Circle, FileText, LoaderCircle, MessageSquare, PanelRight, Plus, RefreshCw, SendHorizontal, UserPlus, X } from "lucide-react";
+import { ArrowDownRight, Bot, Check, Circle, ClipboardCheck, FileText, LoaderCircle, MessageSquare, Plus, RefreshCw, SendHorizontal, UserPlus, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isAiInvocation } from "@/ai/intent";
 import type { AccountId, DemoAccount } from "@/accounts/demo";
 import type { AiStage, CaseKey, CaseMessage, HumanActor } from "@/chat/types";
@@ -13,7 +13,6 @@ import { isHomeQuote } from "@/demo/home-evidence";
 import { HomeSupplierDocuments } from "../try/HomeSupplierDocuments";
 import type { Person } from "../demo-data";
 import { useDismiss } from "../useDismiss";
-import { useResizableWidth } from "../useResizableWidth";
 import { usd } from "../demo-data";
 import { chatTimeline, latestChatMessage } from "./activity";
 import { ActivityCard } from "./ActivityCard";
@@ -88,7 +87,6 @@ export function CaseChat({ projectKey, quote, account, designer, client, demo = 
   const [historyOpen, setHistoryOpen] = useState(false);
   const attachRoot = useRef<HTMLDivElement>(null);
   // The draft panel keeps at least 360px for the chat beside it.
-  const panel = useResizableWidth("setti-draft-panel-width", 420, 320, 360);
   useDismiss(attachRoot, attachOpen, setAttachOpen);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -157,6 +155,15 @@ export function CaseChat({ projectKey, quote, account, designer, client, demo = 
   const isStartingPaymentNote = (message: CaseMessage) => home && preparedVersionCount === 0 && message.actor === "assistant" && message.model === "system" && !message.replyToMessageId && /\bV1\b/.test(message.text);
   const startingPaymentNotes = messages.filter(isStartingPaymentNote);
   const lastConversationMessageId = messages.filter((message) => !isStartingPaymentNote(message)).at(-1)?.id;
+  // The walkthrough's first step: Jordan's request already waits in the box, so the next move is Send.
+  const homeRequestReady = homeExampleAvailable && !homeRequestStarted && account.role === "designer";
+  const prefilledHome = useRef(false);
+  useEffect(() => {
+    if (loading || prefilledHome.current || !homeRequestReady || snapshot?.activeMessageId) return;
+    prefilledHome.current = true;
+    setText((current) => current.trim() ? current : HOME_DESIGNER_REQUEST);
+  }, [loading, homeRequestReady, snapshot?.activeMessageId]);
+  const sendHomeRequest = homeRequestReady && isAiInvocation(text);
 
   useEffect(() => {
     if (loading || !lastConversationMessageId) return;
@@ -168,6 +175,14 @@ export function CaseChat({ projectKey, quote, account, designer, client, demo = 
   useEffect(() => {
     if (draft?.id && account.role === "designer") setDraftOpen(true);
   }, [draft?.id, draft?.revision, account.role]);
+
+  // The draft is a dialog over the chat: Escape closes it, like a click outside it.
+  useEffect(() => {
+    if (!draftOpen) return;
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setDraftOpen(false); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [draftOpen]);
 
   useEffect(() => () => {
     if (highlightTimer.current) clearTimeout(highlightTimer.current);
@@ -230,12 +245,12 @@ export function CaseChat({ projectKey, quote, account, designer, client, demo = 
         subtitle={`${designer.name} · ${client.name} · Setti`}>
         {opening?.status === "draft" && account.role === "client" ? null : confirmedQuoteHref ? <Link href={confirmedQuoteHref} aria-label={`View client-confirmed quote V${currentQuote.version}`} className="flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--primary-soft)] px-3 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-brand-100"><FileText className="h-3.5 w-3.5" />Quote V{currentQuote.version}</Link> : <button onClick={() => onOpenQuote()} className="flex shrink-0 items-center gap-1.5 rounded-full bg-[var(--primary-soft)] px-3 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-brand-100"><FileText className="h-3.5 w-3.5" />Quote V{currentQuote.version}{opening?.status === "draft" ? " · Draft" : ""}</button>}
         {canInvite && <button onClick={() => setInviteOpen(true)} className="flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-medium text-[var(--primary)] hover:bg-[var(--primary-soft)]"><UserPlus className="h-3.5 w-3.5" />Invite client</button>}
-        {account.role === "designer" && <button onClick={() => setDraftOpen((open) => !open)} aria-label={draftOpen ? "Close current draft" : "Open current draft"} aria-pressed={draftOpen} className={`rounded-lg p-2 ${draftOpen ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "text-[var(--muted)] hover:bg-[var(--canvas)]"}`}><PanelRight className="h-4 w-4" /></button>}
+        {account.role === "designer" && <button onClick={() => setDraftOpen((open) => !open)} aria-label={draftOpen ? "Close current draft" : "Open current draft"} aria-pressed={draftOpen} className={`rounded-lg p-2 ${draftOpen ? "bg-[var(--primary-soft)] text-[var(--primary)]" : "text-[var(--muted)] hover:bg-[var(--canvas)]"}`}><FileText className="h-4 w-4" /></button>}
       </ChatHeader>
 
       <ChatStatusBar>{demo && "Demo case · saved to this browser session · "}{openingStatusLine()}</ChatStatusBar>
 
-      <div ref={panel.rowRef} className="relative flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           {snapshot?.aiConfigured === false && <div role="status" className="border-b border-amber-100 bg-amber-50 px-4 py-2.5 text-[11px] leading-relaxed text-amber-800">AI is not configured on this server yet. You can still discuss this case; an @Setti request will show a configuration error.</div>}
 
@@ -254,22 +269,35 @@ export function CaseChat({ projectKey, quote, account, designer, client, demo = 
 
               {error && <div role="alert" className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] leading-relaxed text-red-800"><p>{error}</p><div className="mt-2 flex flex-wrap gap-3">{canRetry && <button disabled={running} onClick={() => retry()} className="flex items-center gap-1.5 font-medium hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Retry this message</button>}{hasUnsent && !running && <button onClick={() => { const unsent = editUnsent(); if (unsent) { setText(unsent.text); input.current?.focus(); } }} className="font-medium hover:underline">Edit unsent message</button>}{!running && !hasUnsent && <button onClick={() => void reload()} className="font-medium hover:underline">Reload saved chat</button>}</div></div>}
 
-              {draft && account.role === "designer" && <button onClick={() => setDraftOpen(true)} className="flex w-full items-start gap-3 rounded-xl border border-brand-100 bg-brand-50/50 p-3.5 text-left hover:bg-brand-50"><FileText className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" /><span className="min-w-0 flex-1"><span className="block text-[12px] font-semibold">Current draft · {draft.title}</span><span className="mt-1 block text-[11px] text-slate-500">Awaiting designer pricing · based on V{draft.basedOnVersion} · View changes and sources</span></span><PanelRight className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" /></button>}
+              {draft && account.role === "designer" && <div className="flex flex-wrap items-center gap-3 rounded-xl border border-brand-100 bg-brand-50/50 p-3.5"><FileText className="h-4 w-4 shrink-0 text-[var(--primary)]" /><span className="min-w-40 flex-1"><span className="block text-[12px] font-semibold">Current draft · {draft.title}</span><span className="mt-1 block text-[11px] text-slate-500">Awaiting designer pricing · based on V{draft.basedOnVersion}</span></span><button onClick={() => setDraftOpen(true)} className="shrink-0 rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">Open the draft</button></div>}
               {snapshot?.draftPreparing && <div role="status" className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3.5 text-[12px] text-slate-600"><FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" /><span>The studio is preparing a revised version of the quote. You will see it here once it is sent.</span></div>}
               <div ref={bottom} />
             </div>
           </div>
 
           <div className="border-t border-[var(--line)] bg-white px-4 py-3 sm:px-5">
+            {sendHomeRequest && <div role="status" className="mb-3 flex items-start gap-2 rounded-lg bg-[var(--primary-soft)] px-3 py-2 text-[12px] leading-relaxed text-slate-800"><span className="flex-1"><b>Step 1: press Send.</b> Setti&apos;s AI reads the whole discussion and the supplier documents, then drafts the revised quote for you to review.</span><ArrowDownRight className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" aria-hidden="true" /></div>}
             {homeExampleAvailable && !text.trim() && <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-stone-50 px-3 py-2 text-[11px] leading-relaxed text-slate-600"><span className="min-w-40 flex-1">{account.role === "designer" ? "Ready to put the discussion into figures? AI will read the conversation and sample supplier documents." : "The design direction is agreed. Jordan prepares the revised quote for your review."}</span><button type="button" onClick={() => document.getElementById("home-discussion-start")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="font-medium text-slate-700 underline underline-offset-2">Read from the start</button>{account.role === "designer" ? <button type="button" disabled={sendDisabled} onClick={prepareHomeQuote} className="rounded-md bg-[var(--primary-fill)] px-2.5 py-1.5 font-semibold text-[var(--on-primary)] disabled:opacity-50">Prepare the revised quote</button> : demo ? <button type="button" disabled={sendDisabled} onClick={() => onSwitchAccount("jordan")} className="font-medium text-[var(--primary)] hover:underline disabled:opacity-50">Continue as Jordan</button> : null}<span className="w-full text-[10px] text-slate-500">{account.role === "designer" ? "The button fills a request. Edit it and send when ready; the resulting proposal still needs your review." : "You can add a message below. A quote becomes agreed only when you review and formally confirm it."}</span></div>}
             {mixedExampleAvailable && !text.trim() && <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg bg-brand-50/60 px-3 py-2 text-[11px] leading-relaxed text-slate-600"><span className="flex-1">Replace the chair and return the rug in one request. Sample supplier details are available on Review pricing.</span><button disabled={sendDisabled} onClick={tryMixedChange} className="font-medium text-[var(--primary)] hover:underline disabled:opacity-50">Use chair + rug message</button><span className="w-full text-[10px] text-slate-500">Edit the message, then send it to ask AI for a review draft.</span></div>}
-            <ChatComposer inputRef={input} text={text} onTextChange={setText} disabled={sendDisabled} onSubmit={submit} onMentionAi={mentionAi}
+            <ChatComposer inputRef={input} text={text} onTextChange={setText} disabled={sendDisabled} onSubmit={submit} onMentionAi={mentionAi} highlightSend={sendHomeRequest}
               onAskAboutPayments={!openingPending ? askAboutFunds : undefined}
               leadingAction={account.role === "designer" && <div ref={attachRoot} className="relative"><button onClick={() => setAttachOpen((value) => !value)} disabled={sendDisabled} aria-haspopup="menu" aria-expanded={attachOpen} aria-label="Attach" className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-[var(--primary)] hover:bg-brand-50 disabled:opacity-50"><Plus className="h-3.5 w-3.5" /></button>{attachOpen && <div role="menu" className="absolute bottom-full left-0 z-20 mb-2 w-60 rounded-xl border border-[var(--line)] bg-white p-1.5 shadow-lg"><button role="menuitem" disabled={!canSendQuote} onClick={() => { setAttachOpen(false); setSendQuoteOpen(true); }} className="flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left hover:bg-[var(--canvas)] disabled:cursor-not-allowed disabled:opacity-50"><FileText className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" /><span className="min-w-0"><span className="block text-[12px] font-medium">Send quote V1</span><span className="block text-[11px] text-[var(--muted)]">{opening?.status === "draft" ? `${opening.lineCount} items · ${usd(opening.totalCents)}` : opening?.status === "sent" ? `Sent ${sentOn}` : "This project started from an approved quote"}</span></span></button></div>}</div>} />
           </div>
         </div>
 
-        {draftOpen && <aside aria-label="Current change draft" style={{ "--panel-width": `${panel.width}px` } as CSSProperties} className="absolute inset-y-0 right-0 z-20 flex w-full shrink-0 flex-col border-l border-[var(--line)] bg-white shadow-xl sm:w-[var(--panel-width)] 2xl:relative 2xl:shadow-none"><div role="separator" aria-orientation="vertical" aria-label="Resize the draft panel" tabIndex={0} {...panel.handleProps} className="absolute inset-y-0 -left-1.5 z-30 hidden w-3 cursor-col-resize sm:block after:absolute after:inset-y-0 after:left-1.5 after:w-px after:bg-transparent hover:after:bg-brand-300 focus-visible:outline-none focus-visible:after:bg-brand-400" /><div className="flex items-center gap-2 border-b border-[var(--line)] px-4 py-3"><FileText className="h-4 w-4 text-[var(--primary)]" /><h2 className="flex-1 text-[13px] font-semibold">Current draft</h2><button onClick={() => setDraftOpen(false)} aria-label="Close draft panel" className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--canvas)]"><X className="h-4 w-4" /></button></div><div className="min-h-0 flex-1 overflow-y-auto">{draft ? <ReviewPanel projectKey={projectKey} draft={draft} messages={messages} onSourceMessage={sourceMessage} canPrice={actor === "designer" && !running} /> : <div className="p-6 text-center"><FileText className="mx-auto h-6 w-6 text-slate-300" /><h3 className="mt-3 text-[13px] font-medium">No draft yet</h3><p className="mt-2 text-[12px] leading-relaxed text-[var(--muted)]">Discuss your changes, then mention @Setti and ask it to prepare a draft.</p>{confirmedQuoteHref ? <Link href={confirmedQuoteHref} className="mt-4 inline-block text-[12px] font-medium text-[var(--primary)] hover:underline">View client-confirmed quote V{currentQuote.version}</Link> : <button onClick={() => onOpenQuote()} className="mt-4 text-[12px] font-medium text-[var(--primary)] hover:underline">{openingPending ? "View quote V1" : `View approved quote V${currentQuote.version}`}</button>}</div>}</div></aside>}
+        {draftOpen && <div role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDraftOpen(false); }} className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/45 p-3 sm:p-8">
+          <section role="dialog" aria-modal="true" aria-labelledby="draft-dialog-title" className="flex max-h-full w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <header className="flex items-center gap-3 border-b border-[var(--line)] px-5 py-3.5">
+              <FileText className="h-4 w-4 shrink-0 text-[var(--primary)]" />
+              <div className="min-w-0 flex-1"><h2 id="draft-dialog-title" className="text-[14px] font-semibold">Current draft</h2>{draft && <p className="truncate text-[12px] text-[var(--muted)]">{draft.title}</p>}</div>
+              {draft && (actor === "designer" && !running
+                ? <a href={`/pricing/${projectKey}`} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[var(--primary-fill)] px-4 py-2 text-[13px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]"><ClipboardCheck className="h-4 w-4" />Review pricing</a>
+                : <span className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-[13px] font-semibold text-slate-400" title="Available to the designer while the AI is not running"><ClipboardCheck className="h-4 w-4" />Review pricing</span>)}
+              <button onClick={() => setDraftOpen(false)} aria-label="Close the draft" autoFocus className="shrink-0 rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--canvas)]"><X className="h-4 w-4" /></button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto">{draft ? <ReviewPanel projectKey={projectKey} draft={draft} messages={messages} onSourceMessage={sourceMessage} /> : <div className="p-6 text-center"><FileText className="mx-auto h-6 w-6 text-slate-300" /><h3 className="mt-3 text-[13px] font-medium">No draft yet</h3><p className="mt-2 text-[12px] leading-relaxed text-[var(--muted)]">Discuss your changes, then mention @Setti and ask it to prepare a draft.</p>{confirmedQuoteHref ? <Link href={confirmedQuoteHref} className="mt-4 inline-block text-[12px] font-medium text-[var(--primary)] hover:underline">View client-confirmed quote V{currentQuote.version}</Link> : <button onClick={() => onOpenQuote()} className="mt-4 text-[12px] font-medium text-[var(--primary)] hover:underline">{openingPending ? "View quote V1" : `View approved quote V${currentQuote.version}`}</button>}</div>}</div>
+          </section>
+        </div>}
       </div>
       {inviteOpen && <InviteClientDialog projectKey={projectKey} projectName={currentQuote.projectName} onClose={() => setInviteOpen(false)} />}
       {sendQuoteOpen && <SendQuoteDialog quote={currentQuote} clientName={client.name} onClose={() => setSendQuoteOpen(false)} onSend={sendQuote} onViewQuote={() => { setSendQuoteOpen(false); onOpenQuote(); }} />}

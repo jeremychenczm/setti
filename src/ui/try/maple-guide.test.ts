@@ -145,7 +145,7 @@ describe("living-and-dining demo guide", () => {
     for (const currentRole of ["designer", "client"] as const) {
       const step = mapleGuideStep(homeInitial(), currentRole);
       expect(step).toMatchObject({ index: 0, role: "jordan", destination: "chat", action: "Continue the discussion", title: "From the discussion to a revised quote" });
-      expect(step.detail).toContain("Prepare the revised quote in Jordan's chat");
+      expect(step.detail).toContain("send the @Setti request waiting in Jordan's chat");
       expect(step.complete).toBeUndefined();
     }
   });
