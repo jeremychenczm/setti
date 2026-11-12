@@ -12,13 +12,15 @@ import { ProjectPayments } from "../payments/ProjectPayments";
 import { PreviewQuoteLink } from "../receipts/PreviewQuoteLink";
 import { ReceiptDocument } from "../receipts/ReceiptDocument";
 import { EditorCrumbs } from "./EditorFrame";
+import { ChangeTotalFigures } from "./TotalCard";
+import { ServicesPayCard } from "../payments/ServicesPayCard";
 import { ViewProjectInfo } from "../quotes/ViewProjectInfo";
 import { useVersionReceipt } from "../receipts/useVersionReceipt";
 import { ChangeSourceNote } from "./ChangeSource";
 import { PaymentsPanel } from "../payments/PaymentsPanel";
 import { ApprovalPanel, isApprovalWorkspace } from "./ApprovalPanel";
 import { changeOrderStatusClass, changeOrderStatusLabel } from "./changeOrderStatus";
-import { dateOnly, dateTime, money, safeUrl, signedMoney } from "./common";
+import { dateOnly, dateTime, safeUrl } from "./common";
 import { FundingImpactPreview } from "./FundingImpactPreview";
 import { MoneyCard } from "./MoneyCard";
 import { QuoteLines } from "./QuoteLines";
@@ -128,15 +130,9 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
     </div>
     {order.source?.kind === "vendor" && <ChangeSourceNote source={order.source} detailed />}
     {status === "superseded" && <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[12px] leading-relaxed text-amber-900">A newer client version has been issued. This older link remains an unchanged historical record. Ask the designer for the latest version before confirming the scope.</div>}
-    <div className="grid gap-1.5">
-      <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1 tabular-nums">
-        <span className="text-[15px] text-[var(--muted)]"><span className="sr-only">V{order.basedOnVersion} total </span>{money(order.baselineTotals.totalCents)}</span>
-        <span aria-hidden className="text-[var(--muted)]">→</span>
-        <span className="text-[22px] font-semibold tracking-tight"><span className="sr-only">V{order.version} total </span>{money(order.totals.totalCents)}</span>
-        <span className="rounded-full border border-[var(--primary-line)] bg-brand-50 px-2.5 py-px text-[13px] font-semibold text-[var(--primary)]"><span className="sr-only">Difference </span>{signedMoney(order.deltaTotalCents)}</span>
-      </p>
-      <p className="text-[12px] text-[var(--muted)]">{caption}</p>
-    </div>
+    {/* The same figures as the editor's Total card: the new total large, its change, and how much of it V1 already agreed. */}
+    <ChangeTotalFigures baseVersion={order.basedOnVersion} version={order.version} previousCents={order.baselineTotals.totalCents} nextCents={order.totals.totalCents}
+      keptCents={order.changes.reduce((sum, change) => sum + (change.oldItemCostCents ?? 0), 0)} note={caption} />
     {/* Beside the formal quote, the client reads the money in its own card. */}
     {!workbench && (designer || !split) && <FundingImpactPreview order={order} plan={workspace.fundingPlan} status={status} canView={member} client={clientFirstName} />}
     {member && view?.decision && <a href={`/receipts/${order.projectKey}/${order.version}`} className="inline-flex items-center gap-1 justify-self-start text-[12px] font-medium text-[var(--primary)] hover:underline"><FileText className="h-3.5 w-3.5" />Signed version receipt</a>}
@@ -172,6 +168,8 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
             {summary}
             {!designer && <MoneyCard order={order} plan={workspace.fundingPlan} status={status} canView={member} />}
             {(!designer || view?.decision) && approval}
+            {/* What the client still pays on the confirmed version, as one checkout card; a receipt once paid. */}
+            {!designer && view?.decision?.decision === "approved" && <ServicesPayCard projectKey={order.projectKey} orderId={order.id} />}
             {formal && "receipt" in formal && <VersionChanges receipt={formal.receipt} />}
           </div>
           <div className="min-w-0 rounded-xl bg-[#8e8c85] p-3 sm:p-[18px] lg:col-start-1 lg:row-start-1">
@@ -180,10 +178,7 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
             {formal && "receipt" in formal && <ReceiptDocument receipt={formal.receipt} studioName={studioName} embedded updating={formal.stale} />}
           </div>
         </div>
-        {!designer && view?.decision?.decision === "approved" && <>
-          <div className="mb-5"><ProjectPayments projectKey={order.projectKey} orderId={order.id} /></div>
-          <PaymentsPanel key={`payments-${order.id}`} order={order} onChange={() => void load()} />
-        </>}
+        {!designer && view?.decision?.decision === "approved" && <PaymentsPanel key={`payments-${order.id}`} order={order} onlyWhenNeeded onChange={() => void load()} />}
       </> : <>
         {!workbench && summary}
         {/* The studio's confirmed version is its orders and payments; the signed quote opens from the version list or the card's button. */}

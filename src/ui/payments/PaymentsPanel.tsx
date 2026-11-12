@@ -127,7 +127,7 @@ function LineDrawer({ line, operations, onClose, children }: { line: PaymentLine
 }
 
 /** `designer`: the designer's view, where the supplier steps are done together in the workbench. */
-export function PaymentsPanel({ order, designer = false, onChange, head }: { order: FrozenChangeOrder; designer?: boolean; onChange?: () => void; head?: React.ReactNode }) {
+export function PaymentsPanel({ order, designer = false, onChange, head, onlyWhenNeeded = false }: { order: FrozenChangeOrder; designer?: boolean; onChange?: () => void; head?: React.ReactNode; onlyWhenNeeded?: boolean }) {
   const readiness = useTryReadiness(order.projectKey);
   const demo = useDemoMode();
   const [workspace, setWorkspace] = useState<PaymentsWorkspace | null>(null);
@@ -279,6 +279,9 @@ export function PaymentsPanel({ order, designer = false, onChange, head }: { ord
     }
   }
 
+  // Beside the client's pay card, this panel shows only when the client has a PayPal step of their own to take.
+  if (onlyWhenNeeded && !designer && (!workspace || !(workspace.lines.some((line) => line.steps.some((step) => step.available && step.actor === "client"))
+    || workspace.operations.some((operation) => operation.status === "pending" || operation.status === "unknown")))) return null;
   if (!workspace) return <section id="payments" className="mb-5 grid gap-3">{head}<div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><p className="flex items-center gap-2 text-[12px] text-slate-500">{error ?? <><LoaderCircle className="h-4 w-4 animate-spin" />Loading payment records…</>}</p></div></section>;
   const open = workspace.operations.filter((operation) => operation.status === "pending" || operation.status === "unknown");
   const plan = workspace.plan;
