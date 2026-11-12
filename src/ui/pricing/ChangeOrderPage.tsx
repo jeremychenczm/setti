@@ -18,6 +18,7 @@ import { ApprovalPanel, isApprovalWorkspace } from "./ApprovalPanel";
 import { changeOrderStatusClass, changeOrderStatusLabel } from "./changeOrderStatus";
 import { dateOnly, dateTime, money, safeUrl, signedMoney } from "./common";
 import { FundingImpactPreview } from "./FundingImpactPreview";
+import { MoneyCard } from "./MoneyCard";
 import { QuoteLines } from "./QuoteLines";
 import { VersionChanges } from "./VersionChanges";
 import { TryPageGuide } from "../try/TryPageGuide";
@@ -55,7 +56,7 @@ function Fold({ title, count, children }: { title: string; count?: number; child
 
 /** `account` is who the signed-in viewer is in the order's project; null for anyone else, who reads the shared link. */
 /** One sent version. `embedded` inside the Quotes module, whose sidebar and walkthrough guide stand in for the page header and guide. */
-export function ChangeOrderPage({ orderId, account, demo = false, studioName = "", embedded = false }: { orderId: string; account: DemoAccount | null; demo?: boolean; studioName?: string; embedded?: boolean }) {
+export function ChangeOrderPage({ orderId, account, demo = false, studioName = "", embedded = false, toolbar }: { orderId: string; account: DemoAccount | null; demo?: boolean; studioName?: string; embedded?: boolean; toolbar?: ReactNode }) {
   const designer = account?.role === "designer";
   const [workspace, setWorkspace] = useState<ApprovalWorkspace | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,7 +96,8 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
     setConfirmedHere((already) => already || (!view?.decision && next.view.decision?.decision === "approved"));
     setWorkspace(next);
   };
-  const split = !!order && member && (status !== "approved" || confirmedHere);
+  // The client always reads the version beside its formal quote; the studio's confirmed version opens on its payments.
+  const split = !!order && member && (!designer || status !== "approved" || confirmedHere);
   const formal = useVersionReceipt(order?.projectKey ?? "", order?.version ?? 0, { enabled: split, refresh: `${status}:${view?.decision?.id ?? ""}` });
   // The studio reads about the client by name; the client reads "you".
   const clientFirstName = designer && workspace?.clientName ? workspace.clientName.split(" ")[0] : undefined;
@@ -133,7 +135,8 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
       </p>
       <p className="text-[12px] text-[var(--muted)]">{caption}</p>
     </div>
-    {!workbench && <FundingImpactPreview order={order} plan={workspace.fundingPlan} status={status} canView={member} client={clientFirstName} />}
+    {/* Beside the formal quote, the client reads the money in its own card. */}
+    {!workbench && (designer || !split) && <FundingImpactPreview order={order} plan={workspace.fundingPlan} status={status} canView={member} client={clientFirstName} />}
     {member && view?.decision && <a href={`/receipts/${order.projectKey}/${order.version}`} className="inline-flex items-center gap-1 justify-self-start text-[12px] font-medium text-[var(--primary)] hover:underline"><FileText className="h-3.5 w-3.5" />Signed version receipt</a>}
   </section>;
   const approval = workspace && order && <ApprovalPanel key={order.id} workspace={workspace} loading={loading} onChange={decided} onBusyChange={setApprovalBusy} />;
@@ -142,6 +145,7 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
     <header className={`mb-5 flex flex-wrap items-center gap-x-4 gap-y-3 ${embedded ? "rounded-xl bg-white px-4 py-2.5" : ""}`}>
       {!embedded && <div className="flex items-center gap-2 text-sm font-semibold"><BrandMark className="h-7 w-7" />Setti</div>}
       {member && order && !embedded && <BackToChat projectKey={order.projectKey} />}
+      {embedded && toolbar}
       <div className="ml-auto flex flex-wrap items-center gap-3">
         <button onClick={() => void load()} disabled={loading || approvalBusy} className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Refresh status</button>
         <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-medium text-slate-500">{workspace?.clientName ? demo ? "Client review · demo session" : "Client review" : demo ? "Read-only shared review · demo" : "Read-only shared review"}</span>
@@ -159,8 +163,9 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
         <div className="mb-5 grid items-start gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]" style={{ "--sticky-top": `${stickyTop}px` } as CSSProperties}>
           <div ref={column} className="grid min-w-0 gap-4 lg:sticky lg:top-[var(--sticky-top)] lg:col-start-2 lg:row-start-1">
             {summary}
-            {formal && "receipt" in formal && <VersionChanges receipt={formal.receipt} />}
+            {!designer && <MoneyCard order={order} plan={workspace.fundingPlan} status={status} canView={member} />}
             {(!designer || view?.decision) && approval}
+            {formal && "receipt" in formal && <VersionChanges receipt={formal.receipt} />}
           </div>
           <div className="min-w-0 rounded-xl bg-[#8e8c85] p-3 sm:p-[18px] lg:col-start-1 lg:row-start-1">
             {!formal && <p role="status" className="flex items-center gap-2 rounded-lg bg-white/90 p-6 text-[13px] text-slate-600"><LoaderCircle className="h-4 w-4 animate-spin motion-reduce:animate-none" />Loading the formal quote…</p>}
@@ -168,6 +173,10 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
             {formal && "receipt" in formal && <ReceiptDocument receipt={formal.receipt} studioName={studioName} embedded />}
           </div>
         </div>
+        {!designer && view?.decision?.decision === "approved" && <>
+          <div className="mb-5"><ProjectPayments projectKey={order.projectKey} orderId={order.id} /></div>
+          <PaymentsPanel key={`payments-${order.id}`} order={order} onChange={() => void load()} />
+        </>}
         <QuoteLines order={order} folded />
       </> : <>
         {summary}

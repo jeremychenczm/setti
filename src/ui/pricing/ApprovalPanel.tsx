@@ -1,9 +1,9 @@
 "use client";
 
-import { Check, ClipboardCheck, LoaderCircle, LockKeyhole, RefreshCw } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { LoaderCircle, LockKeyhole, PenLine, RefreshCw } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ApprovalWorkspace, DecideChangeOrderInput } from "@/approval/types";
-import { dateTime, Field, inputClass } from "./common";
+import { dateTime, Field, inputClass, signedMoney } from "./common";
 import { useDemoMode } from "../demo-mode";
 
 export function isApprovalWorkspace(value: unknown, orderId: string): value is ApprovalWorkspace {
@@ -51,6 +51,8 @@ export function ApprovalPanel({ workspace, loading, onChange, onBusyChange }: Ap
   const [pending, setPending] = useState<DecideChangeOrderInput | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Asking for changes instead of signing: the same card, with a request in place of the signature button.
+  const [asking, setAsking] = useState(false);
   const alive = useRef(true);
   const mutating = useRef(false);
   const leaving = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -137,39 +139,58 @@ export function ApprovalPanel({ workspace, loading, onChange, onBusyChange }: Ap
     });
   }
 
+  const designerFirst = order.designerName.replace(/\s*\(demo designer\)$/, "").split(" ")[0];
+  const card = "rounded-xl border border-[var(--line)] bg-white p-5";
+  const sentOn = new Date(order.issuedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
+  const ask = (on: boolean) => {
+    setAsking(on);
+    // The prefilled thanks belongs to signing; a request starts empty.
+    if (on && note === confirmationNote(order.version, order.designerName)) setNote("");
+  };
+  const fact = (label: string, value: ReactNode) => <div className="flex items-baseline justify-between gap-3 border-b border-[var(--line)] py-2.5 text-[12.5px]"><dt className="text-[var(--muted)]">{label}</dt><dd className="m-0 text-right font-semibold">{value}</dd></div>;
+
   return (
-    <section className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="client-decision-title">
-      <h2 id="client-decision-title" className="flex items-center gap-2 text-[16px] font-semibold"><ClipboardCheck className="h-4.5 w-4.5 text-[var(--primary)]" />Client review · V{order.version}</h2>
-      {decision && <div role="status" className={`mt-4 rounded-xl border p-4 text-[12px] leading-relaxed ${decision.decision === "approved" ? "border-emerald-100 bg-emerald-50 text-emerald-900" : "border-amber-100 bg-amber-50 text-amber-900"}`}>
-        <p className="flex items-center gap-1.5 font-semibold">{decision.decision === "approved" && <Check className="h-4 w-4" />}{decision.decision === "approved" ? `V${order.version} confirmed` : `Changes requested for V${order.version}`}</p>
-        <p className="mt-2">{decision.clientName} · {dateTime(decision.decidedAt)} PT</p>
-        <p className="mt-1 text-[11px]">Recorded with the exact frozen content and quote revision.{demo ? " Demo client decision." : ""}</p>
-        {decision.note && <p className="mt-3 whitespace-pre-wrap border-t border-current/10 pt-3">{decision.note}</p>}
-        {decision.decision === "approved" && view.status !== "superseded" && <p className="mt-3 text-[11px]">This confirmed version is the baseline for the next change. Holds it no longer needs are released right away and, with a saved payment method, its new items are held; charges and refunds are separate steps.</p>}
-      </div>}
-      {notice && <p role="status" className="mt-4 rounded-lg bg-brand-50 p-3 text-[12px] leading-relaxed text-brand-900">{notice}</p>}
-      {error && <div role="alert" className="mt-4 rounded-lg border border-red-100 bg-red-50 p-3 text-[12px] leading-relaxed text-red-900"><p>{error}</p>{pending && <div className="mt-3 flex flex-wrap gap-3"><button onClick={() => void checkSavedStatus()} disabled={Boolean(busy) || loading} className="inline-flex items-center gap-1.5 font-semibold underline disabled:opacity-50">{busy === "check" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Check saved status</button><button onClick={() => void submit(pending)} disabled={Boolean(busy) || loading} className="font-semibold underline disabled:opacity-50">Retry the same {pending.decision === "approved" ? "confirmation" : "request"}</button></div>}</div>}
-      {canDecide && !decision && <div className="mt-4">
-        <p className="rounded-lg bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600">Reviewing as <strong className="font-semibold text-slate-800">{clientName}</strong>{demo ? " in this demo session" : ""}. The shared link alone does not grant confirmation permission.</p>
-        <fieldset disabled={disabled} className="mt-4 space-y-4">
-          <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-brand-100 bg-brand-50/50 p-3 text-[12px] leading-relaxed"><input type="checkbox" aria-label="Reviewed this exact change-order version" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} className="mt-0.5" /><span>I have reviewed the complete V{order.version} quote, changes, prices and client terms. My decision applies to this exact version.</span></label>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Field label="Your signature" hint={demo && signature.trim() === clientName ? "Prefilled for the demo. Edit it if you like; it must read your full name." : `Type your full name exactly: ${clientName ?? ""}`}><input aria-label="Demo client confirmation name" autoComplete="off" value={signature} onChange={(event) => setSignature(event.target.value)} maxLength={160} className={inputClass} /></Field>
-              <div className="mt-2 rounded-xl border border-[var(--line)] bg-[var(--canvas)] px-4 pb-3 pt-5">
-                <div aria-hidden className="min-h-[46px] truncate border-b border-slate-300 pb-1 font-signature text-[34px] leading-none text-[var(--ink)]">{signature.trim()}</div>
-                <div className="mt-1.5 flex justify-between gap-3 text-[10px] text-[var(--muted)]"><span>{clientName} · Client</span><span>{today()} · V{order.version}</span></div>
-              </div>
-            </div>
-            <Field label="Message to the designer" hint="Sent to the project chat with your decision. Required when requesting adjustments."><textarea aria-label="Client decision note" value={note} onChange={(event) => setNote(event.target.value)} rows={5} maxLength={3000} className={inputClass} /></Field>
-          </div>
-          <div className="flex flex-wrap items-center gap-3"><button onClick={() => decide("approved")} disabled={!ready} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-4 py-2.5 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:text-slate-400">{busy === "approved" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}Confirm V{order.version} · scope, prices and terms</button><button onClick={() => decide("changes_requested")} disabled={!ready || !note.trim()} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-2.5 text-[12px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40">{busy === "changes_requested" && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}Request adjustments</button></div>
-        </fieldset>
-        <p className="mt-3 text-[11px] leading-relaxed text-slate-500">Confirming records your agreement to this version. Right after, Setti releases any hold it no longer needs and, with a saved payment method, places the new holds. Confirming charges or refunds nothing by itself and places no supplier order. Requesting adjustments moves no money.</p>
-      </div>}
-      {!canDecide && !decision && <p className="mt-4 flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />{workspace.reason ?? (demo ? "This is a read-only shared review. Return to the owning demo project session to make a client decision." : "This is a read-only shared review. Sign in as the project's client to make a decision.")}</p>}
-      {clientName && decision && <a href={`/chats/${order.projectKey}`} className="mt-4 inline-block text-[12px] font-medium text-[var(--primary)] underline">Return to the project conversation</a>}
-    </section>
+    <div className="grid gap-4">
+      {decision && <section className={card} aria-labelledby="client-decision-title">
+        <p className="text-[10.5px] font-bold uppercase tracking-[0.08em] text-[var(--muted)]">{decision.decision === "approved" ? "Signed" : "Returned"} · {dateTime(decision.decidedAt)} PT</p>
+        <h2 id="client-decision-title" className="mt-0.5 text-[15px] font-bold">{decision.decision === "approved" ? `V${order.version} signed` : `Changes requested for V${order.version}`}</h2>
+        {decision.decision === "changes_requested" && decision.note && <p className="mt-3 whitespace-pre-wrap border-l-[3px] border-[var(--primary-line)] py-1 pl-3 text-[12.5px] text-slate-700">{decision.note}</p>}
+        <dl className="mt-3 border-t border-[var(--line)]">
+          {fact("Signed as", <span className="font-signature text-[20px] font-normal leading-none">{decision.signature.replace(/\s*\(demo signature\)$/, "")}</span>)}
+          {fact("Recorded against", "This exact version and its fingerprint")}
+          {decision.decision === "approved" && view.status !== "superseded" && fact("Money", "Unneeded holds released, new items held")}
+          {decision.decision === "changes_requested" && fact("Money", "Nothing moved")}
+          {decision.decision === "approved" && decision.note && fact("Message", <span className="font-normal text-slate-600">{decision.note}</span>)}
+        </dl>
+        {clientName && <div className="mt-3 flex justify-end"><a href={`/chats/${order.projectKey}`} className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--canvas)]">Open the project chat</a></div>}
+      </section>}
+      {canDecide && !decision && <>
+        <section className={card} aria-labelledby="client-decision-title">
+          <h2 id="client-decision-title" className="text-[15px] font-bold">Your decision on V{order.version}</h2>
+          <p className="mt-1.5 text-[12.5px] leading-relaxed text-slate-600">{designerFirst} sent V{order.version} on {sentOn}. It changes your signed V{order.basedOnVersion} by <b className="text-[var(--ink)]">{signedMoney(order.deltaTotalCents)}</b>.{demo ? " Reviewing as Emma in this demo." : ""}</p>
+          {asking
+            ? <p className="mt-2 text-[12px] text-slate-600">Tell {designerFirst} what to change below. V{order.version} stays unsigned and nothing moves. <button type="button" onClick={() => ask(false)} className="font-semibold text-[var(--primary)] underline">Back to signing</button></p>
+            : <button type="button" onClick={() => ask(true)} className="mt-2 text-[12px] font-semibold text-[var(--primary)] underline">Ask for changes instead</button>}
+        </section>
+        <section className={card} aria-label={asking ? "Ask for changes" : `Sign V${order.version}`}>
+          <h3 className="text-[15px] font-bold">{asking ? "Ask for changes" : `Sign V${order.version}`}</h3>
+          <p className="mt-1 text-[11.5px] text-[var(--muted)]">{asking ? `Your message goes to ${designerFirst} in the project chat.` : `Covers V${order.version} exactly as shown, with its terms.`}</p>
+          <fieldset disabled={disabled} className="mt-3 grid gap-3">
+            <label className="flex cursor-pointer items-start gap-2 text-[12px] text-slate-600"><input type="checkbox" aria-label="Reviewed this exact change-order version" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} className="mt-0.5 accent-emerald-700" /><span>I have read V{order.version} and its terms.</span></label>
+            <Field label="Type your full name" hint={demo && signature.trim() === clientName ? "Prefilled for the demo. It must read your full name." : `Type your full name exactly: ${clientName ?? ""}`}><input aria-label="Demo client confirmation name" autoComplete="off" value={signature} onChange={(event) => setSignature(event.target.value)} maxLength={160} className={inputClass} /></Field>
+            <div aria-hidden className="flex min-h-[60px] items-end gap-2.5 border-b-[1.5px] border-[var(--ink)] px-0.5 pb-1"><span className="pb-1.5 text-[18px] text-[var(--muted)]">×</span><span className="truncate font-signature text-[34px] leading-none text-[var(--ink)]">{signature.trim()}</span></div>
+            <div className="-mt-1.5 flex justify-between gap-3 text-[11px] text-[var(--muted)]"><span>{clientName} · Client</span><span>{today()} · V{order.version}</span></div>
+            <Field label={asking ? `What should ${designerFirst} change?` : `Message to ${designerFirst}`} hint={asking ? "Required." : "Sent to the project chat with your signature."}><textarea aria-label="Client decision note" value={note} onChange={(event) => setNote(event.target.value)} rows={asking ? 4 : 3} maxLength={3000} className={inputClass} /></Field>
+            <div className="flex justify-end">{asking
+              ? <button type="button" onClick={() => decide("changes_requested")} disabled={!ready || !note.trim()} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--ink)] px-3.5 py-2 text-[12px] font-semibold text-white hover:bg-[#1f241d] disabled:bg-slate-200 disabled:text-slate-400">{busy === "changes_requested" && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}Send to {designerFirst}</button>
+              : <button type="button" onClick={() => decide("approved")} disabled={!ready} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:text-slate-400">{busy === "approved" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <PenLine className="h-3.5 w-3.5" />}Sign V{order.version}</button>}</div>
+          </fieldset>
+          <p className="mt-3 text-[11px] leading-relaxed text-slate-500">{asking ? "Requesting changes moves no money." : "Signing charges nothing by itself. Right after, Setti releases the holds this version no longer needs and places its new holds."}</p>
+        </section>
+      </>}
+      {notice && <p role="status" className="rounded-lg bg-brand-50 p-3 text-[12px] leading-relaxed text-brand-900">{notice}</p>}
+      {error && <div role="alert" className="rounded-lg border border-red-100 bg-red-50 p-3 text-[12px] leading-relaxed text-red-900"><p>{error}</p>{pending && <div className="mt-3 flex flex-wrap gap-3"><button onClick={() => void checkSavedStatus()} disabled={Boolean(busy) || loading} className="inline-flex items-center gap-1.5 font-semibold underline disabled:opacity-50">{busy === "check" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Check saved status</button><button onClick={() => void submit(pending)} disabled={Boolean(busy) || loading} className="font-semibold underline disabled:opacity-50">Retry the same {pending.decision === "approved" ? "signature" : "request"}</button></div>}</div>}
+      {!canDecide && !decision && <p className={`${card} flex items-start gap-2 text-[12px] leading-relaxed text-slate-600`}><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />{workspace.reason ?? (demo ? "This is a read-only shared review. Return to the owning demo project session to make a client decision." : "This is a read-only shared review. Sign in as the project's client to make a decision.")}</p>}
+    </div>
   );
 }
-

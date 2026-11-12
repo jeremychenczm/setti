@@ -36,11 +36,11 @@ const bucketsFor = ({ confirms, approves, pays }: ReturnType<typeof voiceOf>) =>
   { key: "pay", title: `${pays} through PayPal`, note: "Design services are paid together in one PayPal checkout." },
   { key: "charge-other", title: "Charged in a separate step", note: "This charge needs a separate payment step." },
 ] as const;
-type BucketKey = ReturnType<typeof bucketsFor>[number]["key"];
+export type BucketKey = ReturnType<typeof bucketsFor>[number]["key"];
 
 const designService = (line: FundingLine | undefined) => line?.category === "service" && (line.change === null || line.change === "add" || line.change === "quantity");
 
-function bucketOf(action: FundingAction, line: FundingLine | undefined): BucketKey {
+export function bucketOf(action: FundingAction, line: FundingLine | undefined): BucketKey {
   switch (action.kind) {
     case "new_authorization": return "hold";
     case "release_authorization": return action.timing === "on_payment_execution" ? "release-now" : "release-later";
