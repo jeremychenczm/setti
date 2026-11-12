@@ -141,13 +141,15 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
     {!workbench && (designer || !split) && <FundingImpactPreview order={order} plan={workspace.fundingPlan} status={status} canView={member} client={clientFirstName} />}
     {member && view?.decision && <a href={`/receipts/${order.projectKey}/${order.version}`} className="inline-flex items-center gap-1 justify-self-start text-[12px] font-medium text-[var(--primary)] hover:underline"><FileText className="h-3.5 w-3.5" />Signed version receipt</a>}
   </section>;
+  const viewHead = <>
+    <EditorCrumbs section={designer ? "Quotes" : "Proposals"} name={order?.projectName ?? ""} right={toolbar} />
+    {order && member && <ViewProjectInfo projectKey={order.projectKey} client={!designer} studioName={studioName} designerName={order.designerName} clientName={workspace?.clientName ?? order.clientName} projectName={order.projectName} version={order.version} />}
+  </>;
   const approval = workspace && order && <ApprovalPanel key={order.id} workspace={workspace} loading={loading} onChange={decided} onBusyChange={setApprovalBusy} />;
 
   return <DemoModeProvider value={demo}><div className={embedded ? "min-w-0 pb-2 text-[var(--ink)]" : "min-h-dvh bg-[var(--canvas)] px-3 py-5 text-[var(--ink)] sm:px-6"}><main className={`${embedded ? "" : "mx-auto"} ${embedded ? "" : split ? "max-w-[1280px]" : workbench ? "max-w-[1120px]" : "max-w-[860px]"}`}>
-    {embedded && <div className="mb-3 grid gap-3">
-      <EditorCrumbs section={designer ? "Quotes" : "Proposals"} name={order?.projectName ?? ""} right={<>{workbench && order && <PreviewQuoteLink projectKey={order.projectKey} version={order.version} />}{toolbar}</>} />
-      {order && member && <ViewProjectInfo projectKey={order.projectKey} client={!designer} studioName={studioName} designerName={order.designerName} clientName={workspace?.clientName ?? order.clientName} projectName={order.projectName} version={order.version} />}
-    </div>}
+    {/* The studio's confirmed version puts these at the top of its working column, beside the money. */}
+    {embedded && !workbench && <div className="mb-3 grid gap-3">{viewHead}</div>}
     {!embedded && <header className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
       {!embedded && <div className="flex items-center gap-2 text-sm font-semibold"><BrandMark className="h-7 w-7" />Setti</div>}
       {member && order && !embedded && <BackToChat projectKey={order.projectKey} />}
@@ -183,12 +185,9 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
           <PaymentsPanel key={`payments-${order.id}`} order={order} onChange={() => void load()} />
         </>}
       </> : <>
-        {summary}
-        {workbench ? <>
-          <PaymentsPanel key={`payments-${order.id}`} order={order} designer onChange={() => void load()} />
-          <QuoteLines order={order} onChangeLine={changeLine} lineError={lineError} folded />
-          {approval}
-        </> : <>
+        {!workbench && summary}
+        {/* The studio's confirmed version is its orders and payments; the signed quote opens from the version list or the card's button. */}
+        {workbench ? <PaymentsPanel key={`payments-${order.id}`} order={order} designer head={embedded ? viewHead : undefined} onChange={() => void load()} /> : <>
           <QuoteLines order={order} onChangeLine={designer && status === "approved" ? changeLine : undefined} lineError={lineError} />
           {approval}
           {view?.decision?.decision === "approved" && <div className="mb-5"><ProjectPayments projectKey={order.projectKey} orderId={order.id} /></div>}
@@ -197,7 +196,7 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
       </>}
 
       {/* Beside the formal quote these would only repeat it; without one they are the version's record. */}
-      {!split && <section aria-label="More about this version" className="rounded-xl bg-white px-5 py-1.5 shadow-sm sm:px-6">
+      {!split && !workbench && <section aria-label="More about this version" className="rounded-xl bg-white px-5 py-1.5 shadow-sm sm:px-6">
         {order.constraints.length > 0 && <Fold title="Terms to keep" count={order.constraints.length}><ul className="list-disc space-y-1 pl-4">{order.constraints.map((constraint, index) => <li key={index}>{constraint}</li>)}</ul></Fold>}
         {order.issues.length > 0 && <Fold title="Designer checks" count={order.issues.length}><ul className="space-y-2">{order.issues.map((issue) => <li key={issue.id} className="rounded-lg bg-slate-50 p-3"><p className="font-medium text-slate-800">{issue.label}</p><p className="mt-1 whitespace-pre-wrap">{issue.note || "No additional note."}</p></li>)}</ul></Fold>}
         <Fold title="Client terms and review notes"><h3 className="font-medium text-slate-800">Client terms</h3><p className="mt-1 whitespace-pre-wrap">{order.terms}</p><h3 className="mt-3 font-medium text-slate-800">Designer review notes</h3><p className="mt-1 whitespace-pre-wrap">{order.reviewNotes || "No additional notes."}</p></Fold>

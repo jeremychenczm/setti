@@ -1,22 +1,18 @@
 "use client";
 
-import { AllCommunityModule, themeQuartz, type ColDef, type ICellRendererParams, type RowSelectionOptions } from "ag-grid-community";
-import { AgGridReact } from "ag-grid-react";
-import { Check, CircleAlert, LoaderCircle } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { Check, CircleAlert, Eye, EyeOff, LoaderCircle, LockKeyhole } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { FrozenChangeOrder } from "@/pricing/types";
+import type { AttentionView } from "@/payments/attention-view";
 import type { OperationView, PaymentLineView, PaymentStep, PaymentsWorkspace } from "@/payments/types";
-import { money } from "../pricing/common";
+import { nonRefundableText } from "@/pricing/fees";
+import { BrandMark } from "../BrandMark";
+import { shortMoney } from "../pricing/common";
+import { CARD, EditorLayout, GHOST, ModuleTitle, SELECT, SEND, SendBar, SumRow, Todo } from "../pricing/EditorFrame";
+import { useCounted } from "../pricing/MoneyCard";
 import { useDemoMode } from "../demo-mode";
 import { demoSupplierNumber } from "./demo-supplier";
 import { lineProgress } from "./progress";
-
-const modules = [AllCommunityModule];
-const theme = themeQuartz.withParams({
-  accentColor: "#b27a26", backgroundColor: "#ffffff", foregroundColor: "#30362d", borderColor: "#e7e5db",
-  headerBackgroundColor: "#f7f6f2", headerTextColor: "#7b7f73", fontFamily: "inherit", fontSize: 12, headerFontSize: 11,
-  rowHoverColor: "#fafaf8", selectedRowBackgroundColor: "#fffaf0", wrapperBorder: false,
-});
 
 /** Which run a line belongs to: its supplier confirms and it is charged, or the supplier credits it and it is refunded. */
 export type BatchMode = "charge" | "refund";
@@ -28,138 +24,295 @@ const STEPS: Record<BatchMode, PaymentStep["kind"][]> = { charge: ["supplier_con
 export function nextBatchStep(line: PaymentLineView, mode: BatchMode): PaymentStep | null {
   return line.cancellation ? null : line.steps.find((step) => step.available && step.actor === "designer" && STEPS[mode].includes(step.kind)) ?? null;
 }
-const clientOwes = (line: PaymentLineView) => line.cancellation ? 0 : Math.max(0, line.targetCents - (line.capturedCents - line.refundedCents) - line.heldCents);
 const toRefund = (line: PaymentLineView) => line.cancellation ? 0 : Math.max(0, line.capturedCents - line.refundedCents - line.targetCents);
+const TONES = [{ bg: "#fbf1dc", bar: "#c98a1b" }, { bg: "#e8f0e4", bar: "#5f8a55" }, { bg: "#e6edf6", bar: "#4f74a8" }, { bg: "#eeeaf5", bar: "#7a64a8" }, { bg: "#e2f0ef", bar: "#3f8a85" }, { bg: "#f6e7e1", bar: "#b0654a" }];
+const usd = (cents: number) => shortMoney(cents);
+const dayLabel = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
 
-interface Row { key: string; label: string; supplier: string; terms: string; amountCents: number; releaseCents: number; reference: string; status: string; result: BatchResult | null }
+function Chip({ tone, children }: { tone: "ok" | "warn" | "plain"; children: ReactNode }) {
+  const look = tone === "ok" ? "bg-emerald-50 text-emerald-700" : tone === "warn" ? "bg-[#fffbeb] text-[#92400e] shadow-[inset_0_0_0_1px_#fde68a]" : "bg-[#efede6] text-[#4b5348]";
+  return <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-[9px] py-0.5 text-[11.5px] font-semibold ${look}`}>{children}</span>;
+}
 
-function Tile({ swatch, label, count, amount, note }: { swatch: string; label: string; count: string; amount: number; note: string }) {
-  return <div className="min-w-0 rounded-xl border border-[var(--line)] bg-white p-3.5">
-    <p className="flex items-center gap-2 text-[12px] font-semibold"><i aria-hidden className="h-2.5 w-2.5 shrink-0" style={{ background: swatch }} />{label}<span className="ml-auto text-[11px] font-normal text-[var(--muted)]">{count}</span></p>
-    <p className="mt-1 text-[22px] font-bold tabular-nums tracking-tight">{money(amount)}</p>
-    <p className="text-[11px] text-[var(--muted)]">{note}</p>
+function Tile({ swatch, label, cents, note, striped }: { swatch: string; label: string; cents: number; note: string; striped?: boolean }) {
+  const shown = useCounted(cents);
+  return <div className="grid gap-px rounded-[10px] bg-[var(--canvas)] px-[11px] py-[9px]">
+    <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[#4b5348]"><i aria-hidden className="inline-block h-2 w-2 rounded-[2px]" style={{ background: striped ? `repeating-linear-gradient(135deg, ${swatch} 0 2px, #fff 2px 4px)` : swatch }} />{label}</span>
+    <b className="text-[20px] font-bold tracking-[-0.01em] tabular-nums">{usd(shown)}</b>
+    <small className="text-[11px] text-[var(--muted)]">{note}</small>
   </div>;
 }
 
-function StatusCell({ data }: ICellRendererParams<Row>) {
-  if (!data) return null;
-  const result = data.result;
-  if (result?.state === "running") return <span className="inline-flex items-center gap-1.5 text-[var(--muted)]"><LoaderCircle className="h-3.5 w-3.5 animate-spin" />Working…</span>;
-  if (result?.state === "done") return <span className="inline-flex items-center gap-1 font-medium text-emerald-700"><Check className="h-3.5 w-3.5" />{result.text}</span>;
-  if (result?.state === "refused") return <span title={result.text} className="inline-flex items-center gap-1 font-medium text-red-700"><CircleAlert className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{result.text}</span></span>;
-  return <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">{data.status}</span>;
-}
-
 /**
- * The version's money, and the designer's supplier steps done together: tick the
- * lines whose supplier has confirmed (or credited), then one button records each
- * confirmation and runs its PayPal step, line by line. Each line is still checked
- * against the confirmed terms on its own; a line that differs is refused alone.
+ * The designer's orders and payments on a confirmed version, in the quote editor's
+ * table: hold by hold, the supplier's order number and confirmed terms; ticked lines
+ * are recorded and charged in one run, and each line is still checked against the
+ * signed terms on its own. A confirmation that differs from them is not charged: it
+ * starts the next version instead. Credits and refunds work the same way.
  */
-export function PaymentWorkbench({ designer, workspace, order, operations, busy, disabled, results, onRun, onOpen, allItems }: {
+export function PaymentWorkbench({ designer, workspace, order, operations, busy, disabled, results, onRun, allItems, head }: {
   designer: boolean; workspace: PaymentsWorkspace; order: FrozenChangeOrder; operations: readonly OperationView[]; busy: string | null; disabled: boolean;
-  results: Record<string, BatchResult>; onRun: (mode: BatchMode, items: { key: string; reference: string }[]) => void; onOpen: (key: string) => void; allItems: ReactNode;
+  results: Record<string, BatchResult>; onRun: (mode: BatchMode, items: { key: string; reference: string }[]) => void; onOpen?: (key: string) => void; allItems: ReactNode;
+  /** The page's breadcrumbs and Project info, at the top of the working column. */
+  head?: ReactNode;
 }) {
   const demo = useDemoMode();
   const lines = workspace.lines;
   // A line stays in its list after a run, so its result shows where it was.
   const charge = lines.filter((line) => nextBatchStep(line, "charge") || results[lineKey(line)]?.mode === "charge");
   const refund = lines.filter((line) => nextBatchStep(line, "refund") || results[lineKey(line)]?.mode === "refund");
-  const client = lines.filter((line) => clientOwes(line) > 0);
-  const tabs = [
-    { id: "charge", label: "Confirm & charge", lines: charge },
-    { id: "refund", label: "Credit & refund", lines: refund },
-    { id: "client", label: "Client pays", lines: client },
-    { id: "all", label: "All items", lines },
-  ] as const;
-  const [tab, setTab] = useState<(typeof tabs)[number]["id"]>(() => charge.length ? "charge" : refund.length ? "refund" : "all");
+  const [tab, setTab] = useState<"charge" | "refund" | "all">(() => charge.length ? "charge" : refund.length ? "refund" : "all");
+  const [view, setView] = useState<"supplier" | "status">("supplier");
+  const [open, setOpen] = useState(true);
   const [references, setReferences] = useState<Record<string, string>>({});
-  const [ticked, setTicked] = useState<string[] | null>(null);
+  // The demo has its supplier numbers filled in, so every line it can record starts ticked.
+  const [ticked, setTicked] = useState<Record<string, boolean>>({});
+  const isTicked = (line: PaymentLineView) => ticked[lineKey(line)] ?? demo;
+  const [confirmed, setConfirmed] = useState<Record<string, { quantity: number; unitPriceCents: number }>>({});
+  const [starting, setStarting] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
+  const [attention, setAttention] = useState<AttentionView | null>(null);
+  // Setti's reminders are the studio's; the client never asks for them.
+  useEffect(() => {
+    if (!designer) return;
+    let live = true;
+    fetch("/api/attention", { cache: "no-store" }).then((response) => response.ok ? response.json() as Promise<AttentionView> : null).then((view) => { if (live) setAttention(view); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [workspace, designer]);
+  const overdue = new Set((attention?.items ?? []).filter((item) => item.kind === "not_ordered" && item.projectKey === workspace.projectKey).map((item) => `${item.side}:${item.itemId}`));
 
-  const supplierOf = (line: PaymentLineView) => (line.side === "baseline" ? order.changes.find((change) => change.itemId === line.itemId)?.before?.vendor : undefined)
-    ?? order.lines.find((quoteLine) => quoteLine.itemId === line.itemId)?.vendor ?? "Supplier";
+  const supplierOf = (line: PaymentLineView) => ((line.side === "baseline" ? order.changes.find((change) => change.itemId === line.itemId)?.before?.vendor : undefined)
+    ?? order.lines.find((quoteLine) => quoteLine.itemId === line.itemId)?.vendor ?? "Supplier").replace(/\s*\(demo\)$/, "");
   const mode: BatchMode = tab === "refund" ? "refund" : "charge";
-  const rows: Row[] = (tab === "refund" ? refund : charge).map((line) => {
-    const key = lineKey(line);
-    const step = (kind: PaymentStep["kind"]) => line.steps.find((item) => item.kind === kind);
-    const terms = line.confirmedTerms;
-    // A finished line shows what moved; a line that only has a hold left to release charges nothing.
-    const finished = results[key]?.state === "done";
-    const amount = finished ? mode === "refund" ? line.refundedCents : line.capturedCents - line.refundedCents
-      : mode === "refund" ? step("refund")?.amountCents ?? step("supplier_credit")?.amountCents ?? toRefund(line)
-        : step("capture")?.amountCents ?? (step("supplier_confirmation") && terms ? terms.quantity * terms.unitPriceCents + terms.taxCents + terms.freightCents : 0);
-    return {
-      key, label: line.label, supplier: supplierOf(line), amountCents: amount, releaseCents: mode === "charge" && !finished ? step("void")?.amountCents ?? Math.max(0, line.heldCents - amount) : 0,
-      terms: mode === "refund" ? (line.nonRefundable?.oldItemCostCents ? `${money(line.capturedCents - line.refundedCents)} paid, ${money(line.nonRefundable.oldItemCostCents)} kept` : `${money(line.capturedCents - line.refundedCents)} paid`)
-        : terms ? terms.purpose === "retained_cost" ? `Retained cost ${money(amount)}` : `${terms.quantity} × ${money(terms.unitPriceCents)}${terms.taxCents || terms.freightCents ? ` + ${money(terms.taxCents + terms.freightCents)}` : ""}` : "—",
-      reference: references[key] ?? (demo ? demoSupplierNumber(mode === "refund" ? "credit" : "order", line.itemId) : ""),
-      status: lineProgress(line, operations).label, result: results[key] ?? null,
-    };
-  });
-  const runnable = rows.filter((row) => !row.result || row.result.state === "refused");
-  const selected = (ticked ?? runnable.map((row) => row.key)).filter((key) => runnable.some((row) => row.key === key));
-  const chosen = rows.filter((row) => selected.includes(row.key));
-  const missing = chosen.filter((row) => !row.reference.trim());
-  const total = chosen.reduce((sum, row) => sum + row.amountCents, 0);
-  const released = chosen.reduce((sum, row) => sum + row.releaseCents, 0);
+  const step = (line: PaymentLineView, kind: PaymentStep["kind"]) => line.steps.find((item) => item.kind === kind);
+  const reference = (line: PaymentLineView, kind: BatchMode = mode) => references[lineKey(line)] ?? (demo ? demoSupplierNumber(kind === "refund" ? "credit" : "order", line.itemId, line.label) : "");
+  const terms = (line: PaymentLineView) => line.confirmedTerms;
+  const typed = (line: PaymentLineView) => confirmed[lineKey(line)] ?? (terms(line) ? { quantity: terms(line)!.quantity, unitPriceCents: terms(line)!.unitPriceCents } : null);
+  const differs = (line: PaymentLineView) => { const signed = terms(line), now = typed(line); return !!signed && !!now && signed.purpose === "order" && (now.quantity !== signed.quantity || now.unitPriceCents !== signed.unitPriceCents); };
+  const finished = (line: PaymentLineView) => results[lineKey(line)]?.state === "done";
+  const runnable = (line: PaymentLineView, kind: BatchMode = mode) => !finished(line) && results[lineKey(line)]?.state !== "running" && !!nextBatchStep(line, kind);
+  const canTick = (line: PaymentLineView, kind: BatchMode = mode) => runnable(line, kind) && !!reference(line, kind).trim() && !(kind === "charge" && differs(line));
+  const amountOf = (line: PaymentLineView) => finished(line) ? mode === "refund" ? line.refundedCents : line.capturedCents - line.refundedCents
+    : mode === "refund" ? step(line, "refund")?.amountCents ?? step(line, "supplier_credit")?.amountCents ?? toRefund(line)
+      : step(line, "capture")?.amountCents ?? (terms(line) ? terms(line)!.quantity * terms(line)!.unitPriceCents + terms(line)!.taxCents + terms(line)!.freightCents : 0);
+  const releaseOf = (line: PaymentLineView) => mode === "charge" && !finished(line) ? step(line, "void")?.amountCents ?? Math.max(0, line.heldCents - amountOf(line)) : 0;
+
+  const list = tab === "refund" ? refund : charge;
+  const chosen = list.filter((line) => isTicked(line) && canTick(line));
+  const total = chosen.reduce((sum, line) => sum + amountOf(line), 0);
   const running = busy === `batch:${mode}`;
+  const tickGroup = (members: PaymentLineView[], value: boolean) => setTicked((current) => ({ ...current, ...Object.fromEntries(members.filter((line) => canTick(line)).map((line) => [lineKey(line), value])) }));
 
-  const columns = useMemo<ColDef<Row>[]>(() => [
-    { field: "label", headerName: "Item", flex: 1.4, minWidth: 170, cellClass: "font-semibold" },
-    { field: "supplier", headerName: "Supplier", flex: 1.1, minWidth: 140, cellClass: "text-slate-500" },
-    { field: "terms", headerName: mode === "refund" ? "Paid so far" : `Confirmed in V${workspace.version}`, flex: 1, minWidth: 130 },
-    { field: "reference", headerName: mode === "refund" ? "Credit note no. ✎" : "Supplier order no. ✎", flex: 1.1, minWidth: 150, editable: ({ data }) => !data?.result || data.result.state === "refused", cellClass: "font-mono text-[11px]" },
-    { field: "amountCents", headerName: mode === "refund" ? "Refund" : "Charge", width: 175, type: "numericColumn", cellRenderer: ({ data }: ICellRendererParams<Row>) => data && <span className="tabular-nums">{money(data.amountCents)}{data.releaseCents > 0 && <span className="ml-1 text-[10px] text-[var(--muted)]">+{money(data.releaseCents)} released</span>}</span> },
-    { colId: "status", headerName: "Status", flex: 1.2, minWidth: 170, cellRenderer: StatusCell, sortable: false },
-    { colId: "edit", headerName: "", width: 70, sortable: false, cellRenderer: ({ data }: ICellRendererParams<Row>) => data && <button onClick={() => onOpen(data.key)} className="text-[12px] font-medium text-[var(--primary)] hover:underline">Edit</button> },
-  ], [mode, workspace.version, onOpen]);
-  const rowSelection = useMemo<RowSelectionOptions<Row>>(() => ({ mode: "multiRow", checkboxes: true, headerCheckbox: true, enableClickSelection: false, hideDisabledCheckboxes: true, isRowSelectable: (node) => !!node.data && (!node.data.result || node.data.result.state === "refused") }), []);
+  async function startNext(line: PaymentLineView) {
+    const signed = terms(line), now = typed(line);
+    if (!signed || !now) return;
+    setStarting(lineKey(line)); setStartError(null);
+    const response = await fetch(`/api/pricing/${workspace.projectKey}/change-line`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ itemId: line.itemId, supplier: { reference: reference(line).trim() || "Supplier confirmation", quantity: now.quantity, unitPriceCents: now.unitPriceCents, taxCents: signed.taxCents, freightCents: signed.freightCents, leadTimeDays: null } }) }).catch(() => null);
+    const body = await response?.json().catch(() => null) as { href?: string; error?: string } | null;
+    if (!response?.ok || !body?.href) { setStarting(null); setStartError(body?.error ?? "The next version could not be started. Try again."); return; }
+    window.location.assign(body.href);
+  }
 
-  const held = lines.reduce((sum, line) => sum + line.heldCents, 0);
-  const net = lines.reduce((sum, line) => sum + line.capturedCents - line.refundedCents, 0);
-  const count = (list: readonly PaymentLineView[], test: (line: PaymentLineView) => boolean) => { const n = list.filter(test).length; return `${n} ${n === 1 ? "item" : "items"}`; };
-  const active = tabs.find((item) => item.id === tab)!;
+  const td = "border-b border-[var(--line)] px-2 py-[7px] align-middle";
+  const one = `${td} whitespace-nowrap`;
+  const th = "whitespace-nowrap border-b border-[var(--line)] bg-white p-2 text-[10.5px] font-semibold tracking-[0.02em] text-[var(--muted)]";
+  const internal = (label: string) => <><EyeOff aria-hidden className="mr-[3px] inline h-3 w-3 align-[-2px]" />{label}<span className="sr-only"> (not shown to the client)</span></>;
+  const cellInput = (marked: boolean) => `w-[76px] rounded-md border px-1.5 py-[3px] text-right tabular-nums outline-none focus:border-[#cfcab9] ${marked ? "border-transparent bg-[#fff3c4]" : "border-transparent bg-transparent hover:border-[var(--line)] hover:bg-white"}`;
+  const chipOf = (line: PaymentLineView) => line.change === "add" || line.change === "replace" ? <span className="ml-1.5 rounded-[5px] bg-[#eef6ff] px-1.5 py-px text-[10px] font-bold text-[#1d4f91]">New in V{workspace.version}</span>
+    : line.change === "remove" ? <span className="ml-1.5 rounded-[5px] bg-[#fdf1f0] px-1.5 py-px text-[10px] font-bold text-[#9c3d34]">Removed in V{workspace.version}</span>
+      : line.change === "quantity" ? <span className="ml-1.5 rounded-[5px] bg-[#fff3c4] px-1.5 py-px text-[10px] font-bold text-[var(--primary)]">Changed in V{workspace.version}</span> : null;
+  const status = (line: PaymentLineView) => {
+    const result = results[lineKey(line)];
+    if (result?.state === "running") return <Chip tone="plain"><LoaderCircle className="h-3 w-3 animate-spin" />Working…</Chip>;
+    if (result?.state === "done") return <Chip tone="ok"><Check className="h-3 w-3" strokeWidth={3} />{result.text}</Chip>;
+    if (result?.state === "refused") return <span title={result.text} className="inline-flex max-w-[220px] items-center gap-1 text-[11.5px] font-medium text-red-700"><CircleAlert className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{result.text}</span></span>;
+    if (mode === "charge" && differs(line)) return <Chip tone="warn">Differs from V{workspace.version}</Chip>;
+    if (overdue.has(lineKey(line))) return <Chip tone="warn">Held · 3 days passed</Chip>;
+    return <Chip tone="plain">{lineProgress(line, operations).label}</Chip>;
+  };
 
-  return <div className="space-y-4">
-    <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-      <Tile swatch="#d7262e" label="On hold" count={count(lines, (line) => line.heldCents > 0)} amount={held} note="Charged after each supplier confirms" />
-      <Tile swatch="#ffcc70" label="Charged" count={count(lines, (line) => line.capturedCents > 0)} amount={net} note="Captured by PayPal, after refunds" />
-      <Tile swatch="#f7a6a0" label="To refund" count={count(lines, (line) => toRefund(line) > 0)} amount={lines.reduce((sum, line) => sum + toRefund(line), 0)} note="After each supplier credit" />
-      <Tile swatch="#ebe9e2" label="Client to pay" count={count(lines, (line) => clientOwes(line) > 0)} amount={lines.reduce((sum, line) => sum + clientOwes(line), 0)} note={`${order.clientName} pays from their own account`} />
-    </div>
+  function groupRow(name: string, members: PaymentLineView[], cols: number, sum: number, tone: (typeof TONES)[number]) {
+    const tickable = members.filter((line) => canTick(line));
+    const count = tickable.filter(isTicked).length;
+    return <tr>
+      <td colSpan={cols - 2} className="border-b border-[var(--line)] px-2 py-2 font-semibold" style={{ background: tone.bg, boxShadow: `inset 3px 0 0 ${tone.bar}` }}><span className="font-bold">{name}</span><span className="ml-1.5 font-medium text-[var(--muted)]">{members.length} {members.length === 1 ? "item" : "items"}</span></td>
+      <td className="border-b border-[var(--line)] px-2 py-2 text-right font-semibold tabular-nums" style={{ background: tone.bg }}>{usd(sum)}</td>
+      <td className="border-b border-[var(--line)] px-2 py-2 text-right" style={{ background: tone.bg }}>{tickable.length > 0 && <label className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-[var(--muted)]">All<input type="checkbox" checked={count === tickable.length} ref={(input) => { if (input) input.indeterminate = count > 0 && count < tickable.length; }} disabled={disabled} onChange={(event) => tickGroup(members, event.target.checked)} aria-label={`Tick every line in ${name}`} className="h-[15px] w-[15px] cursor-pointer accent-emerald-700" /></label>}</td>
+    </tr>;
+  }
 
-    {/* The client sees where each item stands; the supplier steps are the designer's. */}
-    {!designer ? allItems : <div className="rounded-xl border border-[var(--line)] bg-white p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-[13px] font-semibold">Next steps</h3>
-        <div role="tablist" aria-label="Payment steps" className="flex flex-wrap gap-0.5 rounded-lg bg-[var(--canvas)] p-0.5">{tabs.map((item) => <button key={item.id} role="tab" aria-selected={tab === item.id} onClick={() => { setTab(item.id); setTicked(null); }}
-          className={`rounded-md px-3 py-1.5 text-[12px] ${tab === item.id ? "bg-white font-semibold shadow-sm" : "text-[var(--muted)] hover:text-[var(--ink)]"}`}>{item.label} <span className="tabular-nums">{item.lines.length}</span></button>)}</div>
+  function chargeRow(line: PaymentLineView, tone: (typeof TONES)[number], cols: number) {
+    const key = lineKey(line), signed = terms(line), now = typed(line), done = finished(line) || !runnable(line), diff = differs(line);
+    const stripe = { boxShadow: `inset 3px 0 0 ${tone.bar}` };
+    const holds = line.holds.filter((hold) => hold.heldCents > 0);
+    const release = releaseOf(line);
+    const edit = (field: "quantity" | "unitPriceCents") => {
+      if (!signed || !now) return <span className="text-[var(--muted)]">—</span>;
+      const value = now[field], was = signed[field];
+      if (done || signed.purpose !== "order") return <span>{field === "quantity" ? value : usd(value)}</span>;
+      return <>{value !== was && <span className="block text-[10.5px] leading-[1.1] text-[var(--muted)] line-through">{field === "quantity" ? was : usd(was)}</span>}
+        <input aria-label={`${line.label} confirmed ${field === "quantity" ? "quantity" : "unit price"}`} inputMode="decimal" disabled={disabled} defaultValue={field === "quantity" ? String(value) : usd(value)} key={`${key}:${field}:${value}`}
+          onBlur={(event) => { const n = Number(event.target.value.replace(/[$,\s]/g, "")); if (!Number.isFinite(n) || n <= 0) return; const next = { ...now, [field]: field === "quantity" ? Math.round(n) : Math.round(n * 100) }; setConfirmed((current) => ({ ...current, [key]: next })); if (next[field] !== was) setTicked((current) => ({ ...current, [key]: false })); }}
+          onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} className={cellInput(value !== was)} /></>;
+    };
+    return [<tr key={key} className={done ? "bg-[#fcfcfa]" : undefined}>
+      <td style={stripe} className={`${one} w-[22px] pl-2`} />
+      <td className={`${td} min-w-[210px]`}><span className="text-[12.5px] font-semibold">{line.label}</span>{chipOf(line)}{signed?.purpose === "retained_cost" && <span className="ml-1.5 rounded-full bg-[#fdeceb] px-[7px] py-px text-[10px] font-bold text-[#9c3d34]">Not refundable</span>}</td>
+      {view === "status" && <td className={`${one} text-[var(--muted)]`}>{supplierOf(line)}</td>}
+      <td className={`${one} text-right tabular-nums`}>{edit("quantity")}</td>
+      <td className={`${one} text-right tabular-nums`}>{edit("unitPriceCents")}</td>
+      <td className={`${one} text-right text-[12px] tabular-nums`}>{holds.length ? holds.map((hold) => <span key={hold.id} className="block">{hold.version ? `V${hold.version} ` : ""}{usd(hold.heldCents)}</span>) : <span className="text-[var(--muted)]">—</span>}</td>
+      <td className={one}>{done ? <span className="font-mono text-[11px]">{reference(line)}</span> : <input aria-label={`${line.label} supplier order number`} value={reference(line)} placeholder="Add" disabled={disabled} onChange={(event) => setReferences((current) => ({ ...current, [key]: event.target.value }))} className="w-[150px] rounded-md border border-[var(--line)] bg-white px-1.5 py-[3px] font-mono text-[11px] outline-none focus:border-[#cfcab9]" />}</td>
+      <td className={one}>{status(line)}</td>
+      <td className={`${one} text-right tabular-nums`}><b className="font-semibold">{diff && !done ? "—" : usd(amountOf(line))}</b>{!diff && release > 0 && <span className="block text-[10.5px] text-[var(--muted)]">{usd(release)} released</span>}</td>
+      <td className={`${one} text-right`}>{!done && <input type="checkbox" aria-label={`Record ${line.label}`} title={diff ? `Differs from V${workspace.version}: start the next version instead` : reference(line).trim() ? "Record this confirmation" : "Add the supplier order number first"} checked={isTicked(line) && canTick(line)} disabled={disabled || !canTick(line)} onChange={(event) => setTicked((current) => ({ ...current, [key]: event.target.checked }))} className="h-[15px] w-[15px] cursor-pointer accent-emerald-700 disabled:cursor-not-allowed" />}</td>
+    </tr>,
+    diff && !done && now && signed ? <tr key={`${key}:diff`}><td colSpan={cols} style={stripe} className="border-b border-dashed border-[var(--line)] bg-[#fffbeb] py-[7px] pl-[50px] pr-2">
+      <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#92400e]"><CircleAlert className="h-[15px] w-[15px] shrink-0" />
+        <span className="min-w-0 flex-1"><b>{supplierOf(line)} confirmed {now.quantity} × {usd(now.unitPriceCents)} = {usd(now.quantity * now.unitPriceCents)}</b>, not {signed.quantity} × {usd(signed.unitPriceCents)} as {order.clientName.split(" ")[0]} signed in V{workspace.version}. This line is not charged.</span>
+        <button type="button" disabled={!!starting} onClick={() => void startNext(line)} className="inline-flex items-center gap-1.5 rounded-md bg-[var(--ink)] px-2.5 py-1 text-[11.5px] font-semibold text-white hover:bg-[#1f241d] disabled:opacity-50">{starting === key ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <BrandMark className="h-3.5 w-3.5" />}Start V{workspace.version + 1} from this confirmation</button>
+      </div></td></tr> : null];
+  }
+
+  function refundRow(line: PaymentLineView, tone: (typeof TONES)[number]) {
+    const key = lineKey(line), done = finished(line) || !runnable(line);
+    const kept = line.nonRefundable?.oldItemCostCents ?? 0;
+    const fees = line.nonRefundable?.oldItemFees ?? [];
+    return <tr key={key} className={done ? "bg-[#fcfcfa]" : undefined}>
+      <td style={{ boxShadow: `inset 3px 0 0 ${tone.bar}` }} className={`${one} w-[22px] pl-2`} />
+      <td className={`${td} min-w-[210px]`}><span className="text-[12.5px] font-semibold">{line.label}</span>{chipOf(line)}</td>
+      <td className={`${one} text-right tabular-nums`}>{usd(line.capturedCents - line.refundedCents + (finished(line) ? line.refundedCents : 0))}</td>
+      <td className={td}>{kept > 0 ? <span className="flex flex-wrap items-center gap-1.5 text-[12px] text-slate-600">{fees.length ? nonRefundableText(line.nonRefundable!) : "Kept by the supplier"}<span className="rounded-full bg-[#fdeceb] px-[7px] py-px text-[10px] font-bold text-[#9c3d34]">Not refundable</span><span className="text-[#9c3d34]">−{usd(kept)}</span></span> : <span className="text-[var(--muted)]">—</span>}</td>
+      <td className={one}>{done ? <span className="font-mono text-[11px]">{reference(line)}</span> : <input aria-label={`${line.label} credit note number`} value={reference(line)} placeholder="Add" disabled={disabled} onChange={(event) => setReferences((current) => ({ ...current, [key]: event.target.value }))} className="w-[150px] rounded-md border border-[var(--line)] bg-white px-1.5 py-[3px] font-mono text-[11px] outline-none focus:border-[#cfcab9]" />}</td>
+      <td className={one}>{status(line)}</td>
+      <td className={`${one} text-right font-semibold tabular-nums`}>{usd(amountOf(line))}</td>
+      <td className={`${one} text-right`}>{!done && <input type="checkbox" aria-label={`Record ${line.label} credit`} title={reference(line).trim() ? "Record this credit" : "Add the credit note number first"} checked={isTicked(line) && canTick(line)} disabled={disabled || !canTick(line)} onChange={(event) => setTicked((current) => ({ ...current, [key]: event.target.checked }))} className="h-[15px] w-[15px] cursor-pointer accent-emerald-700 disabled:cursor-not-allowed" />}</td>
+    </tr>;
+  }
+
+  /** Every line of the version and where its money stands; nothing to do here. */
+  function allTable() {
+    const groups = (["service", "furniture"] as const).map((category) => [category === "service" ? "Services" : "Products", lines.filter((line) => line.category === category)] as const).filter(([, members]) => members.length);
+    return <div className="overflow-x-auto [contain:inline-size]"><table className="w-full min-w-[760px] border-collapse text-[12.5px]">
+      <thead><tr><th className={th} /><th className={`${th} text-left`}>Item</th><th className={`${th} text-left`}>{internal("Supplier")}</th><th className={`${th} text-right`}>V{workspace.version} total</th><th className={`${th} text-right`}>Paid so far</th><th className={`${th} text-right`}>On hold</th><th className={`${th} text-left`}>Status</th></tr></thead>
+      {groups.map(([name, members], index) => { const tone = TONES[index]; return <tbody key={name}>
+        <tr><td colSpan={3} className="border-b border-[var(--line)] px-2 py-2" style={{ background: tone.bg, boxShadow: `inset 3px 0 0 ${tone.bar}` }}><span className="font-bold">{name}</span><span className="ml-1.5 font-medium text-[var(--muted)]">{members.length} {members.length === 1 ? "item" : "items"}</span></td>
+          <td className="border-b border-[var(--line)] px-2 py-2 text-right font-semibold tabular-nums" style={{ background: tone.bg }}>{usd(members.reduce((sum, line) => sum + line.targetCents, 0))}</td>
+          <td className="border-b border-[var(--line)] px-2 py-2 text-right font-semibold tabular-nums" style={{ background: tone.bg }}>{usd(members.reduce((sum, line) => sum + line.capturedCents - line.refundedCents, 0))}</td>
+          <td colSpan={2} className="border-b border-[var(--line)] px-2 py-2" style={{ background: tone.bg }} /></tr>
+        {members.map((line) => { const progress = lineProgress(line, operations); return <tr key={lineKey(line)}>
+          <td style={{ boxShadow: `inset 3px 0 0 ${tone.bar}` }} className={`${one} w-[22px] pl-2`} />
+          <td className={`${td} min-w-[210px]`}><span className={`text-[12.5px] font-semibold ${line.cancellation || line.change === "remove" ? "text-[var(--muted)] line-through" : ""}`}>{line.label}</span>{chipOf(line)}</td>
+          <td className={`${one} text-[var(--muted)]`}>{supplierOf(line)}</td>
+          <td className={`${one} text-right tabular-nums`}>{usd(line.targetCents)}</td>
+          <td className={`${one} text-right tabular-nums`}>{usd(line.capturedCents - line.refundedCents)}</td>
+          <td className={`${one} text-right tabular-nums`}>{line.heldCents ? usd(line.heldCents) : <span className="text-[var(--muted)]">—</span>}</td>
+          <td className={one}><Chip tone={progress.tone === "settled" ? "ok" : overdue.has(lineKey(line)) ? "warn" : "plain"}>{progress.settled && <Check className="h-3 w-3" strokeWidth={3} />}{progress.label}</Chip></td>
+        </tr>; })}
+      </tbody>; })}
+    </table>
+    {workspace.others.lineCount > 0 && <p className="border-t border-[var(--line)] px-4 py-2 text-[11px] text-[var(--muted)]">{workspace.others.lineCount} other lines ({usd(workspace.others.targetCents)}) are outside this change; this page runs no payment step for them.</p>}
+    </div>;
+  }
+
+  function table() {
+    if (tab === "all") return allTable();
+    if (!list.length) return <p className="px-4 py-6 text-[12.5px] text-[var(--muted)]">{tab === "charge" ? "No item is waiting for a supplier order or a charge." : "No item is waiting for a supplier credit or a refund."}</p>;
+    const cols = tab === "charge" ? (view === "status" ? 10 : 9) : 8;
+    const groups: [string, PaymentLineView[]][] = tab === "charge" && view === "status"
+      ? ([["Waiting for a supplier order", list.filter((line) => !finished(line))], ["Recorded", list.filter(finished)]] as [string, PaymentLineView[]][]).filter(([, members]) => members.length)
+      : [...new Set(list.map(supplierOf))].map((name) => [name, list.filter((line) => supplierOf(line) === name)]);
+    const head = tab === "charge"
+      ? <tr><th className={th} /><th className={`${th} text-left`}>Item</th>{view === "status" && <th className={`${th} text-left`}>{internal("Supplier")}</th>}<th className={`${th} text-right`}>Confirmed qty</th><th className={`${th} text-right`}>Unit price</th><th className={`${th} text-right`}>On hold</th><th className={`${th} text-left`}>{internal("Supplier order no.")}</th><th className={`${th} text-left`}>Status</th><th className={`${th} text-right`}>Charge</th><th className={`${th} text-right`}>{internal("Record")}</th></tr>
+      : <tr><th className={th} /><th className={`${th} text-left`}>Item</th><th className={`${th} text-right`}>Charged</th><th className={`${th} text-left`}>Kept by the supplier</th><th className={`${th} text-left`}>{internal("Credit note no.")}</th><th className={`${th} text-left`}>Status</th><th className={`${th} text-right`}>Refund to {order.clientName.split(" ")[0]}</th><th className={`${th} text-right`}>{internal("Record")}</th></tr>;
+    return <div className="overflow-x-auto [contain:inline-size]"><table className="w-full min-w-[860px] border-collapse text-[12.5px]"><thead>{head}</thead>
+      {groups.map(([name, members], index) => { const tone = TONES[(index + (tab === "refund" ? 3 : 0)) % TONES.length]; return <tbody key={name}>
+        {groupRow(name, members, cols, members.reduce((sum, line) => sum + (tab === "charge" && differs(line) && !finished(line) ? 0 : amountOf(line)), 0), tone)}
+        {members.map((line) => tab === "charge" ? chargeRow(line, tone, cols) : refundRow(line, tone))}
+      </tbody>; })}
+    </table></div>;
+  }
+
+  if (!designer) return <>{allItems}</>;
+  // What this version asks of the suppliers, read from the records, so a reload or a record made elsewhere counts too.
+  const signedOrder = (line: PaymentLineView) => line.supplierEvents.some((event) => event.kind === "order_confirmed" && event.quantity === line.confirmedTerms?.quantity && event.unitPriceCents === line.confirmedTerms?.unitPriceCents);
+  const orderScope = lines.filter((line) => line.changed && !line.cancellation && !nextBatchStep(line, "refund") && toRefund(line) === 0 && (!!nextBatchStep(line, "charge") || signedOrder(line)));
+  const creditScope = lines.filter((line) => line.changed && !line.cancellation && (!!nextBatchStep(line, "refund") || line.supplierEvents.some((event) => event.kind === "credit_confirmed")));
+  const ordersDone = orderScope.filter((line) => !nextBatchStep(line, "charge")).length;
+  const creditsDone = creditScope.filter((line) => !nextBatchStep(line, "refund")).length;
+  const toOrder = lines.filter((line) => nextBatchStep(line, "charge")).length, toCredit = lines.filter((line) => nextBatchStep(line, "refund")).length;
+  // Before a run each item reads how many are ticked to record; once nothing waits, how many were recorded.
+  const tickedFor = (kind: BatchMode) => lines.filter((line) => nextBatchStep(line, kind) && canTick(line, kind) && isTicked(line)).length;
+  const progress = (kind: BatchMode) => {
+    const [scope, done, waiting, noun] = kind === "charge" ? [orderScope, ordersDone, toOrder, "Supplier orders"] as const : [creditScope, creditsDone, toCredit, "Supplier credits"] as const;
+    if (!waiting) return { done: scope.length > 0, text: `${noun} recorded · ${done} of ${scope.length}` };
+    const count = tickedFor(kind);
+    return { done: count === waiting, text: `${noun} · ${count} of ${waiting} ticked to record${done ? ` · ${done} recorded` : ""}` };
+  };
+  const waiting = lines.filter((line) => nextBatchStep(line, "charge"));
+  const charged = lines.reduce((sum, line) => sum + line.capturedCents - line.refundedCents, 0);
+  const onHold = lines.reduce((sum, line) => sum + line.heldCents, 0);
+  const released = lines.reduce((sum, line) => sum + line.releasedCents, 0);
+  const refundDue = lines.reduce((sum, line) => sum + toRefund(line), 0);
+  const whole = Math.max(1, charged + onHold + released + refundDue);
+  const late = waiting.filter((line) => overdue.has(lineKey(line)));
+  const client = order.clientName.split(" ")[0];
+  const seg = (cents: number, color: string, striped?: boolean) => <i className="block h-full transition-[width] duration-500" style={{ width: `${(cents / whole) * 100}%`, background: striped ? `repeating-linear-gradient(135deg, ${color} 0 4px, #fff 4px 7px)` : color }} />;
+
+  const card = <section className={CARD} aria-label="Orders and payments">
+      <div className={`flex flex-wrap items-center gap-2.5 px-4 ${open ? "pb-0.5 pt-3.5" : "py-[11px]"}`}>
+        <ModuleTitle open={open} onToggle={() => setOpen((value) => !value)}>Orders and payments</ModuleTitle>
+        {!open && <span className="text-[12px] text-[var(--muted)]">{toOrder} to order · {toCredit} credits due</span>}
       </div>
+      {open && <>
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2 border-b border-[var(--line)] px-3 py-[9px]">
+          <span role="tablist" aria-label="Orders and payments" className="inline-flex gap-0.5 rounded-[10px] border border-[var(--line)] bg-[var(--canvas)] p-[3px]">
+            {([["charge", `To order · ${toOrder}`], ["refund", `Credits · ${toCredit}`], ["all", `All items · ${lines.length}`]] as const).map(([id, label]) =>
+              <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`whitespace-nowrap rounded-[7px] px-[11px] py-1 text-[12px] ${tab === id ? "bg-white font-semibold text-[var(--ink)] shadow-[0_1px_2px_rgba(30,32,28,.12)]" : "font-medium text-[var(--muted)]"}`}>{label}</button>)}
+          </span>
+          <span className="flex-1" />
+          {tab === "charge" && <label className="inline-flex items-center gap-1.5 text-[12px] text-[var(--muted)]">View by<select aria-label="View by" value={view} onChange={(event) => setView(event.target.value as "supplier" | "status")} className={SELECT}><option value="supplier">Supplier</option><option value="status">Status</option></select></label>}
+          <a href={`/receipts/${order.projectKey}/${order.version}`} className={GHOST}><Eye className="h-[15px] w-[15px]" />Signed V{workspace.version}</a>
+        </div>
+        {table()}
+        {tab === "charge" && demo && list.length > 0 && <p className="border-t border-[var(--line)] px-4 py-2 text-[11px] text-[var(--muted)]">Demo: there is no real supplier, so each order number is filled in and each confirmation matches what {client} signed. Change a quantity or price to see a confirmation that differs.</p>}
+        {startError && <p role="alert" className="border-t border-[var(--line)] px-4 py-2 text-[12px] text-red-700">{startError}</p>}
+      </>}
+    </section>;
 
-      {tab === "all" ? allItems : tab === "client" ? <ul className="divide-y divide-[var(--line)] border-y border-[var(--line)]">{client.length ? client.map((line) => <li key={lineKey(line)} className="flex flex-wrap items-center gap-3 py-2.5 text-[12px]"><span className="min-w-40 flex-1 font-semibold">{line.label}</span><span className="tabular-nums">{money(clientOwes(line))}</span><span className="text-[var(--muted)]">{lineProgress(line, operations).next}</span></li>) : <li className="py-3 text-[12px] text-[var(--muted)]">{order.clientName} has nothing left to pay on this version.</li>}</ul>
-        : active.lines.length === 0 ? <p className="rounded-lg bg-[var(--canvas)] px-3 py-3 text-[12px] text-[var(--muted)]">{tab === "charge" ? "No item is waiting for a supplier confirmation or a charge." : "No item is waiting for a supplier credit or a refund."}</p>
-        : <>
-          <div className="w-full" style={{ height: Math.min(420, 44 * Math.max(rows.length, 1) + 42) }}>
-            <AgGridReact<Row> key={tab} modules={modules} theme={theme} rowData={rows} columnDefs={columns} defaultColDef={{ sortable: true, resizable: true, suppressMovable: true }}
-              rowSelection={rowSelection} selectionColumnDef={{ width: 44, minWidth: 44, maxWidth: 44, resizable: false, pinned: "left" }}
-              getRowId={({ data }) => data.key} rowHeight={44} headerHeight={40} animateRows={false} readOnlyEdit singleClickEdit stopEditingWhenCellsLoseFocus
-              onCellEditRequest={({ data, newValue }) => { if (data) setReferences((current) => ({ ...current, [data.key]: String(newValue ?? "") })); }}
-              onFirstDataRendered={({ api }) => api.forEachNode((node) => { if (selected.includes(node.id ?? "")) node.setSelected(true); })}
-              onSelectionChanged={({ api, source }) => { if (source !== "api") setTicked(api.getSelectedRows().map((row) => row.key)); }} />
-          </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">{tab === "charge"
-            ? `Ticking a line records that its supplier confirmed these terms${demo ? " (demo: there is no real supplier, so each line is filled in from what the client confirmed)" : ""}. Setti checks each line against V${workspace.version} on its own: a line that differs is refused and the others still go through. Each charge is its own PayPal capture.`
-            : `Ticking a line records that its supplier issued this credit. Each refund is its own PayPal refund, from the item's completed capture.`} Select Edit to change a line&apos;s amounts.</p>
-          {runnable.length === 0 ? <p role="status" className="mt-3 flex items-center gap-1.5 text-[12px] font-medium text-emerald-700"><Check className="h-3.5 w-3.5" />{tab === "charge" ? `All ${rows.length} recorded and charged.` : `All ${rows.length} credits recorded and refunded.`}</p> : <div className="mt-3 flex flex-wrap items-center gap-3">
-            <button type="button" disabled={disabled || chosen.length === 0 || missing.length > 0} onClick={() => onRun(mode, chosen.map((row) => ({ key: row.key, reference: row.reference })))}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-4 py-2.5 text-[13px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:text-slate-400">
-              {running && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}
-              {tab === "charge" ? `Record ${chosen.length} ${chosen.length === 1 ? "confirmation" : "confirmations"} and charge ${money(total)}` : `Record ${chosen.length} ${chosen.length === 1 ? "credit" : "credits"} and refund ${money(total)}`}
-            </button>
-            {released > 0 && <span className="text-[12px] text-[var(--muted)]">The unused {money(released)} of the holds is released with them.</span>}
-            {missing.length > 0 && <span className="text-[12px] text-amber-800">Enter the {tab === "charge" ? "supplier's order number" : "credit note number"} for {missing.map((row) => row.label).join(", ")}.</span>}
-          </div>}
-        </>}
-    </div>}
-  </div>;
+  const side = <SumRow>
+      <section className={`${CARD} grid content-start gap-[9px] px-5 pb-5 pt-[18px]`} aria-label={`${client}'s money on V${workspace.version}`}>
+        <h3 className="mb-1 text-[15px] font-bold">{client}&apos;s money on V{workspace.version}</h3>
+        <div className="grid grid-cols-2 gap-2">
+          <Tile swatch="#30362d" label="Charged" cents={charged} note="Captured by PayPal" />
+          <Tile swatch="#d7262e" label="On hold" cents={onHold} note="Waiting for a supplier order" />
+          <Tile swatch="#b7d7c4" label="Released" cents={released} note={`Back on ${client}'s card`} striped />
+          <Tile swatch="#ffcc70" label="To refund" cents={refundDue} note="After each supplier credit" />
+        </div>
+        <div role="img" aria-label={`${usd(charged)} charged, ${usd(onHold)} on hold, ${usd(released)} released, ${usd(refundDue)} to refund`} className="flex h-2.5 overflow-hidden rounded-full bg-[#ebe9e2]">{seg(charged, "#30362d")}{seg(onHold, "#d7262e")}{seg(released, "#b7d7c4", true)}{seg(refundDue, "#ffcc70")}</div>
+        <p className="text-[11.5px] text-[var(--muted)]">A hold is not a charge, and a release is not a refund. Each line is its own PayPal step.</p>
+      </section>
+      <section className={`${CARD} grid content-start gap-[9px] px-5 pb-5 pt-[18px]`} aria-label="Setti's daily check">
+        <div className="mb-1 flex items-center justify-between gap-2"><h3 className="text-[15px] font-bold">Setti&apos;s daily check</h3>
+          <span className={`inline-flex items-center gap-[5px] rounded-full px-2.5 py-0.5 text-[11.5px] font-semibold before:h-1.5 before:w-1.5 before:rounded-full before:bg-current before:opacity-60 ${!waiting.length ? "bg-emerald-50 text-emerald-700" : late.length ? "bg-[#fffbeb] text-[#92400e]" : "bg-[#efede6] text-[#4b5348]"}`}>{!waiting.length ? "All charged" : late.length ? `${late.length} overdue` : `${waiting.length} to order`}</span></div>
+        {!waiting.length ? <p className="flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700"><Check className="h-3.5 w-3.5" strokeWidth={3} />Every hold is charged. Nothing is waiting for you.</p>
+          : late.length ? <p className="flex items-start gap-2 rounded-lg border border-[#fde68a] bg-[#fffbeb] px-2.5 py-2 text-[12.5px] text-[#92400e]"><CircleAlert className="mt-0.5 h-[15px] w-[15px] shrink-0" /><span><b>{attention ? `Day ${attention.simulatedDays} · ${dayLabel(attention.checkedAt)}:` : "Overdue:"}</b> PayPal&apos;s 3-day honor period is over for {late.length} {late.length === 1 ? "hold" : "holds"} and no supplier order is recorded. A reminder for each is in your Inbox.</span></p>
+            : <p className="text-[11.5px] text-[var(--muted)]">{attention?.watching.until ? `Record each supplier order by ${dayLabel(attention.watching.until)}, while PayPal's 3-day honor period for the holds lasts.` : "Record each supplier order within PayPal's 3-day honor period for the holds."} Setti checks every morning.</p>}
+        {waiting.length > 0 && <ul className="grid">{waiting.map((line) => <li key={lineKey(line)} className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2.5 border-b border-[var(--line)] py-[7px] text-[12.5px]"><span className="truncate">{line.label}</span><span className="text-[var(--muted)]">{supplierOf(line)}</span><b className="tabular-nums">{usd(line.heldCents)}</b></li>)}</ul>}
+      </section>
+    </SumRow>;
+
+  const bar = tab !== "all" ? <SendBar>
+      <span className="flex flex-1 flex-wrap gap-x-4 gap-y-1.5 text-[12px] text-[#4b5348]">
+        {(["charge", "refund"] as const).map((kind) => { const item = progress(kind); return <Todo key={kind} done={item.done}>{item.text}</Todo>; })}
+      </span>
+      {workspace.reason && <span className="inline-flex items-center gap-1.5 text-[11.5px] text-[var(--muted)]"><LockKeyhole className="h-3.5 w-3.5" />{workspace.reason}</span>}
+      <button type="button" disabled={disabled || !chosen.length || running} onClick={() => onRun(mode, chosen.map((line) => ({ key: lineKey(line), reference: reference(line) })))} className={SEND}>
+        {running && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}
+        {mode === "charge" ? chosen.length ? `Record ${chosen.length} ${chosen.length === 1 ? "confirmation" : "confirmations"} and charge ${usd(total)}` : "Record confirmations and charge" : chosen.length ? `Record ${chosen.length} ${chosen.length === 1 ? "credit" : "credits"} and refund ${usd(total)}` : "Record credits and refund"}
+      </button>
+    </SendBar> : null;
+
+  return <EditorLayout main={<>{head}{card}</>} side={side} bar={bar} />;
 }

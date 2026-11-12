@@ -124,7 +124,7 @@ function LineDrawer({ line, operations, onClose, children }: { line: PaymentLine
 }
 
 /** `designer`: the designer's view, where the supplier steps are done together in the workbench. */
-export function PaymentsPanel({ order, designer = false, onChange }: { order: FrozenChangeOrder; designer?: boolean; onChange?: () => void }) {
+export function PaymentsPanel({ order, designer = false, onChange, head }: { order: FrozenChangeOrder; designer?: boolean; onChange?: () => void; head?: React.ReactNode }) {
   const readiness = useTryReadiness(order.projectKey);
   const [workspace, setWorkspace] = useState<PaymentsWorkspace | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -270,7 +270,7 @@ export function PaymentsPanel({ order, designer = false, onChange }: { order: Fr
     }
   }
 
-  if (!workspace) return <section id="payments" className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><p className="flex items-center gap-2 text-[12px] text-slate-500">{error ?? <><LoaderCircle className="h-4 w-4 animate-spin" />Loading payment records…</>}</p></section>;
+  if (!workspace) return <section id="payments" className="mb-5 grid gap-3">{head}<div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><p className="flex items-center gap-2 text-[12px] text-slate-500">{error ?? <><LoaderCircle className="h-4 w-4 animate-spin" />Loading payment records…</>}</p></div></section>;
   const open = workspace.operations.filter((operation) => operation.status === "pending" || operation.status === "unknown");
   const plan = workspace.plan;
   const disabled = Boolean(busy) || readiness.blocked;
@@ -278,9 +278,10 @@ export function PaymentsPanel({ order, designer = false, onChange }: { order: Fr
   const pay: LinePayment = { checkout: workspace.checkout, savedMethod: workspace.savedMethod, request };
   const openLine = workspace.lines.find((line) => lineKey(line) === selected) ?? null;
 
-  return <section id="payments" aria-labelledby="payments-title" className="mb-5 scroll-mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-    <div className="flex flex-wrap items-center gap-2"><h2 id="payments-title" className="mr-auto flex items-center gap-2 text-[16px] font-semibold"><CircleDollarSign className="h-4.5 w-4.5 text-[var(--primary)]" />Payments · V{workspace.version}</h2>{workspace.savedMethod && !workspace.canRemoveSaved && <span className="text-[11px] text-[var(--muted)]">Paid with {savedMethodName(workspace.savedMethod)}</span>}<span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-800">PayPal Sandbox · test money</span><button onClick={() => void load()} disabled={Boolean(busy)} className="flex items-center gap-1 text-[11px] text-slate-500 hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Reload</button></div>
-    <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Amounts come from recorded PayPal results; a step counts only after PayPal confirms it.</p>
+  // The designer's orders and payments read as the editor does: the work in its own card, the PayPal records folded below.
+  return <section id="payments" aria-labelledby={designer ? undefined : "payments-title"} aria-label={designer ? "Payments" : undefined} className={designer ? "mb-3 grid scroll-mt-5 gap-3" : "mb-5 scroll-mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6"}>
+    {!designer && <><div className="flex flex-wrap items-center gap-2"><h2 id="payments-title" className="mr-auto flex items-center gap-2 text-[16px] font-semibold"><CircleDollarSign className="h-4.5 w-4.5 text-[var(--primary)]" />Payments · V{workspace.version}</h2>{workspace.savedMethod && !workspace.canRemoveSaved && <span className="text-[11px] text-[var(--muted)]">Paid with {savedMethodName(workspace.savedMethod)}</span>}<span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-800">PayPal Sandbox · test money</span><button onClick={() => void load()} disabled={Boolean(busy)} className="flex items-center gap-1 text-[11px] text-slate-500 hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Reload</button></div>
+    <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Amounts come from recorded PayPal results; a step counts only after PayPal confirms it.</p></>}
     {(readiness.pending || Boolean(readiness.blocked && readiness.error)) && <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-[12px] leading-relaxed text-amber-900">{readiness.notice ?? readiness.error}</p>}
     {notice && <div role="status" className="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-[12px] leading-relaxed text-amber-900"><span className="flex-1">{notice.text}</span><button aria-label="Dismiss" onClick={() => setNotice(null)}><X className="h-3.5 w-3.5" /></button></div>}
     {error && <p role="alert" className="mt-4 rounded-lg border border-red-100 bg-red-50 p-3 text-[12px] leading-relaxed text-red-900">{error}</p>}
@@ -308,13 +309,13 @@ export function PaymentsPanel({ order, designer = false, onChange }: { order: Fr
       </div> : null}
     </div>)}</div>}
 
-    {workspace.lines.length > 0 && <><div className="mt-4"><PaymentWorkbench designer={designer} workspace={workspace} order={order} operations={workspace.operations} busy={busy} disabled={disabled || !workspace.canAct} results={results} onRun={(mode, items) => void runBatch(mode, items)} onOpen={setSelected}
+    {workspace.lines.length > 0 && <><div className={designer ? "" : "mt-4"}><PaymentWorkbench head={head} designer={designer} workspace={workspace} order={order} operations={workspace.operations} busy={busy} disabled={disabled || !workspace.canAct} results={results} onRun={(mode, items) => void runBatch(mode, items)} onOpen={setSelected}
         allItems={<PaymentLines workspace={workspace} selected={selected} onSelect={setSelected} />} /></div>
       {openLine && <LineDrawer line={openLine} operations={workspace.operations} onClose={() => setSelected(null)}>
         <LineDetails key={lineKey(openLine)} line={openLine} operations={workspace.operations} version={workspace.version} busy={busy} disabled={disabled} canAct={workspace.canAct} canReconcile={workspace.canReconcile} pay={pay} onAction={(action, key) => run({ ...action, itemId: openLine.itemId, side: openLine.side } as Action, key)} onCheck={(operationId) => void run({ action: "check", operationId }, `check:${operationId}`)} onCancelItem={(reason, note) => cancelItem(openLine, reason, note)} />
       </LineDrawer>}
       {/* Fees are evidence, not a step: folded so the steps stay at the top of the page. */}
-      <details className="mt-4 rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer text-[12px] font-medium">PayPal fees and merchant net</summary>
+      <details className={designer ? "rounded-xl border border-[var(--line)] bg-white px-4 py-3" : "mt-4 rounded-lg border border-slate-200 p-3"}><summary className="cursor-pointer text-[12px] font-medium">PayPal fees and merchant net</summary>
         <PaymentFees lines={workspace.lines} {...(workspace.canReconcile ? { onRefresh: () => void run({ action: "fees" }, "fees"), refreshing: busy === "fees", disabled } : {})} />
       </details></>}
 
