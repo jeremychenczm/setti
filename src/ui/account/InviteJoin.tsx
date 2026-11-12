@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { FormEvent } from "react";
 import { authClient } from "@/auth/client";
-import { BUTTON, Field, PASSWORD_HINT, Shell, useSubmit } from "./AuthForm";
+import { BUTTON, Field, PASSWORD_HINT, PASSWORD_LIMITS, Shell, SIGN_UP_EMAIL_HINT, signUpProblem, useSubmit } from "./AuthForm";
 
 interface Invite {
   status: "open" | "expired" | "used" | "replaced";
@@ -76,9 +76,12 @@ export function InviteJoin({ token, invite, viewer }: { token: string; invite: I
   const signUp = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") ?? "").trim(), email = String(form.get("email") ?? "").trim(), password = String(form.get("password") ?? "");
+    const problem = signUpProblem(name, email, password);
     void run(async () => {
+      if (problem) return problem;
       // A client's account has no studio: it opens only the projects it joins.
-      const result = await authClient.signUp.email({ name: String(form.get("name") ?? "").trim(), email: String(form.get("email") ?? "").trim(), password: String(form.get("password") ?? "") });
+      const result = await authClient.signUp.email({ name, email, password });
       if (result.error) return result.error.message ?? "That account could not be created.";
       const refused = await join(token);
       // The new account is signed in either way; show the page as that account sees it.
@@ -88,10 +91,10 @@ export function InviteJoin({ token, invite, viewer }: { token: string; invite: I
   };
   return <Shell title="Join the project" footer={<>Already have an account? <Link className="font-medium text-[var(--primary)]" href={`/sign-in?next=${encodeURIComponent(here)}`}>Sign in</Link></>}>
     <div className="space-y-4">{intro}
-      <form className="space-y-3" onSubmit={signUp}>
+      <form className="space-y-3" onSubmit={signUp} noValidate>
         <Field label="Your name" name="name" autoComplete="name" required maxLength={100} />
-        <Field label="Email" name="email" type="email" autoComplete="email" required />
-        <Field label="Password" name="password" type="password" autoComplete="new-password" required minLength={10} maxLength={128} hint={PASSWORD_HINT} />
+        <Field label="Email" name="email" type="email" autoComplete="email" required hint={SIGN_UP_EMAIL_HINT} />
+        <Field label="Password" name="password" type="password" autoComplete="new-password" required {...PASSWORD_LIMITS} hint={PASSWORD_HINT} />
         {alert}
         <button className={BUTTON} disabled={busy}>{busy ? "Joining…" : "Create account and join"}</button>
       </form>

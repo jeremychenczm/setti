@@ -85,6 +85,8 @@ export function QuoteDraftEditor({ projectKey, view, onSaved, onClose }: { proje
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lineError, setLineError] = useState<string | null>(null);
+  // An in-page question rather than window.confirm, whose buttons follow the browser's language.
+  const [leaving, setLeaving] = useState(false);
   const total = useMemo(() => lines.reduce((sum, line) => sum + (lineTotal(line) ?? 0), 0), [lines]);
 
   useEffect(() => {
@@ -121,12 +123,17 @@ export function QuoteDraftEditor({ projectKey, view, onSaved, onClose }: { proje
   return <section className="flex min-w-0 flex-1 overflow-hidden rounded-xl bg-white shadow-sm">
     <div className="flex min-w-0 flex-1 flex-col">
       <header className="flex flex-wrap items-center gap-3 border-b border-[var(--line)] px-6 py-3.5">
-        <button onClick={() => { if (!dirty || window.confirm("Leave without saving your changes to quote V1?")) onClose(); }} className="flex items-center gap-1.5 text-[12px] text-[var(--muted)] hover:text-[var(--ink)]"><ArrowLeft className="h-3.5 w-3.5" />Back to the quote</button>
+        <button onClick={() => { if (dirty) setLeaving(true); else onClose(); }} className="flex items-center gap-1.5 text-[12px] text-[var(--muted)] hover:text-[var(--ink)]"><ArrowLeft className="h-3.5 w-3.5" />Back to the quote</button>
         <span className="text-[var(--line)]">/</span>
         <span className="text-[12px] font-medium">Edit quote V1 · {view.document.projectName}</span>
         <span className="ml-auto text-[12px] text-[var(--muted)]">{dirty ? "Unsaved changes" : "Saved"}</span>
         <button onClick={() => void save()} disabled={saving || !dirty} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-4 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:text-slate-400">{saving && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}Save V1</button>
       </header>
+      {leaving && <div role="alertdialog" aria-label="Unsaved changes" className="flex flex-wrap items-center gap-3 border-b border-amber-200 bg-amber-50 px-6 py-2.5 text-[12px] text-amber-900">
+        <span>Leave without saving your changes to quote V1?</span>
+        <button onClick={onClose} className="ml-auto rounded-lg px-3 py-1.5 font-medium text-red-700 hover:bg-red-50">Leave without saving</button>
+        <button onClick={() => setLeaving(false)} autoFocus className="rounded-lg bg-white px-3 py-1.5 font-medium shadow-sm hover:bg-[var(--canvas)]">Keep editing</button>
+      </div>}
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[920px] px-5 py-6">
           {error && <p role="alert" className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-800">{error}</p>}

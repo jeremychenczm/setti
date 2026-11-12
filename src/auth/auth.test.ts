@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { openTestDb, testDatabaseUrl, truncate } from "@/db/testing";
 import { defaultStudioName, newStudioSlug } from "./names";
 import { authAccounts, authSessions, studioMembers, studios, users } from "./schema";
+import { SIGN_UP_EMAIL_RULE } from "./rules";
 import { createAuth, PASSWORD_MIN_LENGTH, type Auth } from "./server";
 import { activeStudio } from "./studio";
 
@@ -30,7 +31,7 @@ describe.skipIf(!testDatabaseUrl)("accounts and studios", () => {
 
   beforeAll(async () => {
     handle = await openTestDb();
-    auth = createAuth(handle.db, { baseURL: "http://localhost:3000", secret: "test-only-secret-0123456789abcdefghijklmnop", rateLimit: false });
+    auth = createAuth(handle.db, { baseURL: "http://localhost:3000", secret: "test-only-secret-0123456789abcdefghijklmnop", rateLimit: false, signUpEmailDomains: null });
   });
   beforeEach(async () => { await truncate(handle.db, "users", "studios"); });
   afterAll(async () => { await handle.pool.end(); });
@@ -65,6 +66,20 @@ describe.skipIf(!testDatabaseUrl)("accounts and studios", () => {
   it("refuses a second account with the same email", async () => {
     expect((await signUp("jordan@example.com")).status).toBe(200);
     expect((await signUp("jordan@example.com")).status).toBeGreaterThanOrEqual(400);
+    expect(await handle.db.select().from(users)).toHaveLength(1);
+  });
+
+  it("opens new accounts to Gmail addresses only, even when the API is called directly", async () => {
+    const live = createAuth(handle.db, { baseURL: "http://localhost:3000", secret: "test-only-secret-0123456789abcdefghijklmnop", rateLimit: false });
+    // Over HTTP, as a script posting to the API would.
+    const signUpLive = (email: string) => live.handler(new Request("http://localhost:3000/api/auth/sign-up/email", {
+      method: "POST", headers: { "Content-Type": "application/json", Origin: "http://localhost:3000" },
+      body: JSON.stringify({ name: "Jordan Lee", email, password: PASSWORD }),
+    }));
+    const refused = await signUpLive("jordan@example.com");
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toEqual(expect.objectContaining({ message: SIGN_UP_EMAIL_RULE }));
+    expect((await signUpLive("Jordan.Lee@Gmail.com")).status).toBe(200);
     expect(await handle.db.select().from(users)).toHaveLength(1);
   });
 

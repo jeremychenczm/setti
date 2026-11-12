@@ -6,25 +6,29 @@
  */
 import { randomUUID } from "node:crypto";
 import { betterAuth } from "better-auth";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { organization } from "better-auth/plugins";
 import { asc, eq } from "drizzle-orm";
 import type { Db } from "@/db/client";
 import { AUTH_COOKIE_PREFIX } from "./cookie-prefix";
+import { emailInDomains, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, SIGN_UP_EMAIL_DOMAINS, SIGN_UP_EMAIL_RULE } from "./rules";
 import { authAccounts, authSessions, authVerifications, studioInvitations, studioMembers, studios, users } from "./schema";
 
-export const PASSWORD_MIN_LENGTH = 10;
-export const PASSWORD_MAX_LENGTH = 128;
+export { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH };
 
 export interface AuthOptions {
   baseURL?: string;
   secret?: string;
   /** Off in tests, which sign many accounts up in a row. */
   rateLimit?: boolean;
+  /** The email domains new accounts may use; null takes any address, as the tests do. */
+  signUpEmailDomains?: readonly string[] | null;
 }
 
 export function createAuth(db: Db, options: AuthOptions = {}) {
+  const domains = options.signUpEmailDomains === undefined ? SIGN_UP_EMAIL_DOMAINS : options.signUpEmailDomains;
   const auth = betterAuth({
     appName: "Setti",
     baseURL: options.baseURL ?? process.env.BETTER_AUTH_URL ?? process.env.SETTI_PUBLIC_URL,
@@ -48,6 +52,14 @@ export function createAuth(db: Db, options: AuthOptions = {}) {
       },
     },
     telemetry: { enabled: false },
+    hooks: {
+      // Checked here, not only in the form, so a script posting to the API is refused too.
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path === "/sign-up/email" && domains && !emailInDomains(String(ctx.body?.email ?? ""), domains)) {
+          throw new APIError("BAD_REQUEST", { message: SIGN_UP_EMAIL_RULE });
+        }
+      }),
+    },
     // UUIDs, like every other table, so a studio id can key the data it owns.
     advanced: { cookiePrefix: AUTH_COOKIE_PREFIX, database: { generateId: () => randomUUID() } },
     databaseHooks: {

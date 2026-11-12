@@ -39,7 +39,7 @@ describe.skipIf(!testDatabaseUrl)("who a request is", () => {
 
   beforeAll(async () => {
     handle = await openTestDb();
-    auth = createAuth(handle.db, { baseURL: "http://localhost:3000", secret: "test-only-secret-0123456789abcdefghijklmnop", rateLimit: false });
+    auth = createAuth(handle.db, { baseURL: "http://localhost:3000", secret: "test-only-secret-0123456789abcdefghijklmnop", rateLimit: false, signUpEmailDomains: null });
   });
   beforeEach(async () => { await truncate(handle.db, "users", "studios", "chat_cases"); });
   afterAll(async () => { await handle.pool.end(); });

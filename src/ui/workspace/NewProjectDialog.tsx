@@ -12,11 +12,14 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") ?? "").trim();
+    // The form sets noValidate: the browser's own message would follow its language, not the app's.
+    if (!name) { setError("Name the project."); return; }
     setBusy(true); setError(null);
     try {
       const response = await fetch("/api/projects", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: String(form.get("name") ?? ""), subtitle: String(form.get("subtitle") ?? "") }),
+        body: JSON.stringify({ name, subtitle: String(form.get("subtitle") ?? "") }),
       });
       const body = await response.json().catch(() => null) as { href?: string; error?: string } | null;
       if (!response.ok || !body?.href) { setError(body?.error ?? "The project could not be created. Try again."); setBusy(false); return; }
@@ -28,7 +31,7 @@ export function NewProjectDialog({ onClose }: { onClose: () => void }) {
   }
 
   return <div role="dialog" aria-modal="true" aria-labelledby="new-project-title" className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/30 px-4">
-    <form onSubmit={(event) => void submit(event)} className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
+    <form onSubmit={(event) => void submit(event)} noValidate className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
       <div className="flex items-center justify-between">
         <h2 id="new-project-title" className="text-[16px] font-semibold">New project</h2>
         <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--canvas)]"><X className="h-4 w-4" /></button>
