@@ -14,7 +14,8 @@
 import type { CaseKey } from "../chat/types";
 import type { ItemHoldView, ItemHoldsView } from "./item-holds-view";
 
-export type AttentionKind = "payment_unknown" | "hold_failed" | "renewal_failed" | "expired" | "capture_ready" | "expiring" | "not_ordered";
+/** The last two are the prepared example projects' to-dos (see attention-view.ts); the rest come from recorded holds. */
+export type AttentionKind = "payment_unknown" | "hold_failed" | "renewal_failed" | "expired" | "capture_ready" | "expiring" | "not_ordered" | "awaiting_credit" | "awaiting_confirmation";
 
 export interface AttentionItem {
   /** Stable per project, item and kind. */
@@ -22,10 +23,16 @@ export interface AttentionItem {
   kind: AttentionKind;
   projectKey: CaseKey;
   projectName: string;
+  /** Live projects are this session's Sandbox records; examples are prepared data. */
+  source: "live" | "example";
   /** The quote line, and its side of a replacement. */
   itemId: string;
   side: "baseline" | "proposed";
   itemLabel: string;
+  /** Who supplies the item, when the quote names one. */
+  supplier: string | null;
+  /** The money the step is about: what is held, what goes back once the supplier's credit lands, or, with nothing held, the approved amount. */
+  amount: { cents: number; part: "held" | "toRefund" | "approved" };
   title: string;
   detail: string;
   /** `now`: act today; `soon`: within a few days. */
@@ -38,7 +45,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** A week before a hold expires, Setti starts saying so. */
 export const EXPIRY_NOTICE_DAYS = 7;
 
-const ORDER: AttentionKind[] = ["payment_unknown", "hold_failed", "renewal_failed", "expired", "capture_ready", "expiring", "not_ordered"];
+const ORDER: AttentionKind[] = ["payment_unknown", "hold_failed", "renewal_failed", "expired", "capture_ready", "expiring", "not_ordered", "awaiting_credit", "awaiting_confirmation"];
 
 const day = (value: Date) => value.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
 
@@ -92,7 +99,12 @@ function reminder(view: ItemHoldsView, line: ItemHoldView, now: Date): Pick<Atte
 export function projectAttention(view: ItemHoldsView, projectName: string, now: Date): AttentionItem[] {
   return view.items.flatMap((line) => {
     const found = reminder(view, line, now);
-    return found ? [{ ...found, id: `${view.projectKey}:${line.side}:${line.itemId}:${found.kind}`, projectKey: view.projectKey, projectName, itemId: line.itemId, side: line.side, itemLabel: line.label, href: itemHref(view, line) }] : [];
+    return found ? [{
+      ...found, id: `${view.projectKey}:${line.side}:${line.itemId}:${found.kind}`, projectKey: view.projectKey, projectName, source: "live" as const,
+      itemId: line.itemId, side: line.side, itemLabel: line.label, supplier: line.vendor,
+      amount: line.heldCents > 0 ? { cents: line.heldCents, part: "held" as const } : { cents: line.targetCents, part: "approved" as const },
+      href: itemHref(view, line),
+    }] : [];
   });
 }
 

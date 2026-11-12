@@ -105,7 +105,7 @@ On **Payments**, every item carries one status, worked out from that item's own 
 
 Setti keeps watching the holds after everyone has signed.
 
-- **Jordan's Inbox** lists what needs the designer today, one line per item: a hold whose supplier order is still not recorded after three days, an item ready to charge, a hold close to PayPal's 29-day limit, a hold that failed, expired or could not be renewed, and a PayPal result Setti could not confirm.
+- **Jordan's Inbox** lists what needs the designer today, one row per project, the example projects included: a hold whose supplier order is still not recorded after three days, an item ready to charge, a hold close to PayPal's 29-day limit, a hold that failed, expired or could not be renewed, and a PayPal result Setti could not confirm.
 - **Emma's Inbox** is her money: every hold, charge, release and refund, with its PayPal ID and time. Opening it reads the latest entries back from PayPal, and once PayPal's webhook for a step arrives, the entry says **Confirmed by PayPal**.
 - **AI summaries** open both inboxes. The server checks every amount and status in a summary against the entries it cites, and shows no summary when one still fails after a rewrite.
 - **A daily check** (Render cron, 15:00 UTC) reads back holds past their 29 days and renews a furniture hold still waiting for its supplier on day 25 with the client's saved payment method: a new hold first, then the old one released. Both people get a chat notice three days before.

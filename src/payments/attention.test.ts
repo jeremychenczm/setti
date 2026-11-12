@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { exampleProjects } from "../money-desk/examples";
+import { needs } from "../ui/money/desk-view";
 import { projectAttention, renewalNotice, renewalNoticesDue, sortAttention } from "./attention";
+import { exampleAttention } from "./attention-view";
 import type { ItemHoldView, ItemHoldsView } from "./item-holds-view";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -103,5 +106,14 @@ describe("what needs the designer today", () => {
     expect(sortAttention(items).map((entry) => [entry.itemId, entry.kind, entry.urgency])).toEqual([
       ["b", "payment_unknown", "now"], ["c", "not_ordered", "now"], ["d", "capture_ready", "soon"],
     ]);
+  });
+
+  it("lists the example projects' to-dos exactly as Money's Needs you does, with the same amounts", () => {
+    const reminders = exampleAttention();
+    expect(reminders.map((entry) => [entry.projectName, entry.itemLabel, entry.amount.cents]))
+      .toEqual(needs(exampleProjects()).map((row) => [row.project, row.item, row.amountCents]));
+    expect(reminders).toHaveLength(7);
+    expect(reminders.filter((entry) => entry.kind === "awaiting_credit")).toEqual([expect.objectContaining({ projectKey: "fieldwork-goods", amount: { cents: 221_000, part: "toRefund" } })]);
+    expect(reminders.every((entry) => entry.source === "example" && entry.urgency === "now" && entry.href === `/quotes/${entry.projectKey}?tab=payments`)).toBe(true);
   });
 });

@@ -108,7 +108,7 @@ function view(scenario: Scenario): { view: InboxView; truth: ReturnType<typeof t
   return {
     truth,
     view: {
-      role: "client", reader: "Emma", simulatedDays: 0, lastCheck: null, reminders: [], project: { key: "maple", name: "Maple Ave" },
+      role: "client", reader: "Emma", simulatedDays: 0, lastCheck: null, reminders: [], projects: [], project: { key: "maple", name: "Maple Ave" },
       events: timeline.events, totals: { heldCents: sum("heldCents"), chargedCents: sum("chargedCents"), refundedCents: sum("refundedCents") }, items,
       readAt: "2026-11-05T16:00:00Z", unread: [], opened: true,
     },

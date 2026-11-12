@@ -513,7 +513,7 @@ export async function getInboxSummaryResponse(req: NextRequest) {
   const { sessionId, account } = scope;
   if (!sessionId) return NextResponse.json({ code: "NOT_FOUND", error: "There is nothing in this inbox yet." }, { status: 404, headers });
   try {
-    const view = await inboxView(db(), null, sessionId, account);
+    const view = await inboxView(db(), null, sessionId, account, { projects: false });
     return NextResponse.json(await summarizeInbox(db(), sessionId, { audience: view.role, reader: `${view.reader} (the ${view.role})`, facts: inboxFacts(view) }, undefined,
       () => takeAiAllowance(scope.actor, db)), { headers });
   } catch (error) { return fail(error); }

@@ -1,6 +1,7 @@
 /**
  * The payment inbox in the sidebar. The designer's lists what needs doing
- * across every project (the reminders); the client's shows where their money
+ * across every project (the reminders, the demo's examples included, with each
+ * project as Money shows it); the client's shows where their money
  * stands in their project: every charge, hold, release and refund, each with the
  * last time PayPal confirmed it. Both are read from recorded facts; opening the
  * client's inbox first reads its newest records back from PayPal. The AI summary
@@ -14,10 +15,11 @@ import type { CaseKey } from "../chat/types";
 import type { Db } from "../db/client";
 import type { SummaryFact } from "../ai/inbox-summary";
 import { items } from "../db/schema";
+import { moneyDesk } from "../money-desk/desk";
 import { pricingCases } from "../pricing/schema";
 import { and, eq } from "drizzle-orm";
 import type { AttentionItem } from "./attention";
-import { attentionView, sessionProjectName } from "./attention-view";
+import { sessionProjectName, studioAttention } from "./attention-view";
 import { lastInboxRead, markInboxSeen, unreadIds } from "./inbox-reads";
 import { checkWithPayPal, moneyEvents, type MoneyEvent } from "./money-events";
 import type { PayPalPayments } from "./paypal";
@@ -30,6 +32,8 @@ export interface InboxView {
   lastCheck: { at: string; problems: string[] } | null;
   /** The designer's reminders across projects, most pressing first. */
   reminders: AttentionItem[];
+  /** Every project the designer runs, as Money lists it; empty for the client. */
+  projects: InboxProject[];
   /** The client's project and its money, newest first. */
   project: { key: CaseKey; name: string } | null;
   events: MoneyEvent[];
@@ -44,8 +48,11 @@ export interface InboxView {
   opened: boolean;
 }
 
-/** One item's money as it stands now. */
-export interface ItemMoney { label: string; heldCents: number; chargedCents: number; refundedCents: number; releasedCents: number }
+/** One item's money as it stands now; `holds` counts PayPal's holds standing for it. */
+export interface ItemMoney { label: string; heldCents: number; chargedCents: number; refundedCents: number; releasedCents: number; holds: number }
+
+/** One of the designer's projects: where it stands, and where its payments and chat are. */
+export interface InboxProject { id: string; name: string; source: "live" | "example"; stage: string; client: string; paymentsHref: string; chatHref: string }
 
 const usd = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const when = (value: string) => new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" });
@@ -60,14 +67,16 @@ export function itemsNow(ledger: Pick<ProjectLedger, "authorizations" | "capture
   const capturedFrom = (holdId: string) => completed.filter((capture) => capture.authorizationId === holdId).reduce((sum, capture) => sum + capture.amountCents, 0);
   const byItem = new Map<string | null, ItemMoney>();
   const entry = (itemId: string | null) => {
-    if (!byItem.has(itemId)) byItem.set(itemId, { label: label(itemId), heldCents: 0, chargedCents: 0, refundedCents: 0, releasedCents: 0 });
+    if (!byItem.has(itemId)) byItem.set(itemId, { label: label(itemId), heldCents: 0, chargedCents: 0, refundedCents: 0, releasedCents: 0, holds: 0 });
     return byItem.get(itemId)!;
   };
   for (const hold of ledger.authorizations) {
     const remaining = Math.max(0, hold.amountCents - capturedFrom(hold.id));
     const expired = hold.status === "expired" || (!!hold.expiresAt && hold.expiresAt.getTime() <= now);
-    if ((hold.status === "created" || hold.status === "partially_captured") && !expired) entry(hold.itemId).heldCents += remaining;
-    else if (remaining) entry(hold.itemId).releasedCents += remaining;
+    if ((hold.status === "created" || hold.status === "partially_captured") && !expired) {
+      entry(hold.itemId).heldCents += remaining;
+      if (remaining) entry(hold.itemId).holds += 1;
+    } else if (remaining) entry(hold.itemId).releasedCents += remaining;
   }
   const holdItem = new Map(ledger.authorizations.map((hold) => [hold.id, hold.itemId]));
   const chargedItem = new Map(completed.map((capture) => [capture.id, capture.itemId ?? (capture.authorizationId ? holdItem.get(capture.authorizationId) : null) ?? null]));
@@ -88,20 +97,33 @@ async function moneyNow(db: Pick<Db, "select">, sessionId: string, key: CaseKey)
   return { totals: { heldCents: sum("heldCents"), chargedCents: sum("chargedCents"), refundedCents: sum("refundedCents") }, items: byItem };
 }
 
-export async function inboxView(db: Db, paypal: PayPalPayments | null, sessionId: string | null, account: DemoAccount): Promise<InboxView> {
+/** The designer's projects as Money's desk reads them, with where each one's payments and chat open. */
+async function studioProjects(db: Db, sessionId: string | null, account: DemoAccount): Promise<InboxProject[]> {
+  return (await moneyDesk(db, sessionId, account)).projects.map((project) => ({
+    id: project.id, name: project.name, source: project.source, stage: project.stage, client: project.client,
+    // An example's desk link is its chat; its payments are the records' payments tab.
+    paymentsHref: project.source === "live" ? project.href : `/quotes/${project.id}?tab=payments`, chatHref: `/chats/${project.id}`,
+  }));
+}
+
+/** `projects: false` leaves out the designer's project list, for callers that only count. */
+export async function inboxView(db: Db, paypal: PayPalPayments | null, sessionId: string | null, account: DemoAccount, options: { projects?: boolean } = {}): Promise<InboxView> {
   // Real time, taken first: a record completed while the view is read stays new.
   const readAt = new Date().toISOString();
-  const attention = await attentionView(db, sessionId, account);
+  const attention = await studioAttention(db, sessionId, account);
   const read = sessionId ? await lastInboxRead(db, sessionId, account.id) : null;
   const base = { reader: account.name.split(" ")[0], simulatedDays: attention.simulatedDays, lastCheck: attention.lastCheck, readAt, opened: read !== null };
-  if (account.role === "designer") return { ...base, role: "designer", reminders: attention.items, project: null, events: [], totals: null, items: [], unread: unreadIds(read, { events: [], reminders: attention.items }) };
+  if (account.role === "designer") {
+    const projects = options.projects === false ? [] : await studioProjects(db, sessionId, account);
+    return { ...base, role: "designer", reminders: attention.items, projects, project: null, events: [], totals: null, items: [], unread: unreadIds(read, { events: [], reminders: attention.items }) };
+  }
   const key = account.projectKey;
-  if (!key || !sessionId || !canOpenProject(account, key)) return { ...base, role: "client", reminders: [], project: null, events: [], totals: null, items: [], unread: [] };
+  if (!key || !sessionId || !canOpenProject(account, key)) return { ...base, role: "client", reminders: [], projects: [], project: null, events: [], totals: null, items: [], unread: [] };
   let events = await moneyEvents(db, sessionId, key);
   // The client sees what PayPal says now: the newest records are read back first.
   if (paypal && events.length) { await checkWithPayPal(db, paypal, events); events = await moneyEvents(db, sessionId, key); }
   const money = await moneyNow(db, sessionId, key);
-  return { ...base, role: "client", reminders: [], project: { key, name: await sessionProjectName(db, sessionId, key) }, events, totals: money?.totals ?? null, items: money?.items ?? [], unread: unreadIds(read, { events, reminders: [] }) };
+  return { ...base, role: "client", reminders: [], projects: [], project: { key, name: await sessionProjectName(db, sessionId, key) }, events, totals: money?.totals ?? null, items: money?.items ?? [], unread: unreadIds(read, { events, reminders: [] }) };
 }
 
 /**
@@ -109,7 +131,7 @@ export async function inboxView(db: Db, paypal: PayPalPayments | null, sessionId
  * and the designer's reminders open now, are no longer new.
  */
 export async function markInboxOpened(db: Db, sessionId: string, account: DemoAccount, through: Date): Promise<void> {
-  const reminderIds = account.role === "designer" ? (await attentionView(db, sessionId, account)).items.map((item) => item.id) : [];
+  const reminderIds = account.role === "designer" ? (await studioAttention(db, sessionId, account)).items.map((item) => item.id) : [];
   await markInboxSeen(db, sessionId, account.id, { through, reminderIds });
 }
 
@@ -119,7 +141,7 @@ export async function markInboxOpened(db: Db, sessionId: string, account: DemoAc
  * counts money records completed since they last opened the inbox.
  */
 export async function inboxBadge(db: Db, sessionId: string | null, account: DemoAccount): Promise<{ count: number; role: InboxView["role"]; opened: boolean }> {
-  const view = await inboxView(db, null, sessionId, account);
+  const view = await inboxView(db, null, sessionId, account, { projects: false });
   return { role: view.role, count: view.role === "designer" ? view.reminders.length : view.unread.length, opened: view.opened };
 }
 
@@ -133,6 +155,7 @@ function listed(labels: readonly string[]): string {
 const REMINDER_STATE: Record<AttentionItem["kind"], string> = {
   payment_unknown: "with an unknown PayPal result", hold_failed: "whose hold failed", renewal_failed: "whose hold renewal failed",
   expired: "whose hold expired", capture_ready: "ready to capture", expiring: "whose hold expires soon", not_ordered: "not ordered yet",
+  awaiting_credit: "waiting for a supplier credit", awaiting_confirmation: "waiting for a supplier's confirmation",
 };
 
 /** Facts that count and name the items sharing a state, when there are at least two; none when one group would only repeat the total. */
