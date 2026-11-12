@@ -4,6 +4,7 @@ import { ArrowUpRight, ChevronRight, CircleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import type { CaseMessage, ChangeDraft, DraftChange, DraftItem } from "@/chat/types";
 import { FromV1Note } from "../pricing/common";
+import type { DraftEstimate } from "./draft-pricing";
 
 function money(cents: number | null, currency: string | null): string {
   if (cents === null) return "Price to review";
@@ -26,9 +27,6 @@ function safeUrl(value: string): string | null {
     return null;
   }
 }
-
-/** What the draft does to the total, before pricing: the estimate when Setti can work one out. */
-export interface DraftEstimate { baseline: number; total: number; difference: number; fees: { name: string; cents: number }[] }
 
 export const Was = ({ children }: { children: ReactNode }) => <span className="text-slate-400 line-through decoration-slate-300">{children}</span>;
 export const Act = ({ children }: { children: ReactNode }) => <span className="text-[var(--muted)]">{children} · </span>;

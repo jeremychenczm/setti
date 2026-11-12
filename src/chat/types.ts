@@ -118,6 +118,8 @@ export interface ChangeDraft {
   origin?: HumanActor;
   /** Set when the draft starts from a supplier's order confirmation: the supplier, and what its confirmation changes. */
   supplierNotice?: { vendor: string; notice: string };
+  /** The Setti reply that brought this draft; that message carries the draft's card. */
+  replyMessageId?: string;
 }
 
 /** A later quote version the designer sent into the chat, as its card shows it. */

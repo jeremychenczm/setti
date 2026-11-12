@@ -35,7 +35,8 @@ export function ChatMessageBubble({ message, person, own, highlighted, unsaved, 
       <div className={`flex items-start gap-2.5 ${own ? "justify-end" : ""}`}>
         {!own && (notice ? <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"><Info className="h-5 w-5" /></span> : assistant ? <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-200 text-slate-700"><Bot className="h-5 w-5" /></span> : <Avatar person={person} />)}
         {own && <span className="order-last"><Avatar person={person} /></span>}
-        <div className={`max-w-[85%] rounded-xl px-3.5 py-2.5 sm:max-w-[75%] lg:max-w-[65%] ${notice ? "border border-[var(--line)] bg-white" : assistant ? "bg-[var(--agent)]" : own ? "bg-[var(--primary-soft)]" : "bg-[var(--canvas)]"}`}>
+        {/* A reply that carries a table (the draft card) gets the room the table needs. */}
+        <div className={`${assistant && attachment ? "w-full min-w-0 max-w-[96%] sm:max-w-[92%]" : "max-w-[85%] sm:max-w-[75%] lg:max-w-[65%]"} rounded-xl px-3.5 py-2.5 ${notice ? "border border-[var(--line)] bg-white" : assistant ? "bg-[var(--agent)]" : own ? "bg-[var(--primary-soft)]" : "bg-[var(--canvas)]"}`}>
           <div className={`mb-1 text-[11px] font-semibold ${notice ? "text-slate-500" : assistant ? "text-slate-700" : "text-slate-600"}`}>{notice ? "System notice" : assistant ? <>Setti<AiTag /></> : person.name}</div>
           {about && <button onClick={about.open} className="mb-1.5 inline-flex max-w-full items-center gap-1 rounded-full border border-brand-100 bg-white px-2 py-0.5 text-[11px] font-medium text-[var(--primary)] hover:bg-brand-50"><FileText className="h-3 w-3 shrink-0" /><span className="truncate">About · {about.name} (V1)</span></button>}
           {/* A written money answer is rendered by its card, with each sentence's evidence numbers. */}

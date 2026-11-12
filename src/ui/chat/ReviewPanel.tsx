@@ -5,10 +5,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CaseKey, CaseMessage, ChangeDraft } from "@/chat/types";
 import { reviewSummary, type CarriedSummary, type FieldChange, type ReviewLine, type ReviewSummary } from "@/pricing/review-diff";
 import type { PricingWorkspace } from "@/pricing/types";
-import { createPricingInput, previewPricing } from "@/pricing/calculation";
-import { isHomeQuote } from "@/demo/home-evidence";
 import { FromV1Note } from "../pricing/common";
-import { Act, Amount, ChangeRow, DraftCard, Fold, RowsHeading, TotalsLine, Was, type DraftEstimate } from "./DraftCard";
+import { Act, Amount, ChangeRow, DraftCard, Fold, RowsHeading, TotalsLine, Was } from "./DraftCard";
+import { draftEstimate, type DraftEstimate } from "./draft-pricing";
 
 const ACT: Record<ReviewLine["kind"], string> = { revised: "Revised from V1", carried: "From V1", changed: "Changed", added: "Added", removed: "Removed" };
 /** Short fields read well in one line; long ones (specification, terms) wait in the details. */
@@ -77,16 +76,7 @@ export function ReviewPanel({ projectKey, draft, messages, onSourceMessage }: { 
       const workspace = body as PricingWorkspace;
       setSummary(reviewSummary(workspace));
       setClientName(workspace.quote.clientName || null);
-      setEstimate(null);
-      if (isHomeQuote(workspace.quote) && workspace.sourceDraft?.id === draft.id && workspace.sourceDraft.revision === draft.revision) {
-        const proposed = createPricingInput(workspace.quote, workspace.sourceDraft);
-        const preview = previewPricing(workspace.quote, workspace.sourceDraft, proposed);
-        const nameOf = (itemId: string | null) => workspace.quote.lines.find((line) => line.itemId === itemId)?.name ?? "Old item";
-        if (preview.proposedTotals && preview.deltaTotalCents !== null) setEstimate({
-          baseline: preview.baselineTotals.totalCents, total: preview.proposedTotals.totalCents, difference: preview.deltaTotalCents,
-          fees: proposed.changes.filter((change) => (change.oldItemCostCents ?? 0) > 0).map((change) => ({ name: nameOf(change.itemId), cents: change.oldItemCostCents ?? 0 })),
-        });
-      }
+      setEstimate(draftEstimate(workspace, { id: draft.id, revision: draft.revision }));
     } catch (cause) {
       if (requestId !== requestSequence.current) return;
       setSummary(null);

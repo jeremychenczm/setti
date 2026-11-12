@@ -17,6 +17,7 @@ import { usd } from "../demo-data";
 import { chatTimeline, latestChatMessage } from "./activity";
 import { ActivityCard } from "./ActivityCard";
 import { ChatMessageBubble as MessageBubble } from "./ChatMessageBubble";
+import { DraftMessageCard } from "./DraftMessageCard";
 import { ChatComposer, ChatHeader, ChatStatusBar } from "./ChatLayout";
 import { QuoteCard } from "./QuoteCard";
 import { VersionCard } from "./VersionCard";
@@ -140,6 +141,8 @@ export function CaseChat({ projectKey, quote, account, designer, client, demo = 
   };
   /** The quote a designer's message carries: V1, or a later version sent into the chat. */
   const attachmentFor = (messageId: string) => {
+    // Setti's reply carries the draft it brought, for the designer who prices it.
+    if (draft && draft.replyMessageId === messageId && account.role === "designer") return <DraftMessageCard draft={draft} projectKey={projectKey} projectName={currentQuote.projectName} />;
     if (opening && opening.messageId === messageId) return <QuoteCard opening={opening} projectName={currentQuote.projectName} viewerRole={account.role} onOpen={() => onOpenQuote()} replacedBy={versions[0]?.version ?? null} />;
     const index = versions.findIndex((version) => version.messageId === messageId);
     return index < 0 ? null : <VersionCard version={versions[index]} projectKey={projectKey} projectName={currentQuote.projectName} viewerRole={account.role} replacedBy={versions[index + 1]?.version ?? null} />;
@@ -172,15 +175,6 @@ export function CaseChat({ projectKey, quote, account, designer, client, demo = 
     initiallyPositioned.current = true;
   }, [lastConversationMessageId, running, loading, home, discussionStart, homeRequestStarted]);
 
-  // The dialog opens by itself only for a draft that arrives while the chat is open, so a later
-  // visit is not covered by it (the guide sits above the chat); the card in the chat opens it then.
-  const seenDraft = useRef<string | null | undefined>(undefined);
-  useEffect(() => {
-    if (loading) return;
-    const key = draft?.id ? `${draft.id}:${draft.revision}` : null;
-    if (seenDraft.current !== undefined && key && key !== seenDraft.current && account.role === "designer") setDraftOpen(true);
-    seenDraft.current = key;
-  }, [loading, draft?.id, draft?.revision, account.role]);
 
   // The draft is a dialog over the chat: Escape closes it, like a click outside it.
   useEffect(() => {
@@ -275,7 +269,7 @@ export function CaseChat({ projectKey, quote, account, designer, client, demo = 
 
               {error && <div role="alert" className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-[12px] leading-relaxed text-red-800"><p>{error}</p><div className="mt-2 flex flex-wrap gap-3">{canRetry && <button disabled={running} onClick={() => retry()} className="flex items-center gap-1.5 font-medium hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Retry this message</button>}{hasUnsent && !running && <button onClick={() => { const unsent = editUnsent(); if (unsent) { setText(unsent.text); input.current?.focus(); } }} className="font-medium hover:underline">Edit unsent message</button>}{!running && !hasUnsent && <button onClick={() => void reload()} className="font-medium hover:underline">Reload saved chat</button>}</div></div>}
 
-              {draft && account.role === "designer" && <div className="flex flex-wrap items-center gap-3 rounded-xl border border-brand-100 bg-brand-50/50 p-3.5"><FileText className="h-4 w-4 shrink-0 text-[var(--primary)]" /><span className="min-w-40 flex-1"><span className="block text-[12px] font-semibold">Current draft · {draft.changes.length} {draft.changes.length === 1 ? "change" : "changes"} to V{draft.basedOnVersion}</span><span className="mt-1 block text-[11px] text-slate-500">Awaiting designer pricing</span></span><button onClick={() => setDraftOpen(true)} className="shrink-0 rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">Open the draft</button></div>}
+              {draft && account.role === "designer" && !(draft.replyMessageId && messages.some((message) => message.id === draft.replyMessageId)) && <div className="flex flex-wrap items-center gap-3 rounded-xl border border-brand-100 bg-brand-50/50 p-3.5"><FileText className="h-4 w-4 shrink-0 text-[var(--primary)]" /><span className="min-w-40 flex-1"><span className="block text-[12px] font-semibold">Current draft · {draft.changes.length} {draft.changes.length === 1 ? "change" : "changes"} to V{draft.basedOnVersion}</span><span className="mt-1 block text-[11px] text-slate-500">Awaiting designer pricing</span></span><button onClick={() => setDraftOpen(true)} className="shrink-0 rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">Open the draft</button></div>}
               {snapshot?.draftPreparing && <div role="status" className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3.5 text-[12px] text-slate-600"><FileText className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" /><span>The studio is preparing a revised version of the quote. You will see it here once it is sent.</span></div>}
               <div ref={bottom} />
             </div>

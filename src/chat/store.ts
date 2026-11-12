@@ -251,7 +251,9 @@ export function createChatStore(db: Db): ChatStore {
           }
           draft = withV1Lines(draft, read);
         }
-        await tx.insert(chatMessages).values({ caseId: row.id, id: randomUUID(), actor: "assistant", text: result.text, replyToMessageId: messageId, aiState: "completed", model: result.model, moneyAnswer: result.moneyAnswer ?? null, quoteAnswer: result.quoteAnswer ?? null });
+        const replyId = randomUUID();
+        if (draft) draft = { ...draft, replyMessageId: replyId };
+        await tx.insert(chatMessages).values({ caseId: row.id, id: replyId, actor: "assistant", text: result.text, replyToMessageId: messageId, aiState: "completed", model: result.model, moneyAnswer: result.moneyAnswer ?? null, quoteAnswer: result.quoteAnswer ?? null });
         await tx.update(chatMessages).set({ aiState: "completed", error: null, model: result.model })
           .where(and(eq(chatMessages.caseId, row.id), eq(chatMessages.id, messageId)));
         const [updated] = await tx.update(chatCases).set({

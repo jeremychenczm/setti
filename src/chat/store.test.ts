@@ -125,7 +125,7 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     answer.moneyAnswer.facts[0].text.en = "Later records must not rewrite the stored answer";
     await store.completeAi(sessionId, "maple", question.id, run.runId, result);
     const reloaded = await createChatStore(handle.db).getCase(sessionId, "maple");
-    expect(reloaded.draft).toEqual(existing);
+    expect(reloaded.draft).toEqual({ ...existing, replyMessageId: expect.any(String) });
     expect(reloaded.messages.filter((m) => m.replyToMessageId === question.id)).toHaveLength(1);
     expect(reloaded.messages.find((m) => m.replyToMessageId === question.id)?.moneyAnswer).toEqual(expected);
     expect((await store.getCase(randomUUID(), "maple")).messages).toEqual([]);
@@ -211,7 +211,8 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     const proposal = draft(input.id);
     await store.completeAi(sessionId, "maple", input.id, run.runId, { text: "Please review this draft.", draft: proposal, model: "test-model" });
     const refreshed = await createChatStore(handle.db).getCase(sessionId, "maple");
-    expect(refreshed.draft).toEqual(proposal);
+    // The draft names the reply that brought it, which carries its card in the chat.
+    expect(refreshed.draft).toEqual({ ...proposal, replyMessageId: refreshed.messages[1].id });
     expect(refreshed.messages).toHaveLength(2);
     expect(refreshed.messages[0]).toMatchObject({ id: input.id, aiState: "completed", error: null, model: "test-model" });
     expect(refreshed.messages[1]).toMatchObject({ actor: "assistant", replyToMessageId: input.id, text: "Please review this draft." });
@@ -228,12 +229,12 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     await store.appendMessage(sessionId, "maple", second);
     const failedRun = await start(second.id);
     const failed = await store.failAi(sessionId, "maple", second.id, failedRun.runId, "Provider temporarily unavailable");
-    expect(failed.draft).toEqual(originalDraft);
+    expect(failed.draft).toEqual({ ...originalDraft, replyMessageId: expect.any(String) });
     expect(failed.messages.find((message) => message.id === second.id)).toMatchObject({ aiState: "failed", error: "Provider temporarily unavailable" });
     const retry = await start(second.id);
     expect(retry.runId).not.toBe(failedRun.runId);
     const completed = await store.completeAi(sessionId, "maple", second.id, retry.runId, { text: "The current draft changes nothing yet.", model: "test-model" });
-    expect(completed.draft).toEqual(originalDraft);
+    expect(completed.draft).toEqual({ ...originalDraft, replyMessageId: failed.draft!.replyMessageId });
     expect(completed.messages.filter((message) => message.replyToMessageId === second.id)).toHaveLength(1);
   });
 
@@ -282,7 +283,7 @@ describe.skipIf(!testDatabaseUrl)("persisted demo chat", () => {
     const currentDraft = draft(newer.id, "New direction");
     await store.completeAi(sessionId, "maple", newer.id, newRun.runId, { text: "Updated draft", draft: currentDraft, model: "test-model" });
     await expect(store.beginAi(sessionId, "maple", older.id)).rejects.toMatchObject({ code: "STALE_MESSAGE" });
-    expect((await store.getCase(sessionId, "maple")).draft).toEqual(currentDraft);
+    expect((await store.getCase(sessionId, "maple")).draft).toEqual({ ...currentDraft, replyMessageId: expect.any(String) });
   });
 
   it("uses the shared invocation syntax for natural @Setti commands", async () => {
