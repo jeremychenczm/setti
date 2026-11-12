@@ -515,7 +515,7 @@ export async function getInboxSummaryResponse(req: NextRequest) {
   try {
     const view = await inboxView(db(), null, sessionId, account);
     return NextResponse.json(await summarizeInbox(db(), sessionId, { audience: view.role, reader: `${view.reader} (the ${view.role})`, facts: inboxFacts(view) }, undefined,
-      () => takeAiAllowance(db(), scope.actor)), { headers });
+      () => takeAiAllowance(scope.actor, db)), { headers });
   } catch (error) { return fail(error); }
 }
 

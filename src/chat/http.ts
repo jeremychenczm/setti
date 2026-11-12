@@ -4,7 +4,6 @@ import type { DemoAccount } from "@/accounts/demo";
 import { AI_ALLOWANCE_USED, takeAiAllowance } from "@/ai/allowance";
 import { aiConfigured } from "@/ai/model";
 import { isAiInvocation } from "@/ai/intent";
-import { appDb } from "@/db/shared";
 import { takeAiBudget } from "@/http/ai-budget";
 import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
 import type { Actor } from "@/http/identity";
@@ -119,7 +118,7 @@ export async function postCaseResponse(req: NextRequest, rawKey: string, retry =
       if (!isAiInvocation(input.text)) return respond(snapshot(state, account));
       messageId = input.id;
     }
-    const budget = takeAiBudget(sessionId) ?? (await takeAiAllowance(appDb(), scope.actor) ? null : AI_ALLOWANCE_USED);
+    const budget = takeAiBudget(sessionId) ?? (await takeAiAllowance(scope.actor) ? null : AI_ALLOWANCE_USED);
     if (budget) return respond({ code: "RATE_LIMITED", error: budget, state: snapshot(await store.getCase(sessionId, rawKey), account) }, 429);
     const state = await runCaseAi(store, sessionId, rawKey, messageId);
     return respond(snapshot(state, account));

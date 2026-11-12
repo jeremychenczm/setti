@@ -19,15 +19,15 @@ describe.skipIf(!testDatabaseUrl)("AI allowance", () => {
 
   it(`gives a real account ${AI_REQUESTS_PER_ACCOUNT} AI requests in all, even when they arrive at once`, async () => {
     const avery = await account(), mia = await account();
-    const results = await Promise.all(Array.from({ length: AI_REQUESTS_PER_ACCOUNT + 5 }, () => takeAiAllowance(handle.db, avery)));
+    const results = await Promise.all(Array.from({ length: AI_REQUESTS_PER_ACCOUNT + 5 }, () => takeAiAllowance(avery, () => handle.db)));
     expect(results.filter(Boolean)).toHaveLength(AI_REQUESTS_PER_ACCOUNT);
-    expect(await takeAiAllowance(handle.db, avery)).toBe(false);
-    expect(await takeAiAllowance(handle.db, mia)).toBe(true);
+    expect(await takeAiAllowance(avery, () => handle.db)).toBe(false);
+    expect(await takeAiAllowance(mia, () => handle.db)).toBe(true);
   });
 
   it("leaves the demo's visitors to the hourly budget", async () => {
     const visitor = await account("jordan");
-    for (let i = 0; i <= AI_REQUESTS_PER_ACCOUNT; i++) expect(await takeAiAllowance(handle.db, visitor)).toBe(true);
+    for (let i = 0; i <= AI_REQUESTS_PER_ACCOUNT; i++) expect(await takeAiAllowance(visitor, () => handle.db)).toBe(true);
     expect(await handle.db.select().from(aiAllowances)).toHaveLength(0);
   });
 });

@@ -6,16 +6,20 @@
  */
 import { sql } from "drizzle-orm";
 import type { Db } from "@/db/client";
+import { appDb } from "@/db/shared";
 import type { Actor } from "@/http/identity";
 import { aiAllowances } from "./schema";
 
 export const AI_REQUESTS_PER_ACCOUNT = 20;
 export const AI_ALLOWANCE_USED = `This account has used its ${AI_REQUESTS_PER_ACCOUNT} AI requests. Your message is saved, and the rest of Setti keeps working.`;
 
-/** Takes one request from the account's allowance; false when none is left. One statement, so requests at the same moment cannot overspend it. */
-export async function takeAiAllowance(db: Db, actor: Pick<Actor, "userId" | "demoPersona">): Promise<boolean> {
+/**
+ * Takes one request from the account's allowance; false when none is left. One statement, so
+ * requests at the same moment cannot overspend it. The database is opened only for a real account.
+ */
+export async function takeAiAllowance(actor: Pick<Actor, "userId" | "demoPersona">, db: () => Db = appDb): Promise<boolean> {
   if (actor.demoPersona) return true;
-  const taken = await db.insert(aiAllowances).values({ userId: actor.userId, used: 1 })
+  const taken = await db().insert(aiAllowances).values({ userId: actor.userId, used: 1 })
     .onConflictDoUpdate({
       target: aiAllowances.userId,
       set: { used: sql`${aiAllowances.used} + 1`, updatedAt: sql`now()` },

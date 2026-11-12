@@ -45,7 +45,7 @@ export async function studioChatResponse(req: NextRequest, id: string) {
     const saved = await store().append(session, project, input);
     if (!saved.runId) return response(snapshot(saved.messages));
     let result: Awaited<ReturnType<typeof callStudioModel>>;
-    const budget = takeAiBudget(session) ?? (await takeAiAllowance(appDb(), scope.actor) ? null : AI_ALLOWANCE_USED);
+    const budget = takeAiBudget(session) ?? (await takeAiAllowance(scope.actor) ? null : AI_ALLOWANCE_USED);
     if (budget) {
       const messages = await store().finish(session, project, input.id, saved.runId, { error: budget });
       return response({ error: budget, state: snapshot(messages) }, 429);
