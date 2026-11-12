@@ -52,7 +52,7 @@ function Tile({ swatch, label, cents, note, striped }: { swatch: string; label: 
  */
 export function PaymentWorkbench({ designer, workspace, order, operations, busy, disabled, results, onRun, allItems, head }: {
   designer: boolean; workspace: PaymentsWorkspace; order: FrozenChangeOrder; operations: readonly OperationView[]; busy: string | null; disabled: boolean;
-  results: Record<string, BatchResult>; onRun: (mode: BatchMode, items: { key: string; reference: string }[]) => void; onOpen?: (key: string) => void; allItems: ReactNode;
+  results: Record<string, BatchResult>; onRun: (batches: { mode: BatchMode; items: { key: string; reference: string }[] }[]) => void; onOpen?: (key: string) => void; allItems: ReactNode;
   /** The page's breadcrumbs and Project info, at the top of the working column. */
   head?: ReactNode;
 }) {
@@ -92,15 +92,25 @@ export function PaymentWorkbench({ designer, workspace, order, operations, busy,
   const finished = (line: PaymentLineView) => results[lineKey(line)]?.state === "done";
   const runnable = (line: PaymentLineView, kind: BatchMode = mode) => !finished(line) && results[lineKey(line)]?.state !== "running" && !!nextBatchStep(line, kind);
   const canTick = (line: PaymentLineView, kind: BatchMode = mode) => runnable(line, kind) && !!reference(line, kind).trim() && !(kind === "charge" && differs(line));
-  const amountOf = (line: PaymentLineView) => finished(line) ? mode === "refund" ? line.refundedCents : line.capturedCents - line.refundedCents
-    : mode === "refund" ? step(line, "refund")?.amountCents ?? step(line, "supplier_credit")?.amountCents ?? toRefund(line)
+  const amountOf = (line: PaymentLineView, kind: BatchMode = mode) => finished(line) ? kind === "refund" ? line.refundedCents : line.capturedCents - line.refundedCents
+    : kind === "refund" ? step(line, "refund")?.amountCents ?? step(line, "supplier_credit")?.amountCents ?? toRefund(line)
       : step(line, "capture")?.amountCents ?? (terms(line) ? terms(line)!.quantity * terms(line)!.unitPriceCents + terms(line)!.taxCents + terms(line)!.freightCents : 0);
   const releaseOf = (line: PaymentLineView) => mode === "charge" && !finished(line) ? step(line, "void")?.amountCents ?? Math.max(0, line.heldCents - amountOf(line)) : 0;
 
   const list = tab === "refund" ? refund : charge;
-  const chosen = list.filter((line) => isTicked(line) && canTick(line));
-  const total = chosen.reduce((sum, line) => sum + amountOf(line), 0);
-  const running = busy === `batch:${mode}`;
+  const running = busy === "batch";
+  // One button records everything ticked on both tabs: the supplier orders and their charges first, then the credits and their refunds.
+  const chosenFor = (kind: BatchMode) => lines.filter((line) => nextBatchStep(line, kind) && canTick(line, kind) && isTicked(line));
+  const orders = chosenFor("charge"), credits = chosenFor("refund");
+  const chargeTotal = orders.reduce((sum, line) => sum + amountOf(line, "charge"), 0), refundTotal = credits.reduce((sum, line) => sum + amountOf(line, "refund"), 0);
+  const plural = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`;
+  const runLabel = orders.length && credits.length ? `Record ${plural(orders.length, "order")} and ${plural(credits.length, "credit")} · charge ${usd(chargeTotal)}, refund ${usd(refundTotal)}`
+    : orders.length ? `Record ${plural(orders.length, "confirmation")} and charge ${usd(chargeTotal)}`
+      : credits.length ? `Record ${plural(credits.length, "credit")} and refund ${usd(refundTotal)}` : "Record confirmations and charge";
+  const runAll = () => onRun([
+    { mode: "charge" as const, items: orders.map((line) => ({ key: lineKey(line), reference: reference(line, "charge") })) },
+    { mode: "refund" as const, items: credits.map((line) => ({ key: lineKey(line), reference: reference(line, "refund") })) },
+  ].filter((batch) => batch.items.length));
   const tickGroup = (members: PaymentLineView[], value: boolean) => setTicked((current) => ({ ...current, ...Object.fromEntries(members.filter((line) => canTick(line)).map((line) => [lineKey(line), value])) }));
 
   async function startNext(line: PaymentLineView) {
@@ -303,16 +313,16 @@ export function PaymentWorkbench({ designer, workspace, order, operations, busy,
       </section>
     </SumRow>;
 
-  const bar = tab !== "all" ? <SendBar>
+  const bar = <SendBar>
       <span className="flex flex-1 flex-wrap gap-x-4 gap-y-1.5 text-[12px] text-[#4b5348]">
         {(["charge", "refund"] as const).map((kind) => { const item = progress(kind); return <Todo key={kind} done={item.done}>{item.text}</Todo>; })}
       </span>
       {workspace.reason && <span className="inline-flex items-center gap-1.5 text-[11.5px] text-[var(--muted)]"><LockKeyhole className="h-3.5 w-3.5" />{workspace.reason}</span>}
-      <button type="button" disabled={disabled || !chosen.length || running} onClick={() => onRun(mode, chosen.map((line) => ({ key: lineKey(line), reference: reference(line) })))} className={SEND}>
-        {running && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}
-        {mode === "charge" ? chosen.length ? `Record ${chosen.length} ${chosen.length === 1 ? "confirmation" : "confirmations"} and charge ${usd(total)}` : "Record confirmations and charge" : chosen.length ? `Record ${chosen.length} ${chosen.length === 1 ? "credit" : "credits"} and refund ${usd(total)}` : "Record credits and refund"}
+      <button type="button" disabled={disabled || (!orders.length && !credits.length) || running} onClick={runAll} className={SEND}>
+        {(running || busy === "handover") && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}
+        {busy === "handover" ? `All recorded · switching to ${client}…` : runLabel}
       </button>
-    </SendBar> : null;
+    </SendBar>;
 
   return <EditorLayout main={<>{head}{card}</>} side={side} bar={bar} />;
 }

@@ -11,6 +11,9 @@ import { emptyPaymentFeedback, feedbackMessage, paymentFeedback, paymentReturnNo
 import { lineProgress, paymentScopeTotals } from "./progress";
 import { demoSupplierNumber } from "./demo-supplier";
 import { useDemoMode } from "../demo-mode";
+import { DEMO_ACCOUNTS, type AccountId } from "@/accounts/demo";
+import { quoteHref } from "@/quotes/links";
+import { switchPersona } from "../account/switchPersona";
 import { PaymentFees } from "./PaymentFees";
 import { PayMethodChooser, SavedMethodCard, savedMethodName } from "./PaymentMethods";
 import { PayPalButtons } from "./PayPalButtons";
@@ -126,6 +129,7 @@ function LineDrawer({ line, operations, onClose, children }: { line: PaymentLine
 /** `designer`: the designer's view, where the supplier steps are done together in the workbench. */
 export function PaymentsPanel({ order, designer = false, onChange, head }: { order: FrozenChangeOrder; designer?: boolean; onChange?: () => void; head?: React.ReactNode }) {
   const readiness = useTryReadiness(order.projectKey);
+  const demo = useDemoMode();
   const [workspace, setWorkspace] = useState<PaymentsWorkspace | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [feedback, dispatchFeedback] = useReducer(paymentFeedback, emptyPaymentFeedback);
@@ -202,13 +206,14 @@ export function PaymentsPanel({ order, designer = false, onChange, head }: { ord
    * supplier record and then its PayPal step, through the same endpoint as one line.
    * The server checks each line on its own; a refused line keeps its reason and the run goes on.
    */
-  async function runBatch(mode: BatchMode, items: { key: string; reference: string }[]) {
+  async function runBatch(batches: { mode: BatchMode; items: { key: string; reference: string }[] }[]) {
     if (mutating.current || readiness.blocked || !workspace) return;
-    mutating.current = true; setBusy(`batch:${mode}`); dispatchFeedback({ type: "action_started" });
+    mutating.current = true; setBusy("batch"); dispatchFeedback({ type: "action_started" });
     ++loadSequence.current;
     let current = workspace;
+    let handOver: AccountId | null = null;
     try {
-      for (const item of items) {
+      for (const { mode, items } of batches) for (const item of items) {
         setResults((previous) => ({ ...previous, [item.key]: { mode, state: "running" } }));
         try {
           // A line takes a few steps at most: the supplier record, a capture per hold, and a release of what stays held.
@@ -237,12 +242,16 @@ export function PaymentsPanel({ order, designer = false, onChange, head }: { ord
       }
       dispatchFeedback({ type: "records_loaded" });
       onChange?.();
+      // In the demo, once the studio has nothing left to record, the walkthrough hands over to the client.
+      const client = DEMO_ACCOUNTS.find((account) => account.role === "client" && account.projectKey === order.projectKey);
+      if (demo && designer && client && current.lines.every((line) => !nextBatchStep(line, "charge") && !nextBatchStep(line, "refund"))) handOver = client.id;
     } finally {
       ++loadSequence.current;
       mutating.current = false;
-      setBusy(null);
+      setBusy(handOver ? "handover" : null);
       paymentChanged(order.projectKey);
     }
+    if (handOver) { const to = handOver; window.setTimeout(() => void switchPersona(to, quoteHref(order.projectKey, order.version)).then((problem) => { if (problem) { setBusy(null); dispatchFeedback({ type: "action_failed", message: problem }); } }), 1500); }
   }
 
   /** Cancels an item of this version through the project's item endpoint, then reloads this version's records. */
@@ -309,7 +318,7 @@ export function PaymentsPanel({ order, designer = false, onChange, head }: { ord
       </div> : null}
     </div>)}</div>}
 
-    {workspace.lines.length > 0 && <><div className={designer ? "" : "mt-4"}><PaymentWorkbench head={head} designer={designer} workspace={workspace} order={order} operations={workspace.operations} busy={busy} disabled={disabled || !workspace.canAct} results={results} onRun={(mode, items) => void runBatch(mode, items)} onOpen={setSelected}
+    {workspace.lines.length > 0 && <><div className={designer ? "" : "mt-4"}><PaymentWorkbench head={head} designer={designer} workspace={workspace} order={order} operations={workspace.operations} busy={busy} disabled={disabled || !workspace.canAct} results={results} onRun={(batches) => void runBatch(batches)} onOpen={setSelected}
         allItems={<PaymentLines workspace={workspace} selected={selected} onSelect={setSelected} />} /></div>
       {openLine && <LineDrawer line={openLine} operations={workspace.operations} onClose={() => setSelected(null)}>
         <LineDetails key={lineKey(openLine)} line={openLine} operations={workspace.operations} version={workspace.version} busy={busy} disabled={disabled} canAct={workspace.canAct} canReconcile={workspace.canReconcile} pay={pay} onAction={(action, key) => run({ ...action, itemId: openLine.itemId, side: openLine.side } as Action, key)} onCheck={(operationId) => void run({ action: "check", operationId }, `check:${operationId}`)} onCancelItem={(reason, note) => cancelItem(openLine, reason, note)} />
