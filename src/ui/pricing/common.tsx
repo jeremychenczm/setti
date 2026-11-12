@@ -16,6 +16,12 @@ export function signedMoney(value: number | null): string {
   return value === null ? "Not yet priced" : `${value >= 0 ? "+" : "−"}${money(Math.abs(value))}`;
 }
 
+/** "$3,360" for whole dollars, "$19.50" otherwise: for amounts inside a sentence. */
+export function shortMoney(cents: number): string {
+  const digits = cents % 100 ? 2 : 0;
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: digits, maximumFractionDigits: digits }).format(cents / 100);
+}
+
 export function centsText(value: number | null): string {
   return value === null ? "" : (value / 100).toFixed(2);
 }
@@ -48,6 +54,11 @@ export function TotalTile({ label, amount, signed = false }: { label: string; am
 export function dateTime(value: string): string {
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString("en-US", { timeZone: "America/Los_Angeles", dateStyle: "medium", timeStyle: "short" });
+}
+
+export function dateOnly(value: string): string {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString("en-US", { timeZone: "America/Los_Angeles", dateStyle: "medium" });
 }
 
 export function LocalShareLink({ path }: { path: string }) {

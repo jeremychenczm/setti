@@ -21,6 +21,7 @@ import type { FrozenChangeOrder, PricingReview, PricingStore, PricingWorkspace }
 import { freezeRevision, insertBaseline } from "./bridge";
 import { changeOrderContentHash, itemMappingKey } from "./document";
 import { PricingStoreError } from "./errors";
+import { quoteTitle } from "./title";
 import { paymentPreparationPending, PREPARATION_MESSAGE } from "../try/preparation";
 export { changeOrderContentHash } from "./document";
 export { PricingStoreError } from "./errors";
@@ -42,7 +43,7 @@ function versionMessage(order: FrozenChangeOrder): string {
   const count = order.changes.length;
   const delta = order.deltaTotalCents === 0 ? "no change" : `${order.deltaTotalCents > 0 ? "+" : "−"}${usd(Math.abs(order.deltaTotalCents))}`;
   const reason = order.source?.kind === "vendor" ? ` It follows a notice from ${order.source.vendor}.` : "";
-  return `Hi ${firstName}, here is quote V${order.version}: ${order.title}.${reason} It changes ${count} line${count === 1 ? "" : "s"}, and the new total is ${usd(order.totals.totalCents)} (${delta} against the approved V${order.basedOnVersion}). Please review it and confirm.`;
+  return `Hi ${firstName}, here is quote V${order.version} for ${order.projectName}.${reason} It changes ${count} line${count === 1 ? "" : "s"}, and the new total is ${usd(order.totals.totalCents)} (${delta} against the approved V${order.basedOnVersion}). Please review it and confirm.`;
 }
 
 function publicReview(row: ReviewRow): PricingReview {
@@ -231,8 +232,9 @@ export function createPricingStore(db: Db): PricingStore {
         }
         const revisionContentHash = await freezeRevision(tx, revision.id);
         const issuedAt = new Date();
+        // The version is named by its project and number, not by the AI draft's title.
         const withoutHash: Omit<FrozenChangeOrder, "contentHash"> = {
-          ...body, id: randomUUID(), version: revision.number, issuedAt: issuedAt.toISOString(), reviewId: review.id, reviewVersion: review.version, revisionId: revision.id, revisionContentHash,
+          ...body, title: quoteTitle({ projectName: body.projectName, version: revision.number }), id: randomUUID(), version: revision.number, issuedAt: issuedAt.toISOString(), reviewId: review.id, reviewVersion: review.version, revisionId: revision.id, revisionContentHash,
         };
         // JSON roundtrip freezes the serialisable document and removes any optional undefined properties.
         const clean = JSON.parse(JSON.stringify(withoutHash)) as Omit<FrozenChangeOrder, "contentHash">;

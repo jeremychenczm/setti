@@ -2,9 +2,12 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { FundingPlan } from "../../approval/funding";
+import type { ReviewedChange } from "../../pricing/types";
 import { FundingImpactPreview } from "./FundingImpactPreview";
 
-const order = { id: "mixed-order", version: 3, basedOnVersion: 2, contentHash: "frozen-hash", deltaTotalCents: 6_000 };
+// The rug's supplier keeps a $60 restocking fee from its refund.
+const rugReturn = { key: "change-1", action: "remove", itemId: "rug", oldItemHandling: "returned", oldItemCostCents: 6_000, oldItemFees: [{ kind: "restocking_fee", amountCents: 6_000 }] } as ReviewedChange;
+const order = { id: "mixed-order", version: 3, basedOnVersion: 2, contentHash: "frozen-hash", deltaTotalCents: 6_000, changes: [rugReturn] };
 
 function plan(): FundingPlan {
   return {
@@ -33,40 +36,32 @@ function render(value: FundingPlan | null = plan(), props: Partial<Parameters<ty
 }
 
 describe("client funding impact preview", () => {
-  it("separates the budget difference from authorization, release and conditional refund", () => {
+  it("groups every planned step by what happens to the money, with its items and total", () => {
     const html = render();
-    expect(html).toContain("Payment impact before you confirm · V3");
-    expect(html).toContain("+$60.00");
-    expect(html).toContain("$1,100.00");
-    expect(html).toContain("$800.00");
-    expect(html).toContain("$240.00");
-    expect(html).toContain("Authorization to release");
-    expect(html).toContain("Releasing a hold is not a refund");
-    expect(html).toContain("After supplier credit is verified");
-    expect(html).toContain("client approves on PayPal");
+    expect(html).toContain("What happens to your money if you confirm");
+    const step = (title: string) => html.slice(html.indexOf(title), html.indexOf("</li>", html.indexOf(title)));
+    expect(step("Held after you confirm")).toContain("$1,100.00");
+    expect(step("Held after you confirm")).toContain("1 new hold: New desk $1,100.");
+    expect(step("Released right after you confirm")).toContain("Old chair $800.");
+    expect(step("Released right after you confirm")).toContain("A release isn&#x27;t a refund");
+    expect(step("Refunded once the supplier credits it")).toContain("Wool rug $240 (Restocking fee $60.00, not refunded).");
+    // An unchanged line still to be paid is a step of its own, not hidden among the changes.
+    expect(step("You pay through PayPal")).toContain("Design services $400.");
     expect(html).toContain("does not query PayPal live");
     expect(html).toMatch(/datetime="2026-10-21T20:00:00Z"/i);
-    expect(html).toContain("does not authorize, capture, release or refund funds");
     expect(html).not.toContain("<button");
   });
 
-  it("keeps unfunded unchanged lines outside the changed-item totals and visible", () => {
-    const html = render();
-    const changed = html.slice(html.indexOf("Payment impact of changed items"), html.indexOf("Other quote lines still need funding"));
-    expect(changed).not.toContain("$400.00");
-    expect(html).toContain("Other quote lines still need funding");
-    expect(html).toContain("Design services");
-    expect(html).toContain("$400.00");
-    expect(html).toContain("Their quote approval does not mean they have been paid");
-  });
-
-  it("shows supplier confirmation as a dependency of a planned capture", () => {
+  it("shows charges and releases that wait for the supplier as waiting for it", () => {
     const value = plan();
-    value.actions.push({ itemId: "chair", side: "proposed", label: "New desk", kind: "capture", amountCents: 110_000, timing: "after_vendor_confirmation", reason: "Capture only after the reviewed supplier terms are confirmed." });
-    value.money.chargeCents = 150_000;
+    value.actions = [
+      { itemId: "chair", side: "baseline", label: "Pendant light", kind: "release_authorization", amountCents: 48_000, timing: "after_vendor_confirmation", reason: "" },
+      { itemId: "chair", side: "baseline", label: "Pendant light", kind: "capture", amountCents: 96_000, timing: "after_vendor_confirmation", reason: "" },
+    ];
     const html = render(value);
-    expect(html).toContain("After supplier confirmation");
-    expect(html).toContain("Capture only after the reviewed supplier terms are confirmed.");
+    expect(html).toContain("Released once the supplier confirms");
+    expect(html).toContain("Charged from a hold once the supplier confirms");
+    expect(html).not.toContain("right after you confirm");
   });
 
   it("shows blocked money as unavailable instead of settled zero or executable actions", () => {
@@ -80,7 +75,7 @@ describe("client funding impact preview", () => {
     expect(html).toContain("A refund has an unknown provider outcome.");
     expect(html).not.toContain("$0.00");
     expect(html).not.toContain("$1,100.00");
-    expect(html).not.toContain("<table");
+    expect(html).not.toContain("Held after you confirm");
   });
 
   it("does not invent money when the preview is missing", () => {
@@ -116,7 +111,7 @@ describe("client funding impact preview", () => {
     const html = render(plan(), { canView: false });
     expect(html).toContain("This shared quote remains read-only");
     expect(html).not.toContain("$800.00");
-    expect(html).not.toContain("before you confirm");
+    expect(html).not.toContain("if you confirm");
   });
 
   it("labels superseded and requested-adjustment versions without current payment instructions", () => {
@@ -126,12 +121,12 @@ describe("client funding impact preview", () => {
     expect(historical).not.toContain("$1,100.00");
     const declined = render(plan(), { status: "declined" });
     expect(declined).toContain("The designer must issue a new version");
-    expect(declined).not.toContain("before you confirm");
+    expect(declined).not.toContain("if you confirm");
   });
 
   it("makes clear an approved version shows remaining steps from current records", () => {
     const html = render(plan(), { status: "approved" });
-    expect(html).toContain("Remaining payment plan · V3");
+    expect(html).toContain("What is left to happen to your money");
     expect(html).toContain("not a snapshot taken at approval");
   });
 
@@ -141,7 +136,6 @@ describe("client funding impact preview", () => {
     value.actions[0].reason = '<img src=x onerror="alert(1)">';
     const html = render(value);
     expect(html).toContain("&lt;script&gt;");
-    expect(html).toContain("&lt;img");
     expect(html).not.toContain("<script>");
     expect(html).not.toContain("<img src=x");
   });

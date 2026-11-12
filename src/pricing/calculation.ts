@@ -319,7 +319,6 @@ export function previewPricing(quote: ApprovedQuoteReport, draft: ChangeDraft, v
   const problems: string[] = [];
   const originalCurrencies = new Map(draft.changes.map((change, index) => [`change-${index}`, change.after?.currency ?? null]));
   const initialEvidence = new Map(createPricingInput(quote, draft).changes.map((change) => [change.key, change.priceEvidence]));
-  if (!input.title.trim()) problems.push("Enter a change order title.");
   if (!input.terms.trim()) problems.push("Enter the terms for this quote and old-item handling.");
   if (input.source?.kind === "vendor" && (!input.source.vendor.trim() || !input.source.notice.trim())) problems.push("Name the supplier and enter what its notice says, so the client sees why the price changed.");
   for (const [index, change] of input.changes.entries()) {

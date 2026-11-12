@@ -8,6 +8,7 @@ import { clientSignatureName } from "../opening/types";
 import { changeOrders, pricingCases } from "../pricing/schema";
 import { changeOrderContentHash, itemMappingKey } from "../pricing/document";
 import type { FrozenChangeOrder } from "../pricing/types";
+import { quoteTitle } from "../pricing/title";
 import { buildFundingPlan, type FundingFacts, type FundingLineFact } from "./funding";
 import { changeOrderDecisions } from "./schema";
 import { changeOrderView } from "./view";
@@ -233,7 +234,7 @@ export function createApprovalStore(db: Db) {
           await tx.update(chatCases).set({ draft: null, updatedAt: decidedAt }).where(eq(chatCases.id, caseRow.id));
         }
         await tx.insert(chatMessages).values({ caseId: caseRow.id, id: randomUUID(), actor: "assistant", model: "system", aiState: "completed", text: input.decision === "approved"
-          ? `Demo client ${clientName} confirmed V${order.version}: ${order.title}. This is now the baseline for future changes. No payment has been executed.${note ? ` Note: ${note}` : ""}`
+          ? `Demo client ${clientName} confirmed ${quoteTitle(order)}. This is now the baseline for future changes. No payment has been executed.${note ? ` Note: ${note}` : ""}`
           : `Demo client ${clientName} requested changes to V${order.version}: ${note}. The previously approved quote remains the baseline. No payment has been executed.` });
         return (await workspace(tx, sessionId, id))!;
       });

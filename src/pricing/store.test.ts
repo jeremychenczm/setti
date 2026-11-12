@@ -13,6 +13,7 @@ import type { CaseKey, ChangeDraft } from "../chat/types";
 import { createPricingInput } from "./calculation";
 import { changeOrders, pricingCases, pricingReviews } from "./schema";
 import { changeOrderContentHash, createPricingStore } from "./store";
+import { quoteTitle } from "./title";
 import type { PricingInput, PricingStore, PricingWorkspace } from "./types";
 
 describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
@@ -236,7 +237,11 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
     // Issuing sends: one designer message carries the version into the chat, and the chat shows its card.
     const sent = (await handle.db.select().from(chatMessages).where(eq(chatMessages.caseId, workspace.caseId))).filter((message) => message.actor === "designer");
     expect(sent.map((message) => message.id)).toEqual([order.messageId]);
-    expect(sent[0].text).toMatch(/^Hi Emma, here is quote V2: Reviewed chair update\. It changes 1 line, and the new total is \$[\d,.]+ \(\+\$[\d,.]+ against the approved V1\)\. Please review it and confirm\.$/);
+    // The version goes by its project and number; the review's own title never reaches the client.
+    expect(sent[0].text).toMatch(/^Hi Emma, here is quote V2 for [^.]+\. It changes 1 line, and the new total is \$[\d,.]+ \(\+\$[\d,.]+ against the approved V1\)\. Please review it and confirm\.$/);
+    expect(sent[0].text).toContain(`quote V2 for ${first.order.projectName}.`);
+    expect(sent[0].text).not.toContain("Reviewed chair update");
+    expect(first.order.title).toBe(quoteTitle(first.order));
     expect((await createChatStore(handle.db).getCase(sessionId, "maple")).versions).toEqual([expect.objectContaining({
       id: first.order.id, version: 2, basedOnVersion: 1, messageId: order.messageId, changeCount: 1, status: "awaiting_client_confirmation", fromCurrentDraft: true,
     })]);
@@ -309,8 +314,8 @@ describe.skipIf(!testDatabaseUrl)("persisted designer pricing reviews", () => {
   it("rolls back baseline import, revision creation and approvals if the final order insert fails", async () => {
     const { workspace } = await seed();
     const saved = await saveReady(workspace);
-    const doomed = await store.saveReview(sessionId, "maple", { sourceDraftId: saved.review!.sourceDraftId, sourceDraftRevision: 1, expectedVersion: 1, input: { ...saved.review!.input, title: "Reject this test order" } });
-    await handle.db.execute(sql`CREATE FUNCTION pricing_test_reject_issue() RETURNS trigger AS $$ BEGIN IF NEW.document->>'title' = 'Reject this test order' THEN RAISE EXCEPTION 'Intentional test insert failure'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql`);
+    const doomed = await store.saveReview(sessionId, "maple", { sourceDraftId: saved.review!.sourceDraftId, sourceDraftRevision: 1, expectedVersion: 1, input: { ...saved.review!.input, reviewNotes: "Reject this test order" } });
+    await handle.db.execute(sql`CREATE FUNCTION pricing_test_reject_issue() RETURNS trigger AS $$ BEGIN IF NEW.document->>'reviewNotes' = 'Reject this test order' THEN RAISE EXCEPTION 'Intentional test insert failure'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql`);
     await handle.db.execute(sql`CREATE TRIGGER pricing_test_reject_issue BEFORE INSERT ON change_orders FOR EACH ROW EXECUTE FUNCTION pricing_test_reject_issue()`);
     try {
       await expect(issue(doomed)).rejects.toThrow();

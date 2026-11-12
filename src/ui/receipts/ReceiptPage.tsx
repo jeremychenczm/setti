@@ -124,7 +124,9 @@ export function ReceiptDocument({ receipt, studioName = "" }: { receipt: Version
   const certificate = certificateRows(receipt);
   const sample = receipt.signatures.every((signature) => signature.method === "sample");
   const lastSigned = receipt.signatures[receipt.signatures.length - 1];
-  const title = "title" in version.document ? version.document.title : `${project.room}. First quote.`;
+  // What the version is, in fixed words: the AI draft's title is never shown.
+  const changes = "changes" in version.document ? version.document.changes.length : null;
+  const title = changes === null ? `${project.room}. First quote.` : `${project.room}. ${changes} ${changes === 1 ? "change" : "changes"} to version ${version.basedOn}.`;
   const actorName = (actor: string) => actor === "client" ? `${project.client} (client)` : actor === "designer" ? `${project.designer} (designer)` : actor;
   let section = 0;
 

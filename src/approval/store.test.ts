@@ -84,6 +84,7 @@ describe.skipIf(!testDatabaseUrl)("whole-document client decisions", () => {
     expect(chat.draft).toBeNull();
     expect(chat.quote).toMatchObject({ id: order.id, version: order.version });
     expect(chat.messages.at(-1)?.text).toContain("No payment has been executed");
+    expect(chat.messages.at(-1)?.text).toContain(`confirmed ${order.projectName} · Quote V${order.version}.`);
   });
 
   it("shows an owning client's funding preview before approval without creating a decision or payment", async () => {

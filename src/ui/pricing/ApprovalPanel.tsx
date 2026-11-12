@@ -4,7 +4,6 @@ import { Check, ClipboardCheck, LoaderCircle, LockKeyhole, RefreshCw } from "luc
 import { useEffect, useRef, useState } from "react";
 import type { ApprovalWorkspace, DecideChangeOrderInput } from "@/approval/types";
 import { dateTime, Field, inputClass } from "./common";
-import { FundingImpactPreview } from "./FundingImpactPreview";
 import { useDemoMode } from "../demo-mode";
 
 export function isApprovalWorkspace(value: unknown, orderId: string): value is ApprovalWorkspace {
@@ -138,8 +137,7 @@ export function ApprovalPanel({ workspace, loading, onChange, onBusyChange }: Ap
     });
   }
 
-  return <>
-    <FundingImpactPreview order={order} plan={workspace.fundingPlan} status={view.status} canView={clientName !== null} />
+  return (
     <section className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" aria-labelledby="client-decision-title">
       <h2 id="client-decision-title" className="flex items-center gap-2 text-[16px] font-semibold"><ClipboardCheck className="h-4.5 w-4.5 text-[var(--primary)]" />Client review · V{order.version}</h2>
       {decision && <div role="status" className={`mt-4 rounded-xl border p-4 text-[12px] leading-relaxed ${decision.decision === "approved" ? "border-emerald-100 bg-emerald-50 text-emerald-900" : "border-amber-100 bg-amber-50 text-amber-900"}`}>
@@ -147,7 +145,7 @@ export function ApprovalPanel({ workspace, loading, onChange, onBusyChange }: Ap
         <p className="mt-2">{decision.clientName} · {dateTime(decision.decidedAt)} PT</p>
         <p className="mt-1 text-[11px]">Recorded with the exact frozen content and quote revision.{demo ? " Demo client decision." : ""}</p>
         {decision.note && <p className="mt-3 whitespace-pre-wrap border-t border-current/10 pt-3">{decision.note}</p>}
-        {decision.decision === "approved" && view.status !== "superseded" && <p className="mt-3 text-[11px]">This confirmed version is the baseline for the next change. With a saved payment method, its new items are held right away; releases, captures and refunds are separate steps.</p>}
+        {decision.decision === "approved" && view.status !== "superseded" && <p className="mt-3 text-[11px]">This confirmed version is the baseline for the next change. Holds it no longer needs are released right away and, with a saved payment method, its new items are held; charges and refunds are separate steps.</p>}
       </div>}
       {notice && <p role="status" className="mt-4 rounded-lg bg-brand-50 p-3 text-[12px] leading-relaxed text-brand-900">{notice}</p>}
       {error && <div role="alert" className="mt-4 rounded-lg border border-red-100 bg-red-50 p-3 text-[12px] leading-relaxed text-red-900"><p>{error}</p>{pending && <div className="mt-3 flex flex-wrap gap-3"><button onClick={() => void checkSavedStatus()} disabled={Boolean(busy) || loading} className="inline-flex items-center gap-1.5 font-semibold underline disabled:opacity-50">{busy === "check" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Check saved status</button><button onClick={() => void submit(pending)} disabled={Boolean(busy) || loading} className="font-semibold underline disabled:opacity-50">Retry the same {pending.decision === "approved" ? "confirmation" : "request"}</button></div>}</div>}
@@ -167,11 +165,11 @@ export function ApprovalPanel({ workspace, loading, onChange, onBusyChange }: Ap
           </div>
           <div className="flex flex-wrap items-center gap-3"><button onClick={() => decide("approved")} disabled={!ready} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-4 py-2.5 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:text-slate-400">{busy === "approved" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}Confirm V{order.version} · scope, prices and terms</button><button onClick={() => decide("changes_requested")} disabled={!ready || !note.trim()} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-4 py-2.5 text-[12px] font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40">{busy === "changes_requested" && <LoaderCircle className="h-3.5 w-3.5 animate-spin" />}Request adjustments</button></div>
         </fieldset>
-        <p className="mt-3 text-[11px] leading-relaxed text-slate-500">Confirming records agreement to this version. Neither button places a supplier order, authorizes funds, charges or refunds money.</p>
+        <p className="mt-3 text-[11px] leading-relaxed text-slate-500">Confirming records your agreement to this version. Right after, Setti releases any hold it no longer needs and, with a saved payment method, places the new holds. Confirming charges or refunds nothing by itself and places no supplier order. Requesting adjustments moves no money.</p>
       </div>}
       {!canDecide && !decision && <p className="mt-4 flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />{workspace.reason ?? (demo ? "This is a read-only shared review. Return to the owning demo project session to make a client decision." : "This is a read-only shared review. Sign in as the project's client to make a decision.")}</p>}
       {clientName && decision && <a href={`/chats/${order.projectKey}`} className="mt-4 inline-block text-[12px] font-medium text-[var(--primary)] underline">Return to the project conversation</a>}
     </section>
-  </>;
+  );
 }
 
