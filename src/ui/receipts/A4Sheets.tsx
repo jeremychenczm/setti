@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { paginate, type Page } from "./paginate";
 
@@ -77,6 +78,8 @@ export function A4Sheets({ blocks, tables, footer, label }: {
   const measure = useRef<HTMLDivElement>(null);
   const probe = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLDivElement>(null);
+  const region = useRef<HTMLDivElement>(null);
+  const [current, setCurrent] = useState(0);
   const [layout, setLayout] = useState<{ pages: Page[]; room: number } | null>(null);
   const [scale, setScale] = useState(1);
   const [fonts, setFonts] = useState(0);
@@ -116,7 +119,11 @@ export function A4Sheets({ blocks, tables, footer, label }: {
   }, []);
 
   const all = blocks.map((_, index) => index);
-  return <div className="relative w-full" role="region" aria-label={label}>
+  // On screen one sheet shows at a time, turned with the pager; printed, every sheet prints.
+  const count = layout?.pages.length ?? 0;
+  const shown = Math.min(current, Math.max(0, count - 1));
+  const turn = (to: number) => { setCurrent(to); region.current?.scrollIntoView({ block: "start", behavior: "smooth" }); };
+  return <div ref={region} className="relative w-full scroll-mt-3" role="region" aria-label={label}>
     {/* The measuring copy: one empty sheet for the room a page has, and every block at the sheet's width. Never seen or printed. */}
     <div aria-hidden inert className="pointer-events-none invisible absolute left-0 top-0 h-0 w-0 overflow-hidden print:hidden">
       <div className={`${sheet} h-[297mm]`}><div ref={probe} className="min-h-0 flex-1" />{footer(1, 1)}</div>
@@ -127,13 +134,19 @@ export function A4Sheets({ blocks, tables, footer, label }: {
         // Only a block taller than a page makes its sheet longer than A4.
         const over = Math.max(0, Math.ceil(page.height - layout.room));
         const size = { "--sheet-scale": scale, "--sheet-height": over ? `calc(297mm + ${over}px)` : "297mm" } as CSSProperties;
-        return <div key={index} style={size} className="relative h-[calc(var(--sheet-height)*var(--sheet-scale))] w-[calc(210mm*var(--sheet-scale))] print:h-auto print:w-auto print:break-after-page print:last:break-after-auto">
+        return <div key={index} style={size} className={`relative h-[calc(var(--sheet-height)*var(--sheet-scale))] w-[calc(210mm*var(--sheet-scale))] print:block print:h-auto print:w-auto print:break-after-page print:last:break-after-auto ${index === shown ? "" : "hidden"}`}>
           <div className={`${sheet} absolute left-0 top-0 h-[var(--sheet-height)] origin-top-left shadow-[0_1px_2px_rgba(29,33,27,.12),0_10px_30px_rgba(29,33,27,.14)] [scale:var(--sheet-scale)] print:static print:shadow-none print:[scale:1] ${over ? "print:h-auto print:min-h-[297mm]" : "print:h-[296.5mm] print:overflow-hidden"}`}>
             <div className="min-h-0 flex-1"><Blocks blocks={blocks} indexes={page.blocks} tables={tables} /></div>
             {footer(index + 1, layout.pages.length)}
           </div>
         </div>;
       })}
+      {count > 1 && <nav aria-label="Pages" className="flex items-center gap-1 rounded-full bg-white/95 p-1 text-[12px] shadow-sm print:hidden">
+        <button type="button" onClick={() => turn(shown - 1)} disabled={shown === 0} aria-label="Previous page" className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-[var(--canvas)] disabled:opacity-30 disabled:hover:bg-transparent"><ChevronLeft className="h-4 w-4" /></button>
+        {layout!.pages.map((_, index) => <button key={index} type="button" onClick={() => turn(index)} aria-label={`Page ${index + 1}`} aria-current={index === shown ? "page" : undefined}
+          className={`h-7 min-w-7 rounded-full px-2 font-semibold tabular-nums ${index === shown ? "bg-[var(--ink)] text-white" : "text-[var(--muted)] hover:bg-[var(--canvas)] hover:text-[var(--ink)]"}`}>{index + 1}</button>)}
+        <button type="button" onClick={() => turn(shown + 1)} disabled={shown === count - 1} aria-label="Next page" className="flex h-7 w-7 items-center justify-center rounded-full hover:bg-[var(--canvas)] disabled:opacity-30 disabled:hover:bg-transparent"><ChevronRight className="h-4 w-4" /></button>
+      </nav>}
     </div>
   </div>;
 }

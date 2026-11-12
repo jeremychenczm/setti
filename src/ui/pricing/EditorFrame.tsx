@@ -28,9 +28,9 @@ export function SumRow({ children }: { children: ReactNode }) {
   return <div className="grid items-stretch gap-3 sm:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] @min-[1472px]:grid-cols-1">{children}</div>;
 }
 
-export function EditorCrumbs({ name, right }: { name: string; right?: ReactNode }) {
+export function EditorCrumbs({ name, right, section = "Quotes" }: { name: string; right?: ReactNode; section?: string }) {
   return <div className="flex min-h-[31px] flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[12px] text-[var(--muted)]">
-    <span>Quotes</span><span aria-hidden>/</span><b className="font-semibold text-[var(--ink)]">{name}</b>
+    <span>{section}</span><span aria-hidden>/</span><b className="font-semibold text-[var(--ink)]">{name}</b>
     {right && <span className="ml-auto inline-flex gap-1.5">{right}</span>}
   </div>;
 }

@@ -9,6 +9,8 @@ import { ProjectPayments } from "../payments/ProjectPayments";
 import { dateTime, Field, inputClass, shortMoney } from "../pricing/common";
 import { ReceiptDocument, type OpeningDecide } from "../receipts/ReceiptDocument";
 import { useVersionReceipt } from "../receipts/useVersionReceipt";
+import { EditorCrumbs } from "../pricing/EditorFrame";
+import { ViewProjectInfo } from "./ViewProjectInfo";
 import { useDemoMode } from "../demo-mode";
 import { useCounted } from "../pricing/MoneyCard";
 
@@ -129,8 +131,9 @@ export function ClientFirstQuote({ projectKey, view, studioName, toolbar, onSign
   const signed = approval ? { at: approval.approvedAt, by: approval.approvedBy, sample: true } : opening.signedAt ? { at: opening.signedAt, by: clientName, sample: false } : null;
 
   return <section className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-xl" aria-label="Quote version 1">
-    <div className="grid gap-4 pb-2 text-[var(--ink)]">
-      <header className="flex flex-wrap items-center gap-3 rounded-xl bg-white px-4 py-2.5">{toolbar ?? <span className="text-[12px] text-[var(--muted)]">Proposals / <b className="font-semibold text-[var(--ink)]">{quote.projectName}</b></span>}</header>
+    <div className="grid gap-3 pb-2 text-[var(--ink)]">
+      <EditorCrumbs section="Proposals" name={quote.projectName} right={toolbar} />
+      <ViewProjectInfo projectKey={projectKey} client={true} studioName={studioName} designerName={quote.designerName} clientName={clientName} projectName={quote.projectName} version={1} />
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <div className="grid min-w-0 gap-4 lg:sticky lg:top-0 lg:col-start-2 lg:row-start-1">
           <FirstQuoteMoneyCard money={money} title="Your money" aside={deciding ? "If you sign these decisions" : "For the lines you approved"}

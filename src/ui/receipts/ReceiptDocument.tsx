@@ -129,7 +129,6 @@ function receiptBlocks(receipt: VersionReceipt, studioName: string, demo: boolea
   // A project without a scope yet starts the line with what the version is.
   const place = project.room.trim() ? `${project.room.trim()}. ` : "";
   const title = changeCount === null ? `${place}First quote.` : `${place}${changeCount} ${changeCount === 1 ? "change" : "changes"} to version ${version.basedOn}.`;
-  const actorName = (actor: string) => actor === "client" ? `${project.client} (client)` : actor === "designer" ? `${project.designer} (designer)` : actor;
   const designer = version.sentBy ?? project.designer;
   // Inside another page the document's title is not the page's.
   const Title = embedded ? "h2" : "h1";
@@ -217,17 +216,11 @@ function receiptBlocks(receipt: VersionReceipt, studioName: string, demo: boolea
       <td className={`${total} ${amount}`}>{signedUsd(totals.differenceCents ?? 0)}</td>
     </>, { className: "font-bold" });
 
-    heading("Basis for the change", agreement.source.kind === "vendor" ? `Source: supplier notice${agreement.source.vendor ? ` · ${agreement.source.vendor}` : ""}` : agreement.source.kind ? "Source: client conversation" : undefined);
-    if (agreement.source.kind === "vendor" && agreement.source.notice) add("notice", <p className="border-l-2 border-[var(--line)] pl-3.5 text-[12.5px]">{agreement.source.notice}</p>, 12);
-    for (const message of agreement.source.messages) add(`message-${message.id}`, <blockquote className="m-0 grid gap-1 border-l-2 border-[var(--line)] pl-3.5">
-      <span className="text-[11px] text-[var(--muted)]">{actorName(message.actor)} · project chat · {ptDateTime(message.createdAt)}</span>
-      <p className="whitespace-pre-wrap text-[12.5px]">“{message.text}”</p>
-    </blockquote>, 12);
-    if (!agreement.source.messages.length && !agreement.source.notice) add("no-source", <p className="text-[12px] text-[var(--muted)]">{draft ? "Setti attaches the chat messages this version came from when you send it." : "This version was frozen before Setti kept its source messages."}</p>, 12);
-    if (agreement.terms) add("terms", <div className="grid gap-1">
-      <span className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--muted)]">{!signed ? `Terms sent to ${project.client}` : `Terms ${project.client} ${version.status === "changes_requested" ? "reviewed" : "confirmed"}`}</span>
-      <p className="whitespace-pre-wrap text-[12.5px] text-[#4a4f45]">{agreement.terms}</p>
-    </div>, 12);
+    // The terms are part of what the client signs; where the change came from stays in the project chat.
+    if (agreement.terms) {
+      heading("Terms", !signed ? `Sent to ${project.client}` : `${project.client} ${version.status === "changes_requested" ? "reviewed" : "confirmed"} them`);
+      add("terms", <p className="whitespace-pre-wrap text-[12.5px] text-[#4a4f45]">{agreement.terms}</p>, 12);
+    }
   } else {
     heading("Lines and decisions", "USD");
     table("lines", <><th className={head}>#</th><th className={head}>Item</th><th className={`${head} text-right`}>Amount</th><th className={head}>Decision</th><th className={head}>Signed in</th></>);

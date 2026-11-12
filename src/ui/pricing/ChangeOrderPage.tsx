@@ -11,6 +11,8 @@ import { BackToChat } from "../BackToChat";
 import { ProjectPayments } from "../payments/ProjectPayments";
 import { PreviewQuoteLink } from "../receipts/PreviewQuoteLink";
 import { ReceiptDocument } from "../receipts/ReceiptDocument";
+import { EditorCrumbs } from "./EditorFrame";
+import { ViewProjectInfo } from "../quotes/ViewProjectInfo";
 import { useVersionReceipt } from "../receipts/useVersionReceipt";
 import { ChangeSourceNote } from "./ChangeSource";
 import { PaymentsPanel } from "../payments/PaymentsPanel";
@@ -142,16 +144,19 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
   const approval = workspace && order && <ApprovalPanel key={order.id} workspace={workspace} loading={loading} onChange={decided} onBusyChange={setApprovalBusy} />;
 
   return <DemoModeProvider value={demo}><div className={embedded ? "min-w-0 pb-2 text-[var(--ink)]" : "min-h-dvh bg-[var(--canvas)] px-3 py-5 text-[var(--ink)] sm:px-6"}><main className={`${embedded ? "" : "mx-auto"} ${embedded ? "" : split ? "max-w-[1280px]" : workbench ? "max-w-[1120px]" : "max-w-[860px]"}`}>
-    <header className={`mb-5 flex flex-wrap items-center gap-x-4 gap-y-3 ${embedded ? "rounded-xl bg-white px-4 py-2.5" : ""}`}>
+    {embedded && <div className="mb-3 grid gap-3">
+      <EditorCrumbs section={designer ? "Quotes" : "Proposals"} name={order?.projectName ?? ""} right={<>{workbench && order && <PreviewQuoteLink projectKey={order.projectKey} version={order.version} />}{toolbar}</>} />
+      {order && member && <ViewProjectInfo projectKey={order.projectKey} client={!designer} studioName={studioName} designerName={order.designerName} clientName={workspace?.clientName ?? order.clientName} projectName={order.projectName} version={order.version} />}
+    </div>}
+    {!embedded && <header className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
       {!embedded && <div className="flex items-center gap-2 text-sm font-semibold"><BrandMark className="h-7 w-7" />Setti</div>}
       {member && order && !embedded && <BackToChat projectKey={order.projectKey} />}
-      {embedded && toolbar}
       <div className="ml-auto flex flex-wrap items-center gap-3">
         <button onClick={() => void load()} disabled={loading || approvalBusy} className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Refresh status</button>
         <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-medium text-slate-500">{workspace?.clientName ? demo ? "Client review · demo session" : "Client review" : demo ? "Read-only shared review · demo" : "Read-only shared review"}</span>
         {member && order && <PreviewQuoteLink projectKey={order.projectKey} version={order.version} />}
       </div>
-    </header>
+    </header>}
     {loading && !order && <div role="status" className="flex items-center gap-2 rounded-xl bg-white p-8 text-[13px] text-slate-500"><LoaderCircle className="h-4 w-4 animate-spin" />Loading the frozen client version…</div>}
     {error && <div role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-[12px] text-red-800">{error}</div>}
     {order && workspace && <>
@@ -177,7 +182,6 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
           <div className="mb-5"><ProjectPayments projectKey={order.projectKey} orderId={order.id} /></div>
           <PaymentsPanel key={`payments-${order.id}`} order={order} onChange={() => void load()} />
         </>}
-        <QuoteLines order={order} folded />
       </> : <>
         {summary}
         {workbench ? <>
@@ -192,13 +196,14 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
         </>}
       </>}
 
-      <section aria-label="More about this version" className="rounded-xl bg-white px-5 py-1.5 shadow-sm sm:px-6">
+      {/* Beside the formal quote these would only repeat it; without one they are the version's record. */}
+      {!split && <section aria-label="More about this version" className="rounded-xl bg-white px-5 py-1.5 shadow-sm sm:px-6">
         {order.constraints.length > 0 && <Fold title="Terms to keep" count={order.constraints.length}><ul className="list-disc space-y-1 pl-4">{order.constraints.map((constraint, index) => <li key={index}>{constraint}</li>)}</ul></Fold>}
         {order.issues.length > 0 && <Fold title="Designer checks" count={order.issues.length}><ul className="space-y-2">{order.issues.map((issue) => <li key={issue.id} className="rounded-lg bg-slate-50 p-3"><p className="font-medium text-slate-800">{issue.label}</p><p className="mt-1 whitespace-pre-wrap">{issue.note || "No additional note."}</p></li>)}</ul></Fold>}
         <Fold title="Client terms and review notes"><h3 className="font-medium text-slate-800">Client terms</h3><p className="mt-1 whitespace-pre-wrap">{order.terms}</p><h3 className="mt-3 font-medium text-slate-800">Designer review notes</h3><p className="mt-1 whitespace-pre-wrap">{order.reviewNotes || "No additional notes."}</p></Fold>
         <Fold title="Discussion and sources"><div className="space-y-3">{order.sourceMessages.map((message) => <div key={message.id} className="rounded-lg bg-slate-50 p-3"><p className="mb-1 text-[10px] text-slate-400">{message.actor} · {dateTime(message.createdAt)} PT</p><p className="whitespace-pre-wrap break-words">{message.text}</p></div>)}{order.sources.map((source) => <div key={source.id} className="rounded-lg border border-slate-200 p-3"><p className="font-medium">{source.title || source.url}</p>{safeUrl(source.url) && <a href={safeUrl(source.url)!} target="_blank" rel="noreferrer" className="mt-1 inline-block break-all text-[var(--primary)] underline">{source.url}</a>}<p className="mt-1 text-[10px] text-slate-400">Retrieved {dateTime(source.fetchedAt)} PT</p>{source.error && <p className="mt-1 text-amber-800">{source.error}</p>}{source.products.map((product) => <p key={product.id} className="mt-2 text-[11px] text-slate-600">{product.name} · {product.sku} · brand {product.brand ?? "unconfirmed"} · seller {product.seller ?? "unconfirmed"}<br />{product.specification}<br />{product.priceEvidence}</p>)}</div>)}</div></Fold>
         <Fold title="Record identifiers"><p className="mb-3 flex items-start gap-1.5 text-[11px]"><LockKeyhole className="mt-0.5 h-3.5 w-3.5 shrink-0" />{view?.decision ? "This snapshot remains frozen. The client decision is recorded separately for this exact version." : "This snapshot is frozen and awaits a client decision. No payment has been made through this change order."}</p><dl className="space-y-3 text-[11px]"><div><dt className="text-slate-400">Change order ID</dt><dd className="mt-1 select-all break-all font-mono">{order.id}</dd></div><div><dt className="text-slate-400">Frozen content hash</dt><dd className="mt-1 select-all break-all font-mono">{order.contentHash}</dd></div><div><dt className="text-slate-400">Quote revision ID</dt><dd className="mt-1 select-all break-all font-mono">{order.revisionId}</dd></div><div><dt className="text-slate-400">Quote revision content hash</dt><dd className="mt-1 select-all break-all font-mono">{order.revisionContentHash}</dd></div></dl></Fold>
-      </section>
+      </section>}
     </>}
   </main></div></DemoModeProvider>;
 }
