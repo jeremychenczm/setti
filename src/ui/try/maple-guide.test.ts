@@ -85,13 +85,13 @@ describe("Maple demo guide from saved records", () => {
     expect(mapleGuideStep(data, "client")).toMatchObject({ index: 3, role: "emma" });
     data.payments = confirmed().payments;
     data.payments!.plan = null;
-    expect(mapleGuideStep(data, "designer").index).toBe(3);
+    expect(mapleGuideStep(data, "designer").index).toBe(5);
   });
 
   it.each(["pending", "unknown"] as const)("keeps %s outcomes on the payment step even with settled-looking balances", (status) => {
     const data = confirmed();
     data.payments!.operations = [operation({ status })];
-    expect(mapleGuideStep(data, "designer").index).toBe(3);
+    expect(mapleGuideStep(data, "designer").index).toBe(5);
     expect(mapleGuideStep(data, "designer").complete).toBeUndefined();
   });
 
@@ -100,11 +100,11 @@ describe("Maple demo guide from saved records", () => {
     data.payments!.lines[2].refunds = [{ id: "refund", paypalRefundId: "REFUND", captureId: "CAP", amountCents: 24_000, status: "pending", operationId: "refund-op", createdAt: at }];
     data.payments!.lines.push(line({ itemId: "service", changed: false, category: "service", targetCents: 40_000, capturedCents: 0 }));
     expect(mapleChangeLines(data.payments!)).toHaveLength(3);
-    expect(mapleGuideStep(data, "designer").index).toBe(3);
+    expect(mapleGuideStep(data, "designer").index).toBe(5);
   });
 
   it("asks for an explanation only after the independent item money is settled", () => {
-    expect(mapleGuideStep(confirmed(), "client")).toMatchObject({ index: 4, role: "emma", destination: "chat", complete: false, chatAction: "ask-payments" });
+    expect(mapleGuideStep(confirmed(), "client")).toMatchObject({ index: 7, role: "emma", destination: "chat", complete: false, chatAction: "ask-payments" });
   });
 
   it("requires an evidence answer at least as fresh as the stored payment operations", () => {
@@ -119,14 +119,14 @@ describe("Maple demo guide from saved records", () => {
   it("keeps the completed money step visible while the AI prepares the evidence reply", () => {
     const data = confirmed();
     data.snapshot.activeMessageId = "money-question";
-    expect(mapleGuideStep(data, "client")).toMatchObject({ index: 4, title: "The AI is preparing the payment explanation" });
+    expect(mapleGuideStep(data, "client")).toMatchObject({ index: 7, title: "The AI is preparing the payment explanation" });
     expect(mapleGuideStep(data, "client").chatAction).toBeUndefined();
   });
 
   it("guides the client to an uncovered replacement authorization", () => {
     const data = confirmed();
     data.payments!.lines[1].capturedCents = 0;
-    expect(mapleGuideStep(data, "designer")).toMatchObject({ index: 3, role: "emma" });
+    expect(mapleGuideStep(data, "designer")).toMatchObject({ index: 6, role: "emma" });
   });
 });
 
@@ -181,7 +181,7 @@ describe("living-and-dining demo guide", () => {
       line({ itemId: "site-visits", businessItemId: "site-visits", label: "Site visits during installation", category: "service", change: "quantity", targetCents: 108_000, heldCents: 0, capturedCents: 72_000, steps: [] }),
     ];
     const client = mapleGuideStep(data, "client");
-    expect(client).toMatchObject({ index: 3, role: "emma", destination: "order", orderId: "visitor-v3", anchor: "payments" });
+    expect(client).toMatchObject({ index: 6, role: "emma", destination: "order", orderId: "visitor-v3", anchor: "payments" });
     expect(client.detail).toContain("under Design services");
     // Jordan, looking at the same records, is shown the pendants waiting on his supplier step first.
     expect(mapleGuideStep(data, "designer")).toMatchObject({ role: "jordan", detail: expect.stringContaining("confirms this item's supplier terms") });
@@ -231,11 +231,11 @@ describe("living-and-dining demo guide", () => {
 
   it("offers to skip ahead 3 days in Jordan's inbox while the new items are held and not ordered", () => {
     expect(mapleGuideStep(heldNewItem(0), "designer")).toMatchObject({
-      index: 3, role: "jordan", destination: "inbox", action: "Skip ahead 3 days", skipTo: 3, title: "What if Jordan is busy and forgets to order?",
+      index: 4, role: "jordan", destination: "inbox", action: "Skip ahead 3 days", skipTo: 3, title: "What if Jordan is busy and forgets to order?",
       secondary: { label: "Record the confirmations now", href: "/quotes/maple?v=3#payments" },
     });
     const after = mapleGuideStep(heldNewItem(3), "designer");
-    expect(after).toMatchObject({ index: 3, role: "jordan", destination: "order", orderId: "visitor-v3", anchor: "payments", action: "Record the supplier confirmations", title: "Setti caught it: the held item is still not ordered" });
+    expect(after).toMatchObject({ index: 5, role: "jordan", destination: "order", orderId: "visitor-v3", anchor: "payments", action: "Record the supplier confirmations", title: "Setti caught it: the held item is still not ordered" });
     expect(after.detail).toMatch(/^Day 3: PayPal's 3-day honor period for this hold is over/);
     expect(after.skipTo).toBeUndefined();
   });
