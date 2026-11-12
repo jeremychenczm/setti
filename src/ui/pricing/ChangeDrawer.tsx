@@ -12,7 +12,7 @@ export const OPEN_FIRST_CHANGE_EVENT = "setti:open-first-pricing-change";
  * One change's full details in a dialog over the quote. Previous and Next move
  * through the changes without closing it.
  */
-export function ChangeDrawer({ index, count, action, title, subtitle, onPrevious, onNext, onClose, footer, children }: {
+export function ChangeDrawer({ index, count, action, title, subtitle, onPrevious, onNext, onClose, footer, children, eyebrow, onDone }: {
   index: number;
   count: number;
   action: keyof typeof actionLabels;
@@ -24,6 +24,10 @@ export function ChangeDrawer({ index, count, action, title, subtitle, onPrevious
   /** The designer's check for this change, kept in view below the scrolling details. */
   footer: ReactNode;
   children: ReactNode;
+  /** In place of "Change 2 of 7 · Replacement", for a first quote's items. */
+  eyebrow?: string;
+  /** What the last step's Done does; closing, unless the dialog keeps edits first. */
+  onDone?: () => void;
 }) {
   useEffect(() => {
     // Escape inside the grid cancels a cell edit; it should not also close the drawer.
@@ -36,7 +40,7 @@ export function ChangeDrawer({ index, count, action, title, subtitle, onPrevious
   <aside id="pricing-change-details" role="dialog" aria-modal="true" aria-labelledby="pricing-change-title" className="flex max-h-[min(720px,100%)] w-full max-w-[620px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
     <header className="flex items-start gap-3 border-b border-[var(--line)] px-5 py-4">
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Change {index + 1} of {count} · {actionLabels[action]}</p>
+        <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">{eyebrow ?? `Change ${index + 1} of ${count} · ${actionLabels[action]}`}</p>
         <h2 id="pricing-change-title" className="mt-1 text-[15px] font-semibold leading-snug">{title}</h2>
         {subtitle && <p className="mt-0.5 text-[11px] text-[var(--muted)]">{subtitle}</p>}
       </div>
@@ -50,7 +54,7 @@ export function ChangeDrawer({ index, count, action, title, subtitle, onPrevious
         <span className="flex-1 text-center text-[11px] tabular-nums text-[var(--muted)]">{index + 1} / {count}</span>
         {/* After the last change, the drawer closes onto the save and send bar. */}
         {index === count - 1
-          ? <button type="button" onClick={onClose} className="inline-flex items-center gap-1 rounded-lg bg-[var(--primary-fill)] px-3 py-1.5 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]"><Check className="h-3.5 w-3.5" />Done</button>
+          ? <button type="button" onClick={onDone ?? onClose} className="inline-flex items-center gap-1 rounded-lg bg-[var(--primary-fill)] px-3 py-1.5 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]"><Check className="h-3.5 w-3.5" />Done</button>
           : <button type="button" onClick={onNext} className="inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--canvas)]">Next<ChevronRight className="h-3.5 w-3.5" /></button>}
       </div>
     </footer>

@@ -77,7 +77,7 @@ function statusOf(change: PricingChangeInput | undefined, before: ApprovedQuoteL
   return before && change.after && (before.quantity !== change.after.quantity || before.unitPriceCents !== change.after.unitPriceCents) ? "changed" : "changed";
 }
 
-export function QuoteItemsGrid({ changes, baselineLines, issues, raw, disabled, drafted, view, columns, selectedKey, onSelect, onEdit, onCheck, onResolve }: {
+export function QuoteItemsGrid({ changes, baselineLines, issues, raw, disabled, drafted, view, columns, selectedKey, onSelect, onEdit, onCheck, onResolve, first = false }: {
   changes: PricingChangeInput[];
   baselineLines: readonly ApprovedQuoteLine[];
   issues: PricingIssue[];
@@ -92,6 +92,8 @@ export function QuoteItemsGrid({ changes, baselineLines, issues, raw, disabled, 
   onEdit: (key: string, field: EditableGridField, value: string) => void;
   onCheck: (keys: string[], confirmed: boolean) => void;
   onResolve: (issueId: string, resolved: boolean) => void;
+  /** A first quote: every line is the designer's own, with nothing to compare or check. */
+  first?: boolean;
 }) {
   const [openQuestions, setOpenQuestions] = useState<Record<string, boolean>>(() => {
     const first = issues.find((issue) => !issue.resolved);
@@ -135,7 +137,7 @@ export function QuoteItemsGrid({ changes, baselineLines, issues, raw, disabled, 
       let checked = 0;
       for (const { change, before } of members) {
         const after = change?.after ?? null;
-        const status = statusOf(change, before);
+        const status = first ? "same" : statusOf(change, before);
         const shown = after ?? before!;
         const lineTotal = status === "removed" ? 0 : change ? total(after) : total(before);
         const oldTotal = before ? total(before) : null;
@@ -167,7 +169,7 @@ export function QuoteItemsGrid({ changes, baselineLines, issues, raw, disabled, 
       if (!collapsed[id]) out.push(...lines);
     });
     return out;
-  }, [changes, baselineLines, issues, view, collapsed, openQuestions, drafted, disabled]);
+  }, [changes, baselineLines, issues, view, collapsed, openQuestions, drafted, disabled, first]);
 
   const anyCheck = drafted && changes.length > 0;
   const columnDefs = useMemo<ColDef<GridRow>[]>(() => {
@@ -194,18 +196,18 @@ export function QuoteItemsGrid({ changes, baselineLines, issues, raw, disabled, 
       },
       { colId: "source", headerName: "Source", headerComponentParams: { internal: true }, headerComponent: Header, minWidth: 170, hide: !columns.source, cellClass: "font-mono text-[11px]", valueGetter: ({ data }) => data?.kind === "line" ? data.source : "" },
       { colId: "total", headerName: "Total", width: 116, pinned: "right", type: "rightAligned", cellStyle: right, cellRenderer: TotalCell },
-      { colId: "difference", headerName: "Change", width: 104, pinned: "right", type: "rightAligned", cellStyle: right, cellRenderer: DifferenceCell },
+      ...(first ? [] : [{ colId: "difference", headerName: "Change", width: 104, pinned: "right" as const, type: "rightAligned", cellStyle: right, cellRenderer: DifferenceCell }]),
       ...(anyCheck ? [{ colId: "check", headerName: "Check", headerComponentParams: { internal: true }, headerComponent: Header, width: 78, pinned: "right" as const, cellRenderer: CheckCell }] : []),
     ];
-  }, [columns, raw, anyCheck]);
+  }, [columns, raw, anyCheck, first]);
 
   const context = useMemo(() => ({
-    disabled, selectedKey, onSelect, onCheck, onResolve,
+    disabled, selectedKey, onSelect, onCheck, onResolve, first,
     toggleQuestion: (id: string) => setOpenQuestions((open) => ({ ...open, [id]: !open[id] })),
     openQuestions,
     toggleGroup: (id: string) => setCollapsed((shut) => ({ ...shut, [id]: !shut[id] })),
     collapsed,
-  }), [disabled, selectedKey, onSelect, onCheck, onResolve, openQuestions, collapsed]);
+  }), [disabled, selectedKey, onSelect, onCheck, onResolve, openQuestions, collapsed, first]);
 
   const heights = (row: GridRow) => row.kind === "group" ? 40 : row.kind === "question" ? 46 : row.kind === "fee" ? 34 : row.detail || row.replaces || row.questions.length ? 58 : 44;
   const fullHeight = rows.reduce((acc, row) => acc + heights(row), 0) + 42;
@@ -222,7 +224,7 @@ export function QuoteItemsGrid({ changes, baselineLines, issues, raw, disabled, 
         onCellEditRequest={({ data, colDef, newValue }) => { if (data?.kind === "line" && data.changeKey && data.editable) onEdit(data.changeKey, colDef.colId as EditableGridField, String(newValue ?? "")); }}
         onCellClicked={({ data, colDef }) => { if (data?.kind === "line" && data.changeKey && (colDef.colId === "item" || colDef.colId === "by")) onSelect(data.changeKey); if (data?.kind === "fee" && colDef.colId !== "check") onSelect(data.changeKey); }} />
     </div>
-    <p className="border-t border-[var(--line)] bg-[var(--canvas)] px-3 py-2 text-[10.5px] text-[var(--muted)]">Yellow cells differ from the last signed version; the old value is struck through above. Editing a value clears that line&apos;s check. Open an item to see all its details.</p>
+    <p className="border-t border-[var(--line)] bg-[var(--canvas)] px-3 py-2 text-[10.5px] text-[var(--muted)]">{first ? "Click a quantity or price to change it. Open an item to see all its details." : "Yellow cells differ from the last signed version; the old value is struck through above. Editing a value clears that line's check. Open an item to see all its details."}</p>
   </div>;
 }
 
@@ -231,7 +233,7 @@ function feeLabel(kind: string): string {
 }
 
 type Ctx = {
-  disabled: boolean; selectedKey: string | null; onSelect: (key: string) => void; onCheck: (keys: string[], confirmed: boolean) => void; onResolve: (id: string, resolved: boolean) => void;
+  disabled: boolean; first: boolean; selectedKey: string | null; onSelect: (key: string) => void; onCheck: (keys: string[], confirmed: boolean) => void; onResolve: (id: string, resolved: boolean) => void;
   toggleQuestion: (id: string) => void; openQuestions: Record<string, boolean>; toggleGroup: (id: string) => void; collapsed: Record<string, boolean>;
 };
 type Cell = ICellRendererParams<GridRow, unknown, Ctx>;
@@ -318,7 +320,7 @@ function FullWidthRow({ data, context }: Cell) {
       </button>
       <span className="text-[var(--muted)]">{data.count} {data.count === 1 ? "item" : "items"}</span>
       <span className="ml-auto font-semibold tabular-nums">{data.subtotal === null ? "" : shortMoney(data.subtotal)}</span>
-      <span className={`w-[92px] text-right font-semibold tabular-nums ${data.difference === null || data.difference === 0 ? "text-[var(--muted)]" : data.difference > 0 ? "text-[#9c3d34]" : "text-emerald-700"}`}>{data.difference === null || data.difference === 0 ? "—" : `${data.difference > 0 ? "+" : "−"}${shortMoney(Math.abs(data.difference))}`}</span>
+      {!context.first && <span className={`w-[92px] text-right font-semibold tabular-nums ${data.difference === null || data.difference === 0 ? "text-[var(--muted)]" : data.difference > 0 ? "text-[#9c3d34]" : "text-emerald-700"}`}>{data.difference === null || data.difference === 0 ? "—" : `${data.difference > 0 ? "+" : "−"}${shortMoney(Math.abs(data.difference))}`}</span>}
       <span className="flex w-[64px] items-center justify-end">{data.checkKeys.length > 0 && <label className="inline-flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-[var(--muted)]" title={`Check every line Setti drafted in ${data.name}`}>
         All<input type="checkbox" checked={all} ref={(input) => { if (input) input.indeterminate = some; }} disabled={context.disabled}
           onChange={(event) => context.onCheck(data.checkKeys, event.target.checked)} aria-label={`Check all lines Setti drafted in ${data.name}`} className="h-4 w-4 accent-emerald-700" /></label>}</span>

@@ -109,7 +109,9 @@ function receiptBlocks(receipt: VersionReceipt, studioName: string, demo: boolea
   const certificate = certificateRows(receipt);
   // What the version is, in fixed words: the AI draft's title is never shown.
   const changeCount = "changes" in version.document ? version.document.changes.length : null;
-  const title = changeCount === null ? `${project.room}. First quote.` : `${project.room}. ${changeCount} ${changeCount === 1 ? "change" : "changes"} to version ${version.basedOn}.`;
+  // A project without a scope yet starts the line with what the version is.
+  const place = project.room.trim() ? `${project.room.trim()}. ` : "";
+  const title = changeCount === null ? `${place}First quote.` : `${place}${changeCount} ${changeCount === 1 ? "change" : "changes"} to version ${version.basedOn}.`;
   const actorName = (actor: string) => actor === "client" ? `${project.client} (client)` : actor === "designer" ? `${project.designer} (designer)` : actor;
   const designer = version.sentBy ?? project.designer;
   // Inside another page the document's title is not the page's.

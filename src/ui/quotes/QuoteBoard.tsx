@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { DemoAccount } from "@/accounts/demo";
 import type { CaseKey } from "@/chat/types";
 import type { QuoteView, SignOpeningInput } from "@/opening/types";
-import { QuoteDraftEditor } from "./QuoteDraftEditor";
+import { FirstQuoteEditor } from "./FirstQuoteEditor";
 import { QuoteReport, type QuoteActions } from "./QuoteReport";
 import type { QuoteOption } from "./QuoteReport";
 
@@ -93,7 +93,8 @@ export function QuoteBoard({ projectKey, studioName, viewer, options, focusItemI
     },
   };
 
-  if (loaded && "view" in loaded && editing && loaded.view.draftHash) return <QuoteDraftEditor projectKey={projectKey} view={loaded.view} onSaved={() => load()} onClose={() => setEditing(false)} />;
+  // An unsent V1 opens in the same editor as every later version.
+  if (loaded && "view" in loaded && viewer.role === "designer" && loaded.view.draftHash && (editing || !loaded.view.opening.sentAt)) return <FirstQuoteEditor key={loaded.view.draftHash} projectKey={projectKey} view={loaded.view} onSaved={() => load()} onOpenChat={onOpenChat} />;
   if (loaded && "view" in loaded) return <QuoteReport view={loaded.view} studioName={studioName} viewer={viewer} options={options} focusItemId={focusItemId} actions={actions} onBack={onBack} onSelectQuote={onSelectQuote} onOpenChat={onOpenChat} />;
   return (
     <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-white shadow-sm">
