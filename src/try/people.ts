@@ -6,7 +6,7 @@
  * the server's secret and never stored, so only this server can sign in as them.
  */
 import { createHmac, randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, lt, ne } from "drizzle-orm";
 import { authAccounts, authSessions, studioMembers, studios, users, type DemoPersona } from "@/auth/schema";
 import type { Auth } from "@/auth/server";
 import { chatCases, projectClients } from "@/chat/schema";
@@ -77,13 +77,25 @@ export async function findDemoPerson(db: Db, runId: string, persona: DemoPersona
 
 /**
  * Signs in as a demo person. The response carries the session cookie to pass on
- * to the browser; `replacing` is the browser's current session, ended so a
- * switch leaves one session behind, not two.
+ * to the browser; `replacing` is the browser's current session.
+ *
+ * The session being replaced stays valid for now: a request the page sent
+ * before the switch (the inbox's AI summary takes seconds) comes back for it,
+ * and for a deleted session the auth library's reply clears the cookie, which
+ * would sign the browser out of the new one. The two people's older sessions
+ * go instead, so a run keeps the current session and the one it replaced. A
+ * real account's session ends at once.
  */
 export async function signInDemoPerson(db: Db, auth: Auth, person: DemoPerson, replacing?: string | null): Promise<Response> {
   const context = await auth.$context;
+  const startedAt = new Date();
   const response = await auth.api.signInEmail({ body: { email: person.email, password: demoPassword(context.secret, person.userId) }, asResponse: true });
   if (!response.ok) throw new Error("The demo person could not be signed in.");
-  if (replacing) await db.delete(authSessions).where(eq(authSessions.id, replacing));
+  if (replacing) {
+    const [old] = await db.select({ userId: authSessions.userId, persona: users.demoPersona }).from(authSessions).innerJoin(users, eq(users.id, authSessions.userId)).where(eq(authSessions.id, replacing));
+    // A real account's session ends at once, as a sign-out does; only demo people trade places mid-request.
+    if (old && !old.persona) await db.delete(authSessions).where(eq(authSessions.id, replacing));
+    else await db.delete(authSessions).where(and(inArray(authSessions.userId, [...new Set([person.userId, ...(old ? [old.userId] : [])])]), ne(authSessions.id, replacing), lt(authSessions.createdAt, startedAt)));
+  }
   return response;
 }
