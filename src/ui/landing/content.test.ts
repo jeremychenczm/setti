@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HOME_APPROVED_QUOTE, HOME_DISCUSSION } from "@/demo/living-dining";
-import { DESIGN_FEE_CENTS, EMMA_MESSAGE, MAPLE_CHANGES, MAPLE_MONEY, V1_TOTAL_CENTS, V2_TOTAL_CENTS, usd } from "./content";
+import { EMMA_MESSAGE, MAPLE_CHANGES, MAPLE_MONEY, UNCHANGED_CENTS, V1_TOTAL_CENTS, V2_TOTAL_CENTS, usd } from "./content";
 
 const line = (itemId: string) => HOME_APPROVED_QUOTE.lines.find((entry) => entry.itemId === itemId)!;
 const moves = (itemId: string) => Object.fromEntries(MAPLE_MONEY.find((entry) => entry.itemId === itemId)!.moves.map((move) => [move.kind, move.cents]));
@@ -12,13 +12,14 @@ describe("landing page facts", () => {
       if (change.beforeCents === 0) { expect(HOME_APPROVED_QUOTE.lines.some((entry) => entry.itemId === change.itemId)).toBe(false); continue; }
       expect(change.beforeCents).toBe(line(change.itemId).unitPriceCents * line(change.itemId).quantity);
     }
-    expect(DESIGN_FEE_CENTS).toBe(line("design").unitPriceCents);
+    const unchanged = HOME_APPROVED_QUOTE.lines.filter((entry) => !MAPLE_CHANGES.some((change) => change.itemId === entry.itemId));
+    expect(UNCHANGED_CENTS).toBe(unchanged.reduce((sum, entry) => sum + entry.unitPriceCents * entry.quantity, 0));
     expect(V1_TOTAL_CENTS).toBe(HOME_APPROVED_QUOTE.lines.reduce((sum, entry) => sum + entry.unitPriceCents * entry.quantity, 0));
   });
 
   it("states the V2 total the app's own walkthrough test reaches", () => {
-    expect(V2_TOTAL_CENTS).toBe(1_750_600);
-    expect([usd(V1_TOTAL_CENTS), usd(V2_TOTAL_CENTS)]).toEqual(["$11,060", "$17,506"]);
+    expect(V2_TOTAL_CENTS).toBe(2_120_600);
+    expect([usd(V1_TOTAL_CENTS), usd(V2_TOTAL_CENTS)]).toEqual(["$14,760", "$21,206"]);
   });
 
   it("moves each item's money in a way that adds up to its V1 and V2 prices", () => {

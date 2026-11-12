@@ -2,20 +2,21 @@ import type { ApprovedQuoteLine, ApprovedQuoteReport, QuoteLineApproval } from "
 
 /**
  * The current walkthrough: Maple Ave Café's counter and back-bar refit. The scenario keeps its saved
- * name; version 4 replaced the earlier living-and-dining story, so a run saved under version 3 stops
- * with "not supported" instead of preparing money against a different V1.
+ * name; version 4 replaced the earlier living-and-dining story and version 5 added the V1 lines the
+ * revision leaves alone, so a run saved under an earlier version stops with "not supported" instead
+ * of preparing money against a different V1.
  */
 export const HOME_SCENARIO = "maple-living-dining-v3" as const;
-export const HOME_SCENARIO_VERSION = 4;
+export const HOME_SCENARIO_VERSION = 5;
 export function isHomeScenario(value: string | undefined): boolean {
   return value === HOME_SCENARIO;
 }
 /** V1's product lines, each held on its own. */
-export const HOME_ITEM_IDS = ["countertop", "wall-tile", "pendants", "stools"] as const;
+export const HOME_ITEM_IDS = ["countertop", "wall-tile", "shelving", "mirror", "pendants", "stools"] as const;
 /** Lines whose suppliers needed paying before the design changed: their orders are confirmed and V1 captured them. */
-export const HOME_EARLY_ITEMS = ["countertop", "wall-tile"] as const;
-/** The studio's own services, paid together at signing. */
-export const HOME_SERVICE_IDS = ["design", "site-visits"] as const;
+export const HOME_EARLY_ITEMS = ["countertop", "wall-tile", "shelving", "mirror"] as const;
+/** The studio's services and the trades' fixed-fee work, paid together at signing. */
+export const HOME_SERVICE_IDS = ["design", "site-visits", "plumbing", "electrical", "painting", "strip-out", "site-protection", "permit"] as const;
 
 const approvedAt = "2026-10-03T15:00:00-07:00";
 const room = "Front of house";
@@ -44,6 +45,7 @@ export const HOME_APPROVED_QUOTE: ApprovedQuoteReport = {
     "Each supplier reference identifies fictional local scenario material, not an uploaded or externally verified document. Dimensions, lead times and return terms are illustrative.",
     "Countertop quantities are linear feet of fabricated top; tile quantities are boxes covering the measured wall area plus a cutting allowance.",
     "The fixed USD 2,400 design fee covers the concept, layout and construction drawings; site visits during installation are billed per visit.",
+    "The plumbing, electrical, painting, strip-out, site protection and permit work are each one fixed fee for the work described.",
     "The example approval date and typed signature do not represent a real client's signature.",
   ],
   lines: [
@@ -63,6 +65,54 @@ export const HOME_APPROVED_QUOTE: ApprovedQuoteReport = {
         note: "Local fictional per-visit rate; the quantity is a count of visits.", priceNote: "Four visits at USD 180 each, USD 720 total." },
       returnPolicy: "Fictional service terms: visits are billed per visit; an unused visit is refunded at the per-visit rate.",
     }),
+    service({
+      itemId: "plumbing", name: "Plumbing hookup for the bar sink", vendor: "Northside Plumbing (demo)",
+      sku: "DEMO-CAFE-PLUMB-SINK", specification: "Connect the back bar sink to the existing supply and drain, with two shut-off valves and a leak test",
+      quantity: 1, unitLabel: "fixed fee", unitPriceCents: 42_000,
+      source: { kind: "demo", reference: "MAPLE-CAFE-PLUMB-01", name: "Fictional Northside Plumbing quote",
+        note: "Local fictional fixed-fee terms; not an uploaded or supplier-issued quote.", priceNote: "One fixed fee of USD 420." },
+      returnPolicy: "Fictional service terms: one fixed fee for the hookup described; other plumbing work needs a separate quote.",
+    }),
+    service({
+      itemId: "electrical", name: "Electrical: two counter outlets", vendor: "Brightline Electric (demo)",
+      sku: "DEMO-CAFE-ELEC-GFCI-2", specification: "Two 20 A GFCI outlets under the back bar counter for the espresso machine and grinder, on a new circuit from the existing panel",
+      quantity: 1, unitLabel: "fixed fee", unitPriceCents: 38_000,
+      source: { kind: "demo", reference: "MAPLE-CAFE-ELEC-01", name: "Fictional Brightline Electric quote",
+        note: "Local fictional fixed-fee terms; not an uploaded or supplier-issued quote.", priceNote: "One fixed fee of USD 380." },
+      returnPolicy: "Fictional service terms: one fixed fee for the two outlets and their circuit; other electrical work needs a separate quote.",
+    }),
+    service({
+      itemId: "painting", name: "Side wall paint, two walls", vendor: "Fresh Coat Painters (demo)",
+      sku: "DEMO-CAFE-PAINT-2W", specification: "Prep and two coats of washable eggshell paint, warm white, on the left and right walls of the seating area",
+      quantity: 1, unitLabel: "fixed fee", unitPriceCents: 68_000,
+      source: { kind: "demo", reference: "MAPLE-CAFE-PAINT-01", name: "Fictional Fresh Coat Painters quote",
+        note: "Local fictional fixed-fee terms; not an uploaded or supplier-issued quote.", priceNote: "One fixed fee of USD 680." },
+      returnPolicy: "Fictional service terms: one fixed fee for the two walls described, including paint and prep; touch-ups within 30 days are included.",
+    }),
+    service({
+      itemId: "strip-out", name: "Old fixture removal and disposal", vendor: "Lee Studio (demo)",
+      sku: "DEMO-CAFE-STRIPOUT", specification: "Remove the old counter, shelves and light fittings, and take them to a recycling and disposal site",
+      quantity: 1, unitLabel: "fixed fee", unitPriceCents: 35_000,
+      source: { kind: "demo", reference: "MAPLE-CAFE-SERVICE-03", name: "Fictional studio strip-out terms",
+        note: "Local fictional fixed-fee terms; not an uploaded or supplier-issued agreement.", priceNote: "One fixed fee of USD 350." },
+      returnPolicy: "Fictional service terms: one fixed fee for removing and disposing of the old fixtures described.",
+    }),
+    service({
+      itemId: "site-protection", name: "Site protection and final clean", vendor: "Lee Studio (demo)",
+      sku: "DEMO-CAFE-PROTECT", specification: "Floor and doorway protection for the length of the installation, then one final clean before reopening",
+      quantity: 1, unitLabel: "fixed fee", unitPriceCents: 29_000,
+      source: { kind: "demo", reference: "MAPLE-CAFE-SERVICE-04", name: "Fictional studio site-care terms",
+        note: "Local fictional fixed-fee terms; not an uploaded or supplier-issued agreement.", priceNote: "One fixed fee of USD 290." },
+      returnPolicy: "Fictional service terms: one fixed fee for the protection and the final clean described.",
+    }),
+    service({
+      itemId: "permit", name: "Permit filing and inspection", vendor: "Lee Studio (demo)",
+      sku: "DEMO-CAFE-PERMIT", specification: "Prepare and file the city tenant improvement permit and attend its final inspection",
+      quantity: 1, unitLabel: "fixed fee", unitPriceCents: 26_000,
+      source: { kind: "demo", reference: "MAPLE-CAFE-SERVICE-05", name: "Fictional studio permit terms",
+        note: "Local fictional fixed-fee terms; not an uploaded or supplier-issued agreement.", priceNote: "One fixed fee of USD 260." },
+      returnPolicy: "Fictional service terms: one fixed fee for filing the permit and attending one inspection.",
+    }),
     product({
       itemId: "countertop", name: "Quartz countertop", vendor: "Stoneline Fabrication (demo)", sku: "DEMO-CAFE-QUARTZ-30",
       specification: "3 cm honed white quartz, 25 in deep, fabricated and installed; front counter 14 ft and back bar 8 ft",
@@ -80,6 +130,24 @@ export const HOME_APPROVED_QUOTE: ApprovedQuoteReport = {
         note: "Local fictional per-box price, coverage and return terms; the quantity is a count of boxes.", priceNote: "14 boxes at USD 70 per box, USD 980 total; tax USD 0 and delivery USD 0 (demo assumptions)." },
       leadTimeDays: 10, restockingFeeBps: 2_000,
       returnPolicy: "Fictional terms: delivered to site and paid on delivery. Unopened boxes may be returned within 30 days of delivery with prior approval, with a 20% restocking fee on the returned goods price.",
+    }),
+    product({
+      itemId: "shelving", name: "Back bar oak shelving", vendor: "Birch Line Joinery (demo)", sku: "DEMO-CAFE-OAK-SHELF-8",
+      specification: "Solid oak shelf, 8 ft long and 10 in deep, oiled, on concealed steel brackets; three shelves for the back bar",
+      quantity: 3, unitLabel: "shelf", unitPriceCents: 26_000, customMade: true, nonReturnable: true,
+      source: { kind: "demo", reference: "MAPLE-CAFE-SHELF-01", name: "Fictional Birch Line shelving quote",
+        note: "Local fictional per-shelf price and terms; the quantity is a count of shelves.", priceNote: "Three shelves at USD 260 each, USD 780 total; tax USD 0 and delivery USD 0 (demo assumptions)." },
+      leadTimeDays: 14, restockingFeeBps: null,
+      returnPolicy: "Fictional terms: made to measure and paid on delivery. Delivered shelves cannot be returned.",
+    }),
+    product({
+      itemId: "mirror", name: "Back bar mirror", vendor: "Clearline Glass (demo)", sku: "DEMO-CAFE-MIRROR-3660",
+      specification: "36 × 60 in mirror, 1/4 in glass with polished edges, in a black steel frame; hung above the back bar shelves",
+      quantity: 1, unitLabel: "each", unitPriceCents: 54_000, customMade: true, nonReturnable: true,
+      source: { kind: "demo", reference: "MAPLE-CAFE-MIRROR-01", name: "Fictional Clearline Glass mirror quote",
+        note: "Local fictional price and terms for one framed mirror.", priceNote: "One mirror at USD 540; tax USD 0 and delivery USD 0 (demo assumptions)." },
+      leadTimeDays: 10, restockingFeeBps: null,
+      returnPolicy: "Fictional terms: cut to size and paid on delivery. A delivered mirror cannot be returned.",
     }),
     product({
       itemId: "pendants", name: "Counter pendant light", vendor: "Lumen Row Lighting (demo)", sku: "DEMO-CAFE-PENDANT-9",

@@ -90,7 +90,8 @@ describe.skipIf(!testDatabaseUrl)("café walkthrough after one signature", () =>
     expect(guide(3).title).toBe("Setti caught it: 5 held items are still not ordered");
     expect((await inboxView(handle.db, null, session, findAccount("emma")!)).project).toEqual({ key: "maple", name: "Maple Ave Café" });
     const reminders = (await attentionView(handle.db, session, findAccount("jordan")!, new Date(Date.now() + 4 * 86_400_000))).items.filter((item) => item.projectKey === "maple");
-    expect(reminders.length).toBeGreaterThan(0);
+    // Only the five held items are reminded of; the lines V1 already paid in full have nothing left to do.
+    expect(reminders.map((item) => [item.kind, item.itemLabel]).sort()).toEqual(["Acoustic ceiling panel", "Back bar wall tile, sage green", "Counter pendant light", "Counter stool", "Oak window counter"].map((label) => ["not_ordered", label]));
     expect(new Set(reminders.map((item) => item.projectName))).toEqual(new Set(["Maple Ave Café"]));
     for (const version of [1, 2]) expect((await readVersionReceipt(handle.db, session, "maple", version)).project).toMatchObject({ name: "Maple Ave Café", room: "Front of house" });
     // The signed V2 states what the old countertop and tile keep from Emma, by type.
@@ -149,8 +150,8 @@ describe.skipIf(!testDatabaseUrl)("café walkthrough after one signature", () =>
     const ledger = await readLedger(handle.db, bridge.projectId);
     const captured = ledger.captures.filter((capture) => capture.status === "completed").reduce((sum, capture) => sum + capture.amountCents, 0);
     const refunded = ledger.refunds.filter((refund) => refund.status === "completed").reduce((sum, refund) => sum + refund.amountCents, 0);
-    expect([captured, refunded, captured - refunded]).toEqual([1_873_000, 122_400, 1_750_600]);
-    expect(order.totals.totalCents).toBe(1_750_600);
+    expect([captured, refunded, captured - refunded]).toEqual([2_243_000, 122_400, 2_120_600]);
+    expect(order.totals.totalCents).toBe(2_120_600);
 
     // Settled: each item's status and amounts as the answer's table shows them.
     const settled = await money();
@@ -158,7 +159,7 @@ describe.skipIf(!testDatabaseUrl)("café walkthrough after one signature", () =>
     expect(settled.get("baseline:wall-tile")).toMatchObject({ label: "Back bar wall tile (original)", status: "refunded", nonRefundableCents: 19_600, netCents: 19_600 });
     expect(settled.get("proposed:wall-tile")).toMatchObject({ label: "Back bar wall tile, sage green (new)", status: "charged", netCents: 152_000 });
     expect(settled.get("baseline:pendants")).toMatchObject({ status: "charged", releasedCents: 48_000, nonRefundableFees: [], netCents: 96_000 });
-    expect([...settled.values()].reduce((sum, item) => sum + item.netCents, 0)).toBe(1_750_600);
+    expect([...settled.values()].reduce((sum, item) => sum + item.netCents, 0)).toBe(2_120_600);
     expect([...settled.values()].every((item) => item.factIds.includes(`item:${item.key}`))).toBe(true);
   });
 });

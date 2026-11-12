@@ -25,7 +25,7 @@ function fixture() {
     ledger.authorizations.push(authorization(itemId, businessId(itemId), amount, { status: early ? "captured" : "created" }));
     ledger.operations.push(operation(`op-${itemId}`, businessId(itemId), amount));
     if (!early) continue;
-    // The countertop was paid at templating and the tile on delivery, so V1 already captured them in full.
+    // The countertop was paid at templating and the tile, shelving and mirror on delivery, so V1 already captured them in full.
     const capture = `CAP-${itemId.toUpperCase()}`;
     ledger.captures.push({ id: `capture-${itemId}`, projectId: "project", authorizationId: itemId, itemId: null, paypalCaptureId: capture, amountCents: amount, currency: "USD", finalCapture: true, status: "completed", operationId: `capture-op-${itemId}`, createdAt: now });
     ledger.operations.push(operation(`capture-op-${itemId}`, businessId(itemId), amount, { kind: "capture", authorizationId: itemId, finalCapture: true, paypalResourceId: capture }));
@@ -42,7 +42,7 @@ describe("signed V1 payment evidence", () => {
     expect(statement(context, "item:baseline:stools")).toContain("recorded held amount $1,560.00");
     expect(statement(context, "item:baseline:countertop")).toContain("completed captures $3,960.00");
     expect(statement(context, "item:baseline:wall-tile")).toContain("completed captures $980.00");
-    expect(statement(context, "scope")).toMatch(/held \$3,000\.00, completed captures \$4,940\.00/);
+    expect(statement(context, "scope")).toMatch(/held \$3,000\.00, completed captures \$6,260\.00/);
     expect(statement(context, "next:baseline:design")).toContain("remaining $2,400.00 target");
     expect(statement(context, "next:baseline:stools")).toContain("authorized, not charged");
     expect(context.sources).toContainEqual(expect.objectContaining({ kind: "payment", label: "PayPal V1 capture CAP-COUNTERTOP · completed", href: "/quotes/maple#item-holds" }));

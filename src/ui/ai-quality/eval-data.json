@@ -5,7 +5,8 @@
       "title": "Change drafts",
       "summary": "A project chat ends with a request to Setti, which drafts a revised quote for the designer to review.",
       "sources": [
-        "Claude API, claude-sonnet-5-5, effort high, 2026-11-11"
+        "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
+        "Claude API, claude-sonnet-5-5, effort high, 2026-11-12"
       ],
       "cases": [
         {
@@ -1880,7 +1881,7 @@
           ],
           "earlierNote": null,
           "given": [
-            "Maple Ave Café: approved quote with 6 lines in 1 room"
+            "Maple Ave Café: approved quote with 14 lines in 1 room"
           ],
           "planted": [],
           "records": null,
@@ -1898,7 +1899,7 @@
               "noModelCall": false,
               "blocked": [],
               "reply": {
-                "text": "Thanks, Emma. You've asked to take the sideboard out and get a revised quote. I can't see a line called sideboard in the approved quote, so Jordan Lee, your designer, will confirm which item you mean. They will then prepare a revised quote for you to confirm. Nothing changes until you confirm it.",
+                "text": "Thanks, Emma. I've noted that you no longer want the sideboard, and your designer, Jordan Lee, will prepare a revised quote for you to confirm.",
                 "listLabel": null,
                 "list": [],
                 "notes": [],
@@ -2530,7 +2531,7 @@
           ],
           "earlierNote": null,
           "given": [
-            "Maple Ave Café: approved quote with 6 lines in 1 room"
+            "Maple Ave Café: approved quote with 14 lines in 1 room"
           ],
           "planted": [],
           "records": null,
@@ -2546,15 +2547,35 @@
               "noModelCall": false,
               "blocked": [],
               "reply": {
-                "text": "This draft adds the oak window counter and 12 acoustic panels, raises the stools to 14, re-cuts the front counter to 10 feet, cuts the pendants to 4, swaps the white tile for 20 boxes of sage green and adds two site visits. The window bay measurement, the main counter height and the tile box count need your check. It is a draft for designer review, not an order or a payment.",
+                "text": "I've drafted the revised quote for the window counter, stools, acoustic panels, front counter re-cut, pendants, sage tile and site visits. The design fee and back bar top stay unchanged. This is a draft for your review, not an order or payment. Please check the tile box count and the main counter height before sending it to Emma.",
                 "listLabel": "Draft",
                 "list": [
-                  "Add a 16-foot solid oak window counter at the same height as the main counter.",
-                  "Raise counter stools from 8 to 14 for six extra window seats.",
-                  "Add twelve 2 by 4 ft charcoal felt acoustic ceiling panels.",
-                  "Re-cut the front counter from 14 to 10 feet; the back bar stays at 8 feet, so 18 linear feet in total.",
+                  "Add a 16 ft solid oak window counter at 36 in height, priced per linear foot.",
+                  "Increase counter stools from 8 to 14 for six extra window seats.",
+                  "Add twelve 2 by 4 ft charcoal felt acoustic panels over the seating.",
+                  "Re-cut the front counter from 14 ft to 10 ft, keeping the back bar at 8 ft, for 18 linear ft in total.",
                   "Reduce counter pendants from 6 to 4.",
-                  "Replace the white tile with sage green for the back bar and side wall: 180 sq ft plus 10% for cuts, 20 boxes.",
+                  "Replace the white tile with sage green for 180 sq ft plus 10% for cuts, which is 20 boxes.",
+                  "Increase installation site visits from 4 to 6."
+                ],
+                "notes": [],
+                "cited": []
+              }
+            },
+            {
+              "pass": true,
+              "noModelCall": false,
+              "blocked": [],
+              "reply": {
+                "text": "I drafted the revised quote for review: the 16 ft oak window counter, 14 stools in total, 12 acoustic panels, the front counter re-cut to 10 ft, 4 pendants, sage green tile replacing the white, and 6 site visits. The design fee and back bar top stay unchanged. This is a draft for designer review only, not an order or a payment, so please check the open points below.",
+                "listLabel": "Draft",
+                "list": [
+                  "Add a 16 ft solid oak window counter at the supplier's per-linear-foot price.",
+                  "Raise counter stools from 8 to 14 for six extra window seats.",
+                  "Add twelve 2 x 4 ft charcoal felt acoustic panels.",
+                  "Shorten the front counter top from 14 to 10 ft; the back bar stays at 8 ft, so 18 linear ft in total.",
+                  "Reduce counter pendants from 6 to 4.",
+                  "Replace the white tile with sage green for 180 sq ft plus 10% for cuts, about 20 boxes.",
                   "Increase site visits from 4 to 6."
                 ],
                 "notes": [],
@@ -2566,35 +2587,15 @@
               "noModelCall": false,
               "blocked": [],
               "reply": {
-                "text": "I've drafted a revised quote with all the changes from your discussion: the new oak window counter, 14 stools, 12 acoustic panels, a 10 ft front counter, 4 pendants, sage green tile and 6 site visits. This is a draft for your review, not an order or a payment. Please check the exact window width and the sage tile box count before sending it to Emma.",
+                "text": "I drafted the revised quote from the discussion: a 16 ft oak window counter, 14 stools in total, 12 acoustic panels, the front counter re-cut to 10 ft, four pendants, sage green tile in place of the white, and six site visits. This is a draft for your review, not an order or a payment. Please check the window counter height and the tile box count before it goes to Emma.",
                 "listLabel": "Draft",
                 "list": [
-                  "Add a 16 ft solid oak window counter at the same height as the main counter.",
-                  "Raise the counter stools from 8 to 14 for the six new window seats.",
-                  "Add 12 charcoal 2 × 4 ft felt acoustic ceiling panels over the seating.",
-                  "Re-cut the front counter from 14 to 10 ft, giving 18 linear ft in total with the 8 ft back bar unchanged.",
-                  "Reduce the counter pendants from 6 to 4 to space them evenly over the 10 ft counter.",
-                  "Replace the white tile with sage green tile for the 180 sq ft back bar and side walls, plus 10% for cuts, rounded up to 20 boxes.",
-                  "Raise the installation site visits from 4 to 6."
-                ],
-                "notes": [],
-                "cited": []
-              }
-            },
-            {
-              "pass": true,
-              "noModelCall": false,
-              "blocked": [],
-              "reply": {
-                "text": "I've drafted a revised quote with all seven changes agreed in the discussion: the window counter, stools, acoustic panels, front counter re-cut, pendants, sage tile and site visits. The back bar top and the design fee are unchanged. Please check the window measurements and the tile box count before sending it to Emma. This draft is for your review and is not an order or a payment.",
-                "listLabel": "Draft",
-                "list": [
-                  "Add a 16-foot solid oak window counter at 36 in height.",
-                  "Raise counter stools from 8 to 14 for the six new window seats.",
-                  "Add twelve charcoal 2 by 4 ft felt acoustic panels over the seating.",
-                  "Re-cut the front counter from 14 to 10 ft, giving 18 linear ft with the 8 ft back bar unchanged.",
-                  "Reduce counter pendants from 6 to 4 to space evenly over the 10 ft counter.",
-                  "Replace the white tile with sage green: 180 sq ft plus 10% for cuts is 198 sq ft, or 20 boxes.",
+                  "Add a 16 ft solid oak window counter at the supplier's per-linear-foot price.",
+                  "Raise counter stools from 8 to 14 for six more seats at the window.",
+                  "Add twelve 2 x 4 ft charcoal felt ceiling panels.",
+                  "Re-cut the front counter from 14 to 10 ft; the 8 ft back bar top stays as is, so the line goes from 22 to 18 linear ft.",
+                  "Reduce the counter pendants from 6 to 4.",
+                  "Replace the white tile with sage green for 180 sq ft plus 10% for cuts, rounded up to 20 boxes.",
                   "Increase site visits from 4 to 6."
                 ],
                 "notes": [],

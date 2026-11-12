@@ -62,7 +62,7 @@ describe("café AI orchestration", () => {
     expect(result.draft?.changes).toHaveLength(7);
     const pricing = createPricingInput(s.quote, result.draft!);
     expect(pricing.changes.every((change) => !change.confirmed)).toBe(true);
-    expect(previewPricing(s.quote, result.draft!, pricing)).toMatchObject({ ready: false, proposedTotals: { totalCents: 1_750_600 }, deltaTotalCents: 644_600 });
+    expect(previewPricing(s.quote, result.draft!, pricing)).toMatchObject({ ready: false, proposedTotals: { totalCents: 2_120_600 }, deltaTotalCents: 644_600 });
     expect(s.store.failAi).not.toHaveBeenCalled();
     expect(result).not.toHaveProperty("moneyAnswer");
   });

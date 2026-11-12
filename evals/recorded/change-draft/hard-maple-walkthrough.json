@@ -1,29 +1,30 @@
 {
   "flow": "change-draft",
   "case": "hard-maple-walkthrough",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-12",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "c4ca7a1a9045483bbd9a",
+          "fingerprint": "a8001686acb71d526391",
           "output": {
             "intent": "draft",
-            "message": "This draft adds the oak window counter and 12 acoustic panels, raises the stools to 14, re-cuts the front counter to 10 feet, cuts the pendants to 4, swaps the white tile for 20 boxes of sage green and adds two site visits. The window bay measurement, the main counter height and the tile box count need your check. It is a draft for designer review, not an order or a payment.",
-            "title": "Maple Ave Café revised quote: window counter, acoustic panels, re-cut counter and sage tile",
+            "message": "I've drafted the revised quote for the window counter, stools, acoustic panels, front counter re-cut, pendants, sage tile and site visits. The design fee and back bar top stay unchanged. This is a draft for your review, not an order or payment. Please check the tile box count and the main counter height before sending it to Emma.",
+            "title": "Maple Ave Café revised quote: window counter, acoustic panels, shorter front counter and sage tile",
             "changes": [
               {
                 "action": "add",
                 "itemId": null,
                 "quantity": 16,
                 "productOptionId": "maple-cafe:oak-window-counter",
-                "description": "Add a 16-foot solid oak window counter at the same height as the main counter.",
+                "description": "Add a 16 ft solid oak window counter at 36 in height, priced per linear foot.",
                 "sourceMessageIds": [
                   "discussion-1",
                   "discussion-2",
-                  "discussion-3"
+                  "discussion-3",
+                  "discussion-19"
                 ]
               },
               {
@@ -31,7 +32,7 @@
                 "itemId": "stools",
                 "quantity": 14,
                 "productOptionId": null,
-                "description": "Raise counter stools from 8 to 14 for six extra window seats.",
+                "description": "Increase counter stools from 8 to 14 for six extra window seats.",
                 "sourceMessageIds": [
                   "discussion-3",
                   "discussion-19"
@@ -42,7 +43,7 @@
                 "itemId": null,
                 "quantity": 12,
                 "productOptionId": "maple-cafe:felt-panel",
-                "description": "Add twelve 2 by 4 ft charcoal felt acoustic ceiling panels.",
+                "description": "Add twelve 2 by 4 ft charcoal felt acoustic panels over the seating.",
                 "sourceMessageIds": [
                   "discussion-4",
                   "discussion-5",
@@ -55,7 +56,7 @@
                 "itemId": "countertop",
                 "quantity": 18,
                 "productOptionId": null,
-                "description": "Re-cut the front counter from 14 to 10 feet; the back bar stays at 8 feet, so 18 linear feet in total.",
+                "description": "Re-cut the front counter from 14 ft to 10 ft, keeping the back bar at 8 ft, for 18 linear ft in total.",
                 "sourceMessageIds": [
                   "discussion-8",
                   "discussion-9",
@@ -79,127 +80,7 @@
                 "itemId": "wall-tile",
                 "quantity": 20,
                 "productOptionId": "maple-cafe:sage-tile",
-                "description": "Replace the white tile with sage green for the back bar and side wall: 180 sq ft plus 10% for cuts, 20 boxes.",
-                "sourceMessageIds": [
-                  "discussion-12",
-                  "discussion-13",
-                  "discussion-14",
-                  "discussion-15",
-                  "discussion-20",
-                  "discussion-21"
-                ]
-              },
-              {
-                "action": "quantity",
-                "itemId": "site-visits",
-                "quantity": 6,
-                "productOptionId": null,
-                "description": "Increase site visits from 4 to 6.",
-                "sourceMessageIds": [
-                  "discussion-17",
-                  "discussion-18"
-                ]
-              }
-            ],
-            "unresolved": [
-              "What is the exact width of the window bay, and does the main counter stand at 36 in, the height the window counter is built for?",
-              "Is 20 boxes of sage tile right for 198 sq ft, rounded up from 19.8?"
-            ],
-            "constraints": [
-              "The design fee and the back bar top stay unchanged.",
-              "The client must review and confirm the revised quote before any change goes ahead.",
-              "The window counter is made to order and cannot be cancelled or returned once production starts.",
-              "The re-cut of the front counter carries a fixed USD 280 re-cut fee, and the credit for the removed length is issued only once the re-cut top is approved.",
-              "The white tile boxes are unopened, and their return needs prior supplier approval within 30 days of delivery, with a 20% restocking fee on the returned goods price.",
-              "Stool and pendant quantity changes depend on those orders not yet being confirmed with the suppliers."
-            ],
-            "money": null,
-            "quoteQuery": null
-          }
-        }
-      ],
-      "explanation": "outcome draft (intent draft) · 1 model call · changes 7/7 expected matched, 7 drafted"
-    },
-    {
-      "rep": 1,
-      "pass": 1,
-      "attempts": [
-        {
-          "fingerprint": "c4ca7a1a9045483bbd9a",
-          "output": {
-            "intent": "draft",
-            "message": "I've drafted a revised quote with all the changes from your discussion: the new oak window counter, 14 stools, 12 acoustic panels, a 10 ft front counter, 4 pendants, sage green tile and 6 site visits. This is a draft for your review, not an order or a payment. Please check the exact window width and the sage tile box count before sending it to Emma.",
-            "title": "Maple Ave Café revised quote: window counter, acoustic panels, re-cut counter and sage tile",
-            "changes": [
-              {
-                "action": "add",
-                "itemId": null,
-                "quantity": 16,
-                "productOptionId": "maple-cafe:oak-window-counter",
-                "description": "Add a 16 ft solid oak window counter at the same height as the main counter.",
-                "sourceMessageIds": [
-                  "discussion-1",
-                  "discussion-2",
-                  "discussion-3",
-                  "discussion-19"
-                ]
-              },
-              {
-                "action": "quantity",
-                "itemId": "stools",
-                "quantity": 14,
-                "productOptionId": null,
-                "description": "Raise the counter stools from 8 to 14 for the six new window seats.",
-                "sourceMessageIds": [
-                  "discussion-3",
-                  "discussion-19"
-                ]
-              },
-              {
-                "action": "add",
-                "itemId": null,
-                "quantity": 12,
-                "productOptionId": "maple-cafe:felt-panel",
-                "description": "Add 12 charcoal 2 × 4 ft felt acoustic ceiling panels over the seating.",
-                "sourceMessageIds": [
-                  "discussion-4",
-                  "discussion-5",
-                  "discussion-6",
-                  "discussion-7"
-                ]
-              },
-              {
-                "action": "quantity",
-                "itemId": "countertop",
-                "quantity": 18,
-                "productOptionId": null,
-                "description": "Re-cut the front counter from 14 to 10 ft, giving 18 linear ft in total with the 8 ft back bar unchanged.",
-                "sourceMessageIds": [
-                  "discussion-8",
-                  "discussion-9",
-                  "discussion-19",
-                  "discussion-20",
-                  "discussion-21"
-                ]
-              },
-              {
-                "action": "quantity",
-                "itemId": "pendants",
-                "quantity": 4,
-                "productOptionId": null,
-                "description": "Reduce the counter pendants from 6 to 4 to space them evenly over the 10 ft counter.",
-                "sourceMessageIds": [
-                  "discussion-10",
-                  "discussion-11",
-                  "discussion-19"
-                ]
-              },
-              {
-                "action": "replace",
-                "itemId": "wall-tile",
-                "quantity": 20,
-                "productOptionId": "maple-cafe:sage-tile",
-                "description": "Replace the white tile with sage green tile for the 180 sq ft back bar and side walls, plus 10% for cuts, rounded up to 20 boxes.",
+                "description": "Replace the white tile with sage green for 180 sq ft plus 10% for cuts, which is 20 boxes.",
                 "sourceMessageIds": [
                   "discussion-12",
                   "discussion-13",
@@ -215,24 +96,24 @@
                 "itemId": "site-visits",
                 "quantity": 6,
                 "productOptionId": null,
-                "description": "Raise the installation site visits from 4 to 6.",
+                "description": "Increase installation site visits from 4 to 6.",
                 "sourceMessageIds": [
                   "discussion-17",
-                  "discussion-18",
-                  "discussion-19"
+                  "discussion-18"
                 ]
               }
             ],
             "unresolved": [
-              "Confirm the exact window bay width, which is currently given as about 16 ft.",
-              "Confirm that 20 boxes of sage tile is right for 198 sq ft, since the exact need is 19.8 boxes."
+              "Please confirm the main counter is 36 in high, so the window counter and the existing stools match.",
+              "Please confirm rounding 198 sq ft of sage tile up to 20 boxes."
             ],
             "constraints": [
-              "The design fee and the 8 ft back bar top stay unchanged.",
-              "Returning the delivered white tile needs the supplier's prior approval, within 30 days of delivery, and a 20% restocking fee applies.",
-              "The front counter re-cut carries a fixed re-cut fee, and the removed length is credited only after the supplier approves the re-cut top.",
+              "Emma must confirm the revised quote before anything proceeds.",
+              "The design fee and the 8 ft back bar top are unchanged.",
               "The window counter is made to order and cannot be cancelled or returned once production starts.",
-              "Emma must confirm the revised quote before anything proceeds."
+              "The front counter re-cut carries the fabricator's fixed USD 280 re-cut fee, and the removed length is credited at USD 180 per linear foot once the re-cut top is approved.",
+              "Returning the delivered white tile needs the supplier's prior approval within 30 days of delivery, and a 20% restocking fee applies.",
+              "The stools and pendants have not been ordered, so their quantities can still be changed."
             ],
             "money": null,
             "quoteQuery": null
@@ -242,26 +123,26 @@
       "explanation": "outcome draft (intent draft) · 1 model call · changes 7/7 expected matched, 7 drafted"
     },
     {
-      "rep": 2,
+      "rep": 1,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "c4ca7a1a9045483bbd9a",
+          "fingerprint": "a8001686acb71d526391",
           "output": {
             "intent": "draft",
-            "message": "I've drafted a revised quote with all seven changes agreed in the discussion: the window counter, stools, acoustic panels, front counter re-cut, pendants, sage tile and site visits. The back bar top and the design fee are unchanged. Please check the window measurements and the tile box count before sending it to Emma. This draft is for your review and is not an order or a payment.",
-            "title": "Maple Ave Café revised quote: window counter, acoustic panels, sage tile and shorter front counter",
+            "message": "I drafted the revised quote for review: the 16 ft oak window counter, 14 stools in total, 12 acoustic panels, the front counter re-cut to 10 ft, 4 pendants, sage green tile replacing the white, and 6 site visits. The design fee and back bar top stay unchanged. This is a draft for designer review only, not an order or a payment, so please check the open points below.",
+            "title": "Maple Ave Café revised quote: window counter, stools, panels, re-cut counter, tile and site visits",
             "changes": [
               {
                 "action": "add",
                 "itemId": null,
                 "quantity": 16,
                 "productOptionId": "maple-cafe:oak-window-counter",
-                "description": "Add a 16-foot solid oak window counter at 36 in height.",
+                "description": "Add a 16 ft solid oak window counter at the supplier's per-linear-foot price.",
                 "sourceMessageIds": [
                   "discussion-1",
                   "discussion-2",
-                  "discussion-3"
+                  "discussion-19"
                 ]
               },
               {
@@ -269,9 +150,10 @@
                 "itemId": "stools",
                 "quantity": 14,
                 "productOptionId": null,
-                "description": "Raise counter stools from 8 to 14 for the six new window seats.",
+                "description": "Raise counter stools from 8 to 14 for six extra window seats.",
                 "sourceMessageIds": [
-                  "discussion-3"
+                  "discussion-3",
+                  "discussion-19"
                 ]
               },
               {
@@ -279,7 +161,7 @@
                 "itemId": null,
                 "quantity": 12,
                 "productOptionId": "maple-cafe:felt-panel",
-                "description": "Add twelve charcoal 2 by 4 ft felt acoustic panels over the seating.",
+                "description": "Add twelve 2 x 4 ft charcoal felt acoustic panels.",
                 "sourceMessageIds": [
                   "discussion-4",
                   "discussion-5",
@@ -292,7 +174,7 @@
                 "itemId": "countertop",
                 "quantity": 18,
                 "productOptionId": null,
-                "description": "Re-cut the front counter from 14 to 10 ft, giving 18 linear ft with the 8 ft back bar unchanged.",
+                "description": "Shorten the front counter top from 14 to 10 ft; the back bar stays at 8 ft, so 18 linear ft in total.",
                 "sourceMessageIds": [
                   "discussion-8",
                   "discussion-9",
@@ -305,7 +187,7 @@
                 "itemId": "pendants",
                 "quantity": 4,
                 "productOptionId": null,
-                "description": "Reduce counter pendants from 6 to 4 to space evenly over the 10 ft counter.",
+                "description": "Reduce counter pendants from 6 to 4.",
                 "sourceMessageIds": [
                   "discussion-10",
                   "discussion-11"
@@ -316,7 +198,7 @@
                 "itemId": "wall-tile",
                 "quantity": 20,
                 "productOptionId": "maple-cafe:sage-tile",
-                "description": "Replace the white tile with sage green: 180 sq ft plus 10% for cuts is 198 sq ft, or 20 boxes.",
+                "description": "Replace the white tile with sage green for 180 sq ft plus 10% for cuts, about 20 boxes.",
                 "sourceMessageIds": [
                   "discussion-12",
                   "discussion-13",
@@ -333,21 +215,139 @@
                 "description": "Increase site visits from 4 to 6.",
                 "sourceMessageIds": [
                   "discussion-17",
+                  "discussion-18",
+                  "discussion-19"
+                ]
+              }
+            ],
+            "unresolved": [
+              "Please confirm the main counter is built at 36 in, since the window counter is made for that height.",
+              "Please confirm 20 boxes of sage tile, rounded up from 198 sq ft at 10 sq ft per box."
+            ],
+            "constraints": [
+              "The client will review and confirm the revised quote before anything proceeds.",
+              "The cut front counter top can only be re-cut shorter, for a USD 280 re-cut fee per top, with removed length credited at USD 180 per ft once the re-cut is approved.",
+              "The window counter is made to order and cannot be cancelled or returned once production starts.",
+              "The white tile boxes are delivered and unopened; return needs prior approval within 30 days of delivery, with a 20% restocking fee on the returned goods price.",
+              "The stools and pendants are not yet ordered, so their quantities can be changed free of charge before the order is confirmed.",
+              "The design fee and the back bar top remain unchanged."
+            ],
+            "money": null,
+            "quoteQuery": null
+          }
+        }
+      ],
+      "explanation": "outcome draft (intent draft) · 1 model call · changes 7/7 expected matched, 7 drafted"
+    },
+    {
+      "rep": 2,
+      "pass": 1,
+      "attempts": [
+        {
+          "fingerprint": "a8001686acb71d526391",
+          "output": {
+            "intent": "draft",
+            "message": "I drafted the revised quote from the discussion: a 16 ft oak window counter, 14 stools in total, 12 acoustic panels, the front counter re-cut to 10 ft, four pendants, sage green tile in place of the white, and six site visits. This is a draft for your review, not an order or a payment. Please check the window counter height and the tile box count before it goes to Emma.",
+            "title": "Maple Ave Café revision: window counter, acoustic panels, sage tile and layout changes",
+            "changes": [
+              {
+                "action": "add",
+                "itemId": null,
+                "quantity": 16,
+                "productOptionId": "maple-cafe:oak-window-counter",
+                "description": "Add a 16 ft solid oak window counter at the supplier's per-linear-foot price.",
+                "sourceMessageIds": [
+                  "discussion-1",
+                  "discussion-2",
+                  "discussion-3"
+                ]
+              },
+              {
+                "action": "quantity",
+                "itemId": "stools",
+                "quantity": 14,
+                "productOptionId": null,
+                "description": "Raise counter stools from 8 to 14 for six more seats at the window.",
+                "sourceMessageIds": [
+                  "discussion-2",
+                  "discussion-3"
+                ]
+              },
+              {
+                "action": "add",
+                "itemId": null,
+                "quantity": 12,
+                "productOptionId": "maple-cafe:felt-panel",
+                "description": "Add twelve 2 x 4 ft charcoal felt ceiling panels.",
+                "sourceMessageIds": [
+                  "discussion-4",
+                  "discussion-5",
+                  "discussion-6",
+                  "discussion-7"
+                ]
+              },
+              {
+                "action": "quantity",
+                "itemId": "countertop",
+                "quantity": 18,
+                "productOptionId": null,
+                "description": "Re-cut the front counter from 14 to 10 ft; the 8 ft back bar top stays as is, so the line goes from 22 to 18 linear ft.",
+                "sourceMessageIds": [
+                  "discussion-8",
+                  "discussion-9",
+                  "discussion-20",
+                  "discussion-21"
+                ]
+              },
+              {
+                "action": "quantity",
+                "itemId": "pendants",
+                "quantity": 4,
+                "productOptionId": null,
+                "description": "Reduce the counter pendants from 6 to 4.",
+                "sourceMessageIds": [
+                  "discussion-10",
+                  "discussion-11"
+                ]
+              },
+              {
+                "action": "replace",
+                "itemId": "wall-tile",
+                "quantity": 20,
+                "productOptionId": "maple-cafe:sage-tile",
+                "description": "Replace the white tile with sage green for 180 sq ft plus 10% for cuts, rounded up to 20 boxes.",
+                "sourceMessageIds": [
+                  "discussion-12",
+                  "discussion-13",
+                  "discussion-14",
+                  "discussion-15",
+                  "discussion-20",
+                  "discussion-21"
+                ]
+              },
+              {
+                "action": "quantity",
+                "itemId": "site-visits",
+                "quantity": 6,
+                "productOptionId": null,
+                "description": "Increase site visits from 4 to 6.",
+                "sourceMessageIds": [
+                  "discussion-17",
                   "discussion-18"
                 ]
               }
             ],
             "unresolved": [
-              "Is the window bay measured at 16 feet, and is the main counter 36 inches high to match the window counter?",
-              "Is 20 boxes of sage tile right for 198 sq ft, or should the designer round differently?"
+              "Is the main counter height 36 in, to match the window counter the supplier builds?",
+              "Please confirm that 20 boxes (198 sq ft rounded up) is the right sage tile quantity."
             ],
             "constraints": [
               "Emma must confirm the revised quote before anything proceeds.",
-              "The supplier's fixed re-cut fee of USD 280 for the front counter top applies, and the removed length is credited at USD 180 per linear foot once the re-cut top is approved.",
-              "The delivered white tile is unopened and can only go back with prior supplier approval within 30 days of delivery, with a 20% restocking fee.",
-              "The oak window counter is made to order and cannot be cancelled or returned once production starts.",
-              "The stools and pendants have not been ordered, so their quantities can still be changed.",
-              "The back bar top and the design fee stay as originally approved."
+              "The design fee and the 8 ft back bar top are unchanged.",
+              "The fabricator charges a fixed re-cut fee per top and credits the removed length once the re-cut top is approved.",
+              "Returning the unopened white tile needs supplier approval and carries a 20% restocking fee.",
+              "The window counter is made to order and cannot be cancelled once production starts.",
+              "The pendant and stool changes assume those orders are not yet confirmed with their suppliers."
             ],
             "money": null,
             "quoteQuery": null

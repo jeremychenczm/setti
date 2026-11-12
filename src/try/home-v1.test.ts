@@ -37,7 +37,7 @@ describe.skipIf(!testDatabaseUrl)("instant café V1 workspace", () => {
     return run;
   }
   async function finish(session: string) {
-    for (let count = 0; count < 12; count++) {
+    for (let count = 0; count < 16; count++) {
       const result = await prepareTry(deps(), session, session);
       if (result.kind === "ready") return result.seed;
       if (result.kind === "failed" || result.kind === "not_found") throw new Error("Payment preparation did not finish");
@@ -47,11 +47,17 @@ describe.skipIf(!testDatabaseUrl)("instant café V1 workspace", () => {
 
   it("opens the approved V1 and full discussion immediately, with no provider calls or invented V2", async () => {
     const run = await start();
-    expect(run.seed).toMatchObject({ status: "seeding", workspaceReady: true, baselineQuoteVersion: 1, scenarioVersion: 4, changeOrderId: null });
+    expect(run.seed).toMatchObject({ status: "seeding", workspaceReady: true, baselineQuoteVersion: 1, scenarioVersion: 5, changeOrderId: null });
     expect(run.seed.stages.filter((stage) => stage.status === "done").map((stage) => stage.id)).toEqual(["quote", "discussion"]);
-    // Both services and the four product holds do not depend on each other, so they run as one stage. The
-    // countertop was paid at templating and the tile on delivery, so each records its supplier step and is captured.
-    expect(run.seed.stages.map((stage) => stage.id)).toEqual(["quote", "starting_payments", "countertop_supplier", "countertop_capture", "wall_tile_supplier", "wall_tile_capture", "fees", "discussion"]);
+    // The services and the six product holds do not depend on each other, so they run as one stage. The countertop
+    // was paid at templating and the tile, shelving and mirror on delivery, so each records its supplier step and is captured.
+    expect(run.seed.stages.map((stage) => stage.id)).toEqual(["quote", "starting_payments", "countertop_supplier", "countertop_capture", "wall_tile_supplier", "wall_tile_capture",
+      "shelving_supplier", "shelving_capture", "mirror_supplier", "mirror_capture", "fees", "discussion"]);
+    // The labels' amounts are the café V1's own.
+    expect(run.seed.stages.map((stage) => stage.label).filter((label) => label.includes("$"))).toEqual([
+      "Pay the 8 services ($5,500) and place the 6 product holds ($9,260)", "Capture the $3,960 countertop payment", "Capture the $980 wall tile payment",
+      "Capture the $780 back bar shelving payment", "Capture the $540 back bar mirror payment",
+    ]);
     expect(paypal.calls).toHaveLength(0);
     const chat = await createChatStore(handle.db).getCase(run.session, "maple");
     expect(chat.quote).toEqual(HOME_APPROVED_QUOTE);
@@ -59,26 +65,25 @@ describe.skipIf(!testDatabaseUrl)("instant café V1 workspace", () => {
     expect(chat.draft).toBeNull();
     expect(chat.messages.filter((message) => message.model === "demo-scenario-discussion").map(({ actor, text }) => ({ actor, text }))).toEqual(HOME_DISCUSSION);
     const opening = await readOpening(handle.db, (await findProject(handle.db, run.session, "maple"))!);
-    expect(opening.opening).toMatchObject({ version: 1, status: "approved", closed: false, progress: { approved: 6, pending: 0 } });
+    expect(opening.opening).toMatchObject({ version: 1, status: "approved", closed: false, progress: { approved: 14, pending: 0 } });
     expect(opening.revision?.status).toBe("sent");
-    expect(opening.decisions.size).toBe(6);
-    expect(opening.lineIds.size).toBe(6);
+    expect(opening.decisions.size).toBe(14);
+    expect(opening.lineIds.size).toBe(14);
     expect(await handle.db.select().from(changeOrders)).toHaveLength(0);
     expect((await handle.db.select().from(revisions)).map((revision) => revision.number)).toEqual([1]);
   });
 
-  it("prepares the paid V1 design fee and site visits, four product holds and the countertop and tile captures", async () => {
+  it("prepares the paid V1 services, six product holds and the countertop, tile, shelving and mirror captures", async () => {
     const run = await start(), ready = await finish(run.session);
     expect(ready).toMatchObject({ status: "ready", workspaceReady: true, baselineQuoteVersion: 1, changeOrderId: null });
-    // One services hold and its two captures, then the four product holds.
-    expect(ready.stages.find((stage) => stage.id === "starting_payments")?.operationIds).toHaveLength(7);
+    // One services hold and its eight captures, then the six product holds.
+    expect(ready.stages.find((stage) => stage.id === "starting_payments")?.operationIds).toHaveLength(15);
     const [bridge] = await handle.db.select().from(pricingCases);
     const ledger = await readLedger(handle.db, bridge.projectId);
-    expect(ledger.authorizations).toHaveLength(5);
-    expect(ledger.authorizations.reduce((sum, hold) => sum + hold.amountCents, 0)).toBe(1_106_000);
-    expect(ledger.captures.map((capture) => capture.amountCents).sort((a, b) => a - b)).toEqual([72_000, 98_000, 240_000, 396_000]);
-    expect(ready.stages.find((stage) => stage.id === "countertop_capture")?.operationIds).toHaveLength(1);
-    expect(ready.stages.find((stage) => stage.id === "wall_tile_capture")?.operationIds).toHaveLength(1);
+    expect(ledger.authorizations).toHaveLength(7);
+    expect(ledger.authorizations.reduce((sum, hold) => sum + hold.amountCents, 0)).toBe(1_476_000);
+    expect(ledger.captures.map((capture) => capture.amountCents).sort((a, b) => a - b)).toEqual([26_000, 29_000, 35_000, 38_000, 42_000, 54_000, 68_000, 72_000, 78_000, 98_000, 240_000, 396_000]);
+    for (const stage of ["countertop_capture", "wall_tile_capture", "shelving_capture", "mirror_capture"]) expect(ready.stages.find((entry) => entry.id === stage)?.operationIds).toHaveLength(1);
     // Emma paid the V1 design fee with the Sandbox test card and saved it for the project's later holds.
     expect(await servicesPaymentView(handle.db, run.session, "maple", findAccount("emma")!, "test-client-id")).toMatchObject({
       basis: { version: 1, orderId: null }, dueCents: 0, canPay: false, savedPayPal: true, savedMethod: { kind: "card", label: "Visa •••• 0026" }, canRemoveSaved: true,
@@ -109,7 +114,7 @@ describe.skipIf(!testDatabaseUrl)("instant café V1 workspace", () => {
     const state = await runCaseAi(chat, run.session, "maple", requestId, { configured: () => true, callModel: async () => ({ output, model: "stub-external-model" }) });
     const draft = state.draft!, input = createPricingInput(state.quote!, draft);
     expect(draft.basedOnVersion).toBe(1);
-    expect(previewPricing(state.quote!, draft, input).proposedTotals?.totalCents).toBe(1_750_600);
+    expect(previewPricing(state.quote!, draft, input).proposedTotals?.totalCents).toBe(2_120_600);
     input.changes.forEach((change) => { change.confirmed = true; });
     input.issues.forEach((issue) => { issue.resolved = true; });
     input.reviewNotes = "Verified supplier documents and seven changes.";
@@ -119,7 +124,7 @@ describe.skipIf(!testDatabaseUrl)("instant café V1 workspace", () => {
     expect(paypal.calls).toHaveLength(0);
     await finish(run.session);
     const { order } = await pricing.issueReview(run.session, "maple", command);
-    expect(order).toMatchObject({ version: 2, basedOnVersion: 1, totals: { totalCents: 1_750_600 } });
+    expect(order).toMatchObject({ version: 2, basedOnVersion: 1, totals: { totalCents: 2_120_600 } });
     expect((await handle.db.select().from(revisions)).map((revision) => revision.number).sort()).toEqual([1, 2]);
     const providerCalls = paypal.calls.length;
     await createApprovalStore(handle.db).decide(run.session, order.id, { decision: "approved", contentHash: order.contentHash, revisionContentHash: order.revisionContentHash, acknowledged: true, signature: clientSignatureName(order), note: "Checked V2." });
@@ -142,10 +147,12 @@ describe.skipIf(!testDatabaseUrl)("instant café V1 workspace", () => {
     expect(actions).toHaveLength(10);
     expect(paypal.calls).toHaveLength(providerCalls);
     expect(payments.plan?.actions.some((action) => action.itemId === "design")).toBe(false);
-    // The two extra site visits are the only service money due; the design fee was paid in V1.
+    // The two extra site visits are the only service money due; the design fee and the trade work were paid in V1.
+    const paidInV1 = ([["plumbing", 42_000], ["electrical", 38_000], ["painting", 68_000], ["strip-out", 35_000], ["site-protection", 29_000], ["permit", 26_000]] as const)
+      .map(([itemId, cents]) => expect.objectContaining({ itemId, targetCents: cents, capturedCents: cents }));
     expect(await servicesPaymentView(handle.db, run.session, "maple", findAccount("emma")!, "test-client-id")).toMatchObject({
       basis: { version: 2, orderId: order.id }, dueCents: 36_000, canPay: true, furnitureToHold: { count: 4, cents: 779_000 },
-      services: [expect.objectContaining({ itemId: "design", targetCents: 240_000, capturedCents: 240_000 }), expect.objectContaining({ itemId: "site-visits", targetCents: 108_000, capturedCents: 72_000 })],
+      services: [expect.objectContaining({ itemId: "design", targetCents: 240_000, capturedCents: 240_000 }), expect.objectContaining({ itemId: "site-visits", targetCents: 108_000, capturedCents: 72_000 }), ...paidInV1],
     });
     const ref = { itemId: "wall-tile", side: "proposed" as const, contentHash: order.contentHash, revisionContentHash: order.revisionContentHash };
     const checkout = await startAuthorization(handle.db, paypal, run.session, order.id, ref, links);
@@ -172,8 +179,8 @@ describe.skipIf(!testDatabaseUrl)("instant café V1 workspace", () => {
     await finish(run.session);
     expect(paypal.calls).toHaveLength(calls);
     const operations = await handle.db.select().from(paymentOperations);
-    // Seven starting payments, then the countertop and tile captures.
-    expect(operations).toHaveLength(9);
+    // Fifteen starting payments, then the countertop, tile, shelving and mirror captures.
+    expect(operations).toHaveLength(19);
     expect(operations.some((candidate) => candidate.id === operation.id)).toBe(true);
     expect((await createChatStore(handle.db).getCase(run.session, "maple")).messages.filter((message) => message.model === "demo-scenario-discussion")).toHaveLength(HOME_DISCUSSION.length);
   });

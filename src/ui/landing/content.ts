@@ -22,10 +22,10 @@ export const MAPLE_CHANGES: readonly MapleChange[] = [
   { itemId: "wall-tile", name: "Wall tile", change: "white → sage · 14 → 20 boxes", beforeCents: 98_000, afterCents: 171_600 },
   { itemId: "site-visits", name: "Site visits", change: "4 → 6", beforeCents: 72_000, afterCents: 108_000 },
 ];
-/** The design fee, unchanged by the revision. */
-export const DESIGN_FEE_CENTS = 240_000;
-export const V1_TOTAL_CENTS = DESIGN_FEE_CENTS + MAPLE_CHANGES.reduce((sum, line) => sum + line.beforeCents, 0);
-export const V2_TOTAL_CENTS = DESIGN_FEE_CENTS + MAPLE_CHANGES.reduce((sum, line) => sum + line.afterCents, 0);
+/** The V1 lines the revision leaves as they are: the design fee, the trade work, the back bar shelving and the mirror. */
+export const UNCHANGED_CENTS = 610_000;
+export const V1_TOTAL_CENTS = UNCHANGED_CENTS + MAPLE_CHANGES.reduce((sum, line) => sum + line.beforeCents, 0);
+export const V2_TOTAL_CENTS = UNCHANGED_CENTS + MAPLE_CHANGES.reduce((sum, line) => sum + line.afterCents, 0);
 
 export type MoveKind = "released" | "held" | "charged" | "refunded" | "kept";
 export interface MoneyMove { itemId: string; name: string; moves: readonly { kind: MoveKind; cents: number }[]; note?: string }

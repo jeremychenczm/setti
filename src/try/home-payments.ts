@@ -14,7 +14,7 @@ import type { HOME_EARLY_ITEMS } from "../demo/living-dining";
 import { MaplePreparationError } from "./maple";
 import type { TryDeps } from "./service";
 
-/** Historical V1 services payment (the design fee and the site visits), using the same service capture path as checkout.
+/** Historical V1 services payment (the design fee, the site visits and the fixed-fee trade work), using the same service capture path as checkout.
  * The client paid with PayPal's Sandbox test card and agreed to save it for the
  * project, so later item holds need no PayPal window. It is labelled as a card,
  * never as the visitor's PayPal wallet.
@@ -54,7 +54,7 @@ export async function prepareHomeServices(deps: TryDeps, session: string): Promi
 
 /**
  * The V1 starting payments that do not depend on each other run at the same
- * time: the services (design fee and site visits) and each product hold. Their operations are recorded
+ * time: the services (design fee, site visits and trade work) and each product hold. Their operations are recorded
  * together first, from one payment plan, because an operation still open makes
  * the plan wait; each then runs, or resumes, on its own original operation.
  */
@@ -123,7 +123,7 @@ export async function prepareHomeHold(deps: TryDeps, session: string, itemId: st
   return [checkout.id];
 }
 
-/** A line paid before the design changed (the countertop at templating, the tile on delivery): its supplier step is recorded, then its hold captured. */
+/** A line paid before the design changed (the countertop at templating; the tile, shelving and mirror on delivery): its supplier step is recorded, then its hold captured. */
 export type HomeEarlyItem = (typeof HOME_EARLY_ITEMS)[number];
 
 export async function prepareHomeSupplier(db: Db, session: string, itemId: HomeEarlyItem): Promise<void> {

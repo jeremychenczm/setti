@@ -56,7 +56,7 @@ describe("local supplier evidence for the café proposal", () => {
     expect(context.messages).toHaveLength(HOME_DISCUSSION.length + 1);
     expect(context.productPages[0].text).toBe(HOME_SUPPLIER_NOTES);
     expect(context.productPages[0].products.map((product: { id: string }) => product.id)).toEqual(Object.values(HOME_PRODUCT_IDS));
-    expect(HOME_DESIGNER_REQUEST).not.toMatch(/17,506|DEMO-CAFE-|tile\s*→/);
+    expect(HOME_DESIGNER_REQUEST).not.toMatch(/21,206|DEMO-CAFE-|tile\s*→/);
     expect(pages[0].url).toMatch(/^local:/);
   });
 
@@ -72,7 +72,7 @@ describe("local supplier evidence for the café proposal", () => {
     expect(draft.changes.find((change) => change.itemId === "countertop")?.after).toMatchObject({ quantity: 18, unitPriceCents: 18_000 });
   });
 
-  it("prepopulates an accurate $17,506 / +$6,446 proposal while every human check remains open", () => {
+  it("prepopulates an accurate $21,206 / +$6,446 proposal while every human check remains open", () => {
     const draft = makeDraft();
     const input = createPricingInput(HOME_APPROVED_QUOTE, draft);
     expect(input.changes.every((change) => !change.confirmed)).toBe(true);
@@ -86,7 +86,7 @@ describe("local supplier evidence for the café proposal", () => {
       expect.objectContaining({ category: "furniture", customMade: false, returnable: true, restockingFeeBps: 1_000 }),
     ]);
     expect(input.changes.find((change) => change.itemId === "site-visits")?.after).toMatchObject({ category: "service", quantity: 6, unitPriceCents: 18_000 });
-    expect(previewPricing(HOME_APPROVED_QUOTE, draft, input)).toMatchObject({ ready: false, baselineTotals: { totalCents: 1_106_000 }, proposedTotals: { totalCents: 1_750_600 }, deltaTotalCents: 644_600 });
+    expect(previewPricing(HOME_APPROVED_QUOTE, draft, input)).toMatchObject({ ready: false, baselineTotals: { totalCents: 1_476_000 }, proposedTotals: { totalCents: 2_120_600 }, deltaTotalCents: 644_600 });
     expect(() => prepareChangeOrder(HOME_APPROVED_QUOTE, draft, input, homeMessages())).toThrow();
   });
 
@@ -96,7 +96,7 @@ describe("local supplier evidence for the café proposal", () => {
     input.changes.forEach((change) => { change.confirmed = true; });
     input.issues.forEach((issue) => { issue.resolved = true; });
     const body = prepareChangeOrder(HOME_APPROVED_QUOTE, draft, input, homeMessages());
-    expect(body.totals.totalCents).toBe(1_750_600);
+    expect(body.totals.totalCents).toBe(2_120_600);
     expect(body.deltaTotalCents).toBe(644_600);
     expect(body.source?.kind).toBe("client");
     expect(body.lines.find((line) => line.itemId === "design")).toMatchObject({ origin: "unchanged", unitPriceCents: 240_000 });

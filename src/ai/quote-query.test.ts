@@ -30,12 +30,12 @@ describe("running a quote query on the approved quote", () => {
   it("finds the most expensive furniture line with a sort and a limit, and still counts every match", () => {
     const answer = runQuoteQuery(HOME_APPROVED_QUOTE, query([{ field: "category", op: "eq", value: "Furniture" }], { field: "lineTotal", direction: "desc" }, 1));
     expect(names(answer)).toEqual(["countertop"]);
-    expect(answer).toMatchObject({ matchedCount: 4, totalCents: 396_000 });
+    expect(answer).toMatchObject({ matchedCount: 6, totalCents: 396_000 });
   });
 
   it("matches text without regard to case and keeps the quote's order when unsorted", () => {
-    expect(names(runQuoteQuery(HOME_APPROVED_QUOTE, query([{ field: "name", op: "contains", value: "COUNTER" }])))).toEqual(["countertop", "pendants", "stools"]);
-    expect(names(runQuoteQuery(HOME_APPROVED_QUOTE, query([{ field: "quantity", op: "gt", value: "1" }])))).toEqual(["site-visits", "countertop", "wall-tile", "pendants", "stools"]);
+    expect(names(runQuoteQuery(HOME_APPROVED_QUOTE, query([{ field: "name", op: "contains", value: "COUNTER" }])))).toEqual(["electrical", "countertop", "pendants", "stools"]);
+    expect(names(runQuoteQuery(HOME_APPROVED_QUOTE, query([{ field: "quantity", op: "gt", value: "1" }])))).toEqual(["site-visits", "countertop", "wall-tile", "shelving", "pendants", "stools"]);
   });
 
   it("returns no rows rather than guessing when nothing matches", () => {

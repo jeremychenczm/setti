@@ -67,8 +67,8 @@ async function main() {
   assert(workspace.sourceDraft);
   const input = createPricingInput(workspace.quote, workspace.sourceDraft);
   const preview = previewPricing(workspace.quote, workspace.sourceDraft, input);
-  assert.equal(preview.baselineTotals.totalCents, 1_106_000);
-  assert.equal(preview.proposedTotals?.totalCents, 1_750_600);
+  assert.equal(preview.baselineTotals.totalCents, 1_476_000);
+  assert.equal(preview.proposedTotals?.totalCents, 2_120_600);
   assert.equal(preview.deltaTotalCents, 644_600);
   assert(input.changes.every((change) => !change.confirmed), "Every row must await designer confirmation");
   assert(input.issues.every((issue) => !issue.resolved), "No review issue may be automatically resolved");

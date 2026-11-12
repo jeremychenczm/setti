@@ -5,9 +5,9 @@ import { HOME_APPROVED_QUOTE, HOME_DESIGNER_REQUEST, HOME_DISCUSSION, HOME_EARLY
 const line = (itemId: string) => HOME_APPROVED_QUOTE.lines.find((entry) => entry.itemId === itemId)!;
 
 describe("Maple Ave Café scenario", () => {
-  it("keeps six approved baseline lines: two services and four products priced per foot, box and piece", () => {
+  it("keeps fourteen approved baseline lines: eight services and six products priced per foot, box and piece", () => {
     expect(HOME_SCENARIO).toBe("maple-living-dining-v3");
-    expect(HOME_SCENARIO_VERSION).toBe(4);
+    expect(HOME_SCENARIO_VERSION).toBe(5);
     const quote = HOME_APPROVED_QUOTE;
     expect(quote).toMatchObject({ projectId: "maple", projectName: "Maple Ave Café", version: 1 });
     expect(quote.lines.filter((entry) => entry.category === "furniture").map((entry) => entry.itemId)).toEqual(HOME_ITEM_IDS);
@@ -19,7 +19,11 @@ describe("Maple Ave Café scenario", () => {
     expect(line("stools")).toMatchObject({ quantity: 8, unitPriceCents: 19_500 });
     expect(line("design")).toMatchObject({ quantity: 1, unitPriceCents: 240_000 });
     expect(line("site-visits")).toMatchObject({ quantity: 4, unitLabel: "visit", unitPriceCents: 18_000 });
-    expect(calculateQuoteTotals(quote.lines)).toMatchObject({ subtotalCents: 1_106_000, taxCents: 0, freightCents: 0, totalCents: 1_106_000 });
+    expect(line("shelving")).toMatchObject({ quantity: 3, unitLabel: "shelf", unitPriceCents: 26_000 });
+    expect(line("mirror")).toMatchObject({ quantity: 1, unitPriceCents: 54_000 });
+    expect(["plumbing", "electrical", "painting", "strip-out", "site-protection", "permit"].map((itemId) => [line(itemId).quantity, line(itemId).unitPriceCents]))
+      .toEqual([[1, 42_000], [1, 38_000], [1, 68_000], [1, 35_000], [1, 29_000], [1, 26_000]]);
+    expect(calculateQuoteTotals(quote.lines)).toMatchObject({ subtotalCents: 1_476_000, taxCents: 0, freightCents: 0, totalCents: 1_476_000 });
     expect(quote.lines.every((entry) => entry.approval.status === "approved" && entry.taxCents === 0 && entry.freightCents === 0)).toBe(true);
     expect(quote.assumptions.join(" ")).toMatch(/demo assumptions/);
   });
@@ -30,11 +34,14 @@ describe("Maple Ave Café scenario", () => {
     for (const entry of HOME_APPROVED_QUOTE.lines) {
       expect(entry.source.kind).toBe("demo");
       expect(entry.source.url).toBeUndefined();
-      expect(HOME_SUPPLIER_NOTES).toContain(`[${entry.source.reference}] `);
-      expect(HOME_SUPPLIER_NOTES).toContain(entry.sku);
       expect(entry.specification).not.toBe("");
       expect(entry.returnPolicy).toMatch(/Fictional/);
     }
+    // The supplier documents cover the lines the discussion changes and the design fee; the trade work,
+    // shelving and mirror it leaves alone have none, so nothing in them suggests changing those lines.
+    const documented = HOME_APPROVED_QUOTE.lines.filter((entry) => HOME_SUPPLIER_NOTES.includes(`[${entry.source.reference}] `));
+    expect(documented.map((entry) => entry.itemId)).toEqual(["design", "site-visits", "countertop", "wall-tile", "pendants", "stools"]);
+    for (const entry of documented) expect(HOME_SUPPLIER_NOTES).toContain(entry.sku);
     expect(HOME_SUPPLIER_NOTES).toContain("not real suppliers");
     expect(HOME_APPROVED_QUOTE.paymentNote).toContain("does not confirm");
   });
@@ -53,12 +60,15 @@ describe("Maple Ave Café scenario", () => {
     const removedFeet = 22 - (10 + 8);
     expect(removedFeet).toBe(4);
     const restockingCents = 14 * 7_000 * 0.2;
+    // The trade work, shelving and mirror stay as agreed.
+    const unchangedCents = ["plumbing", "electrical", "painting", "strip-out", "site-protection", "permit", "shelving", "mirror"]
+      .reduce((sum, itemId) => sum + line(itemId).quantity * line(itemId).unitPriceCents, 0);
     const proposed = {
       design: 240_000, visits: 6 * 18_000, countertop: 18 * 18_000, recut: 28_000, tile: tileBoxes * 7_600, restocking: restockingCents,
-      pendants: 4 * 24_000, stools: 14 * 19_500, windowCounter: 16 * 21_000, panels: 12 * 14_500,
+      pendants: 4 * 24_000, stools: 14 * 19_500, windowCounter: 16 * 21_000, panels: 12 * 14_500, unchanged: unchangedCents,
     };
     const revisedTotalCents = Object.values(proposed).reduce((sum, cents) => sum + cents, 0);
-    expect(revisedTotalCents).toBe(1_750_600);
+    expect(revisedTotalCents).toBe(2_120_600);
     expect(revisedTotalCents - calculateQuoteTotals(HOME_APPROVED_QUOTE.lines).totalCents).toBe(644_600);
     // The refunds the change leads to: the removed countertop length less the re-cut fee, and the
     // returned white tile less its restocking fee.
@@ -66,7 +76,7 @@ describe("Maple Ave Café scenario", () => {
     expect(14 * 7_000 - restockingCents).toBe(78_400);
     // The source documents provide prices and terms, not the answer: no totals, quantities to use,
     // refunds or instructions to the model.
-    expect(HOME_SUPPLIER_NOTES).not.toMatch(/17,506|6,446|USD 440|USD 784|USD 196|USD 1,170|USD 3,360|USD 1,740|USD 1,520|20 boxes|18 linear|14 stools|12 panels/);
+    expect(HOME_SUPPLIER_NOTES).not.toMatch(/21,206|6,446|USD 440|USD 784|USD 196|USD 1,170|USD 3,360|USD 1,740|USD 1,520|20 boxes|18 linear|14 stools|12 panels/);
     expect(HOME_SUPPLIER_NOTES).not.toMatch(/\bDo not\b|\bdo not\b|itemId=|not_ordered|old-item|the designer must|consult the/i);
   });
 

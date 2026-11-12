@@ -1,18 +1,18 @@
 {
   "flow": "change-draft",
   "case": "hard-client-cannot-draft",
-  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-11",
+  "source": "Claude API, claude-sonnet-5-5, effort high, 2026-11-12",
   "runs": [
     {
       "rep": 0,
       "pass": 1,
       "attempts": [
         {
-          "fingerprint": "20805ea58e660ad9285a",
+          "fingerprint": "6f2cde7b7673ecb8497a",
           "output": {
             "intent": "answer",
-            "message": "Thanks, Emma. You've asked to take the sideboard out and get a revised quote. I can't see a line called sideboard in the approved quote, so Jordan Lee, your designer, will confirm which item you mean. They will then prepare a revised quote for you to confirm. Nothing changes until you confirm it.",
-            "title": "Client request to remove the sideboard",
+            "message": "Thanks, Emma. I've noted that you no longer want the sideboard, and your designer, Jordan Lee, will prepare a revised quote for you to confirm.",
+            "title": "Sideboard removal request",
             "changes": [],
             "unresolved": [],
             "constraints": [],

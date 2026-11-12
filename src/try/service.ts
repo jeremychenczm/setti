@@ -2,24 +2,35 @@
 import { randomUUID } from "node:crypto";
 import { and, count, desc, eq, gt, sql } from "drizzle-orm";
 import type { Db } from "../db/client";
-import { HOME_ITEM_IDS, HOME_SCENARIO, HOME_SCENARIO_VERSION, isHomeScenario } from "../demo/living-dining";
+import { HOME_APPROVED_QUOTE, HOME_EARLY_ITEMS, HOME_ITEM_IDS, HOME_SCENARIO, HOME_SCENARIO_VERSION, HOME_SERVICE_IDS, isHomeScenario } from "../demo/living-dining";
 import type { LinkBuilder } from "../payments/actions";
 import { refreshRecordedFees } from "../payments/fee-refresh";
 import type { PayPalPayments, TestCardApproval } from "../payments/paypal";
+import { calculateQuoteTotals } from "../quotes/totals";
 import { authorizeItem, captureMapleRug, confirmSupplierOrder, ensureMapleQuote, MaplePreparationError, mapleRun } from "./maple";
 import { ensureHomeWorkspace } from "./home";
 import { prepareHomeCapture, prepareHomeStartingPayments, prepareHomeSupplier, refreshHomeFees, type HomeEarlyItem } from "./home-payments";
-import { trySeeds, type TrySeedStatus, type TryStage } from "./schema";
+import { trySeeds, type TrySeedStatus, type TryStage, type TryStageId } from "./schema";
 
 export const MAPLE_SCENARIO = "maple-mixed-change-v1";
 export type TryScenario = typeof MAPLE_SCENARIO | typeof HOME_SCENARIO;
 export const TRY_PROJECT_HREF = "/chats/maple";
 const LEASE_MS = 5 * 60_000, HOUR_MS = 60 * 60_000;
-/** The café lines paid before the design changed: each records its supplier step, then is captured. */
-const homeEarlyStages: Partial<Record<TryStage["id"], { item: HomeEarlyItem; capture: boolean }>> = {
-  countertop_supplier: { item: "countertop", capture: false }, countertop_capture: { item: "countertop", capture: true },
-  wall_tile_supplier: { item: "wall-tile", capture: false }, wall_tile_capture: { item: "wall-tile", capture: true },
+/** The short name of each café line paid before the design changed, and the supplier step that made its payment due. */
+const homeEarlySteps: Record<HomeEarlyItem, { name: string; confirmation: string }> = {
+  countertop: { name: "countertop", confirmation: "the countertop fabricator's templating confirmation" },
+  "wall-tile": { name: "wall tile", confirmation: "the wall tile delivery confirmation" },
+  shelving: { name: "back bar shelving", confirmation: "the back bar shelving delivery confirmation" },
+  mirror: { name: "back bar mirror", confirmation: "the back bar mirror delivery confirmation" },
 };
+const earlyStage = (item: HomeEarlyItem, step: "supplier" | "capture") => `${item.replaceAll("-", "_")}_${step}` as TryStageId;
+/** The café lines paid before the design changed: each records its supplier step, then is captured. */
+const homeEarlyStages: Partial<Record<TryStageId, { item: HomeEarlyItem; capture: boolean }>> = Object.fromEntries(HOME_EARLY_ITEMS.flatMap((item) => [
+  [earlyStage(item, "supplier"), { item, capture: false }], [earlyStage(item, "capture"), { item, capture: true }],
+]));
+/** The labels' amounts come from the café V1 itself. */
+const homeCents = (itemIds: readonly string[]) => calculateQuoteTotals(HOME_APPROVED_QUOTE.lines.filter((line) => itemIds.includes(line.itemId))).totalCents;
+const dollars = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 export interface TryDeps {
   db: Db; paypal: PayPalPayments; testCard: TestCardApproval; links: LinkBuilder;
   perHour: number; now?: () => Date;
@@ -40,14 +51,14 @@ export type TryPreparation = { kind: "ready" | "progress" | "busy" | "failed"; s
 
 function stages(scenario: string = MAPLE_SCENARIO): TryStage[] {
   const definitions = isHomeScenario(scenario) ? [
-    ["quote", "Import the prepared $11,060 café counter and back-bar agreement"],
-    // V1 pays both services and places all four product holds at once.
-    ["starting_payments", "Pay the $2,400 design fee and four site visits ($720), and place the four product holds ($7,940)"],
-    // The fabricator is paid at templating and the tile on delivery, so V1 already captured both.
-    ["countertop_supplier", "Record the countertop fabricator's templating confirmation (demo)"],
-    ["countertop_capture", "Capture the $3,960 countertop payment"],
-    ["wall_tile_supplier", "Record the wall tile delivery confirmation (demo)"],
-    ["wall_tile_capture", "Capture the $980 wall tile payment"],
+    ["quote", `Import the prepared ${dollars(calculateQuoteTotals(HOME_APPROVED_QUOTE.lines).totalCents)} café counter and back-bar agreement`],
+    // V1 pays every service and places every product hold at once.
+    ["starting_payments", `Pay the ${HOME_SERVICE_IDS.length} services (${dollars(homeCents(HOME_SERVICE_IDS))}) and place the ${HOME_ITEM_IDS.length} product holds (${dollars(homeCents(HOME_ITEM_IDS))})`],
+    // The fabricator is paid at templating and the tile, shelving and mirror on delivery, so V1 already captured them.
+    ...HOME_EARLY_ITEMS.flatMap((item) => [
+      [earlyStage(item, "supplier"), `Record ${homeEarlySteps[item].confirmation} (demo)`],
+      [earlyStage(item, "capture"), `Capture the ${dollars(homeCents([item]))} ${homeEarlySteps[item].name} payment`],
+    ]),
     ["fees", "Read the PayPal payment evidence"],
     ["discussion", "Save the café discussion and demo supplier notes"],
   ] : [

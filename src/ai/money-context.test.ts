@@ -127,8 +127,8 @@ describe.skipIf(!testDatabaseUrl)("read-only case money evidence", () => {
     expect(text(context, "item:baseline:stools")).toContain("recorded held amount $1,560.00");
     expect(text(context, "item:baseline:countertop")).toContain("completed captures $3,960.00");
     expect(text(context, "item:baseline:wall-tile")).toContain("completed captures $980.00");
-    // Preparation also captures the $2,400 design fee and $720 of site visits alongside the countertop and tile.
-    expect(text(context, "scope")).toMatch(/held \$3,000\.00, completed captures \$8,060\.00/);
+    // Preparation also captures the $5,500 of services alongside the countertop, tile, shelving and mirror.
+    expect(text(context, "scope")).toMatch(/held \$3,000\.00, completed captures \$11,760\.00/);
     expect(text(context, "next:baseline:design")).toContain("recorded net captures cover this agreed V1 target");
     expect(context.providerRecordedAt).not.toBeNull();
     expect(context.sources.some((source) => source.kind === "payment" && source.href === "/quotes/maple#item-holds")).toBe(true);
