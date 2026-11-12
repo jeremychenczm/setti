@@ -181,9 +181,10 @@ export function Workspace({ account, projects, demo = false, initialView = "chat
     <DemoModeProvider value={demo}>
     <div className="flex h-dvh min-h-0 gap-2 bg-[var(--canvas)] p-2 text-[var(--ink)]">
       {/* The icon rail and the chat list are one panel, as in a messaging app; other modules keep only the rail. */}
-      <div className="flex min-h-0 shrink-0 overflow-hidden rounded-xl bg-white shadow-sm">
+      {/* Not clipped: the account menu opens wider than the sidebar, over the page beside it. */}
+      <div className="flex min-h-0 shrink-0 rounded-xl bg-white shadow-sm">
         <Sidebar view={view} onView={showView} account={account} demo={demo} onSwitchAccount={switchAccount} badges={{ inbox: inboxCount }} />
-        {view === "chats" && <div className="hidden min-h-0 border-l border-[var(--line)] lg:flex"><ConversationList projects={conversations} activeId={preparedProject?.id ?? activeId} onOpen={open}
+        {view === "chats" && <div className="hidden min-h-0 overflow-hidden rounded-r-xl border-l border-[var(--line)] lg:flex"><ConversationList projects={conversations} activeId={preparedProject?.id ?? activeId} onOpen={open}
           action={account.role === "designer" ? <button type="button" onClick={() => setNewProjectOpen(true)} aria-label="New project" title="New project" className="rounded-lg p-1.5 text-[var(--primary)] hover:bg-[var(--primary-soft)]"><Plus className="h-4 w-4" /></button> : undefined} /></div>}
       </div>
 

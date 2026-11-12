@@ -51,7 +51,7 @@ export function AccountMenu({ account, demo = false, onSwitch, compact = false, 
         </>}
       </button>
       {open && (
-        <div role="menu" aria-label={demo ? "Switch person" : "Account"} className={`absolute z-30 w-64 rounded-xl border border-[var(--line)] bg-white p-1.5 shadow-lg ${compact && placement !== "above" ? "right-0 top-full mt-2" : "bottom-full left-0 mb-2"}`}>
+        <div role="menu" aria-label={demo ? "Switch person" : "Account"} className={`absolute z-50 w-64 rounded-xl border border-[var(--line)] bg-white p-1.5 shadow-lg ${compact && placement !== "above" ? "right-0 top-full mt-2" : "bottom-full left-0 mb-2"}`}>
           {demo ? <>
             <div className="px-2 pb-1.5 pt-1 text-[10px] font-medium uppercase tracking-wider text-[var(--muted)]">Switch person · demo</div>
             {DEMO_PEOPLE.map((option) => (
