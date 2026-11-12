@@ -110,7 +110,6 @@ describe("README labels", () => {
     ["Sample supplier documents", "Sample supplier documents"],
     ["Prepare the revised quote", "Prepare the revised quote"],
     ["Review pricing", "Review pricing"],
-    ["Save pricing review", "Save pricing review"],
     ["Send to Emma as V2", /`Send to \$\{clientFirstName\} as V\$\{nextVersion\}`/],
     ["Send to (client) as V2", /`Send to \$\{clientFirstName\} as V\$\{nextVersion\}`/],
     ["Ask about payments", "Ask about payments"],

@@ -9,8 +9,8 @@ const actionLabels = { replace: "Replacement", quantity: "Quantity change", remo
 export const OPEN_FIRST_CHANGE_EVENT = "setti:open-first-pricing-change";
 
 /**
- * One change's full details in a drawer beside the pricing grid. It stays open
- * while the designer clicks other rows, so the grid can switch what it shows.
+ * One change's full details in a dialog over the quote. Previous and Next move
+ * through the changes without closing it.
  */
 export function ChangeDrawer({ index, count, action, title, subtitle, onPrevious, onNext, onClose, footer, children }: {
   index: number;
@@ -31,7 +31,9 @@ export function ChangeDrawer({ index, count, action, title, subtitle, onPrevious
     document.addEventListener("keydown", close);
     return () => document.removeEventListener("keydown", close);
   }, [onClose]);
-  return <aside id="pricing-change-details" role="dialog" aria-labelledby="pricing-change-title" className="fixed inset-y-0 right-0 z-40 flex w-full max-w-[480px] flex-col border-l border-[var(--line)] bg-white shadow-2xl">
+  // A small dialog in the middle of the page; the dimmed page behind it closes it.
+  return <div className="fixed inset-0 z-40 flex items-center justify-center bg-[rgba(36,38,32,0.45)] p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+  <aside id="pricing-change-details" role="dialog" aria-modal="true" aria-labelledby="pricing-change-title" className="flex max-h-[min(720px,100%)] w-full max-w-[620px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
     <header className="flex items-start gap-3 border-b border-[var(--line)] px-5 py-4">
       <div className="min-w-0 flex-1">
         <p className="text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">Change {index + 1} of {count} · {actionLabels[action]}</p>
@@ -52,5 +54,6 @@ export function ChangeDrawer({ index, count, action, title, subtitle, onPrevious
           : <button type="button" onClick={onNext} className="inline-flex items-center gap-1 rounded-lg border border-[var(--line)] px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--canvas)]">Next<ChevronRight className="h-3.5 w-3.5" /></button>}
       </div>
     </footer>
-  </aside>;
+  </aside>
+  </div>;
 }

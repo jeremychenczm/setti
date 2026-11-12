@@ -4,7 +4,7 @@ import { Plus, X } from "lucide-react";
 import { NON_REFUNDABLE_FEE_KINDS, NON_REFUNDABLE_FEE_LABEL } from "@/pricing/fees";
 import type { NonRefundableFeeKind, PricingChangeInput } from "@/pricing/types";
 import { centsText, inputClass, money } from "./common";
-import { fieldKey, type RawFields } from "./PricingGrid";
+import { fieldKey, type RawFields } from "./QuoteItemsGrid";
 
 /** The raw-text field of one fee's amount. */
 export const feeField = (kind: NonRefundableFeeKind) => `fee:${kind}`;

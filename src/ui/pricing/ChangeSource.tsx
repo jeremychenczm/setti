@@ -14,8 +14,8 @@ const isSupplier = (source: ChangeSource) => source.kind === "vendor";
 
 /** Why this version changes the agreement. The client sees it on the version before confirming. */
 export function ChangeSourceFields({ value, disabled, onChange }: { value: ChangeSource; disabled: boolean; onChange: (source: ChangeSource) => void }) {
-  return <section className="mb-5 rounded-xl bg-white p-4 shadow-sm sm:p-5">
-    <h2 className="mb-1 text-[14px] font-semibold">Why this version</h2>
+  return <section className="border-t border-[var(--line)] pt-4">
+    <h3 className="mb-1 text-[13px] font-semibold">Why this version</h3>
     <p className="mb-3 text-[11px] leading-relaxed text-slate-500">Shown to the client with the version. Whatever the reason, the client confirms the new version before any money moves.</p>
     <fieldset disabled={disabled}>
       <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Why this version">{options.map((option) => {
