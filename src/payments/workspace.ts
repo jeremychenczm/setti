@@ -144,8 +144,8 @@ function steps(plan: FundingPlan, line: FundingLine, canAct: boolean, events: Su
             : "The supplier confirmation recorded for this version matches the confirmed line. Each PayPal hold is captured separately and closed.")]
           : [
             step("supplier_confirmation", action.amountCents, ready, retainedCost
-              ? "Record the supplier's confirmation of the retained cost (demo, entered by the designer). It must match the total cost the client confirmed."
-              : "Record the supplier's order confirmation (demo, entered by the designer). Capture becomes available only if the supplier's terms match this version."),
+              ? "Record the supplier's confirmation of the retained cost (entered by the designer). It must match the total cost the client confirmed."
+              : "Record the supplier's order confirmation (entered by the designer). Capture becomes available only if the supplier's terms match this version."),
             step("capture", action.amountCents, false, retainedCost ? "Capture runs after the supplier confirms the retained cost." : "Capture runs after the supplier confirms the order."),
           ];
       case "release_authorization":
@@ -155,7 +155,7 @@ function steps(plan: FundingPlan, line: FundingLine, canAct: boolean, events: Su
       case "refund":
         return action.timing === "after_vendor_credit"
           ? [
-            step("supplier_credit", action.amountCents, ready, "Record the supplier's credit for the return (demo, entered by the designer). The refund becomes available only if the credit equals the confirmed refund."),
+            step("supplier_credit", action.amountCents, ready, "Record the supplier's credit for the return (entered by the designer). The refund becomes available only if the credit equals the confirmed refund."),
             step("refund", action.amountCents, false, "The refund waits for the supplier's credit."),
           ]
           : [step("refund", action.amountCents, ready, "Refund completed captures above the confirmed amount, newest capture first. Non-refundable fees stay charged.")];
