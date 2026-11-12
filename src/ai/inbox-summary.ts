@@ -19,6 +19,7 @@ import { z } from "zod";
 import type { Db } from "../db/client";
 import { inboxSummaries } from "../db/schema";
 import type { SummarySentence } from "../payments/schema";
+import { AI_REQUESTS_PER_ACCOUNT } from "./allowance";
 import { SETTI_IDENTITY } from "./identity";
 import { aiConfigured } from "./model";
 import { amountsIn, hasEastAsianScript } from "./money-answer";
@@ -190,7 +191,9 @@ export async function writeCheckedSummary(request: Omit<SummaryRequest, "previou
 }
 
 /** The cached summary for these facts, or a newly written and checked one; null when there is nothing to summarise or it could not be checked. */
-export async function summarizeInbox(db: Db, sessionId: string, request: Omit<SummaryRequest, "previousAttemptProblems">, model: SummaryModel = callSummaryModel): Promise<{ summary: InboxSummary | null; reason: string | null }> {
+export async function summarizeInbox(db: Db, sessionId: string, request: Omit<SummaryRequest, "previousAttemptProblems">, model: SummaryModel = callSummaryModel,
+  /** Takes one request from the reader's AI allowance; false when none is left. */
+  takeAllowance: () => Promise<boolean> = async () => true): Promise<{ summary: InboxSummary | null; reason: string | null }> {
   if (!request.facts.length) return { summary: null, reason: null };
   const key = createHash("sha256").update(JSON.stringify({ audience: request.audience, reader: request.reader, facts: request.facts })).digest("hex");
   const [cached] = await db.select().from(inboxSummaries).where(eq(inboxSummaries.key, key));
@@ -201,6 +204,7 @@ export async function summarizeInbox(db: Db, sessionId: string, request: Omit<Su
   const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(inboxSummaries)
     .where(and(eq(inboxSummaries.sessionId, sessionId), gte(inboxSummaries.createdAt, new Date(Date.now() - 60 * 60 * 1000))));
   if (count >= SUMMARIES_PER_HOUR) return { summary: null, reason: "Setti has written many summaries this hour; the records are shown without one." };
+  if (!await takeAllowance()) return { summary: null, reason: `This account has used its ${AI_REQUESTS_PER_ACCOUNT} AI requests, so the records are shown without a summary.` };
 
   let checked: Awaited<ReturnType<typeof writeCheckedSummary>>;
   try { checked = await writeCheckedSummary(request, model); }

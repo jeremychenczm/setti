@@ -358,6 +358,13 @@
       "when": 1794424283773,
       "tag": "0050_supplier_events_real",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1794449636717,
+      "tag": "0051_ai_allowances",
+      "breakpoints": true
     }
   ]
 }

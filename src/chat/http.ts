@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import type { DemoAccount } from "@/accounts/demo";
+import { AI_ALLOWANCE_USED, takeAiAllowance } from "@/ai/allowance";
 import { aiConfigured } from "@/ai/model";
 import { isAiInvocation } from "@/ai/intent";
+import { appDb } from "@/db/shared";
 import { takeAiBudget } from "@/http/ai-budget";
 import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
+import type { Actor } from "@/http/identity";
 import { isSameOriginRequest } from "@/http/origin";
 import { isRefusal, projectScope, refusalResponse } from "@/http/scope";
 import { documentHash } from "@/opening/document";
@@ -39,7 +42,7 @@ function snapshot(state: StoredCase, account: DemoAccount): CaseSnapshot {
 }
 
 /** The studio whose data the request reads and who acts in it, or the refusal to send. */
-async function scoped(req: NextRequest, key: CaseKey): Promise<{ sessionId: string; account: DemoAccount } | NextResponse> {
+async function scoped(req: NextRequest, key: CaseKey): Promise<{ sessionId: string; account: DemoAccount; actor: Actor } | NextResponse> {
   const scope = await projectScope(req, key);
   if (isRefusal(scope)) return refusalResponse(scope);
   noteRequest(scope.sessionId);
@@ -116,7 +119,7 @@ export async function postCaseResponse(req: NextRequest, rawKey: string, retry =
       if (!isAiInvocation(input.text)) return respond(snapshot(state, account));
       messageId = input.id;
     }
-    const budget = takeAiBudget(sessionId);
+    const budget = takeAiBudget(sessionId) ?? (await takeAiAllowance(appDb(), scope.actor) ? null : AI_ALLOWANCE_USED);
     if (budget) return respond({ code: "RATE_LIMITED", error: budget, state: snapshot(await store.getCase(sessionId, rawKey), account) }, 429);
     const state = await runCaseAi(store, sessionId, rawKey, messageId);
     return respond(snapshot(state, account));

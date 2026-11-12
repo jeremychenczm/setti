@@ -7,7 +7,7 @@ import { assertSandbox, SandboxGuardError } from "@/config/paypalEnv";
 import { appDb } from "@/db/shared";
 import { requestActor } from "@/http/actor";
 import { noteRequest, refuseIfEnded } from "@/http/demo-activity";
-import { homeOf } from "@/http/identity";
+import { homeOf, type Actor } from "@/http/identity";
 import { orderScope } from "@/http/order-scope";
 import { isSameOriginRequest, requestOrigin } from "@/http/origin";
 import { isRefusal, NOT_YOUR_PROJECT, projectScope, refusalResponse, SIGN_IN_REQUIRED, studioScope, type ProjectScope } from "@/http/scope";
@@ -20,6 +20,7 @@ import { cancelApprovedItem } from "./cancel-item";
 import { runDailyCheck } from "./daily-check";
 import { inboxBadge, inboxFacts, inboxView, markInboxOpened } from "./inbox-view";
 import { paypalWebhookVerifier, recordWebhookEvent, type WebhookVerifier } from "./webhook";
+import { takeAiAllowance } from "../ai/allowance";
 import { summarizeInbox } from "../ai/inbox-summary";
 import { DemoClockError, demoDays, MAX_SKIP_DAYS, skipAhead } from "../try/clock";
 import { CANCELLATION_REASONS } from "./cancellation";
@@ -467,12 +468,12 @@ function readablePayPal() {
 }
 
 /** Where the signed-in actor's inbox and demo clock read from, or the refusal to send. */
-async function home(req: NextRequest): Promise<ReturnType<typeof homeOf> | NextResponse> {
+async function home(req: NextRequest): Promise<ReturnType<typeof homeOf> & { actor: Actor } | NextResponse> {
   const actor = await requestActor(req);
   if (!actor) return refusalResponse(SIGN_IN_REQUIRED, headers);
   const found = homeOf(actor);
   noteRequest(found.sessionId);
-  return found;
+  return { ...found, actor };
 }
 
 /** The signed-in account's payment inbox: the designer's reminders, or the client's money with PayPal's latest confirmations. */
@@ -513,7 +514,8 @@ export async function getInboxSummaryResponse(req: NextRequest) {
   if (!sessionId) return NextResponse.json({ code: "NOT_FOUND", error: "There is nothing in this inbox yet." }, { status: 404, headers });
   try {
     const view = await inboxView(db(), null, sessionId, account);
-    return NextResponse.json(await summarizeInbox(db(), sessionId, { audience: view.role, reader: `${view.reader} (the ${view.role})`, facts: inboxFacts(view) }), { headers });
+    return NextResponse.json(await summarizeInbox(db(), sessionId, { audience: view.role, reader: `${view.reader} (the ${view.role})`, facts: inboxFacts(view) }, undefined,
+      () => takeAiAllowance(db(), scope.actor)), { headers });
   } catch (error) { return fail(error); }
 }
 
