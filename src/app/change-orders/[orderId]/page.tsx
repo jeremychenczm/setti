@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { eq } from "drizzle-orm";
+import { studios } from "@/auth/schema";
 import { currentActor } from "@/auth/viewer";
 import { appDb } from "@/db/shared";
 import { projectAccess } from "@/http/identity";
@@ -13,5 +15,7 @@ export default async function ClientChangeOrderPage({ params }: { params: Promis
   const actor = await currentActor();
   const owner = actor ? await changeOrderOwner(appDb(), orderId) : null;
   const account = actor && owner ? projectAccess(actor, owner) : null;
-  return <ChangeOrderPage orderId={orderId} account={account} demo={!!account && actor?.demoPersona != null} />;
+  // The project's people see the version's formal quote, which names the studio.
+  const [studio] = account && owner ? await appDb().select({ name: studios.name }).from(studios).where(eq(studios.id, owner.studioId)) : [];
+  return <ChangeOrderPage orderId={orderId} account={account} demo={!!account && actor?.demoPersona != null} studioName={studio?.name ?? ""} />;
 }

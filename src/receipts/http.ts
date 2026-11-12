@@ -1,6 +1,7 @@
 /**
- * GET /api/receipts/{project}/{version}: the signed version receipt as JSON,
- * for the project's studio and its client. `?download=1` sends it as a file
+ * GET /api/receipts/{project}/{version}: the version receipt as JSON, for the
+ * project's studio and its client; before the client signs, the formal quote of
+ * the sent version. `?download=1` sends it as a file
  * named after the receipt number. The receipt carries PayPal ids, so unlike a
  * shared change-order link it is never served to anyone outside the project.
  */
@@ -13,7 +14,7 @@ import { readVersionReceipt, ReceiptError } from "./record";
 
 const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow" };
 const VERSION = /^[1-9]\d{0,2}$/;
-const statuses = { NOT_FOUND: 404, NOT_SENT: 404, NOT_SIGNED: 409 } as const;
+const statuses = { NOT_FOUND: 404, NOT_SENT: 404 } as const;
 
 export async function getReceiptResponse(req: NextRequest, rawKey: string, rawVersion: string) {
   if (!isCaseKey(rawKey) || !VERSION.test(rawVersion)) return NextResponse.json({ code: "NOT_FOUND", error: "Receipt not found." }, { status: 404, headers });

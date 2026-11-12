@@ -16,6 +16,7 @@ import { ResolvePanel, type ResolveItem } from "./ResolvePanel";
 import { BulkDecisionBar } from "./BulkDecisionBar";
 import { SignBar } from "./SignBar";
 import { useDemoMode } from "../demo-mode";
+import { PreviewQuoteLink } from "../receipts/PreviewQuoteLink";
 
 type QuoteRow = QuoteLine & QuoteLineTotals;
 type CategoryFilter = "all" | "furniture" | "service";
@@ -256,7 +257,11 @@ export function QuoteReport({ view, studioName, viewer, options, focusItemId, ac
         {options.length > 1 ? <select aria-label="Select project" value={quote.projectId} onChange={(event) => onSelectQuote(event.target.value as CaseKey)} className="max-w-full rounded-md border border-[var(--line)] bg-white px-2 py-1.5 text-[12px] font-medium">
           {options.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
         </select> : <span className="text-[12px] font-medium">{quote.projectName}</span>}
-        {demo && <span className="ml-auto rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700">Demo quote</span>}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {demo && <span className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700">Demo quote</span>}
+          {/* A draft has no formal document yet; it gets one when it is sent. */}
+          {status !== "draft" && <PreviewQuoteLink projectKey={quote.projectId} version={quote.version} />}
+        </div>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">

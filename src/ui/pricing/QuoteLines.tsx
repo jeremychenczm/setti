@@ -8,22 +8,12 @@ import type { ApprovedQuoteLine } from "@/quotes/types";
 import { calculateLineTotals } from "@/quotes/totals";
 import { ChangeLineButton } from "../quotes/QuoteReport";
 import { FromV1Note, money, safeUrl, shortMoney, signedMoney } from "./common";
+import { units } from "./units";
 
 const handlingLabels: Record<OldItemHandling, string> = { pending: "Not checked", not_ordered: "Not ordered", cancelled: "Cancelled", modified: "Modified", returned: "Returned / return arranged", retained: "Retained", not_applicable: "Not applicable" };
 
 type Priced = Pick<FinalQuoteLine, "quantity" | "unitPriceCents" | "taxCents" | "freightCents"> & { unitLabel?: string };
 const total = (line: Priced) => calculateLineTotals(line).totalCents;
-
-/** "16 linear ft", "20 boxes", "12": a quantity in its purchase unit, where "each" goes unsaid. */
-function units(quantity: number, unit = "each"): string {
-  if (unit === "each") return String(quantity);
-  if (quantity === 1) return `1 ${unit}`;
-  const words = unit.split(" ");
-  const last = words.pop()!;
-  const plural = /^(?:ft|in|yd|m|cm|mm|lb|lbs|kg|oz|sf|sq)$/i.test(last) || /\d|s$/i.test(last) ? last
-    : /(?:x|z|ch|sh)$/i.test(last) ? `${last}es` : /[^aeiou]y$/i.test(last) ? `${last.slice(0, -1)}ies` : `${last}s`;
-  return `${quantity} ${[...words, plural].join(" ")}`;
-}
 
 /** "14 × $195", "Fixed fee", plus any tax and delivery the line carries. */
 function priced(line: Priced): string {

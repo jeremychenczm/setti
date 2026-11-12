@@ -1,11 +1,14 @@
 /**
- * How a signed version receipt reads on the page: labels, the seal, the
- * payment record grouped like a statement, and the signature certificate. Pure,
- * so the page and its tests describe the same receipt.
+ * How a version receipt reads on the page, signed or still a formal quote:
+ * labels, the seal, the changes, the payment record grouped like a statement,
+ * and the signature certificate. Pure, so the page and its tests describe the
+ * same receipt.
  */
 import type { LineState } from "@/opening/types";
+import { NON_REFUNDABLE_FEE_LABEL } from "@/pricing/fees";
 import type { OldItemHandling } from "@/pricing/types";
-import type { ReceiptPayment, ReceiptPending, VersionReceipt } from "@/receipts/types";
+import type { ChangeReceiptLine, ReceiptPayment, ReceiptPending, VersionReceipt } from "@/receipts/types";
+import { units } from "@/ui/pricing/units";
 
 const PT = "America/Los_Angeles";
 
@@ -55,33 +58,90 @@ export function versionFingerprint(receipt: VersionReceipt): string | null {
   return receipt.version.contentHash ?? receipt.version.revision?.contentHash ?? null;
 }
 
+/** Whether the client has signed the version: until then the document is its formal quote, not a receipt. */
+export function isSigned(receipt: VersionReceipt): boolean {
+  return receipt.signatures.length > 0;
+}
+
+/** "Signed version receipt", or "Quote version 2" before the client signs. */
+export function documentName(receipt: VersionReceipt): string {
+  return isSigned(receipt) ? "Signed version receipt" : `Quote version ${receipt.version.number}`;
+}
+
 export interface Seal {
   word: string;
   qualifier: string | null;
   ring: string;
   date: string;
   code: string;
-  tone: "ok" | "muted";
+  /** "awaiting": sent, not signed yet; "unsigned": replaced before the client signed it. Both are stamped dashed. */
+  tone: "ok" | "muted" | "awaiting" | "unsigned";
 }
 
-/** The seal on the title: what the client did, on which day, and the version's fingerprint. */
+const SEAL_WORDS: Record<VersionReceipt["version"]["status"], [string, string | null]> = {
+  approved: ["CONFIRMED", null],
+  partly_approved: ["APPROVED", "IN PART"],
+  declined: ["DECLINED", null],
+  changes_requested: ["RETURNED", "FOR CHANGES"],
+  awaiting_signature: ["AWAITING", "SIGNATURE"],
+  superseded: ["REPLACED", "NOT SIGNED"],
+};
+
+/** The seal on the title: what the client did, on which day, and the version's fingerprint; before a signature, the day it was sent. */
 export function sealOf(receipt: VersionReceipt): Seal {
   const { version, signatures, project } = receipt;
-  const last = signatures.reduce((latest, signature) => signature.at > latest ? signature.at : latest, signatures[0].at);
-  const date = new Intl.DateTimeFormat("en-GB", { timeZone: PT, day: "numeric", month: "short", year: "numeric" }).format(new Date(last)).toUpperCase();
-  const sample = signatures.every((signature) => signature.method === "sample");
-  const [word, qualifier] = {
-    approved: [version.number === 1 ? "APPROVED" : "CONFIRMED", null],
-    partly_approved: ["APPROVED", "IN PART"],
-    declined: ["DECLINED", null],
-    changes_requested: ["RETURNED", "FOR CHANGES"],
-  }[version.status] as [string, string | null];
+  const signed = isSigned(receipt);
+  const at = signed ? signatures.reduce((latest, signature) => signature.at > latest ? signature.at : latest, signatures[0].at) : version.sentAt ?? receipt.issuedAt;
+  const day = new Intl.DateTimeFormat("en-GB", { timeZone: PT, day: "numeric", month: "short", year: "numeric" }).format(new Date(at)).toUpperCase();
+  const sample = signed && signatures.every((signature) => signature.method === "sample");
+  const [word, qualifier] = version.status === "approved" && version.number === 1 ? ["APPROVED", null] : SEAL_WORDS[version.status];
+  const name = `${project.name.toUpperCase()} · V${version.number} ·`;
   return {
-    word, qualifier, date,
-    ring: sample ? "SETTI · DEMO SAMPLE APPROVAL · NOT SIGNED IN SETTI ·" : `SETTI · SIGNED VERSION RECEIPT · ${project.name.toUpperCase()} · V${version.number} ·`,
+    word, qualifier, date: signed ? day : `SENT ${day}`,
+    ring: sample ? "SETTI · DEMO SAMPLE APPROVAL · NOT SIGNED IN SETTI ·" : signed ? `SETTI · SIGNED VERSION RECEIPT · ${name}`
+      : `SETTI · QUOTE ${version.status === "awaiting_signature" ? "AWAITING SIGNATURE" : "NOT SIGNED"} · ${name}`,
     code: versionFingerprint(receipt)?.slice(0, 8).toUpperCase() ?? "SAMPLE",
-    tone: version.status === "approved" || version.status === "partly_approved" ? "ok" : "muted",
+    tone: version.status === "approved" || version.status === "partly_approved" ? "ok" : version.status === "awaiting_signature" ? "awaiting" : version.status === "superseded" ? "unsigned" : "muted",
   };
+}
+
+export interface ChangeRow {
+  change: ChangeReceiptLine;
+  /** The item in the earlier version and in this one; this version's amount includes the fees the old item keeps. Null where the version has no such item. */
+  beforeCents: number | null;
+  afterCents: number | null;
+  changeCents: number;
+  /** "8 → 14", "22 → 18 linear ft, $280 fabrication fee", "New · 12". */
+  summary: string;
+}
+
+/** "$280", "$19.50": an amount inside a short phrase. */
+function phraseUsd(cents: number): string {
+  const digits = cents % 100 ? 2 : 0;
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: digits, maximumFractionDigits: digits }).format(cents / 100);
+}
+
+function changeSummary({ action, before, after, oldItem }: ChangeReceiptLine): string {
+  const what = action === "add" && after ? `New · ${units(after.quantity, after.unitLabel)}`
+    : action === "quantity" && before && after ? `${before.quantity} → ${units(after.quantity, after.unitLabel)}`
+      : action === "replace" && before ? `Replaces ${before.name}` : "Removed";
+  if (!oldItem || oldItem.retainedCents <= 0) return what;
+  const kept = oldItem.fees.length ? oldItem.fees.map((fee) => `${phraseUsd(fee.amountCents)} ${NON_REFUNDABLE_FEE_LABEL[fee.kind].toLowerCase()}`).join(", ") : `${phraseUsd(oldItem.retainedCents)} not refunded`;
+  return `${what}, ${kept}`;
+}
+
+/**
+ * Each change with its amounts as the receipt states them: an old item's
+ * non-refundable fees are part of this version's amount for the line, so the
+ * changes add up to the version's difference.
+ */
+export function changeRows(changes: readonly ChangeReceiptLine[]): ChangeRow[] {
+  return changes.map((change) => {
+    const retained = change.oldItem?.retainedCents ?? 0;
+    const beforeCents = change.before ? change.before.totalCents : null;
+    const afterCents = change.after || retained ? (change.after?.totalCents ?? 0) + retained : null;
+    return { change, beforeCents, afterCents, changeCents: (afterCents ?? 0) - (beforeCents ?? 0), summary: changeSummary(change) };
+  });
 }
 
 /** The payment record as a statement: steps brought forward from each earlier version, then this version's own. */
@@ -135,10 +195,11 @@ export interface CertificateRow {
   matches: boolean | null;
 }
 
-/** Who sent the version and who signed it, each with the fingerprint recorded at that moment. */
+/** Who sent the version and who signed it, each with the fingerprint recorded at that moment; before a signature, the client's empty row. */
 export function certificateRows(receipt: VersionReceipt): CertificateRow[] {
   const { version, signatures, project } = receipt;
   const sent: CertificateRow[] = version.sentAt ? [{ event: `Version ${version.number} sent`, by: version.sentBy ?? project.designer, role: "Designer", at: version.sentAt, fingerprint: version.contentHash, matches: null }] : [];
+  if (!signatures.length) return [...sent, { event: version.status === "superseded" ? "Not signed · replaced" : "Awaiting signature", by: project.client, role: "Client", at: null, fingerprint: null, matches: null }];
   return [...sent, ...signatures.map((signature, index): CertificateRow => ({
     event: signature.method === "sample" ? "Sample approval (demo)"
       : version.number === 1 ? `Signing ${index + 1}`

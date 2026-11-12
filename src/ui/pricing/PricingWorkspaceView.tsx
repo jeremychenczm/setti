@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ArrowUpRight, Check, ClipboardCheck, LoaderCircle, RefreshCw, Save, Send, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, Check, ClipboardCheck, LoaderCircle, RefreshCw, Save, Send, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { CaseKey } from "@/chat/types";
 import { canLoadMapleSampleMaterials, loadMapleSampleMaterials, MAPLE_SAMPLE_MATERIALS } from "@/demo/maple-materials";
@@ -21,6 +21,7 @@ import { HOME_EVIDENCE_ID, isHomeQuote } from "@/demo/home-evidence";
 import { HomeSupplierDocuments } from "../try/HomeSupplierDocuments";
 import { useTryReadiness } from "../try/useTryReadiness";
 import { useDemoMode } from "../demo-mode";
+import { BackToChat } from "../BackToChat";
 
 const handlingLabels: Record<OldItemHandling, string> = { pending: "Not checked yet", not_ordered: "Not ordered", cancelled: "Order cancelled", modified: "Modified (re-made or re-sized)", returned: "Returned / return arranged", retained: "Retained in the project", not_applicable: "Not applicable" };
 const oldCostFields = ["oldItemCostCents", ...NON_REFUNDABLE_FEE_KINDS.map(feeField)];
@@ -176,7 +177,7 @@ export function PricingWorkspaceView({ projectKey, clientName, guide }: { projec
     });
   }
 
-  const header = <header className="mb-5 flex flex-wrap items-center gap-3"><a href={`/chats/${projectKey}`} className="flex items-center gap-1.5 text-[12px] text-slate-500 hover:text-slate-900"><ArrowLeft className="h-3.5 w-3.5" />Back to project chat</a>{demo && <span className="ml-auto rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-800">Demo designer workspace</span>}</header>;
+  const header = <header className="mb-5 flex flex-wrap items-center gap-3"><BackToChat projectKey={projectKey} />{demo && <span className="ml-auto rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-800">Demo designer workspace</span>}</header>;
 
   return (
     <div id="pricing-workspace" data-pricing-source-stale={stale ? "true" : "false"} className={`min-h-dvh bg-[var(--canvas)] px-3 py-5 text-[var(--ink)] transition-[padding] duration-200 sm:px-6 ${selected ? "lg:pr-[504px]" : ""}`}>

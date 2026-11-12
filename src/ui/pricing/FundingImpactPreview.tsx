@@ -9,6 +9,15 @@ interface FundingImpactPreviewProps {
   status: ChangeOrderView["status"];
   /** Shared quote links do not expose the owning case's payment records. */
   canView: boolean;
+  /** The client's first name when the studio reads it; the client reads it as "you". */
+  client?: string;
+}
+
+/** The client as the preview names them: "you" to the client, by name to the studio. */
+function voiceOf(client?: string) {
+  return client
+    ? { confirms: `${client} confirms`, approves: `${client} approves`, pays: `${client} pays`, money: `${client}'s money` }
+    : { confirms: "you confirm", approves: "you approve", pays: "You pay", money: "your money" };
 }
 
 /**
@@ -17,17 +26,17 @@ interface FundingImpactPreviewProps {
  * to charge and (with a saved method) new holds follow the confirmation itself;
  * charges wait for the supplier's confirmation and conditional refunds for its credit.
  */
-const BUCKETS = [
-  { key: "hold", title: "Held after you confirm", note: "With a saved payment method, Setti places them right after you confirm; otherwise you approve each with PayPal or a card. Each is charged only after its supplier confirms the order." },
-  { key: "release-now", title: "Released right after you confirm", note: "These holds are no longer needed. A release isn't a refund: this money was held, never charged." },
+const bucketsFor = ({ confirms, approves, pays }: ReturnType<typeof voiceOf>) => [
+  { key: "hold", title: `Held after ${confirms}`, note: `With a saved payment method, Setti places them right after ${confirms}; otherwise ${approves} each with PayPal or a card. Each is charged only after its supplier confirms the order.` },
+  { key: "release-now", title: `Released right after ${confirms}`, note: "These holds are no longer needed. A release isn't a refund: this money was held, never charged." },
   { key: "release-later", title: "Released once the supplier confirms", note: "The rest of the hold is charged after the supplier confirms; this part is then released." },
   { key: "charge-later", title: "Charged from a hold once the supplier confirms", note: "Already held. Each is charged only after its supplier confirms the order on these terms." },
   { key: "refund-credit", title: "Refunded once the supplier credits it", note: "Each refund waits for the supplier's credit. Fees the supplier keeps aren't refunded." },
   { key: "refund", title: "Refunded by the studio", note: "The studio sends these refunds through PayPal. Non-refundable fees stay charged." },
-  { key: "pay", title: "You pay through PayPal", note: "Design services are paid together in one PayPal checkout." },
+  { key: "pay", title: `${pays} through PayPal`, note: "Design services are paid together in one PayPal checkout." },
   { key: "charge-other", title: "Charged in a separate step", note: "This charge needs a separate payment step." },
 ] as const;
-type BucketKey = (typeof BUCKETS)[number]["key"];
+type BucketKey = ReturnType<typeof bucketsFor>[number]["key"];
 
 const designService = (line: FundingLine | undefined) => line?.category === "service" && (line.change === null || line.change === "add" || line.change === "quantity");
 
@@ -41,11 +50,13 @@ function bucketOf(action: FundingAction, line: FundingLine | undefined): BucketK
 }
 
 /** Displays the server's plan by what happens to the money, without changing its amounts or enabling payment actions. */
-export function FundingImpactPreview({ order, plan, status, canView }: FundingImpactPreviewProps) {
+export function FundingImpactPreview({ order, plan, status, canView, client }: FundingImpactPreviewProps) {
+  const voice = voiceOf(client);
   const heading = !canView ? "Payments"
     : status === "superseded" ? "Historical payment plan"
       : status === "declined" ? "Payment plan for requested adjustments"
-        : status === "approved" ? "What is left to happen to your money" : `What happens to your money if you confirm V${order.version}`;
+        : status === "approved" ? `What is left to happen to ${voice.money}`
+          : client ? `What happens when ${voice.confirms} V${order.version}` : `What happens to your money if you confirm V${order.version}`;
   let unavailable: string | null = null;
   if (!canView) unavailable = "Payment records are available only in the browser that owns this demo case. This shared quote remains read-only.";
   else if (status === "superseded") unavailable = "This is a historical quote version. Review the latest client version for its current payment plan.";
@@ -68,7 +79,7 @@ export function FundingImpactPreview({ order, plan, status, canView }: FundingIm
     const change = action.kind === "refund" && action.side === "baseline" ? order.changes?.find((entry) => entry.itemId === action.itemId) : undefined;
     return change && change.oldItemCostCents > 0 ? ` (${notRefundedText(change)})` : "";
   };
-  const buckets = BUCKETS.map((bucket) => ({ ...bucket, actions: plan.actions.filter((action) => bucketOf(action, lineOf(action)) === bucket.key) }))
+  const buckets = bucketsFor(voice).map((bucket) => ({ ...bucket, actions: plan.actions.filter((action) => bucketOf(action, lineOf(action)) === bucket.key) }))
     .filter((bucket) => bucket.actions.length > 0);
 
   return <section className="grid gap-3" aria-labelledby={headingId}>

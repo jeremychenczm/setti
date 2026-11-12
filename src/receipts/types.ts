@@ -1,8 +1,9 @@
 /**
- * A signed version receipt: one version of a project's quote as the client
- * decided it, the PayPal steps that followed, and the fingerprints a reader
- * needs to check it. The same record feeds the receipt page and the JSON
- * download. Every amount is in US cents.
+ * A version receipt: one version of a project's quote as the client decided
+ * it, the PayPal steps that followed, and the fingerprints a reader needs to
+ * check it. Before the client signs, the same record is the formal quote of
+ * the version as sent. It feeds the receipt page and the JSON download. Every
+ * amount is in US cents.
  */
 import type { FundingAction } from "../approval/funding";
 import type { CaseKey } from "../chat/types";
@@ -112,8 +113,11 @@ export interface VersionReceipt {
   version: {
     number: number;
     basedOn: number | null;
-    /** A V1 is approved, partly approved or declined line by line; a later version is approved or sent back as a whole. */
-    status: "approved" | "partly_approved" | "declined" | "changes_requested";
+    /**
+     * A V1 is approved, partly approved or declined line by line; a later version is approved or sent back as a whole.
+     * Before any signature, a sent version is awaiting it, or superseded once a newer version replaced it unsigned.
+     */
+    status: "approved" | "partly_approved" | "declined" | "changes_requested" | "awaiting_signature" | "superseded";
     /** The confirmed version that replaced this one. */
     replacedBy: number | null;
     sentAt: string | null;
@@ -125,6 +129,7 @@ export interface VersionReceipt {
     /** The agreed lines the signatures are bound to; `contentHash` is `hashRevision(lines)`. */
     revision: { contentHash: string; lines: LineSnapshot[] } | null;
   };
+  /** Empty while the version awaits the client's signature. */
   signatures: ReceiptSignature[];
   agreement: ReceiptAgreement;
   totals: { previousCents: number | null; totalCents: number; differenceCents: number | null };

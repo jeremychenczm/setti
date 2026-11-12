@@ -1,6 +1,8 @@
 /**
  * Reads one version's receipt from the records Setti already keeps: the version
  * as it was frozen, the client's signatures, and the PayPal steps for its items.
+ * A sent version the client has not signed yet reads as its formal quote: the
+ * same record with no signature.
  * This is the one place that gathers them, so the receipt page, the JSON
  * download and later dispute evidence all tell the same story. Nothing here
  * writes, infers a payment or makes a new fingerprint: amounts come from the
@@ -38,10 +40,10 @@ type DecisionRow = typeof changeOrderDecisions.$inferSelect;
 type Operation = ProjectLedger["operations"][number];
 
 export class ReceiptError extends Error {
-  constructor(readonly code: "NOT_FOUND" | "NOT_SENT" | "NOT_SIGNED", message: string) { super(message); this.name = "ReceiptError"; }
+  constructor(readonly code: "NOT_FOUND" | "NOT_SENT", message: string) { super(message); this.name = "ReceiptError"; }
 }
 
-/** The receipt of `version` in the session's project. A version needs a client decision before it has one. */
+/** The receipt of `version` in the session's project, or its formal quote while the client has not signed it. A version needs to be sent first. */
 export async function readVersionReceipt(db: Db, sessionId: string, key: CaseKey, version: number, now = new Date()): Promise<VersionReceipt> {
   // One consistent snapshot: a payment recorded halfway through must not appear in one section and not another.
   return db.transaction(async (tx) => {
@@ -136,7 +138,6 @@ async function openingReceipt(db: Reader, caseRow: CaseRow, bridge: Bridge | nul
     }
     signatures.sort((a, b) => a.at.localeCompare(b.at));
   }
-  if (!signatures.length) throw new ReceiptError("NOT_SIGNED", "The client has not signed quote V1 yet. A receipt is issued once they sign.");
 
   const lines: OpeningReceiptLine[] = document.lines.map((line) => {
     const state = read.lines[line.itemId];
@@ -169,7 +170,8 @@ async function openingReceipt(db: Reader, caseRow: CaseRow, bridge: Bridge | nul
     format: RECEIPT_FORMAT, receiptNo: receiptNo(key, 1, fingerprint), issuedAt: now.toISOString(), project: project(caseRow, document, bridge),
     version: {
       number: 1, basedOn: null,
-      status: approvedCount === 0 ? "declined" : approvedCount === lines.length ? "approved" : "partly_approved",
+      status: !signatures.length ? replacedBy ? "superseded" : "awaiting_signature"
+        : approvedCount === 0 ? "declined" : approvedCount === lines.length ? "approved" : "partly_approved",
       replacedBy, sentAt: read.opening.sentAt, sentBy: read.opening.sentBy, contentHash: read.opening.contentHash, document,
       revision: revision && { contentHash: revision.contentHash, lines: revision.lines },
     },
@@ -186,22 +188,22 @@ async function changeReceipt(db: Reader, caseRow: CaseRow, bridge: Bridge | null
   const key = caseRow.projectKey;
   const row = versions.orders.find((order) => order.document.version === version);
   if (!row) throw new ReceiptError("NOT_FOUND", `This project has no version ${version}.`);
+  // Every later version is sent when it is frozen; until the client decides, it has no signature.
   const decision = versions.decisions.find((entry) => entry.orderId === row.id);
-  if (!decision) throw new ReceiptError("NOT_SIGNED", `The client has not decided on version ${version} yet. A receipt is issued once they do.`);
   const order: FrozenChangeOrder = row.document;
   const { contentHash, ...document } = order;
   const revision = await revisionSnapshot(db, row.revisionId);
-  const approved = decision.decision === "approved";
+  const approved = decision?.decision === "approved";
   const replacedBy = versions.replacing(version);
 
-  const signature: ReceiptSignature = {
+  const signature: ReceiptSignature | null = decision ? {
     method: "signed", signingId: null, name: decision.clientName, signature: decision.signature, at: decision.decidedAt.toISOString(),
     decision: decision.decision, note: decision.note.trim() || null, itemIds: [],
     contentHash: decision.contentHash, revisionContentHash: decision.revisionContentHash,
     // The signature, the stored version and its recomputed hash must all agree; a mismatch is reported, never hidden.
     matches: decision.contentHash === row.contentHash && row.contentHash === contentHash && changeOrderContentHash(document) === contentHash
       && decision.revisionContentHash === order.revisionContentHash && revision?.contentHash === order.revisionContentHash,
-  };
+  } : null;
 
   const changes: ChangeReceiptLine[] = order.changes.map((change) => ({
     itemId: change.itemId, action: change.action,
@@ -222,11 +224,12 @@ async function changeReceipt(db: Reader, caseRow: CaseRow, bridge: Bridge | null
   return {
     format: RECEIPT_FORMAT, receiptNo: receiptNo(key, version, contentHash), issuedAt: now.toISOString(), project: project(caseRow, order, bridge),
     version: {
-      number: version, basedOn: order.basedOnVersion, status: approved ? "approved" : "changes_requested", replacedBy,
+      number: version, basedOn: order.basedOnVersion, replacedBy,
+      status: decision ? approved ? "approved" : "changes_requested" : revision?.status === "superseded" || replacedBy ? "superseded" : "awaiting_signature",
       sentAt: row.issuedAt.toISOString(), sentBy: order.designerName.replace(/\s*\(demo designer\)$/, ""), contentHash, document,
       revision: revision && { contentHash: revision.contentHash, lines: revision.lines },
     },
-    signatures: [signature],
+    signatures: signature ? [signature] : [],
     agreement: {
       kind: "change", changes,
       unchanged: order.lines.filter((line) => line.origin === "unchanged").map(receiptItem),

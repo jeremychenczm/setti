@@ -80,10 +80,8 @@ describe.skipIf(!testDatabaseUrl)("signed version receipts", () => {
     });
   });
 
-  it("refuses a V1 that was not sent or not signed", async () => {
+  it("refuses a V1 that was not sent", async () => {
     await expect(readVersionReceipt(handle.db, session, TEST_KEY, 1)).rejects.toEqual(refused("NOT_SENT"));
-    await signOpeningForTest(handle.db, session, TEST_KEY, []);
-    await expect(readVersionReceipt(handle.db, session, TEST_KEY, 1)).rejects.toEqual(refused("NOT_SIGNED"));
   });
 
   it("refuses another session's project and a version that does not exist", async () => {
@@ -92,9 +90,14 @@ describe.skipIf(!testDatabaseUrl)("signed version receipts", () => {
     await expect(readVersionReceipt(handle.db, session, TEST_KEY, 2)).rejects.toEqual(refused("NOT_FOUND"));
   });
 
-  it("refuses a version the client has not decided on", async () => {
-    await confirmChanges(handle.db, session, "maple", [{ action: "replace", itemId: "chair", after: product("Oak writing desk", "DEMO-DESK-1", 110_000) }], false);
-    await expect(readVersionReceipt(handle.db, session, "maple", 2)).rejects.toEqual(refused("NOT_SIGNED"));
+  it("reads a sent version the client has not signed as its formal quote, awaiting the signature", async () => {
+    const sent = await confirmChanges(handle.db, session, "maple", [{ action: "replace", itemId: "chair", after: product("Oak writing desk", "DEMO-DESK-1", 110_000) }], false);
+    const quote = await readVersionReceipt(handle.db, session, "maple", 2);
+    expect(quote.version).toMatchObject({ number: 2, status: "awaiting_signature", contentHash: sent.contentHash, sentAt: sent.issuedAt });
+    expect(quote).toMatchObject({ signatures: [], pending: null, receiptNo: `MAPLE-V2-${sent.contentHash.slice(0, 8).toUpperCase()}` });
+    expect(readerFingerprint(JSON.stringify(quote))).toBe(sent.contentHash);
+    await signOpeningForTest(handle.db, session, TEST_KEY, []);
+    expect((await readVersionReceipt(handle.db, session, TEST_KEY, 1)).version.status).toBe("awaiting_signature");
   });
 
   describe("a later version with money on its items", () => {

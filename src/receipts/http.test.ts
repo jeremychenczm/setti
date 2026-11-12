@@ -70,12 +70,10 @@ describe("GET /api/receipts/{project}/{version}", () => {
   });
 
   it("says why there is no receipt yet", async () => {
-    mock.readVersionReceipt.mockRejectedValueOnce(new ReceiptError("NOT_SIGNED", "The client has not decided on version 2 yet."));
-    const unsigned = await get("maple", "2");
-    expect(unsigned.status).toBe(409);
-    expect(await unsigned.json()).toEqual({ code: "NOT_SIGNED", error: "The client has not decided on version 2 yet." });
     mock.readVersionReceipt.mockRejectedValueOnce(new ReceiptError("NOT_SENT", "Quote V1 has not been sent to the client yet."));
-    expect((await get("fernhill", "1")).status).toBe(404);
+    const unsent = await get("fernhill", "1");
+    expect(unsent.status).toBe(404);
+    expect(await unsent.json()).toEqual({ code: "NOT_SENT", error: "Quote V1 has not been sent to the client yet." });
     mock.readVersionReceipt.mockRejectedValueOnce(new Error("connection refused"));
     expect((await get("fernhill", "1")).status).toBe(503);
   });
