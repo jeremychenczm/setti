@@ -67,6 +67,8 @@ describe("pricing review calculation", () => {
     const d = draft([change("quantity")]); const input = createPricingInput(quote(), d);
     expect(input.changes[0]).toMatchObject({ oldItemHandling: "not_applicable", oldItemCostCents: 0, after: { taxCents: null, freightCents: null } });
     expect(input.changes[0].priceEvidence).toContain("original-reference");
+    expect(input.changes[0].priceEvidence).toMatch(/^Unchanged from approved quote V1: .*Only the quantity changes\.$/);
+    expect(input.changes[0].priceEvidence).not.toContain("{");
   });
 
   it("does not ask again for the V1 product details a quantity change keeps, even ones V1 left blank", () => {

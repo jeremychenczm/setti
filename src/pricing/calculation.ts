@@ -83,6 +83,12 @@ function supplierEvidence(after: DraftItem, supplier: SupplierTerms): string {
   return `Supplier order confirmation ${supplier.reference}${after.vendor ? ` from ${after.vendor}` : ""}: ${after.quantity} × ${usd(after.unitPriceCents ?? 0)}, tax ${usd(supplier.taxCents)}, delivery ${usd(supplier.freightCents)}${lead}. Entered by the designer from the supplier's confirmation.`;
 }
 
+/** What a quantity change rests on, as a sentence the client can read: the approved V1 line's own source and price. */
+function quantityEvidence(line: Pick<ApprovedQuoteLine, "source" | "sku" | "unitPriceCents" | "unitLabel">): string {
+  const price = line.unitPriceCents === null ? "price as in V1" : `${usd(line.unitPriceCents)} per ${line.unitLabel?.trim() || "each"}`;
+  return `Unchanged from approved quote V1: ${line.source.name} (${line.source.reference})${line.sku.trim() ? `, ${line.sku.trim()}` : ""}, ${price}. Only the quantity changes.`;
+}
+
 export class PricingValidationError extends Error {
   readonly problems: string[];
   constructor(problems: string[] | string) {
@@ -178,7 +184,7 @@ export function createPricingInput(quote: ApprovedQuoteReport, draft: ChangeDraf
           ...suggestion?.after,
           ...(supplier ? { taxCents: supplier.taxCents, freightCents: supplier.freightCents, leadTimeDays: supplier.leadTimeDays ?? previous?.leadTimeDays ?? null } : {}),
         } : null,
-        priceEvidence: supplier && after ? supplierEvidence(after, supplier) : suggestion?.priceEvidence ?? product?.priceEvidence ?? (change.action === "quantity" && previous ? JSON.stringify({ source: previous.source, sku: previous.sku, unitPriceCents: previous.unitPriceCents, unitLabel: previous.unitLabel ?? null }) : ""),
+        priceEvidence: supplier && after ? supplierEvidence(after, supplier) : suggestion?.priceEvidence ?? product?.priceEvidence ?? (change.action === "quantity" && previous ? quantityEvidence(previous) : ""),
         confirmed: false,
         oldItemHandling: suggestion?.oldItemHandling ?? (needsOldHandling ? "pending" : "not_applicable"),
         oldItemCostCents: suggestion?.oldItemCostCents ?? (needsOldHandling ? null : 0),
