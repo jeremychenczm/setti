@@ -26,6 +26,7 @@ import { InviteClientDialog } from "./InviteClientDialog";
 import { SendQuoteDialog } from "./SendQuoteDialog";
 import { useCaseChat } from "./useCaseChat";
 import { PAYMENT_QUESTION, takePaymentQuestion } from "./payment-question";
+import { quoteHref } from "@/quotes/links";
 
 interface CaseChatProps {
   projectKey: CaseKey;
@@ -96,7 +97,7 @@ export function CaseChat({ projectKey, quote, account, designer, client, demo = 
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentQuote = snapshot?.quote ?? quote;
   const confirmedQuoteHref = currentQuote.version > quote.version && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentQuote.id)
-    ? `/change-orders/${currentQuote.id}` : null;
+    ? quoteHref(projectKey, currentQuote.version) : null;
   const draft = snapshot?.draft ?? null;
   const sendDisabled = loading || running || !snapshot || hasUnsent;
   /** The project has a client to send to; before one is added, the chat names none. */
@@ -291,7 +292,7 @@ export function CaseChat({ projectKey, quote, account, designer, client, demo = 
               <FileText className="h-4 w-4 shrink-0 text-[var(--primary)]" />
               <div className="min-w-0 flex-1"><h2 id="draft-dialog-title" className="text-[14px] font-semibold">Current draft</h2>{draft && <p className="truncate text-[12px] text-[var(--muted)]">{currentQuote.projectName} · based on approved V{draft.basedOnVersion}</p>}</div>
               {draft && (actor === "designer" && !running
-                ? <a href={`/pricing/${projectKey}`} target="_blank" rel="noreferrer" className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[var(--primary-fill)] px-4 py-2 text-[13px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]"><ClipboardCheck className="h-4 w-4" />Review pricing</a>
+                ? <a href={quoteHref(projectKey)} className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-[var(--primary-fill)] px-4 py-2 text-[13px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]"><ClipboardCheck className="h-4 w-4" />Review pricing</a>
                 : <span className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-[13px] font-semibold text-slate-400" title="Available to the designer while the AI is not running"><ClipboardCheck className="h-4 w-4" />Review pricing</span>)}
               <button onClick={() => setDraftOpen(false)} aria-label="Close the draft" autoFocus className="shrink-0 rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--canvas)]"><X className="h-4 w-4" /></button>
             </header>

@@ -10,6 +10,7 @@ import type { PricingWorkspace } from "@/pricing/types";
 import { HOME_DESIGNER_REQUEST, HOME_SCENARIO, isHomeScenario } from "@/demo/living-dining";
 import { money } from "../pricing/common";
 import { OPEN_FIRST_CHANGE_EVENT } from "../pricing/ChangeDrawer";
+import { quoteHref } from "@/quotes/links";
 import { lineProgress } from "../payments/progress";
 import { HOME_GUIDE_STEPS, MAPLE_EXAMPLE_REQUEST, MAPLE_GUIDE_STEPS, mapleChangeLines, mapleGuideStep, type MapleGuideData } from "./maple-guide";
 import { navigateGuidePage, useGuideAnchor } from "./useGuideAnchor";
@@ -51,6 +52,14 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, onO
   const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [viewerId, setViewerId] = useState<string | null>(null);
+  // Inside Quotes, the page shows the draft being edited, or the version its ?v= names.
+  const [shownVersion, setShownVersion] = useState<number | null>(null);
+  useEffect(() => {
+    const read = () => { const value = new URLSearchParams(window.location.search).get("v"); setShownVersion(value ? Number(value) : null); };
+    read();
+    window.addEventListener("popstate", read);
+    return () => window.removeEventListener("popstate", read);
+  }, []);
   const detailsId = useId();
   const request = useRef<AbortController | null>(null);
   const busy = useRef(false);
@@ -78,7 +87,7 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, onO
       ]);
       if (controller.signal.aborted) return;
       const validPayments = payments?.orderId === paymentOrderId && Array.isArray(payments.lines) && Array.isArray(payments.operations) ? payments : null;
-      const formStale = currentView === "pricing" ? document.getElementById("pricing-workspace")?.getAttribute("data-pricing-source-stale") : null;
+      const formStale = currentView === "pricing" || currentView === "quotes" ? document.getElementById("pricing-workspace")?.getAttribute("data-pricing-source-stale") : null;
       setData({ seedOrderId: seed.changeOrderId, scenario: seed.scenario, preparationPending: seed.scenario === HOME_SCENARIO && seed.status !== "ready", snapshot, pricing: pricing?.projectKey === "maple" ? pricing : null, payments: validPayments,
         pricingViewStale: formStale === "true" ? true : formStale === "false" ? false : undefined, simulatedDays: typeof clock?.days === "number" ? clock.days : 0,
         clientInboxOpened: typeof inbox?.opened === "boolean" ? inbox.opened : undefined, clientUnread: typeof inbox?.count === "number" ? inbox.count : undefined });
@@ -112,11 +121,12 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, onO
   const nextName = step.role === "emma" ? "Emma" : "Jordan";
   const changeCount = data.pricing?.review?.input.changes.length ?? 0;
   const reviewLabel = changeCount ? `Review the ${changeCount} change${changeCount === 1 ? "" : "s"}` : "Review the changes";
-  const currentDestination = !switchNeeded && ((step.destination === "inbox" && currentView === "inbox") || (step.destination === "chat" && currentView === "chats") || (step.destination === "pricing" && currentView === "pricing") || (step.destination === "order" && currentView === "change-order" && currentOrderId === step.orderId));
+  const currentDestination = !switchNeeded && ((step.destination === "inbox" && currentView === "inbox") || (step.destination === "chat" && currentView === "chats") || (step.destination === "pricing" && (currentView === "pricing" || (currentView === "quotes" && shownVersion === null))) || (step.destination === "order" && ((currentView === "change-order" && currentOrderId === step.orderId) || (currentView === "quotes" && step.version !== undefined && shownVersion === step.version))));
   // A skip that belongs in the inbox opens it first, so the reminder is seen arriving.
   const skipHere = !!step.skipTo && (step.destination !== "inbox" || currentView === "inbox");
   const action = switchNeeded ? `Continue as ${nextName}` : skipping ? "Running each day's check…" : step.skipTo ? skipHere ? step.action : "Open your Inbox" : currentDestination ? step.destination === "pricing" ? step.anchor === "pricing-source-status" ? step.action : reviewLabel : step.destination === "order" ? step.anchor === "payments" ? "Go to payments below" : "Go to client review below" : step.action : step.action;
   const outcomes = data.payments && data.payments.orderId !== data.seedOrderId ? mapleChangeLines(data.payments) : [];
+  const versionOf = (orderId: string) => data.snapshot.versions?.find((entry) => entry.id === orderId)?.version ?? null;
 
   function continueGuide() {
     if (skipping) return;
@@ -129,8 +139,8 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, onO
         try { next = paymentQuestionHref(projectKey, crypto.randomUUID(), window.sessionStorage); }
         catch { next = `/chats/${projectKey}`; }
       } else if (step.destination === "chat") next = `/chats/${projectKey}${step.anchor ? `#${step.anchor}` : ""}`;
-      else if (step.destination === "pricing") next = `/pricing/maple${step.anchor ? `#${step.anchor}` : ""}`;
-      else next = `/change-orders/${step.orderId}${step.anchor ? `#${step.anchor}` : ""}`;
+      else if (step.destination === "pricing") next = quoteHref(projectKey, null, step.anchor);
+      else next = quoteHref(projectKey, step.version, step.anchor);
       void Promise.resolve(onSwitchAccount(step.role, next)).then((problem) => { if (problem) setError(problem); });
       return;
     }
@@ -164,7 +174,7 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, onO
       }
       else document.getElementById(step.anchor ?? "payments")?.scrollIntoView({ behavior: "smooth", block: "start" });
     } else {
-      navigateGuidePage(step.destination === "pricing" ? `/pricing/maple${step.anchor ? `#${step.anchor}` : ""}` : `/change-orders/${step.orderId}${step.anchor ? `#${step.anchor}` : ""}`, switchNeeded);
+      navigateGuidePage(step.destination === "pricing" ? quoteHref(projectKey, null, step.anchor) : quoteHref(projectKey, step.version, step.anchor), switchNeeded);
     }
   }
 
@@ -182,14 +192,14 @@ function MapleSeedNotice({ projectKey, account, onSwitchAccount, onOpenChat, onO
     {outcomes.length > 0 && <div className="mb-3 grid gap-2 sm:grid-cols-3">
       {outcomes.map((line) => {
         const progress = lineProgress(line, data.payments!.operations);
-        const href = `/change-orders/${data.payments!.orderId}#payment-line-${line.side}-${line.itemId}`;
+        const href = quoteHref(projectKey, versionOf(data.payments!.orderId), `payment-line-${line.side}-${line.itemId}`);
         const result = line.side === "baseline" && line.change === "replace" ? `Released ${money(line.releasedCents)} · still held ${money(line.heldCents)}` : line.change === "remove" ? `Refunded ${money(line.refundedCents)} · retained target ${money(line.targetCents)}` : `Captured ${money(line.capturedCents)} · held ${money(line.heldCents)}`;
         // A plain link: on the same page, the hash change opens the item's side card.
         return <a href={href} key={`${line.side}:${line.itemId}`} className="min-w-0 rounded-lg border border-brand-100 bg-white px-3 py-2 hover:border-brand-300"><p className="truncate text-[11px] font-semibold text-slate-800">{line.label}{line.change === "replace" ? line.side === "baseline" ? " · old item" : " · replacement" : ""}</p><p className={`mt-1 text-[10px] font-medium ${progress.settled ? "text-emerald-700" : "text-amber-800"}`}>{progress.label}</p><p className="mt-1 text-[10px] leading-relaxed text-slate-500">{result}</p></a>;
       })}
     </div>}
       <p>{home ? `Emma confirmed the café counter and back-bar V${startingVersion}. ${data.preparationPending ? "The starting test payments are being prepared in the background; use the progress notice to see which records are complete." : "The pendants and stools have individual Sandbox holds and have not been ordered. The countertop was paid at templating and the wall tile, back bar shelving and mirror on delivery, so their test payments have been captured, as have the design fee, the four site visits and the fixed-fee trade work."} The sample conversation ends before Jordan requests a revised quote.` : "Prepared starting point: Emma confirmed V2; the lounge chair has an $800 hold and the wool rug has a completed $300 payment. These starting transactions were created on PayPal Sandbox with a test card. They are history prepared for this demo, not actions you just took."}</p>
-      <Link href={data.seedOrderId ? `/change-orders/${data.seedOrderId}#payments` : "/quotes/maple#item-holds"} className="mt-1 inline-block font-medium text-[var(--primary)] underline">Inspect the starting V{startingVersion} payment records</Link>
+      <Link href={data.seedOrderId ? quoteHref(projectKey, versionOf(data.seedOrderId), "payments") : quoteHref(projectKey, null, "item-holds")} className="mt-1 inline-block font-medium text-[var(--primary)] underline">Inspect the starting V{startingVersion} payment records</Link>
       <div className="mt-2 rounded-lg border border-brand-100 bg-white p-2.5"><p className="select-text text-[11px] text-slate-700">{exampleRequest}</p><button type="button" onClick={() => void copyRequest()} className="mt-2 inline-flex items-center gap-1 font-medium text-brand-700"><Copy className="h-3 w-3" />{copied ? "Copied · paste and send when ready" : home ? "Copy designer request" : "Copy example request"}</button></div>
       <p className="mt-2">{home ? `The initial V${startingVersion}, discussion and supplier documents are prepared fictional examples. A new @Setti request uses the configured model to select sources and draft changes; prices and totals come from the supplied evidence and the pricing engine.` : "The initial AI draft and prior demo decisions are scripted. Your new @Setti requests use the configured model; supplier confirmations and credits are designer-entered demo records."} You still review prices, sign the client version and confirm each money action yourself. No real money moves. The cards above cover this change, not the whole project&rsquo;s settlement.</p>
     </div>

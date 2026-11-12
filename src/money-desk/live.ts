@@ -17,6 +17,7 @@ import type { PaymentLineView } from "@/payments/types";
 import { paymentsWorkspace } from "@/payments/workspace";
 import { lineProgress } from "@/ui/payments/progress";
 import type { DeskItem, DeskProject, DeskWaitingOn } from "./types";
+import { quoteHref } from "../quotes/links";
 
 type Reader = Pick<Db, "select">;
 
@@ -103,7 +104,7 @@ export async function liveProject(db: Db, sessionId: string, key: CaseKey, accou
           status: "Outside this change", next: "No payment step for this version.", waitingOn: null,
         });
       }
-      return { ...project, stage: `V${workspace.version} confirmed`, version: workspace.version, agreedCents: items.reduce((total, item) => total + item.agreedCents, 0), proposedCents: null, items, href: `/change-orders/${approved.orderId}` };
+      return { ...project, stage: `V${workspace.version} confirmed`, version: workspace.version, agreedCents: items.reduce((total, item) => total + item.agreedCents, 0), proposedCents: null, items, href: quoteHref(key, workspace.version) };
     }
   }
 

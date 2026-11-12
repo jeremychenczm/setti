@@ -8,6 +8,7 @@ import { pricingInputSchema, PricingValidationError } from "./calculation";
 import { pricingDb, pricingStore } from "./server";
 import { startLineChange } from "./line-change";
 import { PricingStoreError } from "./store";
+import { quoteHref } from "../quotes/links";
 
 const uuid = z.uuid();
 const saveSchema = z.strictObject({
@@ -117,7 +118,7 @@ export async function postLineChangeResponse(req: NextRequest, rawKey: string) {
   if (ended) return ended;
   try {
     const { draft } = await startLineChange(pricingDb(), session, rawKey, lineSchema.parse(await boundedJson(req)));
-    return respond({ href: `/pricing/${rawKey}`, draftId: draft.id, revision: draft.revision });
+    return respond({ href: quoteHref(rawKey), draftId: draft.id, revision: draft.revision });
   } catch (error) { return failure(error); }
 }
 

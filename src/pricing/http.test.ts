@@ -164,11 +164,11 @@ describe("designer line changes", () => {
   };
   const jordan = designerActor(studio, { persona: "jordan" });
 
-  it("lets the designer start a change and sends them to the pricing page; the client cannot", async () => {
+  it("lets the designer start a change and sends them to the quote editor; the client cannot", async () => {
     expect((await postLineChangeResponse(change(clientActor(studio, [TEST_KEY])), TEST_KEY)).status).toBe(403);
     expect(mock.startLineChange).not.toHaveBeenCalled();
     const response = await postLineChangeResponse(change(jordan), TEST_KEY);
-    expect(await response.json()).toEqual({ href: "/pricing/fernhill", draftId: "draft-1", revision: 2 });
+    expect(await response.json()).toEqual({ href: "/quotes/fernhill", draftId: "draft-1", revision: 2 });
     expect(mock.startLineChange.mock.calls[0][1]).toBe(studio);
     expect(mock.startLineChange.mock.calls[0][2]).toBe(TEST_KEY);
     expect(mock.startLineChange.mock.calls[0][3]).toEqual({ itemId: DESK });

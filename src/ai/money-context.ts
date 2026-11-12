@@ -20,6 +20,7 @@ import { paymentsWorkspace } from "../payments/workspace";
 import { feesText } from "../pricing/fees";
 import type { FrozenChangeOrder, NonRefundableFee } from "../pricing/types";
 import type { MoneyContext, MoneyFact, MoneyItem, MoneySource, MoneyStatus } from "./money-types";
+import { quoteHref } from "../quotes/links";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const usd = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
@@ -222,7 +223,7 @@ function bounded(context: MoneyContext): MoneyContext {
 }
 
 function contextFromWorkspace(key: CaseKey, quoteId: string, order: FrozenChangeOrder, approvedAt: string, workspace: PaymentsWorkspace, now: Date): MoneyContext {
-  const href = `/change-orders/${order.id}`;
+  const href = quoteHref(key, order.version);
   const sources: MoneySource[] = [
     { id: "quote", kind: "quote", label: `Client-confirmed V${order.version} quote`, href, recordedAt: order.issuedAt },
     { id: "approval", kind: "approval", label: `Client confirmation · V${order.version}`, href, recordedAt: approvedAt },

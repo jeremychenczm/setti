@@ -13,6 +13,7 @@
  */
 import type { CaseKey } from "../chat/types";
 import type { ItemHoldView, ItemHoldsView } from "./item-holds-view";
+import { quoteHref } from "../quotes/links";
 
 export type AttentionKind = "payment_unknown" | "hold_failed" | "renewal_failed" | "expired" | "capture_ready" | "expiring" | "not_ordered";
 
@@ -49,7 +50,7 @@ const day = (value: Date) => value.toLocaleDateString("en-US", { month: "short",
 /** Where an item's next step is: the quote's approved items on V1, the version's payments page after it. */
 function itemHref(view: ItemHoldsView, line: ItemHoldView): string {
   return view.basis?.orderId
-    ? `/change-orders/${view.basis.orderId}#payment-line-${line.side}-${line.itemId}`
+    ? quoteHref(view.projectKey, view.basis.version, `payment-line-${line.side}-${line.itemId}`)
     : `/quotes/${view.projectKey}?hold=${encodeURIComponent(line.itemId)}#item-holds`;
 }
 

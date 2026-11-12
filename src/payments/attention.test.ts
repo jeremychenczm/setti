@@ -69,7 +69,7 @@ describe("what needs the designer today", () => {
   });
 
   it("links a later version's items to that version's payments page", () => {
-    expect(one(item(), at(3), { basis: { version: 2, orderId: "order-2" } })[0].href).toBe("/change-orders/order-2#payment-line-baseline-fernhill-chair");
+    expect(one(item(), at(3), { basis: { version: 2, orderId: "order-2" } })[0].href).toBe("/quotes/fernhill?v=2#payment-line-baseline-fernhill-chair");
   });
 
   it("gives the renewal notice only to unconfirmed holds in their last week, with a saved method", () => {

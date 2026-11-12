@@ -5,7 +5,7 @@
  * business event, so a repeated click or a second window resumes the same
  * operation. PayPal is called only after the case lock is released.
  */
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Db } from "../db/client";
 import { items, paymentOperations, paypalCaptures, paypalRefunds } from "../db/schema";
 import { activeSavedMethod } from "./saved-methods";
@@ -24,6 +24,7 @@ import type { PayPalPayments } from "./paypal";
 import { executeRefund, refreshRefund } from "./refund";
 import { executeSavedHold } from "./saved-hold";
 import { executeVoid } from "./void";
+import { quoteHref } from "../quotes/links";
 
 export type { LineRef } from "./binding";
 
@@ -301,11 +302,11 @@ export async function operationPage(db: Pick<Db, "select">, operationId: string)
   const [operation] = await db.select().from(paymentOperations).where(eq(paymentOperations.id, operationId));
   if (!operation?.revisionId) return null;
   const [found] = operation.changeOrderId
-    ? await db.select({ projectKey: chatCases.projectKey, studioId: chatCases.sessionId }).from(changeOrders).innerJoin(chatCases, eq(chatCases.id, changeOrders.caseId)).where(eq(changeOrders.id, operation.changeOrderId))
+    ? await db.select({ projectKey: chatCases.projectKey, studioId: chatCases.sessionId, version: sql<number>`(${changeOrders.document}->>'version')::int` }).from(changeOrders).innerJoin(chatCases, eq(chatCases.id, changeOrders.caseId)).where(eq(changeOrders.id, operation.changeOrderId))
     : await db.select({ projectKey: chatCases.projectKey, studioId: chatCases.sessionId }).from(pricingCases).innerJoin(chatCases, eq(chatCases.id, pricingCases.caseId)).where(eq(pricingCases.baselineRevisionId, operation.revisionId));
   if (!found) return null;
   const anchor = operation.servicesHold ? "design-services" : operation.changeOrderId ? "payments" : "item-holds";
-  const page = operation.changeOrderId ? `/change-orders/${operation.changeOrderId}` : `/quotes/${found.projectKey}`;
+  const page = operation.changeOrderId && "version" in found ? quoteHref(found.projectKey, Number(found.version)) : quoteHref(found.projectKey);
   return { path: page, anchor, projectKey: found.projectKey, studioId: found.studioId };
 }
 

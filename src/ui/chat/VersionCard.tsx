@@ -4,6 +4,7 @@ import type { AccountRole } from "@/accounts/demo";
 import type { CaseKey, SentVersion } from "@/chat/types";
 import { usd } from "../demo-data";
 import { ChangeSourceNote } from "../pricing/ChangeSource";
+import { quoteHref } from "@/quotes/links";
 
 function signed(cents: number): string {
   return cents === 0 ? "no change" : `${cents > 0 ? "+" : "−"}${usd(Math.abs(cents))}`;
@@ -28,7 +29,7 @@ export function VersionCard({ version, projectKey, projectName, viewerRole, repl
           <span className={`mt-2 inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium ${tone}`}>{label}</span>
         </div>
       </div>
-      <Link href={`/change-orders/${version.id}`} className="flex w-full items-center justify-between border-t border-brand-50 bg-brand-50/40 px-3.5 py-2.5 text-[12px] font-medium text-[var(--primary)] hover:bg-brand-50">
+      <Link href={quoteHref(projectKey, version.version)} className="flex w-full items-center justify-between border-t border-brand-50 bg-brand-50/40 px-3.5 py-2.5 text-[12px] font-medium text-[var(--primary)] hover:bg-brand-50">
         {viewerRole === "client" && awaiting ? "Review and confirm" : `View V${version.version}`}<ChevronRight className="h-3.5 w-3.5" />
       </Link>
       <div className="flex items-center gap-1 border-t border-brand-50 px-3.5 py-1.5 text-[10px] text-[var(--muted)]"><LockKeyhole className="h-3 w-3" />Locked when sent · {new Date(version.issuedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}{(version.status === "approved" || version.status === "declined") && <Link href={`/receipts/${projectKey}/${version.version}`} className="ml-auto font-medium text-[var(--primary)] hover:underline">Receipt</Link>}</div>

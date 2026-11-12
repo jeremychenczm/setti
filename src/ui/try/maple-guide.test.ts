@@ -232,7 +232,7 @@ describe("living-and-dining demo guide", () => {
   it("offers to skip ahead 3 days in Jordan's inbox while the new items are held and not ordered", () => {
     expect(mapleGuideStep(heldNewItem(0), "designer")).toMatchObject({
       index: 3, role: "jordan", destination: "inbox", action: "Skip ahead 3 days", skipTo: 3, title: "What if Jordan is busy and forgets to order?",
-      secondary: { label: "Record the confirmations now", href: "/change-orders/visitor-v3#payments" },
+      secondary: { label: "Record the confirmations now", href: "/quotes/maple?v=3#payments" },
     });
     const after = mapleGuideStep(heldNewItem(3), "designer");
     expect(after).toMatchObject({ index: 3, role: "jordan", destination: "order", orderId: "visitor-v3", anchor: "payments", action: "Record the supplier confirmations", title: "Setti caught it: the held item is still not ordered" });

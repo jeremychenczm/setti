@@ -6,6 +6,7 @@ import { MAPLE_MIXED_CHANGE_MESSAGE } from "@/demo/maple-materials";
 import { isHomeScenario } from "@/demo/living-dining";
 import { lineProgress } from "../payments/progress";
 import { NOT_ORDERED_SKIP } from "./useDemoSkip";
+import { quoteHref } from "@/quotes/links";
 
 export const MAPLE_EXAMPLE_REQUEST = MAPLE_MIXED_CHANGE_MESSAGE;
 export const MAPLE_GUIDE_STEPS = ["Ask for the change", "Check pricing", "Confirm the version", "Move money", "Explain the evidence"] as const;
@@ -35,6 +36,8 @@ export interface MapleGuideStep {
   role: AccountId;
   destination: "chat" | "pricing" | "order" | "inbox";
   orderId?: string;
+  /** The version an "order" step opens. */
+  version?: number;
   anchor?: string;
   action: string;
   complete?: boolean;
@@ -69,12 +72,12 @@ export function mapleGuideStep(data: MapleGuideData, currentRole: "designer" | "
     detail: home ? `Compare the AI-selected products and source prices with the sample supplier documents. Check all seven changes, the countertop re-cut and tile return costs and the unchanged design fee, then resolve open questions.${data.preparationPending ? " You can save the review now; sending the revised version becomes available when the starting payment records are ready." : " Send one version to Emma when ready."}` : "Verify each changed item's details, old-item handling and any return cost, resolve the open items, then send one frozen version to Emma. The draft itself is not an order or a payment.",
   };
   if (latest?.status === "awaiting_client_confirmation") return {
-    index: 2, role: "emma", destination: "order", orderId: latest.id, anchor: "client-decision-title", action: `Review and confirm V${latest.version}`,
+    index: 2, role: "emma", destination: "order", orderId: latest.id, version: latest.version, anchor: "client-decision-title", action: `Review and confirm V${latest.version}`,
     title: `Emma reviews the exact V${latest.version} agreement`, detail: "Read the scope, prices, non-refundable fees and planned payment steps. Type the signature and confirm only when ready. Switching accounts does not sign anything.",
   };
   if (latest?.status === "declined") return { ...chat, index: 1, role: "jordan", title: "Emma asked for changes", detail: "Discuss the client's feedback in the chat and prepare a revised draft before requesting confirmation again." };
   if (latest?.status === "approved") {
-    if (!payments || payments.orderId !== latest.id) return { index: 3, role: currentRole === "client" ? "emma" : "jordan", destination: "order", orderId: latest.id, anchor: "payments", action: `Open V${latest.version} payments`, title: "Read this version's payment records", detail: "Client confirmation is saved. Payment results have not been loaded here yet; approval alone does not establish a charge, release or refund." };
+    if (!payments || payments.orderId !== latest.id) return { index: 3, role: currentRole === "client" ? "emma" : "jordan", destination: "order", orderId: latest.id, version: latest.version, anchor: "payments", action: `Open V${latest.version} payments`, title: "Read this version's payment records", detail: "Client confirmation is saved. Payment results have not been loaded here yet; approval alone does not establish a charge, release or refund." };
     const changed = mapleChangeLines(payments);
     // Held items, new or kept from an earlier version, with no supplier order recorded for any of them yet.
     const notOrdered = changed.filter((line) => line.category === "furniture" && line.heldCents > 0 && line.steps.some((step) => step.kind === "supplier_confirmation"));
@@ -96,12 +99,12 @@ export function mapleGuideStep(data: MapleGuideData, currentRole: "designer" | "
     // The skip happens in Jordan's inbox, so the reminder is seen arriving there.
     if (payments.current && notOrdered.length && !ordered && days < NOT_ORDERED_SKIP) return {
       index: 3, role: "jordan", destination: "inbox", action: "Skip ahead 3 days", skipTo: NOT_ORDERED_SKIP,
-      secondary: { label: "Record the confirmations now", href: `/change-orders/${encodeURIComponent(latest.id)}#payments` },
+      secondary: { label: "Record the confirmations now", href: quoteHref("maple", latest.version, "payments") },
       title: "What if Jordan is busy and forgets to order?",
       detail: `${did ? `Setti ${did}, but` : "So far"} no supplier order is recorded for ${heldText}. Skip ahead 3 days here in Jordan's Inbox and watch Setti's reminder arrive, or record the supplier confirmations now. Simulated time moves only the day Setti judges holds by; PayPal calls still happen now, in the Sandbox.`,
     };
     if (payments.current && notOrdered.length && !ordered) return {
-      index: 3, role: "jordan", destination: "order", orderId: latest.id, anchor: "payments", action: "Record the supplier confirmations",
+      index: 3, role: "jordan", destination: "order", orderId: latest.id, version: latest.version, anchor: "payments", action: "Record the supplier confirmations",
       title: `Setti caught it: ${notOrdered.length === 1 ? "the held item is" : `${notOrdered.length} held items are`} still not ordered`,
       detail: `Day ${days}: PayPal's 3-day honor period for ${notOrdered.length === 1 ? "this hold" : "these holds"} is over and no supplier order is recorded, so Setti's daily check put a reminder in Jordan's Inbox for each. Open a reminder, or go to the payments: tick the held items and record every supplier confirmation and its charge in one step.`,
     };
@@ -124,7 +127,7 @@ export function mapleGuideStep(data: MapleGuideData, currentRole: "designer" | "
     const waiting = (currentRole === "client" ? unsettled.find(needsClient) : undefined) ?? unsettled[0];
     const progress = waiting ? lineProgress(waiting, payments.operations) : null;
     const clientNeeded = !!waiting && needsClient(waiting);
-    return { index: 3, role: available ? available.step.actor === "client" ? "emma" : "jordan" : clientNeeded ? "emma" : "jordan", destination: "order", orderId: latest.id, anchor: "payments", action: `Continue V${latest.version} payments`,
+    return { index: 3, role: available ? available.step.actor === "client" ? "emma" : "jordan" : clientNeeded ? "emma" : "jordan", destination: "order", orderId: latest.id, version: latest.version, anchor: "payments", action: `Continue V${latest.version} payments`,
       title: "Each item keeps its own payment progress", detail: (payments.plan?.status === "blocked" ? "Check unresolved existing operations before starting another payment. Pending and unknown results are not counted as completed." : available ? `${available.line.label}: ${available.step.note}` : progress?.next ?? payments.reason ?? "Open the recorded payment steps to see what is still needed."),
     };
   }

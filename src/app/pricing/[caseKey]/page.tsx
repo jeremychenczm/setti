@@ -1,20 +1,9 @@
-import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
-import { requireWorkspace } from "@/auth/viewer";
 import { isCaseKey } from "@/chat/cases";
-import { PricingWorkspaceView } from "@/ui/pricing/PricingWorkspaceView";
-import { TryPageGuide } from "@/ui/try/TryPageGuide";
-import { DemoModeProvider } from "@/ui/demo-mode";
 
-export const metadata: Metadata = { title: "Designer pricing review | Setti" };
-
-/** The pricing review is the studio's work in progress; a client sees the change order once it is issued. */
+/** The quote editor moved into the project's Quotes; old links land there, and the browser keeps their #anchor. */
 export default async function PricingPage({ params }: { params: Promise<{ caseKey: string }> }) {
   const { caseKey } = await params;
   if (!isCaseKey(caseKey)) notFound();
-  const { account, demo, projects } = await requireWorkspace(`/pricing/${caseKey}`, caseKey);
-  if (account.role !== "designer") redirect(`/chats/${caseKey}`);
-  const project = projects.find((entry) => entry.key === caseKey);
-  if (!project) notFound();
-  return <DemoModeProvider value={demo}><PricingWorkspaceView projectKey={caseKey} clientName={project.client?.name ?? "the client"} guide={demo ? <TryPageGuide projectKey={caseKey} account={account} currentView="pricing" /> : null} /></DemoModeProvider>;
+  redirect(`/quotes/${encodeURIComponent(caseKey)}`);
 }

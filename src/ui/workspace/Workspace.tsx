@@ -21,7 +21,7 @@ import { switchPersona } from "../account/switchPersona";
 const CaseChat = dynamic(() => import("../chat/CaseChat").then((m) => m.CaseChat), {
   loading: () => <div role="status" className="flex flex-1 items-center justify-center rounded-xl bg-white text-[13px] text-[var(--muted)]">Loading conversation…</div>,
 });
-const QuoteBoard = dynamic(() => import("../quotes/QuoteBoard").then((m) => m.QuoteBoard), {
+const QuotesModule = dynamic(() => import("../quotes/QuotesModule").then((m) => m.QuotesModule), {
   loading: () => <div className="flex flex-1 items-center justify-center rounded-xl bg-white text-sm text-[var(--muted)]">Loading quote…</div>,
 });
 const StudioProjectsModule = dynamic(() => import("../studio/StudioProjectsModule").then((m) => m.StudioProjectsModule), {
@@ -50,7 +50,7 @@ function chatPreview(account: DemoAccount, people: { designer: ProjectPerson; cl
  * project sees them; `projects` are the ones they work in, read on the server;
  * `demo` lets a demo visitor switch between the demo's people.
  */
-export function Workspace({ account, projects, demo = false, initialView = "chats", initialQuote, initialCase, initialPreparedCase = null, initialRecordsTab = "quote" }: { account: DemoAccount; projects: ProjectSummary[]; demo?: boolean; initialView?: View; initialQuote?: CaseKey; initialCase?: CaseKey; initialPreparedCase?: string | null; initialRecordsTab?: "quote" | "payments" }) {
+export function Workspace({ account, projects, demo = false, initialView = "chats", initialQuote, initialCase, initialPreparedCase = null, initialRecordsTab = "quote", initialVersion = null }: { account: DemoAccount; projects: ProjectSummary[]; demo?: boolean; initialView?: View; initialQuote?: CaseKey; initialCase?: CaseKey; initialPreparedCase?: string | null; initialRecordsTab?: "quote" | "payments"; initialVersion?: number | null }) {
   const canOpen = (key: string) => projects.some((project) => project.key === key);
   /** A project the viewer works in: the one asked for, else their first. */
   const reachable = (wanted: CaseKey | undefined): CaseKey | null => wanted && canOpen(wanted) ? wanted : projects[0]?.key ?? null;
@@ -202,7 +202,7 @@ export function Workspace({ account, projects, demo = false, initialView = "chat
               : <NoProject designer={account.role === "designer"} onNew={() => setNewProjectOpen(true)} />)}
 
           {view === "quotes" && preparedProject && <StudioProjectRecords key={`${preparedProject.id}:${recordsTab}`} project={preparedProject} initialTab={recordsTab} onBack={openQuoteChat} onSelectTab={openPreparedRecords} />}
-          {view === "quotes" && !preparedProject && (quoteId ? <QuoteBoard key={`${account.id}:${quoteId}:${focusItemId ?? ""}`} projectKey={quoteId} studioName={projects.find((project) => project.key === quoteId)?.studio ?? ""} viewer={account} options={projects.map((project) => ({ key: project.key, label: project.subtitle ? `${project.name} · ${project.subtitle}` : project.name }))} focusItemId={focusItemId}
+          {view === "quotes" && !preparedProject && (quoteId ? <QuotesModule key={`${account.id}:${quoteId}:${focusItemId ?? ""}`} projectKey={quoteId} version={quoteId === initialQuote ? initialVersion : null} demo={demo} clientName={projects.find((project) => project.key === quoteId)?.client?.name ?? "the client"} studioName={projects.find((project) => project.key === quoteId)?.studio ?? ""} viewer={account} options={projects.map((project) => ({ key: project.key, label: project.subtitle ? `${project.name} · ${project.subtitle}` : project.name }))} focusItemId={focusItemId}
             onSelectQuote={(id) => { setQuoteId(id); setActiveId(id); setFocusItemId(null); }} onBack={openQuoteChat} onOpenChat={openQuoteChat} />
             : <NoProject designer={account.role === "designer"} onNew={() => setNewProjectOpen(true)} />)}
         </div>

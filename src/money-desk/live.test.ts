@@ -60,7 +60,7 @@ describe.skipIf(!testDatabaseUrl)("live projects on the money desk", () => {
     await signOpeningForTest(handle.db, session, TEST_KEY);
     const { v3 } = await sixChairsHeld(handle.db, paypal, session);
     const live = (await project())!;
-    expect(live).toMatchObject({ stage: `V${v3.version} confirmed`, version: v3.version, href: `/change-orders/${v3.id}` });
+    expect(live).toMatchObject({ stage: `V${v3.version} confirmed`, version: v3.version, href: `/quotes/${TEST_KEY}?v=${v3.version}` });
     const chairs = live.items.filter((item) => item.id.startsWith(CHAIR));
     expect(chairs.length).toBeGreaterThan(0);
     expect(chairs.some((item) => item.heldCents > 0 && item.status === "Awaiting supplier confirmation" && item.waitingOn === "designer")).toBe(true);

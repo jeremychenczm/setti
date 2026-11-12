@@ -83,7 +83,7 @@ describe.skipIf(!testDatabaseUrl)("read-only case money evidence", () => {
     const ids = new Set(context.sources.map((source) => source.id));
     expect(ids.size).toBe(context.sources.length);
     expect(context.facts.every((entry) => entry.sourceIds.length && entry.sourceIds.every((id) => ids.has(id)))).toBe(true);
-    expect(context.sources.every((source) => /^\/(?:quotes\/maple|change-orders\/[0-9a-f-]{36}(?:#payment-line-[^\s]+|#payments)?)$/i.test(source.href))).toBe(true);
+    expect(context.sources.every((source) => /^\/quotes\/maple(?:\?v=\d+)?(?:#payment-line-[^\s]+|#payments|#item-holds)?$/i.test(source.href))).toBe(true);
     expect(JSON.stringify(context)).not.toMatch(/approvalUrl|setti-demo-chat|signature|requestId|fake-\d/);
   }
 

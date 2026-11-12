@@ -17,6 +17,7 @@ import { isCaseKey } from "./cases";
 import { chatStore } from "./server";
 import { CaseAiError, runCaseAi } from "./service";
 import type { CaseKey, CaseSnapshot, HumanActor, StoredCase } from "./types";
+import { quoteHref } from "../quotes/links";
 
 const uuid = z.uuid();
 const messageSchema = z.strictObject({ id: uuid, actor: z.enum(["designer", "client"]), text: z.string().trim().min(1).max(8000), aboutItemId: z.string().min(1).max(100).optional() });
@@ -248,7 +249,7 @@ export async function postQuoteReviseResponse(req: NextRequest, rawKey: string) 
     const { itemId } = dropSchema.parse(await boundedJson(req));
     if (account.role !== "designer") return respond({ code: "FORBIDDEN", error: "Only the designer can revise a quote line." }, 403);
     const { draft } = await openingStore().revise(sessionId, rawKey, { itemId });
-    return respond({ href: `/pricing/${rawKey}`, draftId: draft.id, revision: draft.revision });
+    return respond({ href: quoteHref(rawKey), draftId: draft.id, revision: draft.revision });
   } catch (error) {
     return openingFailure(error, "Choose the declined quote line to revise.");
   }

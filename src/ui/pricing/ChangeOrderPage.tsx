@@ -54,7 +54,8 @@ function Fold({ title, count, children }: { title: string; count?: number; child
 }
 
 /** `account` is who the signed-in viewer is in the order's project; null for anyone else, who reads the shared link. */
-export function ChangeOrderPage({ orderId, account, demo = false, studioName = "" }: { orderId: string; account: DemoAccount | null; demo?: boolean; studioName?: string }) {
+/** One sent version. `embedded` inside the Quotes module, whose sidebar and walkthrough guide stand in for the page header and guide. */
+export function ChangeOrderPage({ orderId, account, demo = false, studioName = "", embedded = false }: { orderId: string; account: DemoAccount | null; demo?: boolean; studioName?: string; embedded?: boolean }) {
   const designer = account?.role === "designer";
   const [workspace, setWorkspace] = useState<ApprovalWorkspace | null>(null);
   const [loading, setLoading] = useState(true);
@@ -112,7 +113,7 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
     window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
   }, []);
-  const below = (demo && account ? guideHeight : 0) + 16;
+  const below = (demo && account && !embedded ? guideHeight : 0) + 16;
   const stickyTop = windowHeight && below + columnHeight + 16 > windowHeight ? windowHeight - columnHeight - 16 : below;
 
   const summary = order && workspace && <section className={`grid gap-4 rounded-xl bg-white p-5 shadow-sm sm:p-6 ${split ? "" : "mb-5"}`} aria-labelledby="change-order-title">
@@ -137,10 +138,10 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
   </section>;
   const approval = workspace && order && <ApprovalPanel key={order.id} workspace={workspace} loading={loading} onChange={decided} onBusyChange={setApprovalBusy} />;
 
-  return <DemoModeProvider value={demo}><div className="min-h-dvh bg-[var(--canvas)] px-3 py-5 text-[var(--ink)] sm:px-6"><main className={`mx-auto ${split ? "max-w-[1280px]" : workbench ? "max-w-[1120px]" : "max-w-[860px]"}`}>
-    <header className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
-      <div className="flex items-center gap-2 text-sm font-semibold"><BrandMark className="h-7 w-7" />Setti</div>
-      {member && order && <BackToChat projectKey={order.projectKey} />}
+  return <DemoModeProvider value={demo}><div className={embedded ? "min-w-0 pb-2 text-[var(--ink)]" : "min-h-dvh bg-[var(--canvas)] px-3 py-5 text-[var(--ink)] sm:px-6"}><main className={`${embedded ? "" : "mx-auto"} ${embedded ? "" : split ? "max-w-[1280px]" : workbench ? "max-w-[1120px]" : "max-w-[860px]"}`}>
+    <header className={`mb-5 flex flex-wrap items-center gap-x-4 gap-y-3 ${embedded ? "rounded-xl bg-white px-4 py-2.5" : ""}`}>
+      {!embedded && <div className="flex items-center gap-2 text-sm font-semibold"><BrandMark className="h-7 w-7" />Setti</div>}
+      {member && order && !embedded && <BackToChat projectKey={order.projectKey} />}
       <div className="ml-auto flex flex-wrap items-center gap-3">
         <button onClick={() => void load()} disabled={loading || approvalBusy} className="flex items-center gap-1.5 text-[11px] text-slate-500 hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Refresh status</button>
         <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-medium text-slate-500">{workspace?.clientName ? demo ? "Client review · demo session" : "Client review" : demo ? "Read-only shared review · demo" : "Read-only shared review"}</span>
@@ -151,7 +152,7 @@ export function ChangeOrderPage({ orderId, account, demo = false, studioName = "
     {error && <div role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-[12px] text-red-800">{error}</div>}
     {order && workspace && <>
       {/* The walkthrough guide stays in view while the page scrolls. */}
-      {demo && account && <div ref={guide} className="sticky top-0 z-30 -mx-3 mb-5 bg-[var(--canvas)] px-3 pb-3 pt-3 sm:-mx-6 sm:px-6"><TryPageGuide projectKey={order.projectKey} account={account} currentView="change-order" currentOrderId={order.id} /></div>}
+      {demo && account && !embedded && <div ref={guide} className="sticky top-0 z-30 -mx-3 mb-5 bg-[var(--canvas)] px-3 pb-3 pt-3 sm:-mx-6 sm:px-6"><TryPageGuide projectKey={order.projectKey} account={account} currentView="change-order" currentOrderId={order.id} /></div>}
 
       {split ? <>
         {/* From 1024px: the formal quote on the left, the money and the decision beside it. Narrower, the right column comes first. */}

@@ -7,6 +7,7 @@ import type { CaseKey, ChangeDraft, DraftChange, DraftItem } from "@/chat/types"
 import type { PricingWorkspace } from "@/pricing/types";
 import { draftEstimate, type DraftEstimate } from "./draft-pricing";
 import { usd } from "./DraftCard";
+import { quoteHref } from "@/quotes/links";
 
 /** "16 ft", "20 boxes", "14": the quantity with a short unit, so the columns stay narrow. */
 function quantity(item: DraftItem | null): string {
@@ -126,7 +127,7 @@ export function DraftMessageCard({ draft, projectKey, projectName }: { draft: Ch
     </div>}
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--line)] bg-[#fdfcf9] px-3.5 py-2.5">
       <span className="text-[11px] text-[var(--muted)]">Draft only</span>
-      <Link href={`/pricing/${projectKey}`} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">Open the quote<ArrowRight className="h-3.5 w-3.5" /></Link>
+      <Link href={quoteHref(projectKey)} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]">Open the quote<ArrowRight className="h-3.5 w-3.5" /></Link>
     </div>
   </div>;
 }
