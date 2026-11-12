@@ -6,7 +6,7 @@ import { nonRefundableText } from "@/pricing/fees";
 import type { FrozenChangeOrder } from "@/pricing/types";
 import type { SavedMethodView } from "@/payments/saved-methods";
 import type { CheckoutView, OperationView, PaymentLineView, PaymentStep, PaymentsWorkspace } from "@/payments/types";
-import { centsText, dateTime, Field, inputClass, money, parseDollars, signedMoney } from "../pricing/common";
+import { centsText, dateTime, Field, inputClass, money, parseDollars } from "../pricing/common";
 import { emptyPaymentFeedback, feedbackMessage, paymentFeedback, paymentReturnNotice } from "./feedback";
 import { lineProgress, paymentScopeTotals } from "./progress";
 import { demoSupplierNumber } from "./demo-supplier";
@@ -18,6 +18,7 @@ import { useTryReadiness } from "../try/useTryReadiness";
 import type { CancellationReason } from "@/payments/cancellation";
 import { CancellationRecord, CancelItemForm } from "./CancelItemForm";
 import { paymentChanged, usePaymentRefresh } from "./usePaymentRefresh";
+import { lineKey, nextBatchStep, PaymentWorkbench, type BatchMode, type BatchResult } from "./PaymentWorkbench";
 
 type LineRef = { itemId: string; side: PaymentLineView["side"] };
 type Action =
@@ -65,7 +66,6 @@ function lineState(line: PaymentLineView, operations: readonly OperationView[]):
 const progressTones = { waiting: "bg-amber-50 text-amber-800", ready: "bg-brand-50 text-brand-800", settled: "bg-emerald-50 text-emerald-800" };
 const lineAnchor = (line: Pick<PaymentLineView, "side" | "itemId">) => `payment-line-${line.side}-${line.itemId}`;
 
-const lineKey = (line: Pick<PaymentLineView, "side" | "itemId">) => `${line.side}:${line.itemId}`;
 /** A link to one item's card, `#payment-line-<side>-<item>`, as the line's key. */
 function lineFromHash(hash: string): string | null {
   const rest = decodeURIComponent(hash).replace(/^#?payment-line-/, "");
@@ -77,18 +77,9 @@ function lineFromHash(hash: string): string | null {
 /** Every item of the version in one table, as the approved items are: select a row to act on it in the side card. */
 function PaymentLines({ workspace, selected, onSelect }: { workspace: PaymentsWorkspace; selected: string | null; onSelect: (key: string) => void }) {
   const totals = paymentScopeTotals(workspace.lines);
-  const quoteDelta = workspace.plan?.quoteDeltaCents;
-  return <div className="mt-4" aria-labelledby="execution-overview-title">
-    <h3 id="execution-overview-title" className="text-[13px] font-semibold text-slate-900">Items in V{workspace.version} · each with its own progress</h3>
-    <p className="mt-1 text-[11px] leading-relaxed text-slate-600">Select an item to record its supplier&apos;s confirmation, then capture, release or refund it. Completing one item does not complete another; the quote budget change is separate from money held, captured or returned.</p>
-    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">{[
-      { label: "Whole-quote budget change", amount: quoteDelta ?? null, signed: true },
-      { label: "Held now · shown items", amount: totals.heldCents },
-      { label: "Captured · shown items", amount: totals.capturedCents },
-      { label: "Refunded · shown items", amount: totals.refundedCents },
-      { label: "Actually released · shown items", amount: totals.releasedCents },
-    ].map((tile) => <div key={tile.label} className="rounded-lg bg-slate-50 p-2.5"><p className="text-[10px] text-slate-500">{tile.label}</p><p className="mt-0.5 text-[15px] font-semibold tabular-nums">{tile.amount === null ? "Unavailable" : tile.signed ? signedMoney(tile.amount) : money(tile.amount)}</p></div>)}</div>
-    <div className="mt-3 max-h-[640px] overflow-auto rounded-lg border border-[var(--line)]">
+  return <div aria-label={`Items in V${workspace.version}`}>
+    <p className="mb-2 text-[11px] leading-relaxed text-slate-600">Each item keeps its own progress. Select one to act on it alone.{totals.releasedCents > 0 ? ` ${money(totals.releasedCents)} of holds released so far.` : ""}</p>
+    <div className="max-h-[640px] overflow-auto rounded-lg border border-[var(--line)]">
       <table className="w-full min-w-[680px] border-collapse text-left text-[12px]">
         <thead className="sticky top-0 z-10 bg-[var(--canvas)] text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
           <tr><th className="px-3 py-2 font-medium">Item</th><th className="px-3 py-2 font-medium">Progress</th><th className="px-3 py-2 text-right font-medium">Held</th><th className="px-3 py-2 text-right font-medium">Net captured</th><th className="px-3 py-2 font-medium">Next step</th><th className="w-8" /></tr>
@@ -132,7 +123,8 @@ function LineDrawer({ line, operations, onClose, children }: { line: PaymentLine
   </>;
 }
 
-export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; onChange?: () => void }) {
+/** `designer`: the designer's view, where the supplier steps are done together in the workbench. */
+export function PaymentsPanel({ order, designer = false, onChange }: { order: FrozenChangeOrder; designer?: boolean; onChange?: () => void }) {
   const readiness = useTryReadiness(order.projectKey);
   const [workspace, setWorkspace] = useState<PaymentsWorkspace | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -142,6 +134,7 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
   const mutating = useRef(false);
   const loadSequence = useRef(0);
   const [selected, setSelected] = useState<string | null>(null);
+  const [results, setResults] = useState<Record<string, BatchResult>>({});
   useEffect(() => {
     if (!selected) return;
     const close = (event: KeyboardEvent) => { if (event.key === "Escape") setSelected(null); };
@@ -204,6 +197,54 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
   }
   const run = async (action: Action, key: string) => !!await request(action, key);
 
+  /**
+   * The supplier steps of several lines in one go: for each ticked line, in turn, its
+   * supplier record and then its PayPal step, through the same endpoint as one line.
+   * The server checks each line on its own; a refused line keeps its reason and the run goes on.
+   */
+  async function runBatch(mode: BatchMode, items: { key: string; reference: string }[]) {
+    if (mutating.current || readiness.blocked || !workspace) return;
+    mutating.current = true; setBusy(`batch:${mode}`); dispatchFeedback({ type: "action_started" });
+    ++loadSequence.current;
+    let current = workspace;
+    try {
+      for (const item of items) {
+        setResults((previous) => ({ ...previous, [item.key]: { mode, state: "running" } }));
+        try {
+          // A line takes a few steps at most: the supplier record, a capture per hold, and a release of what stays held.
+          for (let guard = 0; guard < 4; guard++) {
+            const line = current.lines.find((candidate) => lineKey(candidate) === item.key);
+            const step = line && nextBatchStep(line, mode);
+            if (!line || !step) break;
+            const ref = { itemId: line.itemId, side: line.side };
+            let action: Action;
+            if (step.kind === "supplier_confirmation") {
+              const terms = line.confirmedTerms;
+              if (!terms) throw new Error("This item has no confirmed terms to check the supplier against.");
+              action = { action: "supplier_order", quantity: terms.quantity, unitPriceCents: terms.unitPriceCents, taxCents: terms.taxCents, freightCents: terms.freightCents, inStock: true, leadTimeDays: null, reference: item.reference.trim(), note: "", ...ref };
+            } else if (step.kind === "supplier_credit") action = { action: "supplier_credit", creditCents: step.amountCents, reference: item.reference.trim(), note: "", ...ref };
+            else action = { action: step.kind === "capture" ? "capture" : step.kind === "void" ? "release" : "refund", ...ref };
+            current = (await call(order.id, { ...action, contentHash: order.contentHash, revisionContentHash: order.revisionContentHash })).workspace;
+            setWorkspace(current);
+          }
+          const done = current.lines.find((candidate) => lineKey(candidate) === item.key);
+          const finished = current;
+          setResults((previous) => ({ ...previous, [item.key]: { mode, state: "done", text: done ? lineProgress(done, finished.operations).label : "Done" } }));
+        } catch (cause) {
+          setResults((previous) => ({ ...previous, [item.key]: { mode, state: "refused", text: cause instanceof Error ? cause.message : "This item could not be completed." } }));
+          try { current = (await call(order.id)).workspace; setWorkspace(current); } catch { /* the next line uses the last records read */ }
+        }
+      }
+      dispatchFeedback({ type: "records_loaded" });
+      onChange?.();
+    } finally {
+      ++loadSequence.current;
+      mutating.current = false;
+      setBusy(null);
+      paymentChanged(order.projectKey);
+    }
+  }
+
   /** Cancels an item of this version through the project's item endpoint, then reloads this version's records. */
   async function cancelItem(line: PaymentLineView, reason: CancellationReason, note: string): Promise<boolean> {
     if (mutating.current || readiness.blocked || !workspace) return false;
@@ -238,14 +279,14 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
   const openLine = workspace.lines.find((line) => lineKey(line) === selected) ?? null;
 
   return <section id="payments" aria-labelledby="payments-title" className="mb-5 scroll-mt-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-    <div className="flex flex-wrap items-center gap-2"><h2 id="payments-title" className="mr-auto flex items-center gap-2 text-[16px] font-semibold"><CircleDollarSign className="h-4.5 w-4.5 text-[var(--primary)]" />Payments · V{workspace.version}</h2><span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-800">PayPal Sandbox · test money</span><button onClick={() => void load()} disabled={Boolean(busy)} className="flex items-center gap-1 text-[11px] text-slate-500 hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Reload</button></div>
-    <p className="mt-2 text-[12px] leading-relaxed text-slate-600">Confirmed targets come from V{workspace.version}; held, captured, refunded and released amounts come from recorded PayPal receipts, including earlier versions of the same item. A step runs only when you start it, and a result counts only after PayPal confirms it.</p>
+    <div className="flex flex-wrap items-center gap-2"><h2 id="payments-title" className="mr-auto flex items-center gap-2 text-[16px] font-semibold"><CircleDollarSign className="h-4.5 w-4.5 text-[var(--primary)]" />Payments · V{workspace.version}</h2>{workspace.savedMethod && !workspace.canRemoveSaved && <span className="text-[11px] text-[var(--muted)]">Paid with {savedMethodName(workspace.savedMethod)}</span>}<span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-800">PayPal Sandbox · test money</span><button onClick={() => void load()} disabled={Boolean(busy)} className="flex items-center gap-1 text-[11px] text-slate-500 hover:underline disabled:opacity-50"><RefreshCw className="h-3 w-3" />Reload</button></div>
+    <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Amounts come from recorded PayPal results; a step counts only after PayPal confirms it.</p>
     {(readiness.pending || Boolean(readiness.blocked && readiness.error)) && <p role="status" className="mt-3 rounded-lg bg-amber-50 p-3 text-[12px] leading-relaxed text-amber-900">{readiness.notice ?? readiness.error}</p>}
     {notice && <div role="status" className="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 p-3 text-[12px] leading-relaxed text-amber-900"><span className="flex-1">{notice.text}</span><button aria-label="Dismiss" onClick={() => setNotice(null)}><X className="h-3.5 w-3.5" /></button></div>}
     {error && <p role="alert" className="mt-4 rounded-lg border border-red-100 bg-red-50 p-3 text-[12px] leading-relaxed text-red-900">{error}</p>}
     {workspace.reason && <p className="mt-4 flex items-start gap-2 rounded-lg bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" />{workspace.reason}</p>}
-    {workspace.savedMethod && <div className="mt-4 space-y-3">
-      <SavedMethodCard method={workspace.savedMethod} canRemove={workspace.canRemoveSaved} busy={busy === "remove_saved"} disabled={disabled} onRemove={() => void run({ action: "remove_saved" }, "remove_saved")} />
+    {workspace.savedMethod && (workspace.canRemoveSaved || (workspace.checkout && toHold.length > 1)) && <div className="mt-4 space-y-3">
+      {workspace.canRemoveSaved && <SavedMethodCard method={workspace.savedMethod} canRemove={workspace.canRemoveSaved} busy={busy === "remove_saved"} disabled={disabled} onRemove={() => void run({ action: "remove_saved" }, "remove_saved")} />}
       {workspace.checkout && toHold.length > 1 && <button type="button" disabled={disabled} onClick={() => void run({ action: "hold_saved" }, "hold_saved")}
         className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-3.5 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:opacity-50">{busy === "hold_saved" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <LockKeyhole className="h-3.5 w-3.5" />}Hold all {toHold.length} new items · {money(toHold.reduce((total, step) => total + step.amountCents, 0))} with {savedMethodName(workspace.savedMethod)}</button>}
     </div>}
@@ -267,11 +308,15 @@ export function PaymentsPanel({ order, onChange }: { order: FrozenChangeOrder; o
       </div> : null}
     </div>)}</div>}
 
-    {workspace.lines.length > 0 && <><PaymentLines workspace={workspace} selected={selected} onSelect={setSelected} />
+    {workspace.lines.length > 0 && <><div className="mt-4"><PaymentWorkbench designer={designer} workspace={workspace} order={order} operations={workspace.operations} busy={busy} disabled={disabled || !workspace.canAct} results={results} onRun={(mode, items) => void runBatch(mode, items)} onOpen={setSelected}
+        allItems={<PaymentLines workspace={workspace} selected={selected} onSelect={setSelected} />} /></div>
       {openLine && <LineDrawer line={openLine} operations={workspace.operations} onClose={() => setSelected(null)}>
         <LineDetails key={lineKey(openLine)} line={openLine} operations={workspace.operations} version={workspace.version} busy={busy} disabled={disabled} canAct={workspace.canAct} canReconcile={workspace.canReconcile} pay={pay} onAction={(action, key) => run({ ...action, itemId: openLine.itemId, side: openLine.side } as Action, key)} onCheck={(operationId) => void run({ action: "check", operationId }, `check:${operationId}`)} onCancelItem={(reason, note) => cancelItem(openLine, reason, note)} />
       </LineDrawer>}
-      <PaymentFees lines={workspace.lines} {...(workspace.canReconcile ? { onRefresh: () => void run({ action: "fees" }, "fees"), refreshing: busy === "fees", disabled } : {})} /></>}
+      {/* Fees are evidence, not a step: folded so the steps stay at the top of the page. */}
+      <details className="mt-4 rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer text-[12px] font-medium">PayPal fees and merchant net</summary>
+        <PaymentFees lines={workspace.lines} {...(workspace.canReconcile ? { onRefresh: () => void run({ action: "fees" }, "fees"), refreshing: busy === "fees", disabled } : {})} />
+      </details></>}
 
     {plan && <>
       {workspace.others.lineCount > 0 && <p className="mt-4 rounded-lg bg-slate-50 p-3 text-[12px] leading-relaxed text-slate-600">{workspace.others.lineCount} other quote lines ({money(workspace.others.targetCents)}) are outside this change. Setti shows their amounts but runs no payment step for them in this demo; they are not authorized or paid.</p>}

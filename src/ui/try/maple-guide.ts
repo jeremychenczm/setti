@@ -103,7 +103,7 @@ export function mapleGuideStep(data: MapleGuideData, currentRole: "designer" | "
     if (payments.current && notOrdered.length && !ordered) return {
       index: 3, role: "jordan", destination: "order", orderId: latest.id, anchor: "payments", action: "Record the supplier confirmations",
       title: `Setti caught it: ${notOrdered.length === 1 ? "the held item is" : `${notOrdered.length} held items are`} still not ordered`,
-      detail: `Day ${days}: PayPal's 3-day honor period for ${notOrdered.length === 1 ? "this hold" : "these holds"} is over and no supplier order is recorded, so Setti's daily check put a reminder in Jordan's Inbox for each. Open a reminder, or go to the payments: save each supplier's confirmation, then capture.`,
+      detail: `Day ${days}: PayPal's 3-day honor period for ${notOrdered.length === 1 ? "this hold" : "these holds"} is over and no supplier order is recorded, so Setti's daily check put a reminder in Jordan's Inbox for each. Open a reminder, or go to the payments: tick the held items and record every supplier confirmation and its charge in one step.`,
     };
     const settled = payments.current && !!payments.plan && payments.plan.status !== "blocked" && changed.length > 0 && changed.every((line) => lineProgress(line, payments.operations).settled)
       && !payments.operations.some((operation) => operation.status === "pending" || operation.status === "unknown");
