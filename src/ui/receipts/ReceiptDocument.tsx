@@ -30,8 +30,9 @@ function Sub({ children }: { children: ReactNode }) {
   return <span className="mt-0.5 block text-[11px] text-[var(--muted)]">{children}</span>;
 }
 
+/** What the client reads under an item: its quantity. The supplier and its reference stay with the studio. */
 function itemDetail(item: ReceiptItem) {
-  return `${item.vendor.replace(/\s*\((demo|simulated estimate)\)$/, "")} · ${item.sku}${item.quantity > 1 ? ` · ${units(item.quantity, item.unitLabel)}${item.unitLabel === "each" ? " each" : ""}` : ""}`;
+  return item.quantity > 1 ? `${units(item.quantity, item.unitLabel)}${item.unitLabel === "each" ? " each" : ""}` : "";
 }
 
 /** The seal on a signed version; a dashed stamp on one the client has not signed. */
@@ -99,7 +100,9 @@ const TABLES: Record<string, SheetTable> = {
 function receiptBlocks(receipt: VersionReceipt, studioName: string, demo: boolean, embedded: boolean) {
   const { project, version, agreement, totals, pending } = receipt;
   const signed = isSigned(receipt);
-  const awaiting = version.status === "awaiting_signature";
+  const draft = version.status === "draft";
+  // A draft reads as the quote the client will receive once it is sent.
+  const awaiting = version.status === "awaiting_signature" || draft;
   const sample = signed && receipt.signatures.every((signature) => signature.method === "sample");
   const lastSigned = receipt.signatures.at(-1) ?? null;
   const groups = paymentGroups(receipt);
@@ -129,7 +132,7 @@ function receiptBlocks(receipt: VersionReceipt, studioName: string, demo: boolea
     <div className="grid gap-0.5 text-right">
       <span className="text-[10.5px] font-bold uppercase tracking-[0.16em]">{signed ? "Signed version receipt" : `Quote · version ${version.number}`}</span>
       <span className="font-mono text-[11.5px]">No. {receipt.receiptNo}</span>
-      <span className="text-[11px] text-[var(--muted)]">{signed || !version.sentAt ? `Issued ${ptDateTime(receipt.issuedAt)}` : `Sent ${ptDateTime(version.sentAt)}`}</span>
+      <span className="text-[11px] text-[var(--muted)]">{draft ? `Preview ${ptDateTime(receipt.issuedAt)} · not sent` : signed || !version.sentAt ? `Issued ${ptDateTime(receipt.issuedAt)}` : `Sent ${ptDateTime(version.sentAt)}`}</span>
     </div>
   </header>, 0);
 
@@ -201,7 +204,7 @@ function receiptBlocks(receipt: VersionReceipt, studioName: string, demo: boolea
       <span className="text-[11px] text-[var(--muted)]">{actorName(message.actor)} · project chat · {ptDateTime(message.createdAt)}</span>
       <p className="whitespace-pre-wrap text-[12.5px]">“{message.text}”</p>
     </blockquote>, 12);
-    if (!agreement.source.messages.length && !agreement.source.notice) add("no-source", <p className="text-[12px] text-[var(--muted)]">This version was frozen before Setti kept its source messages.</p>, 12);
+    if (!agreement.source.messages.length && !agreement.source.notice) add("no-source", <p className="text-[12px] text-[var(--muted)]">{draft ? "Setti attaches the chat messages this version came from when you send it." : "This version was frozen before Setti kept its source messages."}</p>, 12);
     if (agreement.terms) add("terms", <div className="grid gap-1">
       <span className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[var(--muted)]">{!signed ? `Terms sent to ${project.client}` : `Terms ${project.client} ${version.status === "changes_requested" ? "reviewed" : "confirmed"}`}</span>
       <p className="whitespace-pre-wrap text-[12.5px] text-[#4a4f45]">{agreement.terms}</p>
@@ -293,10 +296,11 @@ function receiptBlocks(receipt: VersionReceipt, studioName: string, demo: boolea
       <li>Compare the result with the version {version.number} fingerprint above.</li>
     </ol>
     <pre className="m-0 whitespace-pre-wrap break-all rounded border border-[var(--line)] bg-[#f4f3ef] px-3 py-2.5 font-mono text-[10.5px] leading-relaxed text-[#2c3129]">{verifyCommand(receipt.receiptNo)}</pre>
-  </div> : <p className="text-[12px] text-[var(--muted)]">This version came with the demo, so it has no sent-document fingerprint. Setti recorded the fingerprint of its agreed lines when the project was set up.</p>, 12);
+  </div> : draft ? <p className="text-[12px] text-[var(--muted)]">Setti fingerprints this version when you send it. The fingerprint and how to check it then appear here.</p> : <p className="text-[12px] text-[var(--muted)]">This version came with the demo, so it has no sent-document fingerprint. Setti recorded the fingerprint of its agreed lines when the project was set up.</p>, 12);
 
   add("notes", <div className="grid gap-1 text-[10.5px] leading-relaxed text-[var(--muted)]">
     <p>{signed ? "This receipt records the agreement as signed and the PayPal activity reported when it was issued. Money that moves later appears on a newer receipt. It is not a tax invoice."
+      : draft ? `This is a preview of version ${version.number} before ${designer} sends it. ${project.client} receives exactly this quote, with the date it is sent. It is not a tax invoice.`
       : awaiting ? `This quote is version ${version.number} as ${designer} sent it. It becomes the agreement only when ${project.client} signs it; Setti then issues the signed version receipt. It is not a tax invoice.`
         : `This quote is version ${version.number} as ${designer} sent it. A newer version replaced it before ${project.client} signed it, so it is not an agreement. It is not a tax invoice.`}</p>
     <p>Not included: {receipt.notIncluded.join(", ")}. {demo ? "Demo project on PayPal Sandbox" : "PayPal Sandbox"}; no real money moved.</p>

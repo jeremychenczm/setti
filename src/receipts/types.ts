@@ -116,8 +116,9 @@ export interface VersionReceipt {
     /**
      * A V1 is approved, partly approved or declined line by line; a later version is approved or sent back as a whole.
      * Before any signature, a sent version is awaiting it, or superseded once a newer version replaced it unsigned.
+     * "draft": the designer's preview of a version not sent yet; it is never stored or served.
      */
-    status: "approved" | "partly_approved" | "declined" | "changes_requested" | "awaiting_signature" | "superseded";
+    status: "approved" | "partly_approved" | "declined" | "changes_requested" | "awaiting_signature" | "superseded" | "draft";
     /** The confirmed version that replaced this one. */
     replacedBy: number | null;
     sentAt: string | null;

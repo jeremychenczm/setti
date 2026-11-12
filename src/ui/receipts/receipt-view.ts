@@ -85,6 +85,7 @@ const SEAL_WORDS: Record<VersionReceipt["version"]["status"], [string, string | 
   changes_requested: ["RETURNED", "FOR CHANGES"],
   awaiting_signature: ["AWAITING", "SIGNATURE"],
   superseded: ["REPLACED", "NOT SIGNED"],
+  draft: ["DRAFT", "NOT SENT"],
 };
 
 /** The seal on the title: what the client did, on which day, and the version's fingerprint; before a signature, the day it was sent. */
@@ -97,11 +98,11 @@ export function sealOf(receipt: VersionReceipt): Seal {
   const [word, qualifier] = version.status === "approved" && version.number === 1 ? ["APPROVED", null] : SEAL_WORDS[version.status];
   const name = `${project.name.toUpperCase()} · V${version.number} ·`;
   return {
-    word, qualifier, date: signed ? day : `SENT ${day}`,
+    word, qualifier, date: signed || version.status === "draft" ? day : `SENT ${day}`,
     ring: sample ? "SETTI · DEMO SAMPLE APPROVAL · NOT SIGNED IN SETTI ·" : signed ? `SETTI · SIGNED VERSION RECEIPT · ${name}`
-      : `SETTI · QUOTE ${version.status === "awaiting_signature" ? "AWAITING SIGNATURE" : "NOT SIGNED"} · ${name}`,
-    code: versionFingerprint(receipt)?.slice(0, 8).toUpperCase() ?? "SAMPLE",
-    tone: version.status === "approved" || version.status === "partly_approved" ? "ok" : version.status === "awaiting_signature" ? "awaiting" : version.status === "superseded" ? "unsigned" : "muted",
+      : `SETTI · QUOTE ${version.status === "awaiting_signature" ? "AWAITING SIGNATURE" : version.status === "draft" ? "DRAFT · NOT SENT" : "NOT SIGNED"} · ${name}`,
+    code: versionFingerprint(receipt)?.slice(0, 8).toUpperCase() ?? (version.status === "draft" ? "PREVIEW" : "SAMPLE"),
+    tone: version.status === "approved" || version.status === "partly_approved" ? "ok" : version.status === "awaiting_signature" ? "awaiting" : version.status === "superseded" || version.status === "draft" ? "unsigned" : "muted",
   };
 }
 
@@ -199,7 +200,7 @@ export interface CertificateRow {
 export function certificateRows(receipt: VersionReceipt): CertificateRow[] {
   const { version, signatures, project } = receipt;
   const sent: CertificateRow[] = version.sentAt ? [{ event: `Version ${version.number} sent`, by: version.sentBy ?? project.designer, role: "Designer", at: version.sentAt, fingerprint: version.contentHash, matches: null }] : [];
-  if (!signatures.length) return [...sent, { event: version.status === "superseded" ? "Not signed · replaced" : "Awaiting signature", by: project.client, role: "Client", at: null, fingerprint: null, matches: null }];
+  if (!signatures.length) return [...sent, { event: version.status === "superseded" ? "Not signed · replaced" : version.status === "draft" ? "Not sent yet" : "Awaiting signature", by: project.client, role: "Client", at: null, fingerprint: null, matches: null }];
   return [...sent, ...signatures.map((signature, index): CertificateRow => ({
     event: signature.method === "sample" ? "Sample approval (demo)"
       : version.number === 1 ? `Signing ${index + 1}`
