@@ -38,12 +38,24 @@ export function savedMethodView(row: SavedMethodRow | null): SavedMethodView | n
 }
 
 /** Removes the saved payment method of the project this browser session owns. */
-export async function removeCaseSavedMethod(db: Db, paypal: PayPalPayments, sessionId: string, key: CaseKey): Promise<void> {
+/** The payment project behind this browser's case, or null when it has none yet. */
+async function caseProjectId(db: Reader, sessionId: string, key: CaseKey): Promise<string | null> {
   const [found] = await db.select({ projectId: pricingCases.projectId }).from(chatCases)
     .innerJoin(pricingCases, eq(pricingCases.caseId, chatCases.id))
     .where(and(eq(chatCases.sessionId, sessionId), eq(chatCases.projectKey, key)));
-  if (!found?.projectId) throw new PaymentActionError("NOT_FOUND", "This project has no payment records in this browser.");
-  await removeSavedMethod(db, paypal, found.projectId);
+  return found?.projectId ?? null;
+}
+
+/** The case's saved payment method in any state of its versions, also while none is confirmed. */
+export async function caseSavedMethod(db: Reader, sessionId: string, key: CaseKey): Promise<SavedMethodRow | null> {
+  const projectId = await caseProjectId(db, sessionId, key);
+  return projectId ? activeSavedMethod(db, projectId) : null;
+}
+
+export async function removeCaseSavedMethod(db: Db, paypal: PayPalPayments, sessionId: string, key: CaseKey): Promise<void> {
+  const projectId = await caseProjectId(db, sessionId, key);
+  if (!projectId) throw new PaymentActionError("NOT_FOUND", "This project has no payment records in this browser.");
+  await removeSavedMethod(db, paypal, projectId);
 }
 
 /**

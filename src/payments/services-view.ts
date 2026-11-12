@@ -12,7 +12,9 @@ import { items } from "../db/schema";
 import { PaymentActionError } from "./binding";
 import { recordedSettlement } from "./fee-evidence";
 import type { PaymentOperation } from "./operations";
-import { activeSavedMethod, savedMethodView, type SavedMethodView } from "./saved-methods";
+import { activeSavedMethod, caseSavedMethod, savedMethodView, type SavedMethodView } from "./saved-methods";
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 import { paypalCalls } from "./schema";
 import { lockPaymentBasis } from "./services";
 import type { CheckoutView, DemoCheckout, RecordedSettlement } from "./types";
@@ -60,8 +62,11 @@ export async function servicesPaymentView(db: Db, sessionId: string | null, key:
   let basis;
   try { basis = await db.transaction((tx) => lockPaymentBasis(tx, sessionId, key)); }
   catch (error) {
-    if (error instanceof PaymentActionError) return empty(error.message);
-    throw error;
+    if (!(error instanceof PaymentActionError)) throw error;
+    // Nothing is payable yet, but the method saved for the project still shows, and its client may remove it.
+    const saved = UUID_PATTERN.test(sessionId) ? savedMethodView(await caseSavedMethod(db, sessionId, key)) : null;
+    const client = account?.role === "client" && account.projectKey === key;
+    return { ...empty(error.message), savedPayPal: !!saved, savedMethod: saved, canRemoveSaved: client && !!saved };
   }
   const { ledger, plan } = basis;
   const kinds = new Map((await db.select({ id: items.id, kind: items.kind }).from(items).where(eq(items.projectId, basis.projectId))).map((row) => [row.id, row.kind]));
