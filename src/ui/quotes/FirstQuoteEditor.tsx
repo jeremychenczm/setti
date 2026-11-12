@@ -1,7 +1,7 @@
 "use client";
 
-import { ChevronDown, Columns3, Eye, EyeOff, LoaderCircle, MessageCircle, Plus, Save, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { EyeOff, LoaderCircle, MessageCircle, Plus, Redo2, Save, Trash2, Undo2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CaseKey } from "@/chat/types";
 import type { QuoteView } from "@/opening/types";
 import type { PricingChangeInput } from "@/pricing/types";
@@ -12,6 +12,8 @@ import { BrandMark } from "../BrandMark";
 import { ChangeDrawer } from "../pricing/ChangeDrawer";
 import { shortMoney } from "../pricing/common";
 import { QuotePreview } from "../pricing/QuotePreview";
+import { FirstTotalCard } from "../pricing/TotalCard";
+import { EditorCrumbs, EditorLayout, GHOST, ItemsCard, PreviewButton, ProjectInfoCard, SELECT, SEND, SendBar, SumRow, TOOL } from "../pricing/EditorFrame";
 import { INTERNAL_COLUMNS, QuoteItemsGrid, type EditableGridField, type ItemsColumns, type ItemsView } from "../pricing/QuoteItemsGrid";
 
 /** A line as the form holds it: amounts as typed, in dollars. */
@@ -109,7 +111,7 @@ const LABEL = "block text-[11px] font-medium text-slate-600";
  * draft is saved at once; the server checks it and refuses a save over a draft
  * changed elsewhere. It is sent from the project chat.
  */
-export function FirstQuoteEditor({ projectKey, view, onSaved, onOpenChat }: { projectKey: CaseKey; view: QuoteView; onSaved: () => Promise<void>; onOpenChat: () => void }) {
+export function FirstQuoteEditor({ projectKey, view, studioName = "", onSaved, onOpenChat }: { projectKey: CaseKey; view: QuoteView; studioName?: string; onSaved: () => Promise<void>; onOpenChat: () => void }) {
   const [room, setRoom] = useState(view.document.room);
   const [clientName, setClientName] = useState(view.document.clientName);
   const [lines, setLines] = useState<FormLine[]>(() => view.document.lines.map(toForm));
@@ -125,10 +127,35 @@ export function FirstQuoteEditor({ projectKey, view, onSaved, onOpenChat }: { pr
   const [infoOpen, setInfoOpen] = useState(true);
   const [itemsOpen, setItemsOpen] = useState(true);
   const [previewing, setPreviewing] = useState(false);
+  // Naming a new section, or renaming one: `from` is the section being renamed.
+  const [section, setSection] = useState<{ from: string | null; name: string } | null>(null);
   const totals = useMemo(() => ({
     products: lines.filter((line) => line.category === "furniture").reduce((sum, line) => sum + (lineTotal(line) ?? 0), 0),
     services: lines.filter((line) => line.category === "service").reduce((sum, line) => sum + (lineTotal(line) ?? 0), 0),
   }), [lines]);
+
+  // Undo and redo step through the designer's edits on this page.
+  type Snapshot = { lines: FormLine[]; clientName: string; room: string };
+  const steps = useRef<{ past: Snapshot[]; future: Snapshot[]; last: Snapshot; replaying: boolean }>({ past: [], future: [], last: { lines, clientName, room }, replaying: false });
+  const [history, setHistory] = useState({ past: 0, future: 0 });
+  useEffect(() => {
+    const record = steps.current;
+    const now = { lines, clientName, room };
+    if (record.replaying) record.replaying = false;
+    else if (record.last.lines !== lines || record.last.clientName !== clientName || record.last.room !== room) { record.past.push(record.last); record.future = []; }
+    record.last = now;
+    setHistory({ past: record.past.length, future: record.future.length });
+  }, [lines, clientName, room]);
+  function replay(from: "past" | "future") {
+    const record = steps.current;
+    const target = record[from].pop();
+    if (!target) return;
+    record[from === "past" ? "future" : "past"].push(record.last);
+    record.replaying = true;
+    setLines(target.lines); setClientName(target.clientName); setRoom(target.room); setDirty(true);
+  }
+  const undo = () => replay("past");
+  const redo = () => replay("future");
 
   useEffect(() => {
     if (!dirty) return;
@@ -139,7 +166,16 @@ export function FirstQuoteEditor({ projectKey, view, onSaved, onOpenChat }: { pr
 
   const index = editing ? lines.findIndex((line) => line.key === editing.key) : -1;
   function open(key: string) { const line = lines.find((entry) => entry.key === key); if (line) { setEditing({ ...line }); setLineError(null); } }
-  function add() { setEditing(blank(room)); setLineError(null); }
+  // A new line goes into the last section used, until the designer picks another.
+  function add(into?: string) { setEditing(blank(into ?? lines.at(-1)?.room ?? "")); setLineError(null); }
+  function saveSection() {
+    if (!section) return;
+    const name = section.name.trim();
+    if (!name) return;
+    if (section.from === null) add(name);
+    else { const from = section.from; setLines((current) => current.map((line) => line.room.trim() === from ? { ...line, room: name } : line)); setDirty(true); }
+    setSection(null);
+  }
   /** Keeps the open line, if it is valid, and returns the lines with it. */
   function commit(): FormLine[] | null {
     if (!editing) return lines;
@@ -152,6 +188,18 @@ export function FirstQuoteEditor({ projectKey, view, onSaved, onOpenChat }: { pr
   function keep() { if (commit()) setEditing(null); }
   /** Moving to another line keeps this one first. */
   function step(by: number) { const next = commit(); const target = next?.[Math.max(0, (index >= 0 ? index : lines.length) + by)]; if (next && target) { setEditing({ ...target }); setLineError(null); } }
+  /** Moves a line before or after another; dropped into another section, it joins that section. */
+  function move(key: string, target: string, place: "before" | "after") {
+    setLines((current) => {
+      const moving = current.find((line) => line.key === key), anchor = current.find((line) => line.key === target);
+      if (!moving || !anchor || key === target) return current;
+      const rest = current.filter((line) => line.key !== key);
+      const at = rest.indexOf(anchor) + (place === "after" ? 1 : 0);
+      const moved = viewBy === "section" ? { ...moving, room: anchor.room } : moving;
+      return [...rest.slice(0, at), moved, ...rest.slice(at)];
+    });
+    setDirty(true);
+  }
   function remove(key: string) { setLines((current) => current.filter((line) => line.key !== key)); setDirty(true); setEditing(null); }
   function editCell(key: string, field: EditableGridField, value: string) {
     setLines((current) => current.map((line) => line.key !== key ? line : field === "quantity" ? { ...line, quantity: value.trim() } : field === "unitPriceCents" ? { ...line, unitPrice: value.trim() } : line));
@@ -173,74 +221,59 @@ export function FirstQuoteEditor({ projectKey, view, onSaved, onOpenChat }: { pr
   }
 
   const set = <K extends keyof FormLine>(key: K) => (value: FormLine[K]) => setEditing((line) => line ? { ...line, [key]: value } : line);
-  const card = "rounded-xl border border-[var(--line)] bg-white";
-  const moduleTitle = "inline-flex items-center gap-2 text-[18px] font-bold tracking-tight";
   const changes = lines.map(asChange);
-  return <section className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-xl" aria-label="Quote editor">
-    <div className="grid gap-4 text-[var(--ink)]">
-      <header className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl bg-white px-4 py-2.5"><span className="text-[12px] text-[var(--muted)]">Quotes / <b className="font-semibold text-[var(--ink)]">{view.document.projectName}</b></span>
-        <span className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-[12px] text-[var(--muted)]">Version <b className="font-semibold text-[var(--ink)]">V1 · Draft</b></span></header>
-      {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-800">{error}</p>}
+  const designer = view.document.designerName.replace(/\s*\(demo designer\)$/, "");
+  const created = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" });
+  const total = totals.products + totals.services;
+  return <section className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-xl text-[12.5px] text-[var(--ink)]" aria-label="Quote editor">
+    <EditorLayout
+      main={<>
+        <EditorCrumbs name={view.document.projectName} right={<span className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-white px-2.5 py-[5px] text-[12px] text-[var(--muted)]">Version <b className="font-semibold text-[var(--ink)]">V1 · Draft</b></span>} />
+        {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-800">{error}</p>}
 
-      <section className={card} aria-label="Project info">
-        <div className={`flex flex-wrap items-center gap-3 px-4 py-3 ${infoOpen ? "border-b border-[var(--line)]" : ""}`}>
-          <button type="button" onClick={() => setInfoOpen((value) => !value)} aria-expanded={infoOpen} className={moduleTitle}><ChevronDown className={`h-4 w-4 transition-transform ${infoOpen ? "" : "-rotate-90"}`} />Project info</button>
-          {!infoOpen && <span className="text-[12px] text-[var(--muted)]">{view.document.projectName} · {clientName || "No client yet"} · Quote V1 · Draft</span>}
-        </div>
-        {infoOpen && <>
-          <div className="grid sm:grid-cols-2">
-            <div className="flex items-center gap-3 px-4 py-3.5"><BrandMark className="h-10 w-10" /><div><p className="text-[13.5px] font-semibold">{view.document.designerName.replace(/\s*\(demo designer\)$/, "")}</p><p className="text-[12px] text-[var(--muted)]">Designer</p></div></div>
-            <label className="border-t border-[var(--line)] px-4 py-3.5 sm:border-l sm:border-t-0"><span className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--muted)]">Client</span>
-              <input value={clientName} maxLength={120} onChange={(event) => { setClientName(event.target.value); setDirty(true); }} placeholder="The client's full name" className={FIELD} /></label>
-          </div>
-          <div className="flex flex-wrap items-end gap-x-7 gap-y-2 border-t border-[var(--line)] px-4 py-3.5"><h1 className="mr-auto text-[21px] font-semibold tracking-tight">{view.document.projectName}</h1>
-            <label className="grid w-[240px] text-[10.5px] font-semibold uppercase tracking-wider text-[var(--muted)]">Scope or rooms<input value={room} maxLength={120} onChange={(event) => { setRoom(event.target.value); setDirty(true); }} placeholder="Kitchen and dining" className={`${FIELD} normal-case tracking-normal`} /></label>
-            <span className="grid"><span className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--muted)]">Currency</span><b className="text-[12.5px]">USD</b></span></div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--line)] px-4 py-2.5 text-[12px] text-[var(--muted)]">Quote <b className="text-[var(--ink)]">V1</b><span className="rounded-full bg-[var(--canvas)] px-2.5 py-0.5 text-[11px] font-semibold text-slate-600">{dirty ? "Draft · unsaved edits" : "Draft · saved"}</span><span>Only you can see this draft.</span></div>
-        </>}
-      </section>
+        <ProjectInfoCard open={infoOpen} onToggle={() => setInfoOpen((value) => !value)} summary={`${view.document.projectName} · ${clientName || "No client yet"} · Quote V1 · Draft`}
+          studio={{ name: studioName || designer, person: `${designer} · Designer`, note: "Studio details from Settings" }}
+          client={<><input aria-label="Client name" value={clientName} maxLength={120} onChange={(event) => { setClientName(event.target.value); setDirty(true); }} placeholder="The client's full name" className="-mx-1.5 rounded-md border border-transparent px-1.5 py-0.5 text-[13.5px] font-bold outline-none hover:border-[var(--line)] focus:border-[#cfcab9]" />
+            <input aria-label="Scope or rooms" value={room} maxLength={120} onChange={(event) => { setRoom(event.target.value); setDirty(true); }} placeholder="Scope or rooms, for example Kitchen and dining" className="-mx-1.5 rounded-md border border-transparent px-1.5 py-0.5 text-[12.5px] outline-none hover:border-[var(--line)] focus:border-[#cfcab9]" />
+            <span className="text-[12.5px] text-[var(--muted)]">Signs in the project chat</span></>}
+          title={view.document.projectName}
+          meta={[{ label: "Created", value: created }, { label: "Currency", value: "USD" }]}
+          quote={{ version: 1, status: "Draft", note: dirty ? "Only you can see this draft. Unsaved edits." : "Only you can see this draft." }} />
 
-      <section className={card} aria-label="Quote items">
-        <div className="flex flex-wrap items-center gap-3 px-4 pb-1 pt-3.5">
-          <button type="button" onClick={() => setItemsOpen((value) => !value)} aria-expanded={itemsOpen} className={moduleTitle}><ChevronDown className={`h-4 w-4 transition-transform ${itemsOpen ? "" : "-rotate-90"}`} />Quote items</button>
-          {!itemsOpen && <span className="text-[12px] text-[var(--muted)]">{lines.length} items · V1 total {shortMoney(totals.products + totals.services)}</span>}
-        </div>
-        {itemsOpen && <>
-          <div className="flex flex-wrap items-center gap-2 px-4 py-2.5">
-            <button type="button" onClick={add} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] font-semibold hover:bg-[var(--canvas)]"><Plus className="h-3.5 w-3.5" />Add item</button>
-            <button type="button" onClick={onOpenChat} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] font-semibold text-[var(--primary)] hover:bg-[var(--canvas)]"><BrandMark className="h-4 w-4" />Ask Setti to draft from the chat</button>
-            <span className="ml-auto inline-flex items-center gap-1.5 text-[12px] text-[var(--muted)]">View by<select aria-label="View by" value={viewBy} onChange={(event) => setViewBy(event.target.value as ItemsView)} className="rounded-lg border border-[var(--line)] bg-white px-2 py-1 text-[12px] text-[var(--ink)]"><option value="section">Section</option><option value="supplier">Supplier</option></select></span>
+        <ItemsCard open={itemsOpen} onToggle={() => setItemsOpen((value) => !value)} summary={`${lines.length} items · V1 total ${shortMoney(total)}`}
+          tools={<>
+            <button type="button" onClick={() => setSection({ from: null, name: "" })} className={TOOL}><Plus className="h-[15px] w-[15px]" />Add section</button>
+            <button type="button" onClick={() => add()} className={TOOL}><Plus className="h-[15px] w-[15px]" />Add item</button>
+            <button type="button" onClick={onOpenChat} className={`${TOOL} text-[var(--primary)]`}><BrandMark className="h-[15px] w-[15px]" />Ask Setti to draft the quote</button>
+            <button type="button" onClick={undo} disabled={saving || !history.past} aria-label="Undo" title="Undo" className={TOOL}><Undo2 className="h-[15px] w-[15px]" /></button>
+            <button type="button" onClick={redo} disabled={saving || !history.future} aria-label="Redo" title="Redo" className={TOOL}><Redo2 className="h-[15px] w-[15px]" /></button>
+            <span className="flex-1" />
+            <label className="inline-flex items-center gap-1.5 text-[12px] text-[var(--muted)]">View by<select aria-label="View by" value={viewBy} onChange={(event) => setViewBy(event.target.value as ItemsView)} className={SELECT}><option value="section">Section</option><option value="supplier">Supplier</option></select></label>
             <span className="relative">
-              <button type="button" onClick={() => setColumnsOpen((value) => !value)} aria-expanded={columnsOpen} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-white px-2.5 py-1.5 text-[12px] font-medium hover:bg-[var(--canvas)]"><Columns3 className="h-3.5 w-3.5" />Columns</button>
-              {columnsOpen && <div role="dialog" aria-label="Columns" className="absolute right-0 top-[calc(100%+6px)] z-20 grid w-56 gap-0.5 rounded-xl border border-[var(--line)] bg-white p-2 shadow-lg">
-                {INTERNAL_COLUMNS.filter((column) => column.key !== "source").map((column) => <label key={column.key} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[12px] hover:bg-[var(--canvas)]"><input type="checkbox" checked={columnsShown[column.key]} onChange={(event) => setColumnsShown((shown) => ({ ...shown, [column.key]: event.target.checked }))} /><span className="flex-1">{column.label}</span><EyeOff className="h-3.5 w-3.5 text-[var(--muted)]" aria-label="Hidden from the client" /></label>)}
-                <p className="mt-1 border-t border-[var(--line)] px-2 pt-1.5 text-[10.5px] text-[var(--muted)]">Columns with <EyeOff className="inline h-3 w-3" /> never appear on the quote the client receives.</p>
+              <button type="button" onClick={() => setColumnsOpen((value) => !value)} aria-expanded={columnsOpen} className={GHOST}>Columns</button>
+              {columnsOpen && <div role="dialog" aria-label="Columns" className="absolute right-0 top-[calc(100%+6px)] z-20 grid w-56 gap-0.5 rounded-[10px] border border-[var(--line)] bg-white p-2 shadow-lg">
+                {INTERNAL_COLUMNS.filter((column) => column.key !== "source").map((column) => <label key={column.key} className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-[5px] text-[12px] hover:bg-[var(--canvas)]"><input type="checkbox" checked={columnsShown[column.key]} onChange={(event) => setColumnsShown((shown) => ({ ...shown, [column.key]: event.target.checked }))} /><span className="flex-1">{column.label}</span><EyeOff className="h-3.5 w-3.5 text-[var(--muted)]" aria-label="Hidden from the client" /></label>)}
+                <p className="mt-1 border-t border-[var(--line)] px-1.5 pt-1 text-[11px] text-[var(--muted)]">Columns with <EyeOff className="inline h-3 w-3" /> never appear on the quote the client receives.</p>
               </div>}
             </span>
-            <button type="button" onClick={() => { setColumnsOpen(false); setPreviewing(true); }} disabled={!lines.length} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--ink)] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#1f241d] disabled:opacity-40"><Eye className="h-3.5 w-3.5" />Preview</button>
-          </div>
-          <div className="px-4 pb-4">{lines.length
-            ? <QuoteItemsGrid first changes={changes} baselineLines={[]} issues={[]} raw={{}} disabled={saving} drafted={false} view={viewBy} columns={columnsShown} selectedKey={editing?.key ?? null} onSelect={open} onEdit={editCell} onCheck={() => undefined} onResolve={() => undefined} />
-            : <div className="grid justify-items-center gap-2.5 rounded-xl border border-dashed border-[var(--line)] px-4 py-10 text-center"><h2 className="text-[15px] font-semibold">This quote has no items yet</h2><p className="max-w-[52ch] text-[12.5px] text-[var(--muted)]">Add the items and services the client will decide on, or ask Setti to draft them from the project chat. Nothing reaches the client until you send it.</p>
-              <div className="flex flex-wrap justify-center gap-2"><button type="button" onClick={add} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-white px-3 py-1.5 text-[12px] font-medium"><Plus className="h-3.5 w-3.5" />Add item</button><button type="button" onClick={onOpenChat} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--ink)] px-3 py-1.5 text-[12px] font-semibold text-white"><MessageCircle className="h-3.5 w-3.5" />Ask Setti to draft from the chat</button></div></div>}</div>
-        </>}
-      </section>
-
-      {lines.length > 0 && <section className={`${card} grid gap-2.5 p-5 lg:ml-auto lg:w-[min(100%,520px)]`} aria-label="Total">
-        <h2 className="text-[15px] font-bold">Total</h2>
-        <p className="flex justify-between text-[13px]"><span className="text-[var(--muted)]">Products</span><span className="tabular-nums">{shortMoney(totals.products)}</span></p>
-        <p className="flex justify-between text-[13px]"><span className="text-[var(--muted)]">Services</span><span className="tabular-nums">{shortMoney(totals.services)}</span></p>
-        <p className="mt-1 flex justify-between border-t-2 border-[var(--ink)] pt-2.5 text-[18px] font-bold"><span>V1 total</span><span className="tabular-nums">{shortMoney(totals.products + totals.services)}</span></p>
-        <p className="text-[11.5px] leading-relaxed text-[var(--muted)]">When the client signs, the services they approve are paid and the products they approve are held on their card.</p>
-      </section>}
-
-      <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-[var(--line)] bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
-        <span className="mr-auto text-[12px] text-slate-600">{lines.length} {lines.length === 1 ? "item" : "items"} · Send V1 from the project chat once it is saved; it is frozen when sent.</span>
+            <PreviewButton onClick={() => { setColumnsOpen(false); setPreviewing(true); }} disabled={!lines.length} />
+          </>}>
+          {lines.length
+            ? <QuoteItemsGrid first changes={changes} baselineLines={[]} issues={[]} raw={{}} disabled={saving} drafted={false} view={viewBy} columns={columnsShown} selectedKey={editing?.key ?? null} onSelect={open} onEdit={editCell} onCheck={() => undefined} onResolve={() => undefined} onRenameGroup={(name) => setSection({ from: name, name })} onAddItem={(name) => add(name)} onMove={move} />
+            : <div className="grid justify-items-center gap-2.5 px-4 pb-[38px] pt-[34px] text-center"><h4 className="text-[15px] font-bold">This quote has no items yet</h4><p className="max-w-[52ch] text-[var(--muted)]">Add the items and services the client will decide on, or ask Setti to draft them from the project chat. Nothing reaches the client until you send it.</p>
+              <div className="flex flex-wrap justify-center gap-2"><button type="button" onClick={() => setSection({ from: null, name: "" })} className={GHOST}><Plus className="h-3.5 w-3.5" />Add section</button><button type="button" onClick={() => add()} className={GHOST}><Plus className="h-3.5 w-3.5" />Add item</button><button type="button" onClick={onOpenChat} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--ink)] px-3 py-[7px] text-[12px] font-semibold text-white"><MessageCircle className="h-3.5 w-3.5" />Ask Setti to draft from the chat</button></div></div>}
+        </ItemsCard>
+      </>}
+      side={lines.length > 0 && <SumRow>
+        <span aria-hidden className="hidden sm:block @min-[1472px]:hidden" />
+        <FirstTotalCard productCents={totals.products} serviceCents={totals.services} />
+      </SumRow>}
+      bar={<SendBar>
+        <span className="flex-1 text-[12px] text-[#4b5348]">{lines.length} {lines.length === 1 ? "item" : "items"} · Send V1 from the project chat once it is saved; it is frozen when sent.</span>
         <span className="text-[11.5px] text-[var(--muted)]">{dirty ? "Unsaved edits" : "Saved"}</span>
-        <button type="button" onClick={() => void save()} disabled={saving || !dirty} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-4 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:font-medium disabled:text-slate-400">{saving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}Save</button>
-        <button type="button" onClick={onOpenChat} disabled={dirty} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-4 py-2 text-[12px] font-medium hover:bg-[var(--canvas)] disabled:opacity-40"><MessageCircle className="h-3.5 w-3.5" />Send from the chat</button>
-      </div>
-    </div>
+        <button type="button" onClick={() => void save()} disabled={saving || !dirty} className={dirty ? SEND : GHOST}>{saving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}Save</button>
+        <button type="button" onClick={onOpenChat} disabled={dirty} className={SEND}><MessageCircle className="h-[15px] w-[15px]" />Send from the chat</button>
+      </SendBar>} />
 
     {editing && <ChangeDrawer index={index >= 0 ? index : lines.length} count={index >= 0 ? lines.length : lines.length + 1} action={index >= 0 ? "quantity" : "add"} title={editing.name || "New item"} subtitle={[editing.vendor, editing.sku].filter(Boolean).join(" · ") || undefined}
       eyebrow={index >= 0 ? `Item ${index + 1} of ${lines.length}` : "New item"} onDone={keep}
@@ -281,5 +314,13 @@ export function FirstQuoteEditor({ projectKey, view, onSaved, onOpenChat }: { pr
       </div>
     </ChangeDrawer>}
     {previewing && <QuotePreview receipt={draftReceipt(view, room, clientName, lines)} onClose={() => setPreviewing(false)} />}
+    {section && <div className="fixed inset-0 z-40 flex items-center justify-center bg-[rgba(36,38,32,0.45)] p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setSection(null); }}>
+      <form role="dialog" aria-modal="true" aria-labelledby="section-title" onSubmit={(event) => { event.preventDefault(); saveSection(); }} className="grid w-full max-w-[400px] gap-3 rounded-2xl bg-white p-5 shadow-2xl">
+        <h2 id="section-title" className="text-[15px] font-bold">{section.from === null ? "Add section" : `Rename ${section.from}`}</h2>
+        <p className="-mt-1.5 text-[12px] text-[var(--muted)]">{section.from === null ? "Group the quote the way the client thinks about it, for example by room or trade. Its first item opens next." : "Every item in this section moves with the new name."}</p>
+        <label className={LABEL}>Section name<input value={section.name} autoFocus maxLength={120} onChange={(event) => setSection({ ...section, name: event.target.value })} placeholder="Kitchen, Lighting, Trade work…" className={FIELD} /></label>
+        <div className="flex justify-end gap-2"><button type="button" onClick={() => setSection(null)} className="rounded-lg px-3 py-1.5 text-[12px] font-medium text-slate-600 hover:bg-[var(--canvas)]">Cancel</button><button type="submit" disabled={!section.name.trim()} className="rounded-lg bg-[var(--ink)] px-3.5 py-1.5 text-[12px] font-semibold text-white disabled:bg-slate-200 disabled:text-slate-400">{section.from === null ? "Add section" : "Rename"}</button></div>
+      </form>
+    </div>}
   </section>;
 }

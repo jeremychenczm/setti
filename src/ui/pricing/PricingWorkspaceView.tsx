@@ -1,17 +1,19 @@
 "use client";
 
-import { Check, ChevronDown, Columns3, Eye, EyeOff, LoaderCircle, Save, Send } from "lucide-react";
+import { Check, EyeOff, LoaderCircle, Plus, Redo2, Save, Send, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { CaseKey } from "@/chat/types";
 import { canLoadMapleSampleMaterials, loadMapleSampleMaterials, MAPLE_SAMPLE_MATERIALS } from "@/demo/maple-materials";
-import { draftSource, previewPricing, requiresOldItemHandling } from "@/pricing/calculation";
+import { draftSource, orderedUnits, previewPricing, requiresOldItemHandling } from "@/pricing/calculation";
 import { NON_REFUNDABLE_FEE_KINDS } from "@/pricing/fees";
 import { feeField, OldItemFees } from "./OldItemFees";
 import type { NonRefundableFeeKind, OldItemHandling, PricingChangeInput, PricingItem } from "@/pricing/types";
 import { calculateLineTotals, calculateQuoteTotals } from "@/quotes/totals";
-import { centsText, Field, inputClass, money, parseDollars, FromV1Note, shortMoney, signedMoney } from "./common";
+import { centsText, Field, inputClass, money, parseDollars, FromV1Note } from "./common";
 import { fieldKey, INTERNAL_COLUMNS, QuoteItemsGrid, type EditableGridField, type ItemsColumns, type ItemsView, type RawFields } from "./QuoteItemsGrid";
 import { QuotePreview, VersionMenu } from "./QuotePreview";
+import { ChangeTotalCard } from "./TotalCard";
+import { DraftedBySetti, EditorCrumbs, EditorLayout, GHOST, ItemsCard, PreviewButton, ProjectInfoCard, SELECT, SEND, SendBar, SumCard, SumRow, Todo, TOOL } from "./EditorFrame";
 import { draftReceipt } from "./draft-receipt";
 import { BrandMark } from "../BrandMark";
 import { usePricingWorkspace } from "./usePricingWorkspace";
@@ -30,7 +32,7 @@ const quantityIdentityFields = new Set<keyof PricingItem>(["name", "vendor", "sk
 const drawerHeading = "text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]";
 
 /** The designer's quote editor for the open draft. `embedded` inside the Quotes module, whose sidebar and guide are the page's. */
-export function PricingWorkspaceView({ projectKey, clientName, guide, embedded = false }: { projectKey: CaseKey; clientName: string; guide?: ReactNode; embedded?: boolean }) {
+export function PricingWorkspaceView({ projectKey, clientName, studioName = "", guide, embedded = false }: { projectKey: CaseKey; clientName: string; studioName?: string; guide?: ReactNode; embedded?: boolean }) {
   const readiness = useTryReadiness(projectKey);
   const state = usePricingWorkspace(projectKey);
   const { workspace, input, setInput } = state;
@@ -58,6 +60,30 @@ export function PricingWorkspaceView({ projectKey, clientName, guide, embedded =
   const [itemsOpen, setItemsOpen] = useState(true);
   const [previewing, setPreviewing] = useState(false);
   useEffect(() => () => { if (leaving.current !== null) window.clearTimeout(leaving.current); }, []);
+
+  // Undo and redo step through the designer's edits since the review was loaded.
+  type Input = NonNullable<typeof input>;
+  const steps = useRef<{ epoch: number; past: Input[]; future: Input[]; last: Input | null; replaying: boolean }>({ epoch: -1, past: [], future: [], last: null, replaying: false });
+  const [history, setHistory] = useState({ past: 0, future: 0 });
+  useEffect(() => {
+    const record = steps.current;
+    if (record.epoch !== state.editorEpoch) Object.assign(record, { epoch: state.editorEpoch, past: [], future: [], last: input, replaying: false });
+    else if (record.replaying) Object.assign(record, { last: input, replaying: false });
+    else if (input && record.last && record.last !== input) { record.past.push(record.last); record.future = []; record.last = input; }
+    else record.last = input;
+    setHistory({ past: record.past.length, future: record.future.length });
+  }, [input, state.editorEpoch]);
+  function replay(from: "past" | "future") {
+    const record = steps.current;
+    const target = record[from].pop();
+    if (!target || !input) return;
+    record[from === "past" ? "future" : "past"].push(input);
+    record.replaying = true;
+    setRawByEpoch({ epoch: state.editorEpoch, values: {}, errors: {} });
+    setInput(target);
+  }
+  const undo = () => replay("past");
+  const redo = () => replay("future");
 
   // The guide's Review button opens the first change still to check, beside its row.
   useEffect(() => {
@@ -116,6 +142,17 @@ export function PricingWorkspaceView({ projectKey, clientName, guide, embedded =
       if (!isRequired && wasRequired) return { ...updated, oldItemHandling: "not_applicable" as const, oldItemCostCents: 0, oldItemFees: [], oldItemNote: "" };
       return updated;
     }) } : previous);
+  }
+
+  /** Moves a line before or after another; the order is saved with the review and frozen into the version. */
+  function moveLine(token: string, target: string, place: "before" | "after") {
+    setInput((previous) => {
+      if (!previous || !workspace || token === target) return previous;
+      const all = [...workspace.quote.lines.map((line) => ({ token: line.itemId })), ...previous.changes.filter((change) => change.action === "add").map((change) => ({ token: change.key }))];
+      const rest = orderedUnits(all, previous.lineOrder).map((unit) => unit.token).filter((entry) => entry !== token);
+      const at = rest.indexOf(target) + (place === "after" ? 1 : 0);
+      return { ...previous, lineOrder: [...rest.slice(0, at), token, ...rest.slice(at)] };
+    });
   }
 
   function setRaw(key: string, field: string, value: string, error: string | null) {
@@ -192,110 +229,97 @@ export function PricingWorkspaceView({ projectKey, clientName, guide, embedded =
   const projectName = workspace?.quote.projectName ?? projectKey;
   const checkLines = (keys: string[], confirmed: boolean) => setInput((previous) => previous ? { ...previous, changes: previous.changes.map((change) => keys.includes(change.key) ? { ...change, confirmed } : change) } : previous);
   const resolveIssue = (id: string, resolved: boolean) => setInput((previous) => previous ? { ...previous, issues: previous.issues.map((issue) => issue.id === id ? { ...issue, resolved } : issue) } : previous);
-  const card = "rounded-xl border border-[var(--line)] bg-white";
-  const moduleTitle = "inline-flex items-center gap-2 text-[18px] font-bold tracking-tight";
+  const designerName = workspace?.quote.designerName.replace(/\s*\(demo designer\)$/, "") ?? "";
+  const created = workspace?.review?.createdAt ?? workspace?.sourceDraft?.createdAt ?? null;
+  const createdLabel = created ? new Date(created).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/Los_Angeles" }) : "Today";
 
   return (
-    <div id="pricing-workspace" data-pricing-source-stale={stale ? "true" : "false"} className={embedded ? "min-w-0 text-[var(--ink)]" : "min-h-dvh bg-[var(--canvas)] px-3 py-5 text-[var(--ink)] sm:px-6"}>
-      <main className="mx-auto grid max-w-[1360px] gap-4">
-        {/* The walkthrough guide stays in view while the page scrolls. */}
-        {guide && <div className="sticky top-0 z-30 -mx-3 -mt-5 bg-[var(--canvas)] px-3 pb-3 pt-3 sm:-mx-6 sm:px-6">{guide}</div>}
-        <header className={`flex flex-wrap items-center gap-x-4 gap-y-2 ${embedded ? "rounded-xl bg-white px-4 py-2.5" : ""}`}>{!embedded && <BackToChat projectKey={projectKey} />}<span className="text-[12px] text-[var(--muted)]">Quotes / <b className="font-semibold text-[var(--ink)]">{projectName}</b></span>
-          {workspace && <span className="ml-auto"><VersionMenu projectKey={projectKey} quote={workspace.quote} orders={workspace.orders} draftVersion={issuedForSavedReview ? null : nextVersion} /></span>}
-        </header>
+    <div id="pricing-workspace" data-pricing-source-stale={stale ? "true" : "false"} className={embedded ? "min-w-0 text-[12.5px] text-[var(--ink)]" : "min-h-dvh bg-[var(--canvas)] px-3 py-5 text-[12.5px] text-[var(--ink)] sm:px-6"}>
+      {/* The walkthrough guide stays in view while the page scrolls. */}
+      {guide && <div className="sticky top-0 z-30 -mx-3 -mt-5 mb-3 bg-[var(--canvas)] px-3 pb-3 pt-3 sm:-mx-6 sm:px-6">{guide}</div>}
+      <EditorLayout
+        main={<>
+          <EditorCrumbs name={projectName} right={<>{!embedded && <BackToChat projectKey={projectKey} />}{workspace && <VersionMenu projectKey={projectKey} quote={workspace.quote} orders={workspace.orders} draftVersion={issuedForSavedReview ? null : nextVersion} />}</>} />
 
-        {state.loading && <div role="status" className="flex items-center gap-2 rounded-xl bg-white p-8 text-[13px] text-slate-500"><LoaderCircle className="h-4 w-4 animate-spin" />Loading the quote…</div>}
-        {state.error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-[12px] leading-relaxed text-red-800"><p className="whitespace-pre-wrap">{state.error}</p>{state.pendingCheck && <button onClick={() => void state.checkSavedStatus()} disabled={Boolean(state.busy)} className="mt-2 font-semibold underline disabled:opacity-50">Check saved status</button>}{state.conflict && <button onClick={() => void state.reload()} disabled={Boolean(state.busy)} className="mt-2 font-semibold underline disabled:opacity-50">Load saved review · discard local edits</button>}{!workspace && !state.loading && <button onClick={() => void state.reload()} className="mt-2 font-semibold underline">Try loading again</button>}</div>}
-        {state.notice && <div role="status" className="rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 text-[12px] leading-relaxed text-brand-800">{state.notice}</div>}
-        {workspace && (!workspace.sourceDraft || stale) && <div id="pricing-source-status" className="scroll-mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-[12px] leading-relaxed text-amber-900">
-          <h2 className="font-semibold">{state.draftBaselineStale ? "The original quote behind this AI draft has changed" : workspace.sourceDraft ? state.baselineStale ? "This pricing review uses an older quote snapshot" : "The AI draft has changed" : "There is no current AI draft to price"}</h2>
-          <p className="mt-1">{state.draftBaselineStale ? "This draft cannot be repriced against the current original quote. Return to the project chat and ask @Setti to prepare a new draft." : workspace.sourceDraft ? "Adopt the latest valid draft and quote explicitly before editing or generating another client version. Existing local pricing edits will be replaced." : "Return to the chat and ask @Setti to prepare a change draft. An earlier pricing review cannot be issued after its source draft is withdrawn."}</p>
-          {workspace.sourceDraft && !state.draftBaselineStale && <button onClick={state.adoptLatest} disabled={Boolean(state.busy) || state.pendingCheck} className="mt-3 rounded-lg bg-amber-900 px-3 py-2 font-medium text-white disabled:opacity-50">Re-price from the latest draft</button>}
-          {state.draftBaselineStale && <a href={`/chats/${projectKey}`} className="mt-3 inline-block font-semibold underline">Return to chat · ask @Setti for a new draft</a>}
-        </div>}
-        {state.carryConflicts.length > 0 && <CarryOverChoices conflicts={state.carryConflicts} choices={state.choices} onChoose={state.choose} disabled={Boolean(state.busy)} />}
-        {(readiness.pending || Boolean(readiness.blocked && readiness.error)) && <p role="status" className="rounded-xl bg-amber-50 p-3 text-[12px] leading-relaxed text-amber-900">{readiness.notice ?? readiness.error} You can save this review; sending it to the client becomes available when setup finishes.</p>}
+          {state.loading && <div role="status" className="flex items-center gap-2 rounded-xl bg-white p-8 text-[13px] text-slate-500"><LoaderCircle className="h-4 w-4 animate-spin" />Loading the quote…</div>}
+          {state.error && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-[12px] leading-relaxed text-red-800"><p className="whitespace-pre-wrap">{state.error}</p>{state.pendingCheck && <button onClick={() => void state.checkSavedStatus()} disabled={Boolean(state.busy)} className="mt-2 font-semibold underline disabled:opacity-50">Check saved status</button>}{state.conflict && <button onClick={() => void state.reload()} disabled={Boolean(state.busy)} className="mt-2 font-semibold underline disabled:opacity-50">Load saved review · discard local edits</button>}{!workspace && !state.loading && <button onClick={() => void state.reload()} className="mt-2 font-semibold underline">Try loading again</button>}</div>}
+          {state.notice && <div role="status" className="rounded-xl border border-brand-100 bg-brand-50 px-4 py-3 text-[12px] leading-relaxed text-brand-800">{state.notice}</div>}
+          {workspace && (!workspace.sourceDraft || stale) && <div id="pricing-source-status" className="scroll-mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-[12px] leading-relaxed text-amber-900">
+            <h2 className="font-semibold">{state.draftBaselineStale ? "The original quote behind this AI draft has changed" : workspace.sourceDraft ? state.baselineStale ? "This pricing review uses an older quote snapshot" : "The AI draft has changed" : "There is no current AI draft to price"}</h2>
+            <p className="mt-1">{state.draftBaselineStale ? "This draft cannot be repriced against the current original quote. Return to the project chat and ask @Setti to prepare a new draft." : workspace.sourceDraft ? "Adopt the latest valid draft and quote explicitly before editing or generating another client version. Existing local pricing edits will be replaced." : "Return to the chat and ask @Setti to prepare a change draft. An earlier pricing review cannot be issued after its source draft is withdrawn."}</p>
+            {workspace.sourceDraft && !state.draftBaselineStale && <button onClick={state.adoptLatest} disabled={Boolean(state.busy) || state.pendingCheck} className="mt-3 rounded-lg bg-amber-900 px-3 py-2 font-medium text-white disabled:opacity-50">Re-price from the latest draft</button>}
+            {state.draftBaselineStale && <a href={`/chats/${projectKey}`} className="mt-3 inline-block font-semibold underline">Return to chat · ask @Setti for a new draft</a>}
+          </div>}
+          {state.carryConflicts.length > 0 && <CarryOverChoices conflicts={state.carryConflicts} choices={state.choices} onChoose={state.choose} disabled={Boolean(state.busy)} />}
+          {(readiness.pending || Boolean(readiness.blocked && readiness.error)) && <p role="status" className="rounded-xl bg-amber-50 p-3 text-[12px] leading-relaxed text-amber-900">{readiness.notice ?? readiness.error} You can save this review; sending it to the client becomes available when setup finishes.</p>}
 
-        {workspace && input && <>
-          <section className={card} aria-label="Project info">
-            <div className={`flex flex-wrap items-center gap-3 px-4 py-3 ${infoOpen ? "border-b border-[var(--line)]" : ""}`}>
-              <button type="button" onClick={() => setInfoOpen((open) => !open)} aria-expanded={infoOpen} className={moduleTitle}><ChevronDown className={`h-4 w-4 transition-transform ${infoOpen ? "" : "-rotate-90"}`} />Project info</button>
-              {!infoOpen && <span className="text-[12px] text-[var(--muted)]">{projectName} · {clientName} · Quote V{nextVersion} · {issuedForSavedReview ? "Sent" : "Draft"}</span>}
-              {infoOpen && drafted && <span className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-2.5 py-1 text-[11.5px] text-slate-600"><BrandMark className="h-3.5 w-3.5" />Drafted by Setti from the chat</span>}
-            </div>
-            {infoOpen && <>
-              <div className="grid sm:grid-cols-2">
-                <div className="flex items-center gap-3 px-4 py-3.5"><BrandMark className="h-10 w-10" /><div><p className="text-[13.5px] font-semibold">{workspace.quote.designerName.replace(/\s*\(demo designer\)$/, "")}</p><p className="text-[12px] text-[var(--muted)]">Designer</p></div></div>
-                <div className="border-t border-[var(--line)] px-4 py-3.5 sm:border-l sm:border-t-0"><p className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--muted)]">Client</p><p className="text-[13.5px] font-semibold">{clientName}</p><p className="text-[12px] text-[var(--muted)]">{projectName} · signs in Setti</p></div>
-              </div>
-              <div className="flex flex-wrap items-end gap-x-7 gap-y-2 border-t border-[var(--line)] px-4 py-3.5"><h1 className="mr-auto text-[21px] font-semibold tracking-tight">{projectName}</h1>
-                <span className="grid"><span className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--muted)]">Based on</span><b className="text-[12.5px]">V{workspace.quote.version}, signed</b></span>
-                <span className="grid"><span className="text-[10.5px] font-semibold uppercase tracking-wider text-[var(--muted)]">Currency</span><b className="text-[12.5px]">USD</b></span></div>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-[var(--line)] px-4 py-2.5 text-[12px] text-[var(--muted)]">Quote <b className="text-[var(--ink)]">V{nextVersion}</b>
-                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${issuedForSavedReview ? "bg-emerald-50 text-emerald-700" : "bg-[var(--canvas)] text-slate-600"}`}>{issuedForSavedReview ? "Sent, awaiting signature" : state.saved ? `Draft · saved review ${workspace.review?.version}` : "Draft · unsaved edits"}</span>
-                <span>{issuedForSavedReview ? "Frozen. Open it from the version list to read what the client received." : "Only you can see this draft."}</span></div>
-            </>}
-          </section>
+          {workspace && input && <>
+            <ProjectInfoCard open={infoOpen} onToggle={() => setInfoOpen((open) => !open)} summary={`${projectName} · ${clientName} · Quote V${nextVersion} · ${issuedForSavedReview ? "Sent" : "Draft"}`}
+              badge={drafted ? <DraftedBySetti /> : undefined}
+              studio={{ name: studioName || designerName, person: `${designerName} · Designer`, note: "Studio details from Settings" }}
+              client={<><b className="text-[13.5px] font-bold">{clientName}</b><span className="text-[12.5px]">{projectName}</span><span className="text-[12.5px] text-[var(--muted)]">Signs in the project chat</span></>}
+              title={projectName}
+              meta={[{ label: "Created", value: createdLabel }, { label: "Currency", value: "USD" }]}
+              quote={{ version: nextVersion ?? "", sent: issuedForSavedReview, status: issuedForSavedReview ? "Sent, awaiting signature" : "Draft", note: issuedForSavedReview ? "Frozen. Open it from the version list to read what the client received." : "Only you can see this draft." }} />
 
-          <section className={card} aria-label="Quote items">
-            <div className="flex flex-wrap items-center gap-3 px-4 pb-1 pt-3.5">
-              <button type="button" onClick={() => setItemsOpen((open) => !open)} aria-expanded={itemsOpen} className={moduleTitle}><ChevronDown className={`h-4 w-4 transition-transform ${itemsOpen ? "" : "-rotate-90"}`} />Quote items</button>
-              {!itemsOpen && <span className="text-[12px] text-[var(--muted)]">{workspace.quote.lines.length + input.changes.filter((change) => change.action === "add").length - input.changes.filter((change) => change.action === "remove").length} items · V{nextVersion} total {money(preview?.proposedTotals?.totalCents ?? null)}</span>}
-            </div>
-            {itemsOpen && <>
-              <div className="flex flex-wrap items-center gap-2 px-4 py-2.5">
-                <a href={`/chats/${projectKey}`} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12px] font-semibold text-[var(--primary)] hover:bg-[var(--canvas)]"><BrandMark className="h-4 w-4" />Ask Setti to change the draft</a>
-                <span className="ml-auto inline-flex items-center gap-1.5 text-[12px] text-[var(--muted)]">View by<select aria-label="View by" value={view} onChange={(event) => setView(event.target.value as ItemsView)} className="rounded-lg border border-[var(--line)] bg-white px-2 py-1 text-[12px] text-[var(--ink)]"><option value="section">Section</option><option value="supplier">Supplier</option><option value="change">Change</option></select></span>
+            <ItemsCard open={itemsOpen} onToggle={() => setItemsOpen((open) => !open)}
+              summary={`${workspace.quote.lines.length + input.changes.filter((change) => change.action === "add").length - input.changes.filter((change) => change.action === "remove").length} items · V${nextVersion} total ${money(preview?.proposedTotals?.totalCents ?? null)}`}
+              tools={<>
+                {/* A change is the lines Setti drafted from the conversation; a new line or section comes in through Setti's draft. */}
+                <button type="button" disabled title="In a change, ask Setti to add it to the draft" className={TOOL}><Plus className="h-[15px] w-[15px]" />Add section</button>
+                <button type="button" disabled title="In a change, ask Setti to add it to the draft" className={TOOL}><Plus className="h-[15px] w-[15px]" />Add item</button>
+                <a href={`/chats/${projectKey}`} className={`${TOOL} text-[var(--primary)]`}><BrandMark className="h-[15px] w-[15px]" />Ask Setti to draft the change</a>
+                <button type="button" onClick={undo} disabled={disabled || !history.past} aria-label="Undo" title="Undo" className={TOOL}><Undo2 className="h-[15px] w-[15px]" /></button>
+                <button type="button" onClick={redo} disabled={disabled || !history.future} aria-label="Redo" title="Redo" className={TOOL}><Redo2 className="h-[15px] w-[15px]" /></button>
+                <span className="flex-1" />
+                <label className="inline-flex items-center gap-1.5 text-[12px] text-[var(--muted)]">View by<select aria-label="View by" value={view} onChange={(event) => setView(event.target.value as ItemsView)} className={SELECT}><option value="section">Section</option><option value="supplier">Supplier</option><option value="change">Change</option></select></label>
                 <span className="relative">
-                  <button type="button" onClick={() => setColumnsOpen((open) => !open)} aria-expanded={columnsOpen} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--line)] bg-white px-2.5 py-1.5 text-[12px] font-medium hover:bg-[var(--canvas)]"><Columns3 className="h-3.5 w-3.5" />Columns</button>
-                  {columnsOpen && <div role="dialog" aria-label="Columns" className="absolute right-0 top-[calc(100%+6px)] z-20 grid w-56 gap-0.5 rounded-xl border border-[var(--line)] bg-white p-2 shadow-lg">
-                    {INTERNAL_COLUMNS.map((column) => <label key={column.key} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[12px] hover:bg-[var(--canvas)]"><input type="checkbox" checked={columnsShown[column.key]} onChange={(event) => setColumnsShown((shown) => ({ ...shown, [column.key]: event.target.checked }))} /><span className="flex-1">{column.label}</span><EyeOff className="h-3.5 w-3.5 text-[var(--muted)]" aria-label="Hidden from the client" /></label>)}
-                    <p className="mt-1 border-t border-[var(--line)] px-2 pt-1.5 text-[10.5px] text-[var(--muted)]">Columns with <EyeOff className="inline h-3 w-3" /> never appear on the quote the client receives.</p>
+                  <button type="button" onClick={() => setColumnsOpen((open) => !open)} aria-expanded={columnsOpen} className={GHOST}>Columns</button>
+                  {columnsOpen && <div role="dialog" aria-label="Columns" className="absolute right-0 top-[calc(100%+6px)] z-20 grid w-56 gap-0.5 rounded-[10px] border border-[var(--line)] bg-white p-2 shadow-lg">
+                    {INTERNAL_COLUMNS.map((column) => <label key={column.key} className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-[5px] text-[12px] hover:bg-[var(--canvas)]"><input type="checkbox" checked={columnsShown[column.key]} onChange={(event) => setColumnsShown((shown) => ({ ...shown, [column.key]: event.target.checked }))} /><span className="flex-1">{column.label}</span><EyeOff className="h-3.5 w-3.5 text-[var(--muted)]" aria-label="Hidden from the client" /></label>)}
+                    <p className="mt-1 border-t border-[var(--line)] px-1.5 pt-1 text-[11px] text-[var(--muted)]">Columns with <EyeOff className="inline h-3 w-3" /> never appear on the quote the client receives.</p>
                   </div>}
                 </span>
-                <button type="button" onClick={() => { setColumnsOpen(false); setPreviewing(true); }} className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--ink)] px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-[#1f241d]"><Eye className="h-3.5 w-3.5" />Preview</button>
-              </div>
-              {isHomeQuote(workspace.quote) && <div className="px-4 pb-3"><HomeSupplierDocuments text={workspace.sourceDraft?.sources.find((source) => source.id === HOME_EVIDENCE_ID)?.text || undefined} /></div>}
-              {sampleMaterialsAvailable && <div className="mx-4 mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-brand-100 bg-brand-50/50 px-3 py-2.5 text-[12px]"><span className="flex-1">{MAPLE_SAMPLE_MATERIALS.reference} · {MAPLE_SAMPLE_MATERIALS.supplier}: fictional supplier details for this walkthrough.</span><button type="button" disabled={disabled} onClick={loadSampleMaterials} className="rounded-lg bg-[var(--primary-fill)] px-3 py-1.5 font-semibold text-[var(--on-primary)] disabled:opacity-50">Load sample supplier details</button></div>}
-              <div id="pricing-changes" className="px-4 pb-4"><QuoteItemsGrid changes={input.changes} baselineLines={workspace.quote.lines} issues={input.issues} raw={raw} disabled={disabled} drafted={drafted} view={view} columns={columnsShown}
-                selectedKey={selected?.key ?? null} onSelect={setSelectedKey} onEdit={editGridField} onCheck={checkLines} onResolve={resolveIssue} /></div>
-            </>}
-          </section>
-
-          <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-            <section className={`${card} grid gap-3 p-5`} aria-label="Terms">
-              <h2 className="text-[15px] font-bold">Terms the client signs</h2>
-              <fieldset disabled={disabled} className="grid gap-3">
-                <textarea aria-label="Client terms" rows={6} className={inputClass} value={input.terms} onChange={(event) => setInput((previous) => previous ? { ...previous, terms: event.target.value, changes: previous.changes.map((change) => ({ ...change, confirmed: false })) } : previous)} />
-                {workspace.sourceDraft?.constraints.length ? <div className="rounded-lg bg-[var(--canvas)] px-3 py-2 text-[11.5px] leading-relaxed text-slate-600"><p className="font-semibold text-[var(--ink)]">Also frozen into V{nextVersion}</p><ul className="mt-1 list-disc space-y-0.5 pl-4">{workspace.sourceDraft.constraints.map((constraint, index) => <li key={index}>{constraint}</li>)}</ul></div> : null}
-                <Field label="Note to the client (optional)" hint="Frozen into the version with the terms."><textarea aria-label="Designer review notes" rows={3} className={inputClass} value={input.reviewNotes} onChange={(event) => setInput((previous) => previous ? { ...previous, reviewNotes: event.target.value } : previous)} /></Field>
-              </fieldset>
-              <ChangeSourceFields value={input.source ?? draftSource({ supplierNotice: workspace.sourceDraft?.supplierNotice })} disabled={disabled} onChange={(source) => setInput((previous) => previous ? { ...previous, source } : previous)} />
-            </section>
-            <section className={`${card} grid gap-2.5 p-5`} aria-label="Total">
-              <h2 className="text-[15px] font-bold">Total</h2>
-              <p className="flex justify-between text-[13px]"><span className="text-[var(--muted)]">V{workspace.quote.version}, signed</span><span className="tabular-nums">{money(baselineTotals?.totalCents ?? null)}</span></p>
-              <p className="flex justify-between text-[13px]"><span className="text-[var(--muted)]">Change in V{nextVersion}</span><span className={`tabular-nums ${(preview?.deltaTotalCents ?? 0) > 0 ? "text-[#9c3d34]" : "text-emerald-700"}`}>{signedMoney(preview?.deltaTotalCents ?? null)}</span></p>
-              <p className="mt-1 flex justify-between border-t-2 border-[var(--ink)] pt-2.5 text-[18px] font-bold"><span>V{nextVersion} total</span><span className="tabular-nums">{money(preview?.proposedTotals?.totalCents ?? null)}</span></p>
-              <p className="text-[11.5px] leading-relaxed text-[var(--muted)]">{keptFees ? `Includes ${shortMoney(keptFees)} the suppliers keep and do not refund. ` : ""}The change is not what the client pays today; nothing is held or charged until they sign.</p>
-              {(hasInvalidNumbers || preview?.problems.length) ? <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11.5px] leading-relaxed text-amber-900"><p className="font-semibold">Before sending it to the client</p><ul className="mt-1 list-disc space-y-0.5 pl-4">{Object.values(numericErrors).map((problem, index) => <li key={`number-${index}`}>{problem}</li>)}{preview?.problems.map((problem, index) => <li key={index}>{problem}</li>)}</ul></div> : null}
-            </section>
-          </div>
-
-          <div className="sticky bottom-0 z-10 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-[var(--line)] bg-white/95 px-4 py-3 shadow-sm backdrop-blur">
-            {issuedForSavedReview && state.lastOrder
-              ? <span className="mr-auto flex flex-wrap items-center gap-1.5 text-[12px]"><Check className="h-3.5 w-3.5 text-emerald-600" /><span className="font-medium text-emerald-800">Sent to {clientName} as V{state.lastOrder.order.version}.</span>{openingChat ? <span className="text-[var(--muted)]">Opening the project chat…</span> : <a href={`/chats/${projectKey}`} className="font-semibold text-[var(--primary)] underline">Open the chat</a>}</span>
-              : <span className="mr-auto flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-slate-600">
-                {drafted && <Tick done={checks.done === checks.all}>Check what Setti drafted · {checks.done} of {checks.all}</Tick>}
-                {answers.all > 0 && <Tick done={answers.done === answers.all}>Answer Setti&apos;s questions · {answers.done} of {answers.all}</Tick>}
-                <Tick done={Boolean(preview?.ready && !hasInvalidNumbers)}>{preview?.ready && !hasInvalidNumbers ? "Every amount is complete" : "Some amounts are missing"}</Tick>
-              </span>}
-            {/* One primary step at a time: save while there are unsaved edits, then send. */}
-            <span className="text-[11.5px] text-[var(--muted)]">{state.saved && !hasInvalidNumbers ? `Saved review ${workspace.review?.version}` : "Unsaved edits"}</span>
-            <button onClick={() => void state.save()} disabled={!canSave} className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-[12px] disabled:opacity-40 ${canSave ? "bg-[var(--primary-fill)] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)]" : "border border-slate-200 font-medium hover:bg-slate-50"}`}>{state.busy === "save" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}Save</button>
-            <button onClick={() => { if (canIssue) void state.issue().then((sent) => { if (!sent) return; setOpeningChat(true); leaving.current = window.setTimeout(() => window.location.assign(`/chats/${projectKey}`), 1500); }); }} disabled={!canIssue} className="flex items-center gap-1.5 rounded-lg bg-[var(--primary-fill)] px-4 py-2 text-[12px] font-semibold text-[var(--on-primary)] hover:bg-[var(--primary-hover)] disabled:bg-slate-200 disabled:font-medium disabled:text-slate-400">{state.busy === "issue" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}{issuedForSavedReview && state.lastOrder ? `Sent as V${state.lastOrder.order.version}` : `Send to ${clientFirstName} as V${nextVersion}`}</button>
-          </div>
+                <PreviewButton onClick={() => { setColumnsOpen(false); setPreviewing(true); }} />
+              </>}>
+              <div id="pricing-changes"><QuoteItemsGrid changes={input.changes} baselineLines={workspace.quote.lines} issues={input.issues} raw={raw} disabled={disabled} drafted={drafted} view={view} columns={columnsShown}
+                selectedKey={selected?.key ?? null} onSelect={setSelectedKey} onEdit={editGridField} onCheck={checkLines} onResolve={resolveIssue} onMove={moveLine} lineOrder={input.lineOrder} /></div>
+            </ItemsCard>
+          </>}
         </>}
+        side={workspace && input ? <>
+          <SumRow>
+            <SumCard label="Terms">
+              <div className="grid gap-2.5">
+                <label htmlFor="client-terms" className="text-[15px] font-bold">Terms the client signs</label>
+                <fieldset disabled={disabled} className="grid gap-2.5">
+                  <textarea id="client-terms" aria-label="Client terms" className="min-h-[150px] w-full resize-y rounded-lg border border-[var(--line)] bg-white px-2.5 py-2 text-[12px] leading-normal text-[var(--ink)] outline-none focus:border-[#cfcab9] disabled:bg-slate-50" value={input.terms} onChange={(event) => setInput((previous) => previous ? { ...previous, terms: event.target.value, changes: previous.changes.map((change) => ({ ...change, confirmed: false })) } : previous)} />
+                  {workspace.sourceDraft?.constraints.length ? <div className="rounded-lg bg-[var(--canvas)] px-3 py-2 text-[11.5px] leading-relaxed text-slate-600"><p className="font-semibold text-[var(--ink)]">Also frozen into V{nextVersion}</p><ul className="mt-1 list-disc space-y-0.5 pl-4">{workspace.sourceDraft.constraints.map((constraint, index) => <li key={index}>{constraint}</li>)}</ul></div> : null}
+                  <Field label="Note to the client (optional)" hint="Frozen into the version with the terms."><textarea aria-label="Designer review notes" rows={3} className={inputClass} value={input.reviewNotes} onChange={(event) => setInput((previous) => previous ? { ...previous, reviewNotes: event.target.value } : previous)} /></Field>
+                </fieldset>
+                <ChangeSourceFields value={input.source ?? draftSource({ supplierNotice: workspace.sourceDraft?.supplierNotice })} disabled={disabled} onChange={(source) => setInput((previous) => previous ? { ...previous, source } : previous)} />
+              </div>
+            </SumCard>
+            <ChangeTotalCard baseVersion={workspace.quote.version} version={nextVersion} previousCents={baselineTotals?.totalCents ?? null} nextCents={preview?.proposedTotals?.totalCents ?? null} keptCents={keptFees}>
+              {(hasInvalidNumbers || preview?.problems.length) ? <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11.5px] leading-relaxed text-amber-900"><p className="font-semibold">Before sending it to the client</p><ul className="mt-1 list-disc space-y-0.5 pl-4">{Object.values(numericErrors).map((problem, index) => <li key={`number-${index}`}>{problem}</li>)}{preview?.problems.map((problem, index) => <li key={index}>{problem}</li>)}</ul></div> : null}
+            </ChangeTotalCard>
+          </SumRow>
+          {isHomeQuote(workspace.quote) && <HomeSupplierDocuments text={workspace.sourceDraft?.sources.find((source) => source.id === HOME_EVIDENCE_ID)?.text || undefined} />}
+          {sampleMaterialsAvailable && <div className="flex flex-wrap items-center gap-3 rounded-xl border border-brand-100 bg-brand-50/50 px-3 py-2.5 text-[12px]"><span className="flex-1">{MAPLE_SAMPLE_MATERIALS.reference} · {MAPLE_SAMPLE_MATERIALS.supplier}: fictional supplier details for this walkthrough.</span><button type="button" disabled={disabled} onClick={loadSampleMaterials} className="rounded-lg bg-[var(--primary-fill)] px-3 py-1.5 font-semibold text-[var(--on-primary)] disabled:opacity-50">Load sample supplier details</button></div>}
+        </> : null}
+        bar={workspace && input ? <SendBar>
+          {issuedForSavedReview && state.lastOrder
+            ? <span className="flex flex-1 flex-wrap items-center gap-1.5 text-[12px]"><Check className="h-3.5 w-3.5 text-emerald-600" /><span className="font-medium text-emerald-800">Sent to {clientName} as V{state.lastOrder.order.version}.</span>{openingChat ? <span className="text-[var(--muted)]">Opening the project chat…</span> : <a href={`/chats/${projectKey}`} className="font-semibold text-[var(--primary)] underline">Open the chat</a>}</span>
+            : <span className="flex flex-1 flex-wrap gap-x-4 gap-y-1.5 text-[12px] text-[#4b5348]">
+              {drafted && <Todo done={checks.done === checks.all}>Check what Setti drafted · {checks.done} of {checks.all}</Todo>}
+              {answers.all > 0 && <Todo done={answers.done === answers.all}>Answer Setti&apos;s questions · {answers.done} of {answers.all}</Todo>}
+              <Todo done={Boolean(preview?.ready && !hasInvalidNumbers)}>{preview?.ready && !hasInvalidNumbers ? "Every amount is complete" : "Some amounts are missing"}</Todo>
+            </span>}
+          {/* One primary step at a time: save while there are unsaved edits, then send. */}
+          <span className="text-[11.5px] text-[var(--muted)]">{state.saved && !hasInvalidNumbers ? `Saved review ${workspace.review?.version}` : "Unsaved edits"}</span>
+          <button onClick={() => void state.save()} disabled={!canSave} className={canSave ? SEND : GHOST}>{state.busy === "save" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}Save</button>
+          <button onClick={() => { if (canIssue) void state.issue().then((sent) => { if (!sent) return; setOpeningChat(true); leaving.current = window.setTimeout(() => window.location.assign(`/chats/${projectKey}`), 1500); }); }} disabled={!canIssue} className={SEND}>{state.busy === "issue" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-[15px] w-[15px]" />}{issuedForSavedReview && state.lastOrder ? `Sent as V${state.lastOrder.order.version}` : `Send to ${clientFirstName} as V${nextVersion}`}</button>
+        </SendBar> : null} />
           {workspace && input && selected && <ChangeDrawer index={selectedIndex} count={input.changes.length} action={selected.action} title={selectedItem?.name || "Original item"}
             subtitle={selectedItem ? [selectedItem.vendor, selectedItem.sku].filter(Boolean).join(" · ") : undefined}
             onPrevious={() => setSelectedKey(input.changes[selectedIndex - 1]?.key ?? selected.key)} onNext={() => setSelectedKey(input.changes[selectedIndex + 1]?.key ?? selected.key)} onClose={closeDetails}
@@ -334,11 +358,6 @@ export function PricingWorkspaceView({ projectKey, clientName, guide, embedded =
             </fieldset>
           </ChangeDrawer>}
         {previewing && workspace && input && <QuotePreview receipt={draftReceipt({ workspace, input, preview, nextVersion: nextVersion ?? workspace.quote.version + 1, clientName })} onClose={() => setPreviewing(false)} />}
-      </main>
     </div>
   );
-}
-
-function Tick({ done, children }: { done: boolean; children: ReactNode }) {
-  return <span className="inline-flex items-center gap-1.5"><span className={`flex h-3.5 w-3.5 items-center justify-center rounded-full ${done ? "bg-emerald-600 text-white" : "border border-slate-300"}`}>{done && <Check className="h-2.5 w-2.5" strokeWidth={3} />}</span>{children}</span>;
 }

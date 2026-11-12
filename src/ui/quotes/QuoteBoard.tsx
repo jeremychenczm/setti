@@ -1,11 +1,13 @@
 "use client";
 
 import { ArrowLeft, FileText, LoaderCircle } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { DemoAccount } from "@/accounts/demo";
 import type { CaseKey } from "@/chat/types";
 import type { QuoteView, SignOpeningInput } from "@/opening/types";
 import { FirstQuoteEditor } from "./FirstQuoteEditor";
+import { ClientFirstQuote } from "./ClientFirstQuote";
+import { DesignerFirstQuote } from "./DesignerFirstQuote";
 import { QuoteReport, type QuoteActions } from "./QuoteReport";
 import type { QuoteOption } from "./QuoteReport";
 
@@ -28,8 +30,8 @@ const failure = (body: unknown, fallback: string) => (body as { error?: string }
  * sent, signs only their own project, and only the designer drops lines.
  * Remount it (key) to load another project or account.
  */
-export function QuoteBoard({ projectKey, studioName, viewer, options, focusItemId, onBack, onSelectQuote, onOpenChat }: {
-  projectKey: CaseKey; studioName: string; viewer: DemoAccount; options: QuoteOption[]; focusItemId?: string | null;
+export function QuoteBoard({ projectKey, studioName, viewer, options, focusItemId, toolbar, onBack, onSelectQuote, onOpenChat }: {
+  projectKey: CaseKey; studioName: string; viewer: DemoAccount; options: QuoteOption[]; focusItemId?: string | null; toolbar?: ReactNode;
   onBack: () => void; onSelectQuote: (id: CaseKey) => void; onOpenChat: () => void;
 }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -94,7 +96,12 @@ export function QuoteBoard({ projectKey, studioName, viewer, options, focusItemI
   };
 
   // An unsent V1 opens in the same editor as every later version.
-  if (loaded && "view" in loaded && viewer.role === "designer" && loaded.view.draftHash && (editing || !loaded.view.opening.sentAt)) return <FirstQuoteEditor key={loaded.view.draftHash} projectKey={projectKey} view={loaded.view} onSaved={() => load()} onOpenChat={onOpenChat} />;
+  if (loaded && "view" in loaded && viewer.role === "designer" && loaded.view.draftHash && (editing || !loaded.view.opening.sentAt)) return <FirstQuoteEditor key={loaded.view.draftHash} projectKey={projectKey} view={loaded.view} studioName={studioName} onSaved={() => load()} onOpenChat={onOpenChat} />;
+  // The client reads V1 like every later version: the formal quote beside the money, the decision and the signature.
+  if (loaded && "view" in loaded && viewer.role === "client") return <ClientFirstQuote projectKey={projectKey} view={loaded.view} studioName={studioName} toolbar={toolbar} onSign={actions.sign} onOpenChat={onOpenChat} />;
+  // A sent V1 reads the same way for the designer: the formal quote beside where it stands.
+  if (loaded && "view" in loaded && viewer.role === "designer" && (loaded.view.opening.sentAt || loaded.view.approval))
+    return <DesignerFirstQuote projectKey={projectKey} view={loaded.view} studioName={studioName} toolbar={toolbar} actions={actions} onOpenChat={onOpenChat} />;
   if (loaded && "view" in loaded) return <QuoteReport view={loaded.view} studioName={studioName} viewer={viewer} options={options} focusItemId={focusItemId} actions={actions} onBack={onBack} onSelectQuote={onSelectQuote} onOpenChat={onOpenChat} />;
   return (
     <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl bg-white shadow-sm">

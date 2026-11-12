@@ -43,16 +43,19 @@ export function QuotesModule({ projectKey, studioName, clientName, viewer, demo,
   }, [projectKey]);
 
   if (!versions) return loading();
-  const board = <QuoteBoard projectKey={projectKey} studioName={studioName} viewer={viewer} options={options} focusItemId={focusItemId} onBack={onBack} onSelectQuote={onSelectQuote} onOpenChat={onOpenChat} />;
+  const projectLabel = options.find((option) => option.key === projectKey)?.label ?? projectKey;
+  // V1 lists the later versions too, once there are any.
+  const v1Toolbar = versions.sent.length ? <span className="mr-auto flex flex-wrap items-center gap-3 text-[12px] text-[var(--muted)]">{viewer.role === "designer" ? "Quotes" : "Proposals"} / <b className="font-semibold text-[var(--ink)]">{projectLabel}</b><VersionSwitch projectKey={projectKey} sent={versions.sent} shown={1} draftVersion={null} /></span> : undefined;
+  const board = <QuoteBoard projectKey={projectKey} studioName={studioName} viewer={viewer} options={options} focusItemId={focusItemId} toolbar={v1Toolbar} onBack={onBack} onSelectQuote={onSelectQuote} onOpenChat={onOpenChat} />;
   // A version number names a sent version; V1 stays on the quote board, which knows its line decisions.
   if (requested === 1) return board;
   const chosen = requested ? versions.sent.find((entry) => entry.version === requested) : undefined;
   if (!chosen && viewer.role === "designer" && versions.draftOpen) {
-    return <section className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-xl" aria-label="Quote editor"><PricingWorkspaceView projectKey={projectKey} clientName={clientName} embedded /></section>;
+    return <section className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-xl" aria-label="Quote editor"><PricingWorkspaceView projectKey={projectKey} clientName={clientName} studioName={studioName} embedded /></section>;
   }
   const shown = chosen ?? versions.sent[0];
   if (shown) {
-    const toolbar = <span className="mr-auto flex flex-wrap items-center gap-3 text-[12px] text-[var(--muted)]">{viewer.role === "designer" ? "Quotes" : "Proposals"} / <b className="font-semibold text-[var(--ink)]">{options.find((option) => option.key === projectKey)?.label ?? projectKey}</b>
+    const toolbar = <span className="mr-auto flex flex-wrap items-center gap-3 text-[12px] text-[var(--muted)]">{viewer.role === "designer" ? "Quotes" : "Proposals"} / <b className="font-semibold text-[var(--ink)]">{projectLabel}</b>
       <VersionSwitch projectKey={projectKey} sent={versions.sent} shown={shown.version} draftVersion={viewer.role === "designer" && versions.draftOpen ? (versions.sent[0]?.version ?? 1) + 1 : null} /></span>;
     return <section className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-xl" aria-label={`Quote version ${shown.version}`}><ChangeOrderPage orderId={shown.id} account={viewer} demo={demo} studioName={studioName} embedded toolbar={toolbar} /></section>;
   }
