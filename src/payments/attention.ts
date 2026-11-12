@@ -14,8 +14,7 @@
 import type { CaseKey } from "../chat/types";
 import type { ItemHoldView, ItemHoldsView } from "./item-holds-view";
 
-/** The last two are the prepared example projects' to-dos (see attention-view.ts); the rest come from recorded holds. */
-export type AttentionKind = "payment_unknown" | "hold_failed" | "renewal_failed" | "expired" | "capture_ready" | "expiring" | "not_ordered" | "awaiting_credit" | "awaiting_confirmation";
+export type AttentionKind = "payment_unknown" | "hold_failed" | "renewal_failed" | "expired" | "capture_ready" | "expiring" | "not_ordered";
 
 export interface AttentionItem {
   /** Stable per project, item and kind. */
@@ -23,8 +22,6 @@ export interface AttentionItem {
   kind: AttentionKind;
   projectKey: CaseKey;
   projectName: string;
-  /** Live projects are this session's Sandbox records; examples are prepared data. */
-  source: "live" | "example";
   /** The quote line, and its side of a replacement. */
   itemId: string;
   side: "baseline" | "proposed";
@@ -45,7 +42,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** A week before a hold expires, Setti starts saying so. */
 export const EXPIRY_NOTICE_DAYS = 7;
 
-const ORDER: AttentionKind[] = ["payment_unknown", "hold_failed", "renewal_failed", "expired", "capture_ready", "expiring", "not_ordered", "awaiting_credit", "awaiting_confirmation"];
+const ORDER: AttentionKind[] = ["payment_unknown", "hold_failed", "renewal_failed", "expired", "capture_ready", "expiring", "not_ordered"];
 
 const day = (value: Date) => value.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
 
@@ -100,12 +97,21 @@ export function projectAttention(view: ItemHoldsView, projectName: string, now: 
   return view.items.flatMap((line) => {
     const found = reminder(view, line, now);
     return found ? [{
-      ...found, id: `${view.projectKey}:${line.side}:${line.itemId}:${found.kind}`, projectKey: view.projectKey, projectName, source: "live" as const,
+      ...found, id: `${view.projectKey}:${line.side}:${line.itemId}:${found.kind}`, projectKey: view.projectKey, projectName,
       itemId: line.itemId, side: line.side, itemLabel: line.label, supplier: line.vendor,
       amount: line.heldCents > 0 ? { cents: line.heldCents, part: "held" as const } : { cents: line.targetCents, part: "approved" as const },
       href: itemHref(view, line),
     }] : [];
   });
+}
+
+/**
+ * Held items with no supplier order whose 3-day honor period still runs: nothing
+ * to do yet, and each becomes a "not ordered" reminder when its period ends.
+ */
+export function watchedHolds(view: ItemHoldsView, now: Date): { count: number; until: string | null } {
+  const lines = view.items.filter((line) => line.state === "held" && line.timing && now.getTime() < new Date(line.timing.honorEndsAt).getTime() && !reminder(view, line, now));
+  return { count: lines.length, until: lines.map((line) => line.timing!.honorEndsAt).sort()[0] ?? null };
 }
 
 /** Most pressing first: act-today before soon, then by kind, then by project and item. */

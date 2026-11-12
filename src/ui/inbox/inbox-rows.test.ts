@@ -1,28 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { exampleProjects } from "@/money-desk/examples";
-import { exampleAttention } from "@/payments/attention-view";
+import type { AttentionItem } from "@/payments/attention";
 import type { MoneyEvent } from "@/payments/money-events";
 import { newBatches, projectRows, rowShown, tiles } from "./inbox-rows";
 
-const projects = exampleProjects().map((project) => ({ id: project.id, name: project.name, source: project.source, stage: project.stage, client: project.client, paymentsHref: `/quotes/${project.id}?tab=payments`, chatHref: `/chats/${project.id}` }));
-const view = { reminders: exampleAttention(), projects };
+const reminder = (itemLabel: string, kind: AttentionItem["kind"], heldCents: number): AttentionItem => ({
+  id: `maple:proposed:${itemLabel}:${kind}`, kind, projectKey: "maple", projectName: "Maple Ave Café", itemId: itemLabel, side: "proposed", itemLabel,
+  supplier: "Birch Line Joinery (demo)", amount: { cents: heldCents, part: "held" }, title: itemLabel, detail: "", urgency: kind === "capture_ready" ? "soon" : "now", href: "/change-orders/v2",
+});
+const projects = [{ id: "maple", name: "Maple Ave Café", stage: "V2 confirmed", client: "Emma Park", paymentsHref: "/change-orders/v2#payments", chatHref: "/chats/maple" }];
+const view = { reminders: [reminder("Oak window counter", "not_ordered", 336_000), reminder("Counter stool", "not_ordered", 273_000), reminder("Counter pendant light", "capture_ready", 144_000)], projects };
 
 describe("the designer's inbox grid", () => {
-  it("groups the to-dos into tiles and one row per project, and a tile narrows the rows to its kind", () => {
-    expect(tiles(view.reminders).map((tile) => [tile.id, tile.count, tile.projects, tile.heldCents, tile.toRefundCents]))
-      .toEqual([["confirm", 6, 3, 717_400, 0], ["credit", 1, 1, 0, 221_000], ["holds", 0, 0, 0, 0], ["paypal", 0, 0, 0, 0]]);
+  it("groups the to-dos into tiles and one row per project, and a tile narrows the row to its kind", () => {
+    expect(tiles(view.reminders).map((tile) => [tile.id, tile.count, tile.projects, tile.heldCents]))
+      .toEqual([["confirm", 3, 1, 753_000], ["credit", 0, 0, 0], ["holds", 0, 0, 0], ["paypal", 0, 0, 0]]);
 
-    const all = projectRows(view, { bucket: null, source: "all" }, new Set());
-    expect(all.map((row) => [row.name, row.count, row.todo, row.heldCents, row.toRefundCents])).toEqual([
-      ["Juniper Coffee", 3, "Confirm 3 orders, then charge", 387_000, 0],
-      ["Fieldwork Goods", 2, "Record 1 credit, confirm 1 order", 118_000, 221_000],
-      ["Northline Office", 2, "Confirm 2 orders, then charge", 212_400, 0],
-    ]);
-    expect(all[0].heldShare).toBe(1);
-
-    const credit = projectRows(view, { bucket: "credit", source: "all" }, new Set()).filter((row) => rowShown(row, "all"));
-    expect(credit.map((row) => [row.name, row.count, row.todo, row.toRefundCents])).toEqual([["Fieldwork Goods", 1, "Record 1 credit, then refund", 221_000]]);
-    expect(projectRows(view, { bucket: null, source: "live" }, new Set()).filter((row) => rowShown(row, "live"))).toEqual([]);
+    const [row] = projectRows(view, { bucket: null }, new Set(["maple:proposed:Counter stool:not_ordered"]));
+    expect([row.name, row.count, row.todo, row.heldCents, row.heldShare, row.isNew]).toEqual(["Maple Ave Café", 3, "Order 2 held items, charge 1 item", 753_000, 1, true]);
+    expect(projectRows(view, { bucket: "holds" }, new Set()).filter(rowShown)).toEqual([]);
   });
 });
 

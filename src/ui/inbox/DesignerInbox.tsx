@@ -8,7 +8,7 @@ import type { AttentionItem } from "@/payments/attention";
 import type { InboxView } from "@/payments/inbox-view";
 import { part } from "../money/desk-view";
 import { DailyCheck } from "./DailyCheck";
-import { ACTION, byKind, projectRows, REASON, rowShown, sourceCounts, tiles, usd, waitingText, type Bucket, type ProjectRow, type SourceFilter, type Tile as TileData } from "./inbox-rows";
+import { ACTION, byKind, projectRows, REASON, rowShown, tiles, usd, waitingText, type Bucket, type ProjectRow, type Tile as TileData } from "./inbox-rows";
 import { InboxPopover } from "./InboxPopover";
 import { CARD, Dot, FOCUS, InboxFrame, inboxTheme, NewMark, SearchBox, SimulatedDay, Summary, Swatch, Tile } from "./parts";
 
@@ -19,14 +19,18 @@ const selection: RowSelectionOptions<ProjectRow> = { mode: "singleRow", checkbox
 interface Total { id: "total"; total: true; count: number; todo: string; heldCents: number; toRefundCents: number }
 const isTotal = (data: unknown): data is Total => !!data && (data as Total).total === true;
 
-function SourceTag({ source }: { source: ProjectRow["source"] }) {
-  return <span className={`shrink-0 rounded px-1.5 py-px text-[10px] font-medium leading-4 ${source === "live" ? "bg-[var(--agent)] text-slate-600" : "bg-[var(--canvas)] text-[var(--muted)] ring-1 ring-[var(--line)]"}`}>{source === "live" ? "Live" : "Example"}</span>;
-}
-
-function ProjectCell({ data, tags }: ICellRendererParams<ProjectRow> & { tags: boolean }) {
+function ProjectCell({ data }: ICellRendererParams<ProjectRow>) {
   if (isTotal(data)) return <span className="font-semibold">Total</span>;
   if (!data) return null;
-  return <span className="flex h-full min-w-0 items-center gap-1.5 leading-tight"><span className="truncate font-semibold">{data.name}</span>{tags && <SourceTag source={data.source} />}{data.isNew && <NewMark />}</span>;
+  return <span className="flex h-full min-w-0 items-center gap-1.5 leading-tight"><span className="truncate font-semibold">{data.name}</span>{data.isNew && <NewMark />}</span>;
+}
+
+const dayOf = (value: string) => new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/Los_Angeles" });
+/** What Setti waits for when nothing needs the designer: held items, and the day the first one needs its supplier order. */
+function watchingText(watching: InboxView["watching"]): string | null {
+  if (!watching?.count) return null;
+  const items = `${watching.count} held ${watching.count === 1 ? "item" : "items"}`;
+  return `Setti is watching ${items} on ${watching.projects.join(", ")}. Any still not ordered when PayPal's 3-day honor period ends${watching.until ? `, on ${dayOf(watching.until)},` : ""} shows up here.`;
 }
 
 function StageCell({ data }: ICellRendererParams<ProjectRow>) {
@@ -79,7 +83,6 @@ const projectsLabel = (n: number) => `${n} ${n === 1 ? "project" : "projects"}`;
  * coming up beside it. A row opens its to-dos, each kind's reason said once.
  */
 export function DesignerInbox({ view, fresh, error }: { view: InboxView; fresh: ReadonlySet<string>; error: string | null }) {
-  const [source, setSource] = useState<SourceFilter>("all");
   const [bucket, setBucket] = useState<Bucket | null>(null);
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -88,19 +91,18 @@ export function DesignerInbox({ view, fresh, error }: { view: InboxView; fresh: 
   const card = useRef<HTMLElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
 
-  const counts = sourceCounts(view.projects);
-  const tags = counts.example > 0;
-  const reminders = useMemo(() => view.reminders.filter((item) => source === "all" || item.source === source), [view, source]);
+  const reminders = view.reminders;
   const tileList = useMemo(() => tiles(reminders), [reminders]);
-  const rows = useMemo(() => projectRows(view, { bucket, source }, fresh), [view, bucket, source, fresh]);
-  const needing = rows.filter((row) => rowShown(row, source)).length;
-  const inSource = source === "all" ? counts.all : counts[source];
+  const rows = useMemo(() => projectRows(view, { bucket }, fresh), [view, bucket, fresh]);
+  const needing = rows.filter(rowShown).length;
+  const inSource = view.projects.length;
   const soon = reminders.filter((item) => item.urgency === "soon");
-  const open = rows.find((row) => row.id === openId && rowShown(row, source)) ?? null;
+  const open = rows.find((row) => row.id === openId && rowShown(row)) ?? null;
+  const watching = watchingText(view.watching);
 
   const isExternalFilterPresent = useCallback(() => true, []);
-  // Hides rows of the other source and rows with nothing in the picked tile; a new function per source runs the filter again.
-  const doesExternalFilterPass = useCallback((node: IRowNode<ProjectRow>) => !!node.data && rowShown(node.data, source), [source]);
+  // Hides rows with nothing in the picked tile.
+  const doesExternalFilterPass = useCallback((node: IRowNode<ProjectRow>) => !!node.data && rowShown(node.data), []);
   const sumShown = useCallback((api: GridApi<ProjectRow>) => {
     const next = { rows: 0, count: 0, heldCents: 0, toRefundCents: 0 };
     api.forEachNodeAfterFilter((node) => {
@@ -116,13 +118,13 @@ export function DesignerInbox({ view, fresh, error }: { view: InboxView; fresh: 
   const pinned = useMemo<Total[]>(() => shown.rows ? [{ id: "total", total: true, count: shown.count, todo: note, heldCents: shown.heldCents, toRefundCents: shown.toRefundCents }] : [], [shown, note]);
 
   const columns = useMemo<ColDef<ProjectRow>[]>(() => [
-    { field: "name", headerName: "Project", flex: 1.7, minWidth: 185, cellRenderer: ProjectCell, cellRendererParams: { tags }, getQuickFilterText: ({ data }) => data?.search ?? "" },
+    { field: "name", headerName: "Project", flex: 1.7, minWidth: 185, cellRenderer: ProjectCell, getQuickFilterText: ({ data }) => data?.search ?? "" },
     { field: "stage", headerName: "Stage", flex: 1.1, minWidth: 130, cellRenderer: StageCell },
     { field: "count", headerName: "To do", width: 84, type: "rightAligned", initialSort: "desc", sortingOrder: ["desc", "asc", null], cellRenderer: CountCell },
     { field: "todo", headerName: "What to do", flex: 1.5, minWidth: 160, cellRenderer: TodoCell },
     { colId: "waiting", headerName: "Waiting", width: 185, sortingOrder: ["desc", "asc", null], valueGetter: ({ data }) => data ? data.heldCents + data.toRefundCents : 0, cellRenderer: WaitingCell, colSpan: ({ node }) => node?.rowPinned ? 2 : 1, getQuickFilterText: () => "" },
     { colId: "open", headerName: "", width: 40, sortable: false, resizable: false, cellRenderer: OpenCell, getQuickFilterText: () => "" },
-  ], [tags]);
+  ], []);
 
   const toggle = useCallback((id: string) => setOpenId((current) => current === id ? null : id), []);
   const closePopover = useCallback(() => setOpenId(null), []);
@@ -142,17 +144,9 @@ export function DesignerInbox({ view, fresh, error }: { view: InboxView; fresh: 
     if (key === "Enter" && event.data && !event.node.rowPinned) { event.event?.preventDefault(); toggle(event.data.id); }
   };
 
-  const subtitle = counts.all ? `Setti watches the money in ${counts.all === 1 ? "your project" : `all ${counts.all} projects`} and lists what needs you.`
-    : "Setti watches the money in every project and tells you what needs you.";
-  const tools = <>
-    {tags && <div role="group" aria-label="Show projects" className="flex gap-0.5 rounded-[10px] border border-[var(--line)] bg-[var(--canvas)] p-[3px]">
-      {(["all", "live", "example"] as const).map((id) => <button key={id} type="button" aria-pressed={source === id} onClick={() => setSource(id)}
-        className={`min-h-[30px] rounded-[7px] px-3 text-[12px] font-medium ${FOCUS} ${source === id ? "bg-white text-[var(--ink)] shadow-sm" : "text-[var(--muted)]"}`}>
-        {id === "all" ? "All" : id === "live" ? "Live" : "Examples"} <span className="ml-0.5 font-normal text-[var(--muted)]">{counts[id]}</span>
-      </button>)}
-    </div>}
-    <SimulatedDay days={view.simulatedDays} />
-  </>;
+  const subtitle = view.projects.length === 1 ? "Setti watches the money in your project and lists what needs you."
+    : "Setti watches the money in your projects and lists what needs you.";
+  const tools = <SimulatedDay days={view.simulatedDays} />;
 
   return <InboxFrame subtitle={subtitle} tools={tools} error={error}>
     <div className="grid grid-cols-12 gap-3">
@@ -166,7 +160,7 @@ export function DesignerInbox({ view, fresh, error }: { view: InboxView; fresh: 
           {view.reminders.length > 0 && <SearchBox label="Search projects or items" value={query} onChange={setQuery} />}
         </div>
         {view.reminders.length === 0
-          ? <p className="text-[12px] leading-relaxed text-[var(--muted)]">Nothing needs you today. Setti checks every project&apos;s holds, charges and refunds and lists here what needs your attention.</p>
+          ? <div className="grid gap-1.5 rounded-[10px] border border-[var(--line)] px-4 py-5"><p className="text-[14px] font-semibold">Nothing needs you today.</p><p className="text-[13px] leading-relaxed text-slate-600">{watching ?? "Setti checks every project's holds, charges and refunds and lists here what needs your attention."}</p></div>
           : <div ref={wrap} className="overflow-hidden rounded-[10px] border border-[var(--line)]">
             <AgGridReact<ProjectRow>
               modules={modules} theme={inboxTheme} rowData={rows} columnDefs={columns}
@@ -186,7 +180,7 @@ export function DesignerInbox({ view, fresh, error }: { view: InboxView; fresh: 
 
       <div className="col-span-12 grid content-start gap-3 xl:col-span-4">
         <Summary view={view} />
-        <DailyCheck check={view.lastCheck} live={counts.live} />
+        <DailyCheck check={view.lastCheck} live={view.projects.length} />
         <section aria-labelledby="coming-up" className={`${CARD} grid gap-2`}>
           <h2 id="coming-up" className="text-[12px] font-semibold text-slate-600">Coming up</h2>
           {soon.length === 0 ? <p className="text-[12px] leading-relaxed text-[var(--muted)]">Nothing in the next few days. Holds that are about to end show up here a week ahead.</p>
@@ -198,7 +192,7 @@ export function DesignerInbox({ view, fresh, error }: { view: InboxView; fresh: 
     </div>
 
     {open && <InboxPopover key={open.id} anchor={rowElement} beside={cardElement} onClose={closePopover} keepOpen={inGridRow}
-      title={`${open.name} · ${open.count} to do`} subtitle={[open.source === "live" ? "Live" : "Example", open.stage, open.client].filter(Boolean).join(" · ")}>
+      title={`${open.name} · ${open.count} to do`} subtitle={[open.stage, open.client].filter(Boolean).join(" · ")}>
       {byKind(open.items).map((group) => <div key={group.kind} className="grid gap-2">
         <p className="flex items-start gap-2 rounded-[10px] bg-[#fff8f8] px-2.5 py-2 leading-relaxed text-slate-600"><span className="mt-[5px] flex"><Dot on /></span><span>{REASON[group.kind]}</span></p>
         <ul className="border-t border-[var(--line)]">{group.items.map((item) => <li key={item.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-px border-b border-[var(--line)] py-2">

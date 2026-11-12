@@ -19,7 +19,7 @@ import { moneyDesk } from "../money-desk/desk";
 import { pricingCases } from "../pricing/schema";
 import { and, eq } from "drizzle-orm";
 import type { AttentionItem } from "./attention";
-import { sessionProjectName, studioAttention } from "./attention-view";
+import { attentionView, sessionProjectName, type AttentionView } from "./attention-view";
 import { lastInboxRead, markInboxSeen, unreadIds } from "./inbox-reads";
 import { checkWithPayPal, moneyEvents, type MoneyEvent } from "./money-events";
 import type { PayPalPayments } from "./paypal";
@@ -30,6 +30,8 @@ export interface InboxView {
   reader: string;
   simulatedDays: number;
   lastCheck: { at: string; problems: string[] } | null;
+  /** The designer's held items with nothing to do yet; null for the client. */
+  watching: AttentionView["watching"] | null;
   /** The designer's reminders across projects, most pressing first. */
   reminders: AttentionItem[];
   /** Every project the designer runs, as Money lists it; empty for the client. */
@@ -52,7 +54,7 @@ export interface InboxView {
 export interface ItemMoney { label: string; heldCents: number; chargedCents: number; refundedCents: number; releasedCents: number; holds: number }
 
 /** One of the designer's projects: where it stands, and where its payments and chat are. */
-export interface InboxProject { id: string; name: string; source: "live" | "example"; stage: string; client: string; paymentsHref: string; chatHref: string }
+export interface InboxProject { id: string; name: string; stage: string; client: string; paymentsHref: string; chatHref: string }
 
 const usd = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
 const when = (value: string) => new Date(value).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/Los_Angeles" });
@@ -99,10 +101,9 @@ async function moneyNow(db: Pick<Db, "select">, sessionId: string, key: CaseKey)
 
 /** The designer's projects as Money's desk reads them, with where each one's payments and chat open. */
 async function studioProjects(db: Db, sessionId: string | null, account: DemoAccount): Promise<InboxProject[]> {
-  return (await moneyDesk(db, sessionId, account)).projects.map((project) => ({
-    id: project.id, name: project.name, source: project.source, stage: project.stage, client: project.client,
-    // An example's desk link is its chat; its payments are the records' payments tab.
-    paymentsHref: project.source === "live" ? project.href : `/quotes/${project.id}?tab=payments`, chatHref: `/chats/${project.id}`,
+  // The inbox lists only this session's projects; the prepared examples have nothing to act on.
+  return (await moneyDesk(db, sessionId, account)).projects.filter((project) => project.source === "live").map((project) => ({
+    id: project.id, name: project.name, stage: project.stage, client: project.client, paymentsHref: project.href, chatHref: `/chats/${project.id}`,
   }));
 }
 
@@ -110,9 +111,9 @@ async function studioProjects(db: Db, sessionId: string | null, account: DemoAcc
 export async function inboxView(db: Db, paypal: PayPalPayments | null, sessionId: string | null, account: DemoAccount, options: { projects?: boolean } = {}): Promise<InboxView> {
   // Real time, taken first: a record completed while the view is read stays new.
   const readAt = new Date().toISOString();
-  const attention = await studioAttention(db, sessionId, account);
+  const attention = await attentionView(db, sessionId, account);
   const read = sessionId ? await lastInboxRead(db, sessionId, account.id) : null;
-  const base = { reader: account.name.split(" ")[0], simulatedDays: attention.simulatedDays, lastCheck: attention.lastCheck, readAt, opened: read !== null };
+  const base = { reader: account.name.split(" ")[0], simulatedDays: attention.simulatedDays, lastCheck: attention.lastCheck, readAt, opened: read !== null, watching: account.role === "designer" ? attention.watching : null };
   if (account.role === "designer") {
     const projects = options.projects === false ? [] : await studioProjects(db, sessionId, account);
     return { ...base, role: "designer", reminders: attention.items, projects, project: null, events: [], totals: null, items: [], unread: unreadIds(read, { events: [], reminders: attention.items }) };
@@ -131,18 +132,18 @@ export async function inboxView(db: Db, paypal: PayPalPayments | null, sessionId
  * and the designer's reminders open now, are no longer new.
  */
 export async function markInboxOpened(db: Db, sessionId: string, account: DemoAccount, through: Date): Promise<void> {
-  const reminderIds = account.role === "designer" ? (await studioAttention(db, sessionId, account)).items.map((item) => item.id) : [];
+  const reminderIds = account.role === "designer" ? (await attentionView(db, sessionId, account)).items.map((item) => item.id) : [];
   await markInboxSeen(db, sessionId, account.id, { through, reminderIds });
 }
 
 /**
- * The number on the sidebar's Inbox. The designer's counts the reminders still
- * open, read or not: they go away when handled, not when seen. The client's
- * counts money records completed since they last opened the inbox.
+ * The number on the sidebar's Inbox: what the reader has not seen yet, the
+ * designer's new reminders or the client's new money records. Opening the inbox
+ * clears it; a reminder stays in the inbox until it is handled.
  */
 export async function inboxBadge(db: Db, sessionId: string | null, account: DemoAccount): Promise<{ count: number; role: InboxView["role"]; opened: boolean }> {
   const view = await inboxView(db, null, sessionId, account, { projects: false });
-  return { role: view.role, count: view.role === "designer" ? view.reminders.length : view.unread.length, opened: view.opened };
+  return { role: view.role, count: view.unread.length, opened: view.opened };
 }
 
 const VERB: Record<MoneyEvent["kind"], string> = { charged: "charged", held: "put on hold", released: "hold released", refunded: "refunded" };
@@ -155,7 +156,6 @@ function listed(labels: readonly string[]): string {
 const REMINDER_STATE: Record<AttentionItem["kind"], string> = {
   payment_unknown: "with an unknown PayPal result", hold_failed: "whose hold failed", renewal_failed: "whose hold renewal failed",
   expired: "whose hold expired", capture_ready: "ready to capture", expiring: "whose hold expires soon", not_ordered: "not ordered yet",
-  awaiting_credit: "waiting for a supplier credit", awaiting_confirmation: "waiting for a supplier's confirmation",
 };
 
 /** Facts that count and name the items sharing a state, when there are at least two; none when one group would only repeat the total. */

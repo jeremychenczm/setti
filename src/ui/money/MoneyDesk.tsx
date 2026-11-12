@@ -144,7 +144,8 @@ export function MoneyDesk({ onOpenInbox }: { onOpenInbox: () => void }) {
               <span className="text-[12px] tabular-nums">{usd(row.amountCents)}</span>
             </li>)}
           </ul>
-          <button type="button" onClick={onOpenInbox} className="mt-auto self-start pt-1.5 text-[12px] font-semibold text-[#a3161d] hover:underline">Open in Inbox →</button>
+          {/* The inbox holds this session's own projects; the prepared examples have nothing to act on there. */}
+          {todo.some((row) => projects.find((project) => project.id === row.projectId)?.source === "live") && <button type="button" onClick={onOpenInbox} className="mt-auto self-start pt-1.5 text-[12px] font-semibold text-[#a3161d] hover:underline">Open in Inbox →</button>}
         </section>
 
         {selected && <>
