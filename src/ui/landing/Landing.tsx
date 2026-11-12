@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { DraftMock, MoneyMock, SignMock, ThreadMock, WindowMock } from "./AppMocks";
-import { CardIcon, ChatIcon, DesignerDoodle, LampDoodle, PlantDoodle, ReceiptDoodle, SignIcon, SofaDoodle, SparkIcon, TableDoodle } from "./Doodles";
-import { DEMO_VIDEO_URL, DISCUSSION_LENGTH, EVAL_RESULTS, GITHUB_URL, SECURITY_URL } from "./content";
+import { CardIcon, ChatIcon, DesignerDoodle, LampDoodle, PlantDoodle, ReceiptDoodle, SignIcon, SofaDoodle, SparkIcon } from "./Doodles";
+import { DEMO_VIDEO_ID, DISCUSSION_LENGTH, EVAL_RESULTS, GITHUB_URL, SECURITY_URL } from "./content";
 import styles from "./Landing.module.css";
 
 const PITCH = "Design evolves through conversation. Setti's AI spots changes, drafts revised quotes, and links each approval to PayPal holds, charges and refunds, so designers can spend their time on design.";
@@ -16,7 +16,10 @@ export function Landing() {
         <nav className={styles.links} aria-label="Sections">
           <a href="#how">How it works</a><a href="#paypal">PayPal</a><a href="#ai">AI</a><a href={GITHUB_URL}>GitHub</a>
         </nav>
-        <Link href="/try" className={`${styles.btn} ${styles.btnPrimary} ${styles.navCta}`}>Try the live demo</Link>
+        <div className={styles.account}>
+          <Link href="/sign-in" className={styles.signIn}>Sign in</Link>
+          <Link href="/sign-up" className={`${styles.btn} ${styles.btnPrimary}`}>Sign up</Link>
+        </div>
       </header>
 
       <main>
@@ -25,8 +28,8 @@ export function Landing() {
           <p className={styles.sub}>{PITCH}</p>
           <div className={styles.ctas}>
             <Link href="/try" className={`${styles.btn} ${styles.btnPrimary}`}>Try the live demo</Link>
-            {DEMO_VIDEO_URL
-              ? <a href={DEMO_VIDEO_URL} className={`${styles.btn} ${styles.btnSoft}`}>Watch the 2-minute video</a>
+            {DEMO_VIDEO_ID
+              ? <a href="#video" className={`${styles.btn} ${styles.btnSoft}`}>Watch the 2-minute video</a>
               : <Link href="/ai-quality" className={`${styles.btn} ${styles.btnSoft}`}>See every AI eval</Link>}
           </div>
           <p className={styles.small}>Built for Build What&apos;s Next with PayPal and AI · PayPal Sandbox, no account needed</p>
@@ -90,15 +93,19 @@ export function Landing() {
           </div>
         </section>
 
-        {DEMO_VIDEO_URL && (
-          <section className={styles.section}>
+        {DEMO_VIDEO_ID && (
+          <section id="video" className={styles.section}>
             <h2>Watch one change settle.</h2>
-            <a href={DEMO_VIDEO_URL} className={styles.video}>
-              <span className={`${styles.doodle} ${styles.videoSofa}`}><SofaDoodle /></span>
-              <span className={styles.play} aria-hidden="true" />
-              <span className={`${styles.doodle} ${styles.videoTable}`}><TableDoodle /></span>
-              <small>Watch the walkthrough on YouTube</small>
-            </a>
+            <div className={styles.video}>
+              <iframe
+                src={`https://www.youtube-nocookie.com/embed/${DEMO_VIDEO_ID}?rel=0`}
+                title="Setti walkthrough video"
+                loading="lazy"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+              />
+            </div>
           </section>
         )}
 

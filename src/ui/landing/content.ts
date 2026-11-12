@@ -6,8 +6,8 @@ import { HOME_DESIGNER_REQUEST, HOME_DISCUSSION } from "@/demo/living-dining";
 
 export const GITHUB_URL = "https://github.com/jeremychenczm/setti";
 export const SECURITY_URL = `${GITHUB_URL}/blob/main/SECURITY.md`;
-/** The walkthrough on YouTube. The video section and its button stay hidden until this is set. */
-export const DEMO_VIDEO_URL: string | null = "https://youtu.be/FywJrEkjdC0";
+/** The walkthrough's YouTube video id. The video section and its button stay hidden until this is set. */
+export const DEMO_VIDEO_ID: string | null = "FywJrEkjdC0";
 
 export interface MapleChange { itemId: string; name: string; change: string; beforeCents: number; afterCents: number }
 
