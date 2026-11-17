@@ -57,7 +57,7 @@ export function PayMethodChooser({ options, paypal, testCardBusy, disabled, save
       { id: "paypal" as const, title: "PayPal", detail: "Log in to PayPal in a window over this page", icon: Wallet },
       { id: "paylater" as const, title: "Pay Later", detail: "Pay in 4 or monthly, with PayPal", icon: CalendarClock },
     ] : []),
-    ...(options.testCard ? [{ id: "card" as const, title: "Card", detail: "Visa •••• 0026 · PayPal's Sandbox test card", icon: CreditCard, demo: true }] : []),
+    ...(options.testCard ? [{ id: "card" as const, title: "Card", detail: "Visa •••• 0061 · PayPal's Sandbox test card", icon: CreditCard, demo: true }] : []),
   ];
   const [chosen, setChosen] = useState<Method | null>(null);
   const method = methods.find((entry) => entry.id === chosen)?.id ?? methods[0]?.id;

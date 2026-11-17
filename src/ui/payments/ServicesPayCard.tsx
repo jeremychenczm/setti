@@ -102,13 +102,13 @@ export function ServicesPayCard({ projectKey, orderId }: { projectKey: CaseKey; 
       { id: "paypal" as const, title: "PayPal", detail: "Log in to PayPal to pay", icon: Wallet },
       { id: "paylater" as const, title: "Pay Later", detail: "Pay in 4 or monthly, with PayPal", icon: CalendarClock },
     ] : []),
-    ...(options?.testCard && !(saved?.kind === "card") ? [{ id: "card" as const, title: "Debit or credit card", detail: "Visa •••• 0026 · PayPal's Sandbox test card", icon: CreditCard }] : []),
+    ...(options?.testCard && !(saved?.kind === "card") ? [{ id: "card" as const, title: "Debit or credit card", detail: "Visa •••• 0061 · PayPal's Sandbox test card", icon: CreditCard }] : []),
   ];
   const chosen = methods.find((entry) => entry.id === method)?.id ?? methods[0]?.id ?? null;
   const held = view.furnitureToHold;
   const canPay = view.canPay && !!options && !readiness.blocked;
   const title = owed.length === 1 ? `Pay for ${owed[0].label.charAt(0).toLowerCase()}${owed[0].label.slice(1)}` : "Pay for the design services";
-  const payWithCard = () => void run(chosen === "saved" ? "saved" : "card", { action: "test_card", save: chosen === "card" && !!options?.canSave && save }, chosen === "saved" && saved ? savedMethodName(saved) : "Visa •••• 0026");
+  const payWithCard = () => void run(chosen === "saved" ? "saved" : "card", { action: "test_card", save: chosen === "card" && !!options?.canSave && save }, chosen === "saved" && saved ? savedMethodName(saved) : "Visa •••• 0061");
 
   return <section id="design-services" className={`${CARD} scroll-mt-5 overflow-hidden`} aria-label="Payment due">
     <div className="flex items-end justify-between gap-3 border-b border-[var(--line)] bg-[#fbfaf6] px-4 pb-[13px] pt-3.5">

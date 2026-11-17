@@ -129,7 +129,7 @@ describe("PayPal SDK adapter", () => {
     let sent: unknown;
     const approve = createSdkTestCardApproval({ confirmOrder: async (request: unknown) => { sent = request; return response({ id: "ORDER-1", status: "APPROVED", purchaseUnits: [{ amount: { currencyCode: "USD", value: "800.00" }, customId: "op-1" }] }, 200); } } as never);
     const result = await approve("ORDER-1");
-    expect(sent).toMatchObject({ id: "ORDER-1", body: { paymentSource: { card: { number: "4012000033330026", expiry: "2030-12" } } } });
+    expect(sent).toMatchObject({ id: "ORDER-1", body: { paymentSource: { card: { number: "4500600000000061", expiry: "2030-12" } } } });
     expect(result).toMatchObject({ kind: "ok", value: { orderId: "ORDER-1", status: "APPROVED", amountCents: 80_000, customId: "op-1" } });
   });
 
@@ -201,7 +201,7 @@ describe("PayPal SDK adapter", () => {
     await approve("ORDER-1");
     await approve("ORDER-1", { save: true });
     expect(sent[0].body.paymentSource.card).not.toHaveProperty("attributes");
-    expect(sent[1].body.paymentSource.card).toMatchObject({ number: "4012000033330026", attributes: { vault: { storeInVault: "ON_SUCCESS" } } });
+    expect(sent[1].body.paymentSource.card).toMatchObject({ number: "4500600000000061", attributes: { vault: { storeInVault: "ON_SUCCESS" } } });
   });
 
   it("labels a saved card by brand and last digits, and a saved PayPal account by a masked email, never in full", async () => {

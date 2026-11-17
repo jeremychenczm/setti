@@ -34,8 +34,8 @@ import { formatCents, parseCents } from "./receipts";
 const FULL = "return=representation";
 const BRAND = "Setti (sandbox demo)";
 
-/** PayPal's documented Sandbox Visa. Probe P10: the Sandbox refused 4111… and 5555… on 2026-10-22. */
-export const SANDBOX_TEST_CARD = { number: "4012000033330026", expiry: "2030-12", securityCode: "123", name: "Setti Sandbox Test" } as const;
+/** PayPal's documented Sandbox Visa. The Sandbox refused 4111… and 5555… on 2026-10-22 (probe P10), and 4012…0026 with PAYER_CANNOT_PAY on 2026-11-17. */
+export const SANDBOX_TEST_CARD = { number: "4500600000000061", expiry: "2030-12", securityCode: "123", name: "Setti Sandbox Test" } as const;
 
 /**
  * Confirms the app's own order with the test card, so the usual authorize step
